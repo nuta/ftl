@@ -1,0 +1,12 @@
+.DS_Store*
+.env*
+*.swp
+*.orig
+*.map*
+*.elf*
+*.bin
+*.log
+*.pcap
+
+/.vscode/
+/target/
