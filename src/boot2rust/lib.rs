@@ -2,7 +2,10 @@
 
 core::arch::global_asm!(include_str!("boot.S"));
 
+#[macro_use]
 mod print;
+
+mod panic;
 mod sbi;
 
 #[no_mangle]
@@ -11,10 +14,4 @@ pub fn rust_entry() {
     unsafe {
         sbi::shutdown();
     }
-}
-
-#[panic_handler]
-fn panic(info: &core::panic::PanicInfo) -> ! {
-    println!("kernel panic: {:?}", info);
-    loop {}
 }
