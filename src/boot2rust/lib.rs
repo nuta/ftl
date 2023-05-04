@@ -14,6 +14,7 @@ pub fn rust_entry() {
 }
 
 #[panic_handler]
-fn panic(_info: &core::panic::PanicInfo) -> ! {
+fn panic(info: &core::panic::PanicInfo) -> ! {
+    println!("kernel panic: {:?}", info);
     loop {}
 }
