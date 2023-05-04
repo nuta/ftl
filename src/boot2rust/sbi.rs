@@ -33,7 +33,6 @@ pub const SBI_ERR_ALREADY_STARTED: isize = -7;
 pub const SBI_ERR_ALREADY_STOPPED: isize = -8;
 
 /// Calls a SBI function. See "Chapter 3. Binary Encoding" in the SBI specification.
-#[no_mangle]
 unsafe fn sbi_call(
     extid: SbiExtId,
     a0: isize,
