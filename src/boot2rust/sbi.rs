@@ -1,5 +1,10 @@
+//! SBI (Supervisor Binary Interface) implementation.
+//!
+//! See <https://github.com/riscv-non-isa/riscv-sbi-doc/blob/master/riscv-sbi.pdf>
+//! for the specification.
 use core::result::Result;
 
+/// SBI extension IDs.
 #[repr(isize)]
 enum SbiExtId {
     ConsolePutChar = 0x01,
