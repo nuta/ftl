@@ -2,21 +2,19 @@
 
 core::arch::global_asm!(include_str!("boot.S"));
 
+mod sbi;
+
 #[no_mangle]
 pub fn rust_entry() {
-    let thr = 0x10000000 as *mut u8;
-    for c in b"Hello from Rust World!\n" {
+    for c in b"\n\n\x1b[1;35mHello from Rust World!\x1b[0m\n\n\n" {
         unsafe {
-            core::ptr::write_volatile(thr, *c);
+            let _ = sbi::console_putchar(*c);
         }
     }
 
-    let sifive_test = 0x100000 as *mut u32;
     unsafe {
-        core::ptr::write_volatile(sifive_test, 0x5555);
+        sbi::shutdown();
     }
-
-    loop {}
 }
 
 #[panic_handler]
