@@ -32,6 +32,6 @@ fn panic(info: &PanicInfo) -> ! {
 
     // This is the first panic. Try whatever we can do including complicated stuff
     // which may panic again.
-    println!("kernel panic: {:?}", info);
+    println!("kernel panic: {}", info);
     hang();
 }

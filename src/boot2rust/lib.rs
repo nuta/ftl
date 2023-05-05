@@ -1,6 +1,7 @@
 #![no_std]
 #![feature(naked_functions)]
 #![feature(asm_const)]
+#![feature(fn_align)]
 
 core::arch::global_asm!(include_str!("boot.S"));
 
@@ -55,7 +56,23 @@ static mut THREAD_BOOT: ThreadContext = ThreadContext { sp: 0 };
 
 #[no_mangle]
 pub fn rust_entry() {
+    println!();
+    unsafe {
+        let handler_addr = switch::switch_to_kernel as *const () as usize;
+        assert!(handler_addr & 0b11 == 0, "handler_addr is not aligned");
+        // write stvec
+        core::arch::asm!(
+            "csrw stvec, {}",
+            in(reg) (handler_addr | 0 /* direct */),
+        );
+    }
+
     println!("\n\n\x1b[1;35mHello from Rust World!\x1b[0m\n\n");
+
+    // null pointer dereference
+    unsafe {
+        core::ptr::read_volatile(0xdeadbeef as *const u8);
+    }
 
     unsafe {
         THREAD_A = ThreadContext::new(
