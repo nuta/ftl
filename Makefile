@@ -7,6 +7,9 @@ endif
 
 PROGRESS  ?= printf "  \\033[1;96m%8s\\033[0m  \\033[1;m%s\\033[0m\\n"
 
+RUST_GDB ?= riscv64-unknown-elf-gdb
+GDB ?= rust-gdb
+
 QEMU ?= $(QEMU_PREFIX)qemu-system-riscv64
 QEMUFLAGS += -smp 1 -m 128 -machine virt,aclint=on -bios default
 QEMUFLAGS += -nographic -serial mon:stdio
@@ -19,11 +22,21 @@ CARGOFLAGS += --target src/boot2rust/riscv64-qemu-virt.json
 LD := $(LLVM_PREFIX)ld.lld
 LDFLAGS = -Tsrc/boot2rust/riscv64-qemu-virt.ld
 
+
+ifneq ($(GDBSERVER),)
+QEMUFLAGS += -S -gdb tcp::7777
+endif
+
 .PHONY: run
 run:
 	$(MAKE) ftl.elf
 	$(PROGRESS) QEMU ftl.elf
 	$(QEMU) $(QEMUFLAGS) -kernel ftl.elf
+
+.PHONY: gdb
+gdb:
+	$(PROGRESS) GDB gdbinit
+	RUST_GDB=$(RUST_GDB) $(GDB) -q -ex "source gdbinit"
 
 .PHONY: clean
 clean:

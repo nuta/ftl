@@ -9,21 +9,21 @@ SECTIONS {
     }
 
     __data = .;
-    .rodata : ALIGN(4) {
+    .rodata : ALIGN(8) {
         *(.rodata .rodata.*);
-        . = ALIGN(4);
+        . = ALIGN(8);
         *(.srodata .srodata.*);
     }
 
-    .data : ALIGN(4) {
+    .data : ALIGN(8) {
         *(.data .data.*);
-        . = ALIGN(4);
+        . = ALIGN(8);
         *(.sdata .sdata.*);
     }
 
-    .bss : ALIGN(4) {
+    .bss : ALIGN(8) {
         *(.bss .bss.*);
-        . = ALIGN(4);
+        . = ALIGN(8);
         *(.sbss .sbss.*);
 
         __boot_stack_bottom = .;
