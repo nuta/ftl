@@ -34,19 +34,19 @@ macro_rules! println {
     // println!()
     () => {{
         $crate::print!(
-            ""
+            "\n"
         );
     }};
     // println!("Hello World!")
     ($fmt:expr) => {{
         $crate::print!(
-            $fmt
+            concat!($fmt, "\n"),
         );
     }};
     // println!("Hello {}!", "World")
     ($fmt:expr, $($arg:tt)*) => {{
         $crate::print!(
-            concat!( $fmt, "\n"),
+            concat!($fmt, "\n"),
             $($arg)*
         );
     }};
