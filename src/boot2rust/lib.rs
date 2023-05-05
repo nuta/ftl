@@ -69,11 +69,6 @@ pub fn rust_entry() {
 
     println!("\n\n\x1b[1;35mHello from Rust World!\x1b[0m\n\n");
 
-    // null pointer dereference
-    unsafe {
-        core::ptr::read_volatile(0xdeadbeef as *const u8);
-    }
-
     unsafe {
         THREAD_A = ThreadContext::new(
             entry_a,
