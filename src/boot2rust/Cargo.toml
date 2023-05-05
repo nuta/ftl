@@ -4,9 +4,8 @@ version = "0.0.0"
 authors = ["Seiya Nuta <nuta@seiya.me>"]
 edition = "2021"
 
-[lib]
+[[bin]]
 name = "boot2rust"
-path = "lib.rs"
-crate-type = ["staticlib"]
+path = "main.rs"
 
 [dependencies]

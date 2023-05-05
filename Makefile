@@ -1,3 +1,8 @@
+BUILD ?= debug
+ifeq ($(BUILD),release)
+CARGOFLAGS += --release
+endif
+
 MAKEFLAGS += --no-builtin-rules --no-builtin-variables
 .SUFFIXES:
 
@@ -19,19 +24,24 @@ CARGO ?= cargo
 CARGOFLAGS += -Z build-std=core -Z build-std-features=compiler-builtins-mem
 CARGOFLAGS += --target src/boot2rust/riscv64-qemu-virt.json
 
-LD := $(LLVM_PREFIX)ld.lld
-LDFLAGS = -Tsrc/boot2rust/riscv64-qemu-virt.ld
-
-
 ifneq ($(GDBSERVER),)
 QEMUFLAGS += -S -gdb tcp::7777
 endif
 
 .PHONY: run
 run:
-	$(MAKE) ftl.elf
+	$(PROGRESS) CARGO $@
+	$(CARGO) build $(CARGOFLAGS) --manifest-path src/boot2rust/Cargo.toml
+	cp target/riscv64-qemu-virt/$(BUILD)/boot2rust ftl.elf
 	$(PROGRESS) QEMU ftl.elf
 	$(QEMU) $(QEMUFLAGS) -kernel ftl.elf
+
+.PHONY: test
+test:
+	$(CARGO) test $(CARGOFLAGS) --manifest-path src/boot2rust/Cargo.toml
+	$(PROGRESS) QEMU ftl.test.elf
+	$(QEMU) $(QEMUFLAGS) -kernel ftl.test.elf
+
 
 .PHONY: gdb
 gdb:
@@ -41,9 +51,3 @@ gdb:
 .PHONY: clean
 clean:
 	rm -f ftl.elf qemu-debug.log
-
-ftl.elf: $(wildcard src/*/*) $(wildcard src/*/*/*) Cargo.toml Makefile
-	$(PROGRESS) CARGO $@
-	$(CARGO) build $(CARGOFLAGS) --manifest-path src/boot2rust/Cargo.toml
-	$(PROGRESS) LD $@
-	$(LD) $(LDFLAGS) -o ftl.elf target/riscv64-qemu-virt/debug/libboot2rust.a

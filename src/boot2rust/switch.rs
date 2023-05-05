@@ -50,8 +50,8 @@ fn trap_handler() {
     unsafe {
         asm!("csrr {}, scause", out(reg) scause);
     }
+
     panic!("trap_handler: scause={:x}", scause);
-    loop {}
 }
 
 // This function address must be aligned to 4 bytes not to accidentally set
