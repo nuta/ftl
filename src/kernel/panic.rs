@@ -1,14 +1,6 @@
-use core::arch::asm;
+use crate::arch::hang;
 use core::panic::PanicInfo;
 use core::sync::atomic::{AtomicU8, Ordering};
-
-fn hang() -> ! {
-    loop {
-        unsafe {
-            asm!("wfi");
-        }
-    }
-}
 
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
@@ -22,16 +14,22 @@ fn panic(info: &PanicInfo) -> ! {
         1 => {
             // Paniked while handling a panic: print details and abort.
             println!("kernel panic: {:?}", info);
-            hang();
+            unsafe {
+                hang();
+            }
         }
         _ => {
             // Too nested panics: println! seems to be broken. Spin forever.
-            hang();
+            unsafe {
+                hang();
+            }
         }
     }
 
     // This is the first panic. Try whatever we can do including complicated stuff
     // which may panic again.
     println!("kernel panic: {}", info);
-    hang();
+    unsafe {
+        hang();
+    }
 }

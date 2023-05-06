@@ -7,3 +7,7 @@ pub fn rdcycle() -> u64 {
     }
     cycles
 }
+
+pub unsafe fn wfi() {
+    asm!("wfi");
+}

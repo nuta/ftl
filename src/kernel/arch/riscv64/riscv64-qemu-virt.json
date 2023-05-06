@@ -11,7 +11,7 @@
     "linker-flavor": "ld.lld",
     "pre-link-args": {
         "ld.lld": [
-            "-Tsrc/kernel/riscv64-qemu-virt.ld"
+            "-Tsrc/kernel/arch/riscv64/riscv64-qemu-virt.ld"
         ]
     },
     "llvm-abiname": "lp64d",
