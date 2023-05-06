@@ -8,7 +8,6 @@ SECTIONS {
         *(.text .text.*);
     }
 
-    __data = .;
     .rodata : ALIGN(8) {
         *(.rodata .rodata.*);
         . = ALIGN(8);
