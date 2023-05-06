@@ -1,3 +1,5 @@
+use core::hint::black_box;
+
 use crate::{asm, sbi};
 
 pub struct Bencher {
@@ -5,7 +7,7 @@ pub struct Bencher {
 }
 
 impl Bencher {
-    pub fn run<F>(&self, mut f: F)
+    pub fn iter<F>(&self, mut f: F)
     where
         F: FnMut(),
     {
@@ -16,10 +18,9 @@ impl Bencher {
         let mut results = [0u64; 32];
         for i in 0..results.len() {
             let start = asm::rdcycle();
-            f();
+            black_box(f());
             let end = asm::rdcycle();
-            // results[i] = end - start - rdcycle_latency; FIXME:
-            results[i] = end - start;
+            results[i] = end - start - rdcycle_latency;
         }
 
         let avg = results.iter().sum::<u64>() / results.len() as u64;
@@ -35,8 +36,8 @@ fn test_println() {
 #[test_case]
 fn test_bench() {
     let bencher = Bencher { name: "test_bench" };
-    bencher.run(|| {
-        asm::rdcycle();
+    bencher.iter(|| {
+        println!("hi");
     });
 }
 
