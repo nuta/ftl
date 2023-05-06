@@ -4,7 +4,7 @@
 #![feature(asm_const)]
 #![feature(fn_align)]
 #![feature(custom_test_frameworks)]
-#![test_runner(test_runner)]
+#![test_runner(crate::test::test_runner)]
 #![reexport_test_harness_main = "test_main"]
 
 core::arch::global_asm!(include_str!("boot.S"));
@@ -16,21 +16,7 @@ mod asm;
 mod panic;
 mod sbi;
 mod switch;
-
-#[test_case]
-fn test_println() {
-    println!("test_println output");
-}
-
-pub fn test_runner(tests: &[&dyn Fn()]) {
-    println!("running tests!");
-    for test in tests {
-        test();
-    }
-    unsafe {
-        sbi::shutdown();
-    }
-}
+mod test;
 
 #[must_use]
 unsafe fn push(sp: usize, value: usize) -> usize {

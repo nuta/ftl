@@ -26,6 +26,7 @@ SECTIONS {
         . = ALIGN(8);
         *(.sbss .sbss.*);
 
+        . = ALIGN(8);
         __boot_stack_bottom = .;
         . = . + 1024 * 1024;
         __boot_stack_top = .;
