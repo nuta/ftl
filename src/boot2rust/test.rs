@@ -1,6 +1,7 @@
 use core::hint::black_box;
 
 use crate::{asm, sbi};
+use proc_macros::test;
 
 pub struct Bencher {
     name: &'static str,
@@ -28,23 +29,44 @@ impl Bencher {
     }
 }
 
-#[test_case]
-fn test_println() {
-    println!("test_println output");
+#[test]
+fn test_case123() {
+    println!("test_case output");
 }
 
-#[test_case]
-fn test_bench() {
-    let bencher = Bencher { name: "test_bench" };
-    bencher.iter(|| {
-        println!("hi");
-    });
+// #[test_case]
+// fn test_println() {
+//     println!("test_println output");
+// }
+
+// #[test_case]
+// fn test_bench() {
+//     let bencher = Bencher { name: "test_bench" };
+//     bencher.iter(|| {
+//         println!("hi");
+//     });
+// }
+
+pub struct Testing {
+    name: &'static str,
+    bencher: Bencher,
 }
 
-pub fn test_runner(tests: &[&dyn Fn()]) {
+impl Testing {
+    pub fn set_name(&mut self, name: &'static str) {
+        self.name = name;
+    }
+}
+
+pub fn test_runner(tests: &[&dyn Fn(&mut Testing)]) {
     println!("running tests!");
     for test in tests {
-        test();
+        let mut testing = &mut Testing {
+            name: "",
+            bencher: Bencher { name: "" },
+        };
+        test(testing);
+        println!("{} ... ok", testing.name);
     }
 
     println!("done!");

@@ -9,3 +9,4 @@ name = "boot2rust"
 path = "main.rs"
 
 [dependencies]
+proc_macros = { path = "../proc_macros" }

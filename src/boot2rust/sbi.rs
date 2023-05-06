@@ -4,6 +4,7 @@
 //! for the specification.
 #![allow(unused)]
 
+use core::arch::asm;
 use core::result::Result;
 
 /// SBI extension IDs.
@@ -39,7 +40,7 @@ unsafe fn sbi_call(
     a4: usize,
     a5: usize,
 ) -> Result<usize, SbiErrorCode> {
-    core::arch::asm!(
+    asm!(
         "ecall",
         inout("a0") a0 => a0,
         inout("a1") a1 => a1,
