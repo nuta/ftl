@@ -7,6 +7,7 @@ name = "kernel"
 version = "0.0.0"
 dependencies = [
  "proc_macros",
+ "riscv",
 ]
 
 [[package]]
@@ -35,6 +36,10 @@ checksum = "4424af4bf778aae2051a77b60283332f386554255d722233d09fbfc7e30da2fc"
 dependencies = [
  "proc-macro2",
 ]
+
+[[package]]
+name = "riscv"
+version = "0.1.0"
 
 [[package]]
 name = "syn"

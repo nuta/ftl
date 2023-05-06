@@ -1,6 +1,6 @@
 //! Printing utilities.
-use crate::sbi;
 use core::fmt;
+use riscv::sbi;
 
 /// A private struct internally used in print macros. Don't use this!
 pub struct PrinterInternal;

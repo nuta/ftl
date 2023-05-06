@@ -1,7 +1,7 @@
 use core::hint::black_box;
 
-use crate::{asm, sbi};
 use proc_macros::test;
+use riscv::{instructions::rdcycle, sbi};
 
 pub struct Bencher {
     name: &'static str,
@@ -12,15 +12,15 @@ impl Bencher {
     where
         F: FnMut(),
     {
-        let start = asm::rdcycle();
-        let end = asm::rdcycle();
+        let start = rdcycle();
+        let end = rdcycle();
         let rdcycle_latency = end - start;
 
         let mut results = [0u64; 32];
         for i in 0..results.len() {
-            let start = asm::rdcycle();
+            let start = rdcycle();
             black_box(f());
-            let end = asm::rdcycle();
+            let end = rdcycle();
             results[i] = end - start - rdcycle_latency;
         }
 
@@ -33,19 +33,6 @@ impl Bencher {
 fn test_case123() {
     println!("test_case output");
 }
-
-// #[test_case]
-// fn test_println() {
-//     println!("test_println output");
-// }
-
-// #[test_case]
-// fn test_bench() {
-//     let bencher = Bencher { name: "test_bench" };
-//     bencher.iter(|| {
-//         println!("hi");
-//     });
-// }
 
 pub struct Testing {
     name: &'static str,
