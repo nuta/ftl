@@ -1,11 +1,11 @@
 [package]
-name = "boot2rust"
+name = "kernel"
 version = "0.0.0"
 authors = ["Seiya Nuta <nuta@seiya.me>"]
 edition = "2021"
 
 [[bin]]
-name = "boot2rust"
+name = "kernel"
 path = "main.rs"
 
 [dependencies]

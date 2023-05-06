@@ -22,7 +22,7 @@ QEMUFLAGS += --no-reboot -d unimp,guest_errors,int,cpu_reset -D qemu-debug.log
 
 CARGO ?= cargo
 CARGOFLAGS += -Z build-std=core -Z build-std-features=compiler-builtins-mem
-CARGOFLAGS += --target src/boot2rust/riscv64-qemu-virt.json
+CARGOFLAGS += --target src/kernel/riscv64-qemu-virt.json
 
 ifneq ($(GDBSERVER),)
 QEMUFLAGS += -S -gdb tcp::7777
@@ -31,14 +31,14 @@ endif
 .PHONY: run
 run:
 	$(PROGRESS) CARGO $@
-	$(CARGO) build $(CARGOFLAGS) --manifest-path src/boot2rust/Cargo.toml
-	cp target/riscv64-qemu-virt/$(BUILD)/boot2rust ftl.elf
+	$(CARGO) build $(CARGOFLAGS) --manifest-path src/kernel/Cargo.toml
+	cp target/riscv64-qemu-virt/$(BUILD)/kernel ftl.elf
 	$(PROGRESS) QEMU ftl.elf
 	$(QEMU) $(QEMUFLAGS) -kernel ftl.elf
 
 .PHONY: test
 test:
-	$(CARGO) test $(CARGOFLAGS) --manifest-path src/boot2rust/Cargo.toml
+	$(CARGO) test $(CARGOFLAGS) --manifest-path src/kernel/Cargo.toml
 	$(PROGRESS) QEMU ftl.test.elf
 	$(QEMU) $(QEMUFLAGS) -kernel ftl.test.elf
 

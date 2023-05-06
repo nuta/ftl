@@ -3,7 +3,7 @@
 version = 3
 
 [[package]]
-name = "boot2rust"
+name = "kernel"
 version = "0.0.0"
 dependencies = [
  "proc_macros",
