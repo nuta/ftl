@@ -21,13 +21,10 @@
 
 use core::num::NonZeroUsize;
 
+use utils::alignment::align_up;
+
 #[cfg(test)]
 extern crate test;
-
-fn align_up(value: usize, align: usize) -> usize {
-    debug_assert!(align.is_power_of_two());
-    (value + align - 1) & !(align - 1)
-}
 
 /// A bump memory allocator.
 pub struct BumpAllocator {
