@@ -3,7 +3,7 @@ ENTRY(boot)
 SECTIONS {
     . = 0x80200000;
 
-    .text : {
+    .text : {\
         KEEP(*(.boot));
         *(.text .text.*);
     }
@@ -18,6 +18,11 @@ SECTIONS {
         *(.data .data.*);
         . = ALIGN(8);
         *(.sdata .sdata.*);
+
+        . = ALIGN(8);
+        __cpu_local = .;
+        *(.cpu_local);
+        __cpu_local_end = .;
     }
 
     .bss : ALIGN(8) {

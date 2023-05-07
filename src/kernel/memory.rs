@@ -12,7 +12,7 @@ use linked_list_allocator::Heap;
 /// The size of the malloc heap in bytes. To be used in `core::alloc` objects.
 const MALLOC_SIZE: usize = 16 * 1024 * 1024;
 
-static PAGE_ALLOCATOR: GiantLock<BumpAllocator> =
+pub static PAGE_ALLOCATOR: GiantLock<BumpAllocator> =
     GiantLock::new(BumpAllocator::new());
 
 struct HeapAllocator(GiantLock<Heap>);

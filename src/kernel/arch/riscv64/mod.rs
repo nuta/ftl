@@ -9,6 +9,22 @@ mod thread;
 
 pub use thread::Thread;
 
+pub fn read_cpulocal_base() -> usize {
+    let tp: usize;
+    unsafe {
+        core::arch::asm!("mv {}, tp", out(reg) tp);
+    }
+
+    debug_assert!(tp != 0);
+    tp
+}
+
+pub fn write_cpulocal_base(base: usize) {
+    unsafe {
+        core::arch::asm!("mv tp, {}", in(reg) base);
+    }
+}
+
 pub fn owns_giant_lock() -> bool {
     true // FIXME:
 }

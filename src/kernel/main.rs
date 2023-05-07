@@ -12,6 +12,7 @@
 mod print;
 
 mod arch;
+mod cpu_local;
 mod lock;
 mod memory;
 mod panic;
@@ -21,6 +22,7 @@ extern crate alloc;
 
 pub fn kernel_main() {
     memory::init();
+    cpu_local::init_percpu();
 
     #[cfg(test)]
     {

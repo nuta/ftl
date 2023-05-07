@@ -18,7 +18,7 @@ impl<T> GiantLock<T> {
         unsafe { &*self.inner.get() }
     }
 
-    // TODO: Imitate RefCell to avoid giving out multiple mutable references.
+    // FIXME: Replace with our own zero-overhead and no alloc implementation of RefCell<T>.
     pub fn get_mut(&self) -> &mut T {
         debug_assert!(arch::owns_giant_lock());
         unsafe { &mut *self.inner.get() }

@@ -14,7 +14,7 @@
 //!
 //! let mut allocator = BumpAllocator::new();
 //! allocator.add_region(0x20000 /* base */, 0x1000 /* len */);
-//! let addr1 = allocator.alloc(0x100 /* size */, 0x100 /* align */);
+//! let addr1 = allocator.allocate(0x100 /* size */, 0x100 /* align */);
 //! ```
 #![no_std]
 #![cfg_attr(test, feature(test))]
