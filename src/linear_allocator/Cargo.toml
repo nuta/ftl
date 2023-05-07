@@ -1,0 +1,7 @@
+[package]
+name = "linear_allocator"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+path = "./lib.rs"
