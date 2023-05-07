@@ -34,5 +34,6 @@ pub fn kernel_main() {
     println!("{:#?}", v);
 
     println!("\n\n\x1b[1;35mHello from Rust World!\x1b[0m\n\n");
+
     arch::shutdown();
 }
