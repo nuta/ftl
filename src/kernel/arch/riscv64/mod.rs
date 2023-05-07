@@ -12,11 +12,11 @@ pub fn read_cpu_cycles() -> usize {
     rdcycle() as usize
 }
 
-pub unsafe fn shutdown() {
+pub fn shutdown() {
     sbi::shutdown();
 }
 
-pub unsafe fn hang() -> ! {
+pub fn hang() -> ! {
     loop {
         wfi();
     }
@@ -24,10 +24,8 @@ pub unsafe fn hang() -> ! {
 
 pub fn console_write(bytes: &[u8]) {
     for b in bytes {
-        unsafe {
-            // Ignore errors. We can't do anything if something goes wrong
-            // anyway.
-            let _ = sbi::console_putchar(*b);
-        }
+        // Ignore errors. We can't do anything if something goes wrong
+        // anyway.
+        let _ = sbi::console_putchar(*b);
     }
 }

@@ -14,22 +14,16 @@ fn panic(info: &PanicInfo) -> ! {
         1 => {
             // Paniked while handling a panic: print details and abort.
             println!("kernel panic: {:?}", info);
-            unsafe {
-                hang();
-            }
+            hang();
         }
         _ => {
             // Too nested panics: println! seems to be broken. Spin forever.
-            unsafe {
-                hang();
-            }
+            hang();
         }
     }
 
     // This is the first panic. Try whatever we can do including complicated stuff
     // which may panic again.
     println!("kernel panic: {}", info);
-    unsafe {
-        hang();
-    }
+    hang();
 }

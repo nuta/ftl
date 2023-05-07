@@ -61,13 +61,18 @@ unsafe fn sbi_call(
 }
 
 /// Writes a character to the debug console. Deprecated.
-pub unsafe fn console_putchar(c: u8) -> Result<(), SbiErrorCode> {
-    let _ = sbi_call(SbiExtId::ConsolePutChar, 0, c as usize, 0, 0, 0, 0, 0)?;
+pub fn console_putchar(c: u8) -> Result<(), SbiErrorCode> {
+    unsafe {
+        let _ =
+            sbi_call(SbiExtId::ConsolePutChar, 0, c as usize, 0, 0, 0, 0, 0)?;
+    }
     Ok(())
 }
 
 /// Puts all harts to shutdown state from the supervisor point of view. Never returns.
-pub unsafe fn shutdown() -> ! {
-    let _ = sbi_call(SbiExtId::Shutdown, 0, 0, 0, 0, 0, 0, 0);
+pub fn shutdown() -> ! {
+    unsafe {
+        let _ = sbi_call(SbiExtId::Shutdown, 0, 0, 0, 0, 0, 0, 0);
+    }
     unreachable!()
 }

@@ -13,7 +13,5 @@ pub fn boot_kernel() {
 
     crate::kernel_main();
 
-    unsafe {
-        sbi::shutdown();
-    }
+    sbi::shutdown();
 }

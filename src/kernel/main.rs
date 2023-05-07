@@ -19,7 +19,5 @@ pub fn kernel_main() {
     test_main();
 
     println!("\n\n\x1b[1;35mHello from Rust World!\x1b[0m\n\n");
-    unsafe {
-        arch::shutdown();
-    }
+    arch::shutdown();
 }
