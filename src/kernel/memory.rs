@@ -1,7 +1,7 @@
 use core::{
     alloc::{GlobalAlloc, Layout},
     mem::size_of,
-    ptr::NonNull,
+    ptr::{addr_of, NonNull},
 };
 
 use crate::lock::GiantLock;
@@ -44,8 +44,8 @@ extern "C" {
 
 pub fn init() {
     unsafe {
-        let heap_start = &__boot_heap as *const u8 as usize;
-        let heap_end = &__boot_heap_end as *const u8 as usize;
+        let heap_start = addr_of!(__boot_heap) as usize;
+        let heap_end = addr_of!(__boot_heap_end) as usize;
         PAGE_ALLOCATOR
             .get_mut()
             .add_region(heap_start, heap_end - heap_start);

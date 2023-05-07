@@ -1,4 +1,9 @@
-use core::{marker::PhantomData, mem::size_of, ops::Deref, ptr};
+use core::{
+    marker::PhantomData,
+    mem::size_of,
+    ops::Deref,
+    ptr::{self, addr_of},
+};
 
 use paste::paste;
 
@@ -64,8 +69,8 @@ impl<T> CpuLocal<T> {
             let init_base;
             let init_end;
             unsafe {
-                init_base = &__cpu_local as *const _ as usize;
-                init_end = &__cpu_local_end as *const _ as usize;
+                init_base = addr_of!(__cpu_local) as usize;
+                init_end = addr_of!(__cpu_local_end) as usize;
             }
             let init_addr = self.init as *const _ as usize;
 
@@ -88,8 +93,8 @@ impl<T> Deref for CpuLocal<T> {
 /// Initializes the CPU-local variables. This function must be called
 /// after the memory allocator is initialized and in each CPU initialization.
 pub fn init_percpu() {
-    let init_base = unsafe { &__cpu_local as *const _ as usize };
-    let init_end = unsafe { &__cpu_local_end as *const _ as usize };
+    let init_base = unsafe { addr_of!(__cpu_local) as usize };
+    let init_end = unsafe { addr_of!(__cpu_local_end) as usize };
     let per_cpu_size = init_end - init_base;
 
     let percpu_base = PAGE_ALLOCATOR
