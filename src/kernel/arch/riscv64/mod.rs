@@ -3,10 +3,11 @@ use riscv::{
     sbi,
 };
 
-core::arch::global_asm!(include_str!("boot.S"));
-
 mod boot;
 mod switch;
+mod thread;
+
+pub use thread::Thread;
 
 pub fn owns_giant_lock() -> bool {
     true // FIXME:

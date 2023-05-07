@@ -12,10 +12,15 @@ pub struct Stvec;
 impl Stvec {
     pub unsafe fn write(addr: usize, mode: TrapMode) {
         assert!(addr & 0b11 == 0, "addr is not aligned");
-        asm!(
-                "csrw stvec, {}",
-            in(reg) (addr | mode as usize),
-        );
+        asm!("csrw stvec, {}", in(reg) (addr | mode as usize));
+    }
+}
+
+pub struct Sscratch;
+
+impl Sscratch {
+    pub unsafe fn write(value: usize) {
+        asm!("csrw sscratch, {}", in(reg) value);
     }
 }
 
@@ -23,10 +28,7 @@ pub struct Sepc;
 
 impl Sepc {
     pub unsafe fn write(addr: usize) {
-        asm!(
-                "csrw sepc, {}",
-            in(reg) addr,
-        );
+        asm!("csrw sepc, {}", in(reg) addr);
     }
 }
 

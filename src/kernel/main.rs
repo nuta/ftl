@@ -3,6 +3,7 @@
 #![feature(naked_functions)]
 #![feature(asm_const)]
 #![feature(fn_align)]
+#![feature(offset_of)]
 #![feature(custom_test_frameworks)]
 #![test_runner(crate::test::test_runner)]
 #![reexport_test_harness_main = "test_main"]
@@ -34,6 +35,16 @@ pub fn kernel_main() {
     println!("{:#?}", v);
 
     println!("\n\n\x1b[1;35mHello from Rust World!\x1b[0m\n\n");
+
+    unsafe extern "C" fn first_user_program() {
+        core::arch::asm!("nop; li a0, 0xc0be; ecall; li a0, 0xbeef; ecall; li a0, 0xdead; ecall");
+    }
+
+    use alloc::boxed::Box;
+    let t =
+        Box::new(arch::Thread::new(first_user_program as *const () as usize));
+    arch::Thread::set_current_thread(t);
+    arch::Thread::switch_test();
 
     arch::shutdown();
 }
