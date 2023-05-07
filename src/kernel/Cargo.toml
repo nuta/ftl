@@ -9,5 +9,7 @@ name = "kernel"
 path = "main.rs"
 
 [dependencies]
+linked_list_allocator = "0.10.5"
 proc_macros = { path = "../proc_macros" }
+bump_allocator = { path = "../bump_allocator" }
 riscv = { path = "../riscv" }

@@ -8,6 +8,10 @@ core::arch::global_asm!(include_str!("boot.S"));
 mod boot;
 mod switch;
 
+pub fn owns_giant_lock() -> bool {
+    true // FIXME:
+}
+
 pub fn read_cpu_cycles() -> usize {
     rdcycle() as usize
 }

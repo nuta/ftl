@@ -21,7 +21,7 @@ QEMUFLAGS += -nographic -serial mon:stdio
 QEMUFLAGS += --no-reboot -d unimp,guest_errors,int,cpu_reset -D qemu-debug.log
 
 CARGO ?= cargo
-CARGOFLAGS += -Z build-std=core -Z build-std-features=compiler-builtins-mem
+CARGOFLAGS += -Z build-std=core,alloc -Z build-std-features=compiler-builtins-mem
 CARGOFLAGS += --target src/kernel/arch/riscv64/riscv64-qemu-virt.json
 
 ifneq ($(GDBSERVER),)

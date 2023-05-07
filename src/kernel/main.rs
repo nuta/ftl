@@ -11,12 +11,27 @@
 mod print;
 
 mod arch;
+mod lock;
+mod memory;
 mod panic;
 mod test;
 
+extern crate alloc;
+
 pub fn kernel_main() {
+    memory::init();
+
     #[cfg(test)]
-    test_main();
+    {
+        test_main();
+        unreachable!();
+    }
+
+    let mut v = alloc::vec::Vec::new();
+    v.push(1);
+    v.push(2);
+    v.push(3);
+    println!("{:#?}", v);
 
     println!("\n\n\x1b[1;35mHello from Rust World!\x1b[0m\n\n");
     arch::shutdown();
