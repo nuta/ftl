@@ -22,6 +22,14 @@ macro_rules! __cpu_local_inner {
 }
 
 /// Defines a CPU-local variable.
+///
+/// # Examples
+///
+/// ```
+/// cpu_local! {
+///     pub static ref InterruptCounter: usize = 123;
+/// }
+/// ```
 #[macro_export]
 macro_rules! cpu_local {
     (static ref $N:ident : $T:ty = $E:expr ;) => {
@@ -38,7 +46,6 @@ extern "C" {
 }
 
 pub struct CpuLocal<T: 'static> {
-    offset: Option<usize>,
     init: &'static T,
     _pd: PhantomData<T>,
 }
@@ -46,25 +53,25 @@ pub struct CpuLocal<T: 'static> {
 impl<T> CpuLocal<T> {
     pub const fn new(init: &'static T) -> CpuLocal<T> {
         CpuLocal {
-            offset: None,
             init,
             _pd: PhantomData,
         }
     }
 
     pub fn get(&self) -> &T {
-        let offset = self.offset.unwrap_or_else(|| {
-            let base;
-            let end;
+        // TODO: Cache this offset value. Use Once<T>.
+        let offset = {
+            let init_base;
+            let init_end;
             unsafe {
-                base = &__cpu_local as *const _ as usize;
-                end = &__cpu_local_end as *const _ as usize;
+                init_base = &__cpu_local as *const _ as usize;
+                init_end = &__cpu_local_end as *const _ as usize;
             }
             let init_addr = self.init as *const _ as usize;
 
-            debug_assert!(base <= init_addr && init_addr < end);
-            init_addr - base
-        });
+            debug_assert!(init_base <= init_addr && init_addr < init_end);
+            init_addr - init_base
+        };
 
         unsafe { &*((read_cpulocal_base() + offset) as *const T) }
     }
@@ -78,17 +85,8 @@ impl<T> Deref for CpuLocal<T> {
     }
 }
 
-unsafe impl<T> Sync for CpuLocal<T> {}
-
-cpu_local! {
-    pub static ref bar: usize = 456;
-}
-
-#[inline(never)]
-fn return_bar() -> usize {
-    *bar
-}
-
+/// Initializes the CPU-local variables. This function must be called
+/// after the memory allocator is initialized and in each CPU initialization.
 pub fn init_percpu() {
     let init_base = unsafe { &__cpu_local as *const _ as usize };
     let init_end = unsafe { &__cpu_local_end as *const _ as usize };
@@ -100,7 +98,7 @@ pub fn init_percpu() {
         .unwrap();
     write_cpulocal_base(percpu_base.get());
 
-    // copy initial values
+    // Fill the percpu area with the initial values.
     unsafe {
         ptr::copy_nonoverlapping(
             init_base as *const u8,
@@ -108,6 +106,4 @@ pub fn init_percpu() {
             per_cpu_size,
         );
     }
-
-    println!("deref = {}", return_bar());
 }
