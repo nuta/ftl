@@ -1,5 +1,5 @@
 [package]
-name = "bitstruct"
+name = "bit_types"
 version = "0.1.0"
 edition = "2021"
 
@@ -7,4 +7,4 @@ edition = "2021"
 path = "./lib.rs"
 
 [dependencies]
-bitstruct_macros = { path = "../bitstruct_macros" }
+bit_types_derive = { path = "../bit_types_derive" }

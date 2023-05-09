@@ -6,8 +6,8 @@ use syn::{parse_macro_input, DeriveInput};
 mod parser;
 
 #[proc_macro_error]
-#[proc_macro_derive(BitStruct, attributes(bitstruct))]
-pub fn bitstruct(input: TokenStream) -> TokenStream {
+#[proc_macro_derive(BitStruct, attributes(bit_types))]
+pub fn bit_types(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let st = parser::Parser::new().parse(input);
     TokenStream::from(quote! {})

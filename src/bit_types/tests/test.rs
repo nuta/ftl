@@ -1,4 +1,4 @@
-use bitstruct::{b1, BitStruct};
+use bit_types::{b1, BitStruct};
 
 #[test]
 fn derive() {
@@ -9,9 +9,9 @@ fn derive() {
 
     #[derive(BitStruct)]
     struct Stvec {
-        #[bitstruct(offset = 0, width = 2)]
+        #[bit_types(offset = 0, width = 2)]
         mode: b1,
-        #[bitstruct(offset = 2, width = 62)]
+        #[bit_types(offset = 2, width = 62)]
         addr: u32,
     }
 }

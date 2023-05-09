@@ -1,5 +1,5 @@
 [package]
-name = "bitstruct_macros"
+name = "bit_types_derive"
 version = "0.0.0"
 edition = "2021"
 

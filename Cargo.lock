@@ -9,20 +9,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d468802bab17cbc0cc575e9b053f41e72aa36bfa6b7f55e3529ffa43161b97fa"
 
 [[package]]
-name = "bitflags"
-version = "2.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "24a6904aef64d73cf10ab17ebace7befb918b82164785cb89907993be7f83813"
-
-[[package]]
-name = "bitstruct"
+name = "bit_types"
 version = "0.1.0"
 dependencies = [
- "bitstruct_macros",
+ "bit_types_derive",
 ]
 
 [[package]]
-name = "bitstruct_macros"
+name = "bit_types_derive"
 version = "0.0.0"
 dependencies = [
  "proc-macro-error",
@@ -30,6 +24,12 @@ dependencies = [
  "quote",
  "syn 2.0.15",
 ]
+
+[[package]]
+name = "bitflags"
+version = "2.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "24a6904aef64d73cf10ab17ebace7befb918b82164785cb89907993be7f83813"
 
 [[package]]
 name = "bump_allocator"

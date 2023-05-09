@@ -99,12 +99,12 @@ impl Parser {
             for attr in field
                 .attrs
                 .iter()
-                .filter(|attr| attr.path().is_ident("bitstruct"))
+                .filter(|attr| attr.path().is_ident("bit_types"))
                 .flat_map(|attr| {
                     attr.parse_args_with(
                         Punctuated::<BitStructAttr, Token![,]>::parse_terminated,
                     )
-                    .expect("failed to parse bitstruct attribute")
+                    .expect("failed to parse bit_types attribute")
                 })
             {
                 match attr {
