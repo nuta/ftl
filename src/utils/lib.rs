@@ -2,3 +2,4 @@
 #![no_std]
 
 pub mod alignment;
+pub mod once;
