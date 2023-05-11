@@ -6,19 +6,19 @@ use syn::{
     parse::{Parse, ParseStream},
     punctuated::Punctuated,
     spanned::Spanned,
-    Data, DeriveInput, Expr, ExprRange, Fields, FieldsNamed, Ident, Lit,
-    RangeLimits, Token, Type,
+    DataStruct, ExprRange, Fields, FieldsNamed, Ident, RangeLimits, Token,
+    Type,
 };
+
+use crate::helpers::{parse_expr_lit, AttributeArgs};
 
 pub struct Field {
     pub ident: Ident,
-    pub ty: Type,            // B1, ...
-    pub container_ty: Ident, // u8, ...
+    pub ty: Type,
     pub accessor: Accessor,
 }
 
-pub struct Definition {
-    pub struct_name: Ident,
+pub struct StructDef {
     pub struct_width: Ident,
     pub fields: Vec<Field>,
 }
@@ -30,40 +30,27 @@ struct ArgsDefinition {
 
 // `width` in #[bitfields(width = 32)]
 #[derive(Debug)]
-pub enum BitStructArg {
+pub enum StructArg {
     Width(usize),
 }
 
-impl Parse for BitStructArg {
-    fn parse(input: ParseStream<'_>) -> syn::Result<BitStructArg> {
+impl Parse for StructArg {
+    fn parse(input: ParseStream<'_>) -> syn::Result<StructArg> {
         let name: Ident = input.parse()?;
         let name_str = name.to_string();
 
         if input.peek(Token![=]) {
-            abort!(name, "unexpected attribute");
+            abort!(name, "unknown attribute");
         } else {
             // attributes without values.
-            match name_str.as_ref() {
-                "u8" => Ok(BitStructArg::Width(8)),
-                "u16" => Ok(BitStructArg::Width(16)),
-                "u32" => Ok(BitStructArg::Width(32)),
-                "u64" => Ok(BitStructArg::Width(64)),
-                _ => abort!(name, "unexpected attribute"),
+            match name_str.as_str() {
+                "u8" => Ok(StructArg::Width(8)),
+                "u16" => Ok(StructArg::Width(16)),
+                "u32" => Ok(StructArg::Width(32)),
+                "u64" => Ok(StructArg::Width(64)),
+                _ => abort!(name, "unknown attribute"),
             }
         }
-    }
-}
-
-fn parse_expr_lit(expr: &Option<Box<syn::Expr>>) -> syn::Result<usize> {
-    match expr {
-        Some(expr) => match **expr {
-            Expr::Lit(ref lit) => match &lit.lit {
-                Lit::Int(int) => Ok(int.base10_parse::<usize>()?),
-                _ => Err(syn::Error::new(expr.span(), "expected an integer")),
-            },
-            _ => Err(syn::Error::new(expr.span(), "expected integer literal")),
-        },
-        _ => Err(syn::Error::new(expr.span(), "expected a range")),
     }
 }
 
@@ -89,7 +76,7 @@ impl Parse for BitStructAttr {
                 "readonly" => Ok(BitStructAttr::Accessor(Accessor::ReadOnly)),
                 "writeonly" => Ok(BitStructAttr::Accessor(Accessor::WriteOnly)),
                 "readwrite" => Ok(BitStructAttr::Accessor(Accessor::ReadWrite)),
-                _ => Err(syn::Error::new(ident.span(), "unexpected attribute")),
+                _ => Err(syn::Error::new(ident.span(), "unknown attribute")),
             }
         } else {
             let expr: ExprRange = input.parse()?;
@@ -107,70 +94,26 @@ impl Parse for BitStructAttr {
     }
 }
 
-/// Since syn v2.x, AttributeArgs got removed. Roll our own.
-pub struct AttributeArgs {
-    span: Span,
-    args: Punctuated<BitStructArg, Token![,]>,
-}
+pub struct StructParser {}
 
-impl AttributeArgs {
-    pub fn iter(&self) -> impl Iterator<Item = &BitStructArg> {
-        self.args.iter()
-    }
-
-    pub fn span(&self) -> Span {
-        self.span
-    }
-}
-
-impl Parse for AttributeArgs {
-    fn parse(input: ParseStream<'_>) -> syn::Result<Self> {
-        Ok(Self {
-            span: input.span(),
-            args: Punctuated::parse_terminated(input)?,
-        })
-    }
-}
-
-fn extract_type_name(ty: &Type) -> &Ident {
-    match ty {
-        Type::Path(ref type_path) => match type_path.path.segments.last() {
-            Some(segment) => &segment.ident,
-            None => {
-                abort!(type_path.span(), "expected a type name");
-            }
-        },
-        _ => panic!("expected a type"),
-    }
-}
-
-pub struct Parser {}
-
-impl Parser {
+impl StructParser {
     pub fn new() -> Self {
         Self {}
     }
 
     pub fn parse(
         mut self,
-        args_input: AttributeArgs,
-        struct_input: DeriveInput,
-    ) -> Definition {
-        let data = match struct_input.data {
-            Data::Struct(ref data) => data,
+        args_input: AttributeArgs<StructArg>,
+        struct_input: &DataStruct,
+        struct_span: Span,
+    ) -> StructDef {
+        let fields = match struct_input.fields {
+            Fields::Named(ref fields) => fields,
             _ => abort!(
-                struct_input.span(),
-                "BitStruct can only be derived for structs"
+                struct_span,
+                "#[bitields] can only be derived for structs with named fields"
             ),
         };
-
-        let fields =
-            match data.fields {
-                Fields::Named(ref fields) => fields,
-                _ => abort!(struct_input.span(),
-                "BitStruct can only be derived for structs with named fields"
-            ),
-            };
 
         let args = self.visit_args(&args_input);
         let struct_width = match args.struct_width {
@@ -191,18 +134,20 @@ impl Parser {
 
         let fields = self.visit_fields(fields);
 
-        Definition {
-            struct_name: struct_input.ident,
+        StructDef {
             struct_width,
             fields: fields,
         }
     }
 
-    fn visit_args(&mut self, args: &AttributeArgs) -> ArgsDefinition {
+    fn visit_args(
+        &mut self,
+        args: &AttributeArgs<StructArg>,
+    ) -> ArgsDefinition {
         let mut def = ArgsDefinition { struct_width: None };
         for arg in args.iter() {
             match arg {
-                BitStructArg::Width(w) => {
+                StructArg::Width(w) => {
                     def.struct_width = Some(*w);
                 }
             }
@@ -217,31 +162,6 @@ impl Parser {
         for field in &input.named {
             let field_ident =
                 field.ident.clone().expect("failed to get the field ident");
-            let field_type = extract_type_name(&field.ty).clone();
-
-            let cast_as = match field_type.to_string().as_str() {
-                "B1" | "B2" | "B3" | "B4" | "B5" | "B6" | "B7" | "B8" => {
-                    Ident::new("u8", Span::call_site())
-                }
-                "B9" | "B10" | "B11" | "B12" | "B13" | "B14" | "B15"
-                | "B16" => Ident::new("u16", Span::call_site()),
-                "B17" | "B18" | "B19" | "B20" | "B21" | "B22" | "B23"
-                | "B24" | "B25" | "B26" | "B27" | "B28" | "B29" | "B30"
-                | "B31" | "B32" => Ident::new("u32", Span::call_site()),
-                "B33" | "B34" | "B35" | "B36" | "B37" | "B38" | "B39"
-                | "B40" | "B41" | "B42" | "B43" | "B44" | "B45" | "B46"
-                | "B47" | "B48" | "B49" | "B50" | "B51" | "B52" | "B53"
-                | "B54" | "B55" | "B56" | "B57" | "B58" | "B59" | "B60"
-                | "B61" | "B62" | "B63" | "B64" => {
-                    Ident::new("u64", Span::call_site())
-                }
-                _ => {
-                    abort!(
-                        field_type.span(),
-                        "a bitfield field must be of type u8, u16, u32, or u64"
-                    );
-                }
-            };
 
             // Look for #[bitfield] attribute.
             let mut attr_args = None;
@@ -304,7 +224,6 @@ impl Parser {
             let field: Field = Field {
                 ident: field_ident,
                 ty: field.ty.clone(),
-                container_ty: cast_as,
                 accessor: accessor.unwrap_or(Accessor::ReadWrite),
             };
 
