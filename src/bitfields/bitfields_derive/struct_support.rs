@@ -8,8 +8,8 @@ use syn::{
     parse::{Parse, ParseStream},
     punctuated::Punctuated,
     spanned::Spanned,
-    DataStruct, ExprRange, Fields, FieldsNamed, Ident, RangeLimits, Token,
-    Type,
+    DataStruct, Expr, ExprRange, Fields, FieldsNamed, Ident, RangeLimits,
+    Token, Type,
 };
 
 use crate::helpers::{expr_into_usize, AttributeArgs};
@@ -18,6 +18,7 @@ pub struct Field {
     pub ident: Ident,
     pub ty: Type,
     pub accessor: Accessor,
+    pub default: Option<Expr>,
 }
 
 pub struct StructDef {
@@ -56,7 +57,6 @@ impl Parse for StructArg {
     }
 }
 
-#[derive(Debug)]
 pub enum Accessor {
     ReadOnly,
     WriteOnly,
@@ -64,21 +64,45 @@ pub enum Accessor {
 }
 
 // `0..=1` in #[bitfield(0..=1)]
-#[derive(Debug)]
 pub enum BitStructAttr {
     Range(RangeInclusive<usize>),
     Accessor(Accessor),
+    Default(Expr),
 }
 
 impl Parse for BitStructAttr {
     fn parse(input: ParseStream<'_>) -> syn::Result<BitStructAttr> {
         if input.peek(Ident) {
             let ident: Ident = input.parse()?;
-            match ident.to_string().as_ref() {
-                "readonly" => Ok(BitStructAttr::Accessor(Accessor::ReadOnly)),
-                "writeonly" => Ok(BitStructAttr::Accessor(Accessor::WriteOnly)),
-                "readwrite" => Ok(BitStructAttr::Accessor(Accessor::ReadWrite)),
-                _ => Err(syn::Error::new(ident.span(), "unknown attribute")),
+
+            if input.peek(Token![=]) {
+                // attributes with values.
+                let _ = input.parse::<Token![=]>()?;
+
+                match ident.to_string().as_ref() {
+                    "default" => {
+                        let expr: Expr = input.parse()?;
+                        Ok(BitStructAttr::Default(expr))
+                    }
+                    _ => {
+                        Err(syn::Error::new(ident.span(), "unknown attribute"))
+                    }
+                }
+            } else {
+                match ident.to_string().as_ref() {
+                    "readonly" => {
+                        Ok(BitStructAttr::Accessor(Accessor::ReadOnly))
+                    }
+                    "writeonly" => {
+                        Ok(BitStructAttr::Accessor(Accessor::WriteOnly))
+                    }
+                    "readwrite" => {
+                        Ok(BitStructAttr::Accessor(Accessor::ReadWrite))
+                    }
+                    _ => {
+                        Err(syn::Error::new(ident.span(), "unknown attribute"))
+                    }
+                }
             }
         } else {
             let expr: ExprRange = input.parse()?;
@@ -189,6 +213,7 @@ fn visit_fields(input: &FieldsNamed) -> Vec<Field> {
 
         // Visit each attribute argument.
         let mut accessor = None;
+        let mut default = None;
         if let Some(attr_args) = attr_args {
             for arg in attr_args {
                 match arg {
@@ -211,6 +236,9 @@ fn visit_fields(input: &FieldsNamed) -> Vec<Field> {
 
                         ranges.push(range);
                     }
+                    BitStructAttr::Default(def) => {
+                        default = Some(def);
+                    }
                 }
             }
         }
@@ -219,6 +247,7 @@ fn visit_fields(input: &FieldsNamed) -> Vec<Field> {
             ident: field_ident,
             ty: field.ty.clone(),
             accessor: accessor.unwrap_or(Accessor::ReadWrite),
+            default,
         };
 
         fields.push(field);
@@ -245,7 +274,8 @@ pub fn bitfields_struct(
         ident,
         ty,
         accessor,
-    } in fields
+        ..
+    } in &fields
     {
         let (readable, writable) = match accessor {
             Accessor::ReadOnly => (true, false),
@@ -258,14 +288,14 @@ pub fn bitfields_struct(
             Ident::new(&format!("{}_offset", ident), Span::call_site());
         if prev_fields.is_empty() {
             methods.push(quote! {
-                #[inline(always)]
+                #[inline]
                 pub const fn #offset() -> usize {
                     0
                 }
             });
         } else {
             methods.push(quote! {
-                #[inline(always)]
+                #[inline]
                 pub const fn #offset() -> usize {
                     #(<#prev_types as ::bitfields::BitField>::BITS)+*
                 }
@@ -275,7 +305,7 @@ pub fn bitfields_struct(
         // Width: foo_width()
         let width = Ident::new(&format!("{}_width", ident), Span::call_site());
         methods.push(quote! {
-            #[inline(always)]
+            #[inline]
             pub const fn #width() -> usize {
                 #ty::BITS
             }
@@ -285,7 +315,7 @@ pub fn bitfields_struct(
         if readable {
             let getter = ident.clone();
             methods.push(quote! {
-                #[inline(always)]
+                #[inline]
                 pub fn #getter(&self) -> <#ty as ::bitfields::BitField>::ContainerType {
                     let mask = ((1 << Self::#width()) - 1) << Self::#offset();
                     let value = (self.raw & mask) >> Self::#offset();
@@ -300,7 +330,7 @@ pub fn bitfields_struct(
                 Ident::new(&format!("set_{}", ident), Span::call_site());
 
             methods.push(quote! {
-                #[inline(always)]
+                #[inline]
                 pub fn #setter(&mut self, value: <#ty as ::bitfields::BitField>::ContainerType) {
                     let value: #struct_width = value.into();
                     debug_assert!(value < (1 << Self::#width()), concat!("value is too large for the field"));
@@ -309,8 +339,65 @@ pub fn bitfields_struct(
             });
         }
 
+        // Value validity checker: check_foo(). Internally used in this crate.
+        let checker =
+            Ident::new(&format!("check_{}", ident), Span::call_site());
+        methods.push(quote! {
+            #[inline]
+            fn #checker(&self, value: #struct_width) -> bool {
+                let mask = (1 << Self::#width()) - 1;
+                <#ty as ::bitfields::BitField>::check_validity(((value >> Self::#offset()) & mask) as usize)
+            }
+        });
+
         prev_fields.push(ident);
         prev_types.push(ty);
+    }
+
+    // from_uXX, from_uXX_unchecked, into_uXX
+    let from_method =
+        Ident::new(&format!("from_u{}", struct_width), Span::call_site());
+    let from_unchecked_method = Ident::new(
+        &format!("from_u{}_unchecked", struct_width),
+        Span::call_site(),
+    );
+    let into_method =
+        Ident::new(&format!("into_u{}", struct_width), Span::call_site());
+    let mut checks = Vec::with_capacity(fields.len());
+    for Field { ident, .. } in &fields {
+        let checker =
+            Ident::new(&format!("check_{}", ident), Span::call_site());
+        checks.push(quote! { __new.#checker(value); });
+    }
+    methods.push(quote! {
+        pub unsafe fn #from_unchecked_method(value: #struct_width) -> Self {
+            Self { raw: value }
+        }
+
+        pub fn #from_method(value: #struct_width) -> Self {
+            // SAFETY: This is safe because we check the validity of each field.
+            let mut __new = unsafe {
+                Self::#from_unchecked_method(value)
+            };
+
+            #(#checks)*
+            __new
+        }
+
+        pub const fn #into_method(self) -> #struct_width {
+            self.raw
+        }
+    });
+
+    // Default::default()
+    let mut defaults = Vec::with_capacity(fields.len());
+    for Field { ident, default, .. } in &fields {
+        let setter = Ident::new(&format!("set_{}", ident), Span::call_site());
+        if let Some(default) = default {
+            defaults.push(quote! {
+                __new.#setter(quote!{ #default });
+            });
+        }
     }
 
     quote! {
@@ -320,9 +407,9 @@ pub fn bitfields_struct(
 
         impl core::default::Default for #struct_name {
             fn default() -> Self {
-                Self {
-                    raw: 0,
-                }
+                let mut __new = Self { raw: 0 };
+                #(#defaults)*
+                __new
             }
         }
 

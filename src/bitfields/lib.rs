@@ -20,6 +20,8 @@ pub struct UnknownVariantErr;
 pub trait BitField {
     const BITS: usize;
     type ContainerType;
+
+    fn check_validity(value: usize) -> bool;
 }
 
 macro_rules! define_bit_type {
@@ -29,6 +31,11 @@ macro_rules! define_bit_type {
         impl BitField for $name {
             const BITS: usize = $bits;
             type ContainerType = $container_ty;
+
+            fn check_validity(_: usize) -> bool {
+                // Integer types are always valid.
+                true
+            }
         }
     };
 }
