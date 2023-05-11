@@ -128,13 +128,15 @@ pub fn bitfields_enum(
         impls.push(quote! {
             impl From<#enum_name> for u8 {
                 fn from(value: #enum_name) -> u8 {
-                    value as u8
+                    let raw = value as u8;
+                    debug_assert!(raw < (1 << <#enum_name as ::bitfields::BitField>::BITS as u8));
+                    raw
                 }
             }
 
             impl From<u8> for #enum_name {
                 fn from(value: u8) -> #enum_name {
-                    debug_assert!(value < ((1 << <#enum_name as ::bitfields::BitField>::BITS as u8) - 1));
+                    debug_assert!(value < (1 << <#enum_name as ::bitfields::BitField>::BITS as u8));
                     match value {
                         #(#from_raw_patterns)*
                     }
@@ -147,13 +149,15 @@ pub fn bitfields_enum(
         impls.push(quote! {
             impl From<#enum_name> for u16 {
                 fn from(value: #enum_name) -> u16 {
-                    value as u16
+                    let raw = value as u16;
+                    debug_assert!(raw < (1 << <#enum_name as ::bitfields::BitField>::BITS as u16));
+                    raw
                 }
             }
 
             impl From<u16> for #enum_name {
                 fn from(value: u16) -> #enum_name {
-                    debug_assert!(value < ((1 << <#enum_name as ::bitfields::BitField>::BITS as u16) - 1));
+                    debug_assert!(value < (1 << <#enum_name as ::bitfields::BitField>::BITS as u16));
                     match value {
                         #(#from_raw_patterns)*
                     }
@@ -166,13 +170,15 @@ pub fn bitfields_enum(
         impls.push(quote! {
             impl From<#enum_name> for u32 {
                 fn from(value: #enum_name) -> u32 {
-                    value as u32
+                    let raw = value as u32;
+                    debug_assert!(raw < (1 << <#enum_name as ::bitfields::BitField>::BITS as u32));
+                    raw
                 }
             }
 
             impl From<u32> for #enum_name {
                 fn from(value: u32) -> #enum_name {
-                    debug_assert!(value < ((1 << <#enum_name as ::bitfields::BitField>::BITS as u32) - 1));
+                    debug_assert!(value < (1 << <#enum_name as ::bitfields::BitField>::BITS as u32));
                     match value {
                         #(#from_raw_patterns)*
                     }
@@ -184,7 +190,9 @@ pub fn bitfields_enum(
     impls.push(quote! {
         impl From<#enum_name> for u64 {
             fn from(value: #enum_name) -> u64 {
-                value as u64
+                let raw = value as u64;
+                debug_assert!(raw < (1 << <#enum_name as ::bitfields::BitField>::BITS as u64));
+                raw
             }
         }
 
