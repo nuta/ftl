@@ -1,5 +1,3 @@
-use std::ops::RangeInclusive;
-
 use proc_macro::TokenStream;
 use proc_macro2::Span;
 use proc_macro_error::abort;
@@ -8,11 +6,10 @@ use syn::{
     parse::{Parse, ParseStream},
     punctuated::Punctuated,
     spanned::Spanned,
-    DataStruct, Expr, ExprRange, Fields, FieldsNamed, Ident, RangeLimits,
-    Token, Type,
+    DataStruct, Expr, Fields, FieldsNamed, Ident, Token, Type,
 };
 
-use crate::helpers::{expr_into_usize, AttributeArgs};
+use crate::helpers::AttributeArgs;
 
 pub struct Field {
     pub ident: Ident,
@@ -62,7 +59,6 @@ pub enum Accessor {
 
 // `0..=1` in #[bitfield(0..=1)]
 pub enum BitStructAttr {
-    Range(RangeInclusive<usize>),
     Accessor(Accessor),
     Default(Expr),
 }
@@ -102,17 +98,10 @@ impl Parse for BitStructAttr {
                 }
             }
         } else {
-            let expr: ExprRange = input.parse()?;
-            if !matches!(expr.limits, RangeLimits::Closed(_)) {
-                return Err(syn::Error::new(
-                expr.span(),
-                "must be a closed range (..=) because of the author's strong opinions",
-            ));
-            }
-
-            let start = expr_into_usize(&expr.start)?;
-            let end = expr_into_usize(&expr.end)?;
-            Ok(BitStructAttr::Range(start..=end))
+            Err(syn::Error::new(
+                input.span(),
+                "expected attribute identifier",
+            ))
         }
     }
 }
@@ -131,17 +120,8 @@ fn parse(
     };
 
     let args = visit_args(&args_input);
-    let (struct_width, struct_width_bits) = match args.struct_width {
-        Some(ref w) => (
-            w.clone(),
-            match w.to_string().as_str() {
-                "u8" => 8,
-                "u16" => 16,
-                "u32" => 32,
-                "u64" => 64,
-                _ => unreachable!(),
-            },
-        ),
+    let struct_width = match args.struct_width {
+        Some(ref w) => w.clone(),
         None => {
             abort!(
                 args_input.span(),
@@ -150,7 +130,7 @@ fn parse(
         }
     };
 
-    let fields = visit_fields(fields, struct_width_bits);
+    let fields = visit_fields(fields);
 
     StructDef {
         struct_width,
@@ -170,9 +150,9 @@ fn visit_args(args: &AttributeArgs<StructArg>) -> ArgsDefinition {
     def
 }
 
-fn visit_fields(input: &FieldsNamed, struct_width_bits: usize) -> Vec<Field> {
+fn visit_fields(input: &FieldsNamed) -> Vec<Field> {
     let mut fields = Vec::with_capacity(input.named.len());
-    let mut ranges = Vec::with_capacity(input.named.len());
+
     // Visit each field in the struct.
     for field in &input.named {
         let field_ident =
@@ -219,26 +199,6 @@ fn visit_fields(input: &FieldsNamed, struct_width_bits: usize) -> Vec<Field> {
                 match arg {
                     BitStructAttr::Accessor(acc) => {
                         accessor = Some(acc);
-                    }
-                    BitStructAttr::Range(range) => {
-                        if range.start() > range.end() {
-                            abort!(field, "invalid bitfield range: end must be greater than or equal to start");
-                        }
-
-                        if ranges.iter().any(|r: &RangeInclusive<usize>| {
-                            (range.start() >= r.start()
-                                && range.start() <= r.end())
-                                || (range.end() >= r.start()
-                                    && range.end() <= r.end())
-                        }) {
-                            abort!(field, "invalid bitfield range: overlaps with another field");
-                        }
-
-                        if *range.end() > struct_width_bits - 1 {
-                            abort!(field, "bitfield range is greater than the struct width");
-                        }
-
-                        ranges.push(range);
                     }
                     BitStructAttr::Default(def) => {
                         default = Some(def);

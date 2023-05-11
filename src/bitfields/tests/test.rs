@@ -26,9 +26,9 @@ fn derive() {
 
     #[bitfields(u32)]
     struct Stvec {
-        // #[bitfield(0..=1)]
+        // #[bitfield()]
         mode: TrapMode,
-        #[bitfield(2..=34)]
+        // #[bitfield()]
         addr: B30,
     }
 

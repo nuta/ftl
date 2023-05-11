@@ -31,15 +31,12 @@ impl<T: Parse> Parse for AttributeArgs<T> {
     }
 }
 
-pub fn expr_into_usize(expr: &Option<Box<syn::Expr>>) -> syn::Result<usize> {
+pub fn expr_into_usize(expr: &syn::Expr) -> syn::Result<usize> {
     match expr {
-        Some(expr) => match **expr {
-            Expr::Lit(ref lit) => match &lit.lit {
-                Lit::Int(int) => Ok(int.base10_parse::<usize>()?),
-                _ => Err(syn::Error::new(expr.span(), "expected an integer")),
-            },
-            _ => Err(syn::Error::new(expr.span(), "expected integer literal")),
+        Expr::Lit(ref lit) => match &lit.lit {
+            Lit::Int(int) => Ok(int.base10_parse::<usize>()?),
+            _ => Err(syn::Error::new(expr.span(), "expected an integer")),
         },
-        _ => Err(syn::Error::new(expr.span(), "expected a range")),
+        _ => Err(syn::Error::new(expr.span(), "expected integer literal")),
     }
 }

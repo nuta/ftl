@@ -30,7 +30,7 @@ impl Parse for EnumArg {
             match name_str.as_str() {
                 "bits" => {
                     let expr = input.parse::<Expr>()?;
-                    let bits: usize = expr_into_usize(&Some(Box::new(expr)))?; // FIXME: Get rid of an unnecessary Option
+                    let bits: usize = expr_into_usize(&expr)?;
                     Ok(EnumArg::Width(bits))
                 }
                 _ => abort!(name, "unknown attribute"),
