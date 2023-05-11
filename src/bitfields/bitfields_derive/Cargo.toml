@@ -1,5 +1,5 @@
 [package]
-name = "bit_types_derive"
+name = "bitfields_derive"
 version = "0.0.0"
 edition = "2021"
 
