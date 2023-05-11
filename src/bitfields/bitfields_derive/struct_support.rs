@@ -275,6 +275,15 @@ pub fn bitfields_struct(
             }
         });
 
+        // Bit range: foo_range()
+        let range = Ident::new(&format!("{}_range", ident), Span::call_site());
+        methods.push(quote! {
+            #[inline]
+            pub const fn #range() -> ::core::ops::RangeInclusive<usize> {
+                Self::#offset()..=Self::#offset() + Self::#width() - 1
+            }
+        });
+
         // Getter: foo()
         if readable {
             let getter = ident.clone();
