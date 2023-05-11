@@ -1,23 +1,34 @@
-use std::mem::size_of;
+use std::{
+    fmt::{self, Debug},
+    mem::size_of,
+};
 
 use bitfields::*;
 
 #[test]
 fn derive() {
-    #[derive(Debug, PartialEq)]
+    #[derive(PartialEq)]
     #[bitfields(bits = 2)]
     enum TrapMode {
         Direct = 0b00,
         Vectored = 0b01,
-        Reserved = 0b10,
-        Reserved2 = 0b11,
+    }
+
+    impl Debug for TrapMode {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            match self {
+                TrapMode::Direct => write!(f, "Direct"),
+                TrapMode::Vectored => write!(f, "Vectored"),
+                _ => write!(f, "Unknown"),
+            }
+        }
     }
 
     #[bitfields(u32)]
     struct Stvec {
         // #[bitfield(0..=1)]
         mode: TrapMode,
-        #[bitfield(2..=31)]
+        #[bitfield(2..=34)]
         addr: B30,
     }
 

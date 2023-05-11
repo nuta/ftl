@@ -5,7 +5,7 @@ use quote::quote;
 use syn::{
     parse::{Parse, ParseStream},
     spanned::Spanned,
-    DataEnum, DeriveInput, Expr, Ident, ItemEnum, Token, Variant,
+    Expr, Ident, ItemEnum, Token, Variant,
 };
 
 use crate::helpers::{expr_into_usize, AttributeArgs};
@@ -104,7 +104,6 @@ pub fn bitfields_enum(
         });
     } else {
         // The enum is not exhaustive. We need a catch-all pattern.
-
         enum_input.variants.push(Variant {
             ident: Ident::new("__NonExhaustive", Span::call_site()),
             attrs: Vec::new(),

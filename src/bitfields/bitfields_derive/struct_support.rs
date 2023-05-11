@@ -28,13 +28,13 @@ pub struct StructDef {
 
 #[derive(Debug)]
 struct ArgsDefinition {
-    struct_width: Option<usize>,
+    struct_width: Option<Ident>,
 }
 
 // `width` in #[bitfields(width = 32)]
 #[derive(Debug)]
 pub enum StructArg {
-    Width(usize),
+    Width(Ident),
 }
 
 impl Parse for StructArg {
@@ -47,10 +47,7 @@ impl Parse for StructArg {
         } else {
             // attributes without values.
             match name_str.as_str() {
-                "u8" => Ok(StructArg::Width(8)),
-                "u16" => Ok(StructArg::Width(16)),
-                "u32" => Ok(StructArg::Width(32)),
-                "u64" => Ok(StructArg::Width(64)),
+                "u8" | "u16" | "u32" | "u64" => Ok(StructArg::Width(name)),
                 _ => abort!(name, "unknown attribute"),
             }
         }
@@ -134,15 +131,18 @@ fn parse(
     };
 
     let args = visit_args(&args_input);
-    let struct_width = match args.struct_width {
-        Some(8) => Ident::new("u8", Span::call_site()),
-        Some(16) => Ident::new("u16", Span::call_site()),
-        Some(32) => Ident::new("u32", Span::call_site()),
-        Some(64) => Ident::new("u64", Span::call_site()),
-        Some(w) => {
-            abort!(args_input.span(), "a bitfield struct must have a width of 8, 16, 32, or 64 bits, not {}", w);
-        }
-        _ => {
+    let (struct_width, struct_width_bits) = match args.struct_width {
+        Some(ref w) => (
+            w.clone(),
+            match w.to_string().as_str() {
+                "u8" => 8,
+                "u16" => 16,
+                "u32" => 32,
+                "u64" => 64,
+                _ => unreachable!(),
+            },
+        ),
+        None => {
             abort!(
                 args_input.span(),
                 "a bitfield struct requires a width attribute"
@@ -150,7 +150,7 @@ fn parse(
         }
     };
 
-    let fields = visit_fields(fields);
+    let fields = visit_fields(fields, struct_width_bits);
 
     StructDef {
         struct_width,
@@ -163,14 +163,14 @@ fn visit_args(args: &AttributeArgs<StructArg>) -> ArgsDefinition {
     for arg in args.iter() {
         match arg {
             StructArg::Width(w) => {
-                def.struct_width = Some(*w);
+                def.struct_width = Some(w.clone());
             }
         }
     }
     def
 }
 
-fn visit_fields(input: &FieldsNamed) -> Vec<Field> {
+fn visit_fields(input: &FieldsNamed, struct_width_bits: usize) -> Vec<Field> {
     let mut fields = Vec::with_capacity(input.named.len());
     let mut ranges = Vec::with_capacity(input.named.len());
     // Visit each field in the struct.
@@ -222,7 +222,7 @@ fn visit_fields(input: &FieldsNamed) -> Vec<Field> {
                     }
                     BitStructAttr::Range(range) => {
                         if range.start() > range.end() {
-                            abort!(field_ident, "invalid bitfield range: end must be greater than or equal to start");
+                            abort!(field, "invalid bitfield range: end must be greater than or equal to start");
                         }
 
                         if ranges.iter().any(|r: &RangeInclusive<usize>| {
@@ -231,7 +231,11 @@ fn visit_fields(input: &FieldsNamed) -> Vec<Field> {
                                 || (range.end() >= r.start()
                                     && range.end() <= r.end())
                         }) {
-                            abort!(field_ident, "invalid bitfield range: overlaps with another field");
+                            abort!(field, "invalid bitfield range: overlaps with another field");
+                        }
+
+                        if *range.end() > struct_width_bits - 1 {
+                            abort!(field, "bitfield range is greater than the struct width");
                         }
 
                         ranges.push(range);
