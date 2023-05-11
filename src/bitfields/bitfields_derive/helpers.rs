@@ -31,7 +31,7 @@ impl<T: Parse> Parse for AttributeArgs<T> {
     }
 }
 
-pub fn parse_expr_lit(expr: &Option<Box<syn::Expr>>) -> syn::Result<usize> {
+pub fn expr_into_usize(expr: &Option<Box<syn::Expr>>) -> syn::Result<usize> {
     match expr {
         Some(expr) => match **expr {
             Expr::Lit(ref lit) => match &lit.lit {
