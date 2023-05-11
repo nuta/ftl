@@ -13,15 +13,20 @@ fn derive() {
 
     #[bitfields(u32)]
     struct Stvec {
-        #[bitfield(0..=1)]
+        // #[bitfield(0..=1)]
         // mode: TrapMode,
         mode: B2,
-        #[bitfield(2..=31)]
+        // #[bitfield(2..=31)]
         addr: B30,
     }
 
+    assert_eq!(B1::BITS, 1);
+    assert_eq!(B2::BITS, 2);
+
     assert_eq!(size_of::<Stvec>(), size_of::<u32>());
     let mut stvec = Stvec::default();
+    assert_eq!(Stvec::mode_offset(), 0);
+    assert_eq!(Stvec::addr_offset(), 2);
     assert_eq!(stvec.mode(), 0);
     assert_eq!(stvec.addr(), 0);
     stvec.set_mode(1);

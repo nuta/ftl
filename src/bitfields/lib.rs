@@ -14,9 +14,17 @@
 #![no_std]
 pub use bitfields_derive::bitfields;
 
+pub trait BitField {
+    const BITS: usize;
+}
+
 macro_rules! define_bit_type {
     ($name:ident, $bits:expr) => {
         pub struct $name;
+
+        impl BitField for $name {
+            const BITS: usize = $bits;
+        }
     };
 }
 

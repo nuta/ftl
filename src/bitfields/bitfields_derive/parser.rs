@@ -12,9 +12,8 @@ use syn::{
 
 pub struct Field {
     pub ident: Ident,
-    pub container_ty: Ident,
-    pub offset: usize,
-    pub width: usize,
+    pub ty: Type,            // B1, ...
+    pub container_ty: Ident, // u8, ...
     pub accessor: Accessor,
 }
 
@@ -212,7 +211,6 @@ impl Parser {
     }
 
     fn visit_fields(&mut self, input: &FieldsNamed) -> Vec<Field> {
-        let mut next_offset = 0;
         let mut fields = Vec::with_capacity(input.named.len());
         let mut ranges = Vec::with_capacity(input.named.len());
         // Visit each field in the struct.
@@ -246,81 +244,69 @@ impl Parser {
             };
 
             // Look for #[bitfield] attribute.
-            let mut bitfield_attr = None;
+            let mut attr_args = None;
             for attr in field.attrs.iter() {
                 if attr.path().is_ident("bitfields") {
                     abort!(attr.span(), "the a field must be annotated with `bitfield` instead of `bitfields` (I mean, singular!)");
                 }
 
                 if attr.path().is_ident("bitfield") {
-                    if bitfield_attr.is_some() {
+                    if attr_args.is_some() {
                         abort!(attr.span(), "a field can only be annotated with `bitfield` once");
                     }
-                    bitfield_attr = Some(attr);
-                }
-            }
 
-            // Parse #[bitfield(...)] attribute.
-            let attr_args = match bitfield_attr {
-                Some(bitfield_attr) => {
-                    match bitfield_attr.parse_args_with(
-                Punctuated::<BitStructAttr, Token![,]>::parse_terminated,
-            ) {
-                Ok(parsed) => parsed,
-                Err(err) => {
-                    abort!(
-                        err.span(),
-                        format!("failed to parse bitfield attribute: {}", err),
-                    );
+                    // Parse #[bitfield(...)] attribute.
+                    attr_args = Some(match attr.parse_args_with(
+                        Punctuated::<BitStructAttr, Token![,]>::parse_terminated,
+                    ) {
+                        Ok(parsed) => parsed,
+                        Err(err) => {
+                            abort!(
+                                err.span(),
+                                format!(
+                                    "failed to parse bitfield attribute: {}",
+                                    err
+                                ),
+                            );
+                        }
+                    });
                 }
             }
-                }
-                None => {
-                    abort!(
-                        field.span(),
-                        "each field must be annotated with `bitfield`"
-                    );
-                }
-            };
 
             // Visit each attribute argument.
-            let mut offset = None;
-            let mut width = None;
             let mut accessor = None;
-            for arg in attr_args {
-                match arg {
-                    BitStructAttr::Accessor(acc) => {
-                        accessor = Some(acc);
-                    }
-                    BitStructAttr::Range(range) => {
-                        if range.start() > range.end() {
-                            abort!(field_ident, "invalid bitfield range: end must be greater than or equal to start");
+            if let Some(attr_args) = attr_args {
+                for arg in attr_args {
+                    match arg {
+                        BitStructAttr::Accessor(acc) => {
+                            accessor = Some(acc);
                         }
+                        BitStructAttr::Range(range) => {
+                            if range.start() > range.end() {
+                                abort!(field_ident, "invalid bitfield range: end must be greater than or equal to start");
+                            }
 
-                        if ranges.iter().any(|r: &RangeInclusive<usize>| {
-                            (range.start() >= r.start()
-                                && range.start() <= r.end())
-                                || (range.end() >= r.start()
-                                    && range.end() <= r.end())
-                        }) {
-                            abort!(field_ident, "invalid bitfield range: overlaps with another field");
+                            if ranges.iter().any(|r: &RangeInclusive<usize>| {
+                                (range.start() >= r.start()
+                                    && range.start() <= r.end())
+                                    || (range.end() >= r.start()
+                                        && range.end() <= r.end())
+                            }) {
+                                abort!(field_ident, "invalid bitfield range: overlaps with another field");
+                            }
+
+                            ranges.push(range);
                         }
-
-                        offset = Some(*range.start());
-                        width = Some(range.end() - range.start() + 1);
-                        ranges.push(range);
                     }
                 }
             }
 
             let field: Field = Field {
                 ident: field_ident,
+                ty: field.ty.clone(),
                 container_ty: cast_as,
                 accessor: accessor.unwrap_or(Accessor::ReadWrite),
-                offset: offset.unwrap_or(next_offset),
-                width: width.unwrap_or(1),
             };
-            next_offset = field.offset + field.width;
 
             fields.push(field);
         }
