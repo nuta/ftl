@@ -339,17 +339,6 @@ pub fn bitfields_struct(
             });
         }
 
-        // Value validity checker: check_foo(). Internally used in this crate.
-        let checker =
-            Ident::new(&format!("check_{}", ident), Span::call_site());
-        methods.push(quote! {
-            #[inline]
-            fn #checker(&self, value: #struct_width) -> bool {
-                let mask = (1 << Self::#width()) - 1;
-                <#ty as ::bitfields::BitField>::check_validity(((value >> Self::#offset()) & mask) as usize)
-            }
-        });
-
         prev_fields.push(ident);
         prev_types.push(ty);
     }
@@ -357,31 +346,11 @@ pub fn bitfields_struct(
     // from_uXX, from_uXX_unchecked, into_uXX
     let from_method =
         Ident::new(&format!("from_u{}", struct_width), Span::call_site());
-    let from_unchecked_method = Ident::new(
-        &format!("from_u{}_unchecked", struct_width),
-        Span::call_site(),
-    );
     let into_method =
         Ident::new(&format!("into_u{}", struct_width), Span::call_site());
-    let mut checks = Vec::with_capacity(fields.len());
-    for Field { ident, .. } in &fields {
-        let checker =
-            Ident::new(&format!("check_{}", ident), Span::call_site());
-        checks.push(quote! { __new.#checker(value); });
-    }
     methods.push(quote! {
-        pub unsafe fn #from_unchecked_method(value: #struct_width) -> Self {
+        pub unsafe fn #from_method(value: #struct_width) -> Self {
             Self { raw: value }
-        }
-
-        pub fn #from_method(value: #struct_width) -> Self {
-            // SAFETY: This is safe because we check the validity of each field.
-            let mut __new = unsafe {
-                Self::#from_unchecked_method(value)
-            };
-
-            #(#checks)*
-            __new
         }
 
         pub const fn #into_method(self) -> #struct_width {

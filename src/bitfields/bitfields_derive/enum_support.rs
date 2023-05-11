@@ -5,7 +5,7 @@ use quote::quote;
 use syn::{
     parse::{Parse, ParseStream},
     spanned::Spanned,
-    DataEnum, DeriveInput, Expr, Ident, Token,
+    DataEnum, DeriveInput, Expr, Ident, ItemEnum, Token, Variant,
 };
 
 use crate::helpers::{expr_into_usize, AttributeArgs};
@@ -43,7 +43,7 @@ impl Parse for EnumArg {
 
 fn parse(
     args: AttributeArgs<EnumArg>,
-    _enum_input: &DataEnum,
+    _enum_input: &ItemEnum,
     enum_span: Span,
 ) -> EnumDef {
     let mut enum_width = None;
@@ -77,21 +77,18 @@ fn parse(
 pub fn bitfields_enum(
     enum_name: &Ident,
     args_input: AttributeArgs<EnumArg>,
-    enum_input: &DataEnum,
+    mut enum_input: ItemEnum,
     enum_span: Span,
-    enum_ast: &DeriveInput,
 ) -> TokenStream {
-    let EnumDef { enum_width } = parse(args_input, enum_input, enum_span);
+    let EnumDef { enum_width } = parse(args_input, &enum_input, enum_span);
 
     let mut from_raw_patterns = Vec::with_capacity(enum_input.variants.len());
-    let mut check_patterns = Vec::with_capacity(enum_input.variants.len());
     for variant in &enum_input.variants {
         match &variant.discriminant {
             Some((_, expr)) => {
                 let variant = &variant.ident;
                 from_raw_patterns
                     .push(quote! { (#expr) => #enum_name::#variant, });
-                check_patterns.push(quote! { (#expr) => true, });
             }
             None => {
                 abort!(variant.span(), "each variant must have a discriminant");
@@ -99,21 +96,24 @@ pub fn bitfields_enum(
         }
     }
 
-    if from_raw_patterns.len() < 1 << enum_width {
+    if from_raw_patterns.len() == 1 << enum_width {
         // The enum is not exhaustive (assuming Rust will deny multiple variants that
-        // have the same value). We need a catch-all pattern.
-        check_patterns.push(quote!{
-            _ => panic!(concat!("unexpected value for ", stringify!(#enum_name), ": {:#x}"), value),
+        // have the same value). It should be safe to use `unreachable_unchecked()` here.
+        from_raw_patterns.push(quote! {
+            _ => unsafe { ::core::hint::unreachable_unchecked() },
+        });
+    } else {
+        // The enum is not exhaustive. We need a catch-all pattern.
+
+        enum_input.variants.push(Variant {
+            ident: Ident::new("__NonExhaustive", Span::call_site()),
+            attrs: Vec::new(),
+            fields: syn::Fields::Unit,
+            discriminant: None,
         });
 
         from_raw_patterns.push(quote! {
-            _ => {
-                // SAFETY: We've already checked that the value is valid in Self::from_uXX().
-                //         We could get here if Self::from_uXX_unchecked() is used.
-                unsafe {
-                    core::hint::unreachable_unchecked()
-                }
-            },
+            _ => { #enum_name::__NonExhaustive },
         });
     }
 
@@ -122,12 +122,6 @@ pub fn bitfields_enum(
         impl ::bitfields::BitField for #enum_name {
             const BITS: usize = #enum_width;
             type ContainerType = Self;
-
-            fn check_validity(value: usize) -> bool {
-                match value {
-                    #(#check_patterns)*
-                }
-            }
         }
     });
 
@@ -141,6 +135,7 @@ pub fn bitfields_enum(
 
             impl From<u8> for #enum_name {
                 fn from(value: u8) -> #enum_name {
+                    debug_assert!(value < ((1 << <#enum_name as ::bitfields::BitField>::BITS as u8) - 1));
                     match value {
                         #(#from_raw_patterns)*
                     }
@@ -159,6 +154,7 @@ pub fn bitfields_enum(
 
             impl From<u16> for #enum_name {
                 fn from(value: u16) -> #enum_name {
+                    debug_assert!(value < ((1 << <#enum_name as ::bitfields::BitField>::BITS as u16) - 1));
                     match value {
                         #(#from_raw_patterns)*
                     }
@@ -177,6 +173,7 @@ pub fn bitfields_enum(
 
             impl From<u32> for #enum_name {
                 fn from(value: u32) -> #enum_name {
+                    debug_assert!(value < ((1 << <#enum_name as ::bitfields::BitField>::BITS as u32) - 1));
                     match value {
                         #(#from_raw_patterns)*
                     }
@@ -203,7 +200,7 @@ pub fn bitfields_enum(
     });
 
     quote! {
-        #enum_ast
+        #enum_input
         #(#impls)*
     }
     .into()

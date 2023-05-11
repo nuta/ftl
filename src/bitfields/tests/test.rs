@@ -7,8 +7,10 @@ fn derive() {
     #[derive(Debug, PartialEq)]
     #[bitfields(bits = 2)]
     enum TrapMode {
-        Direct = 0,
-        Vectored = 1,
+        Direct = 0b00,
+        Vectored = 0b01,
+        Reserved = 0b10,
+        Reserved2 = 0b11,
     }
 
     #[bitfields(u32)]
