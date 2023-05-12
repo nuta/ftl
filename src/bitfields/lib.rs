@@ -13,15 +13,16 @@
 //! use bitfields::{bitfields, B30};
 //! use std::mem::size_of;
 //!
-//! #[bitfields(u32)]  // This should come first! Derives Default.
-//! #[derive(Debug)]   // `#[derive]` must come after `#[bitfields]`.
+//! #[bitfields(u32)]       // Derives Default and Debug.
+//! #[derive(Copy, Clone)]  // `#[derive]` must come after `#[bitfields]`.
 //! struct Stvec {
+//!     #[bitfield(default=TrapMode::Direct)]
 //!     mode: TrapMode,
 //!     addr: B30,
 //! }
 //!
-//! #[derive(PartialEq)]
-//! #[bitfields(bits = 2)] // derives Copy, Clone, Debug
+//! #[bitfields(bits = 2)] // Derives Copy, Clone, Debug.
+//! #[derive(PartialEq)]   // `#[derive]` must come after `#[bitfields]`.
 //! enum TrapMode {
 //!     Direct = 0b00,
 //!     Vectored = 0b01,

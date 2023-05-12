@@ -4,17 +4,16 @@ use bitfields::*;
 
 #[test]
 fn derive() {
-    #[derive(PartialEq)]
     #[bitfields(bits = 2)]
+    #[derive(PartialEq)]
     enum TrapMode {
         Direct = 0b00,
         Vectored = 0b01,
     }
 
     #[bitfields(u32)]
-    #[derive(Copy, Clone)]
     struct Stvec {
-        // #[bitfield()]
+        #[bitfield(default=TrapMode::Direct)]
         mode: TrapMode,
         // #[bitfield(hidden)]
         // pad: B3,

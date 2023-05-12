@@ -9,7 +9,7 @@ use syn::{
     DataStruct, Expr, Fields, FieldsNamed, Ident, Token, Type,
 };
 
-use crate::helpers::AttributeArgs;
+use crate::helpers::{is_bit_type, AttributeArgs};
 
 pub struct Field {
     pub ident: Ident,
@@ -189,14 +189,21 @@ fn visit_fields(input: &FieldsNamed) -> Vec<Field> {
                     FieldAttr::Accessor(acc) => {
                         accessor = Some(acc);
                     }
-                    FieldAttr::Default(def) => {
-                        default = Some(def);
+                    FieldAttr::Default(expr) => {
+                        default = Some(expr);
                     }
                     FieldAttr::Hidden => {
                         hidden = true;
                     }
                 }
             }
+        }
+
+        if !is_bit_type(&field.ty) && default.is_none() {
+            abort!(
+                field.span(),
+                "each field must have a default value unless it is a B1/B2/... type"
+            );
         }
 
         let field: Field = Field {
@@ -228,12 +235,13 @@ pub fn bitfields_struct(
     let mut prev_fields = Vec::with_capacity(fields.len());
     let mut prev_types = Vec::with_capacity(fields.len());
     let mut debug_fields = Vec::with_capacity(fields.len());
+    let mut defaults = Vec::with_capacity(fields.len());
     for Field {
         ident,
         ty,
         accessor,
         hidden,
-        ..
+        default,
     } in &fields
     {
         let (readable, writable) = match accessor {
@@ -313,7 +321,13 @@ pub fn bitfields_struct(
                     debug_assert!(value < (1 << Self::#width()), concat!("value is too large for the field"));
                     self.raw |= value << Self::#offset();
                 }
-            });
+                });
+
+                if let Some(default) = default {
+                    defaults.push(quote! {
+                        __new.#setter(#default);
+                    });
+                }
             }
 
             debug_fields.push(quote! {
@@ -339,17 +353,6 @@ pub fn bitfields_struct(
             self.raw
         }
     });
-
-    // Default::default()
-    let mut defaults = Vec::with_capacity(fields.len());
-    for Field { ident, default, .. } in &fields {
-        let setter = Ident::new(&format!("set_{}", ident), Span::call_site());
-        if let Some(default) = default {
-            defaults.push(quote! {
-                __new.#setter(quote!{ #default });
-            });
-        }
-    }
 
     let mut static_asserts = Vec::new();
     if let Some(Field { ident, .. }) = fields.last() {
