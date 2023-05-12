@@ -6,16 +6,15 @@ use syn::{
     parse::{Parse, ParseStream},
     punctuated::Punctuated,
     spanned::Spanned,
-    DataStruct, Expr, Fields, FieldsNamed, Ident, Token, Type,
+    DataStruct, Fields, FieldsNamed, Ident, Token, Type,
 };
 
-use crate::helpers::{is_bit_type, AttributeArgs};
+use crate::helpers::AttributeArgs;
 
 pub struct Field {
     pub ident: Ident,
     pub ty: Type,
     pub accessor: Accessor,
-    pub default: Option<Expr>,
     pub hidden: bool,
 }
 
@@ -61,7 +60,6 @@ pub enum Accessor {
 // `readonly` in #[bitfield(readonly)]
 pub enum FieldAttr {
     Accessor(Accessor),
-    Default(Expr),
     Hidden,
 }
 
@@ -69,26 +67,22 @@ impl Parse for FieldAttr {
     fn parse(input: ParseStream<'_>) -> syn::Result<FieldAttr> {
         let ident: Ident = input.parse()?;
 
-        if input.peek(Token![=]) {
-            // attributes with values.
-            let _ = input.parse::<Token![=]>()?;
+        // if input.peek(Token![=]) {
+        //     // attributes with values.
+        //     let _ = input.parse::<Token![=]>()?;
 
-            match ident.to_string().as_ref() {
-                "default" => {
-                    let expr: Expr = input.parse()?;
-                    Ok(FieldAttr::Default(expr))
-                }
-                _ => Err(syn::Error::new(ident.span(), "unknown attribute")),
-            }
-        } else {
-            match ident.to_string().as_ref() {
-                "readonly" => Ok(FieldAttr::Accessor(Accessor::ReadOnly)),
-                "writeonly" => Ok(FieldAttr::Accessor(Accessor::WriteOnly)),
-                "readwrite" => Ok(FieldAttr::Accessor(Accessor::ReadWrite)),
-                "hidden" => Ok(FieldAttr::Hidden),
-                _ => Err(syn::Error::new(ident.span(), "unknown attribute")),
-            }
+        //     match ident.to_string().as_ref() {
+        //         _ => Err(syn::Error::new(ident.span(), "unknown attribute")),
+        //     }
+        // } else {
+        match ident.to_string().as_ref() {
+            "readonly" => Ok(FieldAttr::Accessor(Accessor::ReadOnly)),
+            "writeonly" => Ok(FieldAttr::Accessor(Accessor::WriteOnly)),
+            "readwrite" => Ok(FieldAttr::Accessor(Accessor::ReadWrite)),
+            "hidden" => Ok(FieldAttr::Hidden),
+            _ => Err(syn::Error::new(ident.span(), "unknown attribute")),
         }
+        // }
     }
 }
 
@@ -181,16 +175,12 @@ fn visit_fields(input: &FieldsNamed) -> Vec<Field> {
 
         // Visit each attribute argument.
         let mut accessor = None;
-        let mut default = None;
         let mut hidden = false;
         if let Some(attr_args) = attr_args {
             for arg in attr_args {
                 match arg {
                     FieldAttr::Accessor(acc) => {
                         accessor = Some(acc);
-                    }
-                    FieldAttr::Default(expr) => {
-                        default = Some(expr);
                     }
                     FieldAttr::Hidden => {
                         hidden = true;
@@ -199,18 +189,10 @@ fn visit_fields(input: &FieldsNamed) -> Vec<Field> {
             }
         }
 
-        if !is_bit_type(&field.ty) && default.is_none() {
-            abort!(
-                field.span(),
-                "each field must have a default value unless it is a B1/B2/... type"
-            );
-        }
-
         let field: Field = Field {
             ident: field_ident,
             ty: field.ty.clone(),
             accessor: accessor.unwrap_or(Accessor::ReadWrite),
-            default,
             hidden,
         };
 
@@ -235,13 +217,11 @@ pub fn bitfields_struct(
     let mut prev_fields = Vec::with_capacity(fields.len());
     let mut prev_types = Vec::with_capacity(fields.len());
     let mut debug_fields = Vec::with_capacity(fields.len());
-    let mut defaults = Vec::with_capacity(fields.len());
     for Field {
         ident,
         ty,
         accessor,
         hidden,
-        default,
     } in &fields
     {
         let (readable, writable) = match accessor {
@@ -322,12 +302,6 @@ pub fn bitfields_struct(
                     self.raw |= value << Self::#offset();
                 }
                 });
-
-                if let Some(default) = default {
-                    defaults.push(quote! {
-                        __new.#setter(#default);
-                    });
-                }
             }
 
             debug_fields.push(quote! {
@@ -377,11 +351,9 @@ pub fn bitfields_struct(
 
         #(#static_asserts)*
 
-        impl core::default::Default for #struct_name {
-            fn default() -> Self {
-                let mut __new = Self { raw: 0 };
-                #(#defaults)*
-                __new
+        impl #struct_name {
+            pub fn zeroed() -> Self {
+                Self { raw: 0 }
             }
         }
 
