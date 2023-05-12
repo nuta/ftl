@@ -280,10 +280,10 @@ pub fn bitfields_struct(
                 let getter = ident.clone();
                 methods.push(quote! {
                 #[inline]
-                pub fn #getter(&self) -> <#ty as ::bitfields::BitField>::ContainerType {
+                pub fn #getter(&self) -> <#ty as ::bitfields::BitField>::AccessorValueType {
                     let mask = ((1 << Self::#width()) - 1) << Self::#offset();
                     let value = (self.raw & mask) >> Self::#offset();
-                    <#ty as ::bitfields::BitField>::ContainerType::from(value)
+                    <#ty as ::bitfields::BitField>::from_u64(value as u64)
                 }
             });
             }
@@ -295,8 +295,8 @@ pub fn bitfields_struct(
 
                 methods.push(quote! {
                 #[inline]
-                pub fn #setter(&mut self, value: <#ty as ::bitfields::BitField>::ContainerType) {
-                    let value: #struct_width = value.into();
+                pub fn #setter(&mut self, value: <#ty as ::bitfields::BitField>::AccessorValueType) {
+                    let value = <#ty as ::bitfields::BitField>::into_u64(value) as #struct_width;
                     debug_assert!(value < (1 << Self::#width()), concat!("value is too large for the field"));
                     self.raw |= value << Self::#offset();
                 }
@@ -332,8 +332,7 @@ pub fn bitfields_struct(
             const _: () = assert!(
                 #struct_name::#offset() + #struct_name::#width() == 8*::core::mem::size_of::<#struct_width>(),
                 concat!(
-                    stringify!(#struct_name), " is not ", stringify!(#struct_width), " bytes",
-                    " (hint: perhaps you forgot to add padding fields?)"
+                    stringify!(#struct_name), " is not ", stringify!(#struct_width), "-sized struct (hint: perhaps you forgot to add padding fields?)"
                 )
             );
         });

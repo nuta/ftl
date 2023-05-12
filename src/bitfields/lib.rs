@@ -47,11 +47,11 @@
 //! #[bitfields(u32)]      // Automatically derives Debug.
 //! #[derive(Copy, Clone)] // `#[derive]` must come after `#[bitfields]`.
 //! struct MyStruct {
-//!    a: B1, // 1-bit
-//!    b: B2, // 2-bits
+//!    a: B2,        // 2-bits
+//!    b: bool,      // 1-bit but as bool
 //!    #[bitfield(hidden)] // Don't expose this field.
 //!    padding: B21, // 21-bits
-//!    c: B8, // 8-bits
+//!    c: B8,        // 8-bits
 //! }
 //! ```
 //!
@@ -178,21 +178,49 @@
 #![no_std]
 pub use bitfields_derive::bitfields;
 
-/// Indicates the given value is not a valid variant of the enum.
-pub struct UnknownVariantErr;
-
 pub trait BitField {
     const BITS: usize;
-    type ContainerType;
+    type AccessorValueType;
+
+    fn from_u64(value: u64) -> Self::AccessorValueType;
+    fn into_u64(value: Self::AccessorValueType) -> u64;
+}
+
+impl BitField for bool {
+    const BITS: usize = 1;
+    type AccessorValueType = bool;
+
+    fn from_u64(value: u64) -> bool {
+        value != 0
+    }
+
+    fn into_u64(value: bool) -> u64 {
+        if value {
+            1
+        } else {
+            0
+        }
+    }
 }
 
 macro_rules! define_bit_type {
-    ($name:ident, $bits:literal, $container_ty:ty) => {
+    ($name:ident, $bits:literal, $value_ty:ty) => {
+        #[doc = concat!($bits, "-bits-wide field.")]
         pub struct $name;
 
         impl BitField for $name {
             const BITS: usize = $bits;
-            type ContainerType = $container_ty;
+            type AccessorValueType = $value_ty;
+
+            fn from_u64(value: u64) -> $value_ty {
+                debug_assert!((value as u64) <= ((1u128 << $bits) - 1) as u64);
+
+                value as $value_ty
+            }
+
+            fn into_u64(value: $value_ty) -> u64 {
+                value as u64
+            }
         }
     };
 }

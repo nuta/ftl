@@ -141,99 +141,27 @@ pub fn bitfields_enum(
         });
     }
 
-    let mut impls = Vec::new();
-    impls.push(quote! {
+    quote! {
+        #[derive(Copy, Clone)]
+        #enum_input
+        #(#static_asserts)*
+
         impl ::bitfields::BitField for #enum_name {
             const BITS: usize = #enum_width;
-            type ContainerType = Self;
-        }
-    });
+            type AccessorValueType = Self;
 
-    if enum_width <= 8 {
-        impls.push(quote! {
-            impl From<#enum_name> for u8 {
-                fn from(value: #enum_name) -> u8 {
-                    let raw = value as u8;
-                    debug_assert!(raw < (1 << <#enum_name as ::bitfields::BitField>::BITS as u8));
-                    raw
+            fn from_u64(value: u64) -> Self {
+                match value {
+                    #(#from_raw_patterns)*
                 }
             }
 
-            impl From<u8> for #enum_name {
-                fn from(value: u8) -> #enum_name {
-                    debug_assert!(value < (1 << <#enum_name as ::bitfields::BitField>::BITS as u8));
-                    match value {
-                        #(#from_raw_patterns)*
-                    }
-                }
-            }
-        });
-    }
-
-    if enum_width <= 16 {
-        impls.push(quote! {
-            impl From<#enum_name> for u16 {
-                fn from(value: #enum_name) -> u16 {
-                    let raw = value as u16;
-                    debug_assert!(raw < (1 << <#enum_name as ::bitfields::BitField>::BITS as u16));
-                    raw
-                }
-            }
-
-            impl From<u16> for #enum_name {
-                fn from(value: u16) -> #enum_name {
-                    debug_assert!(value < (1 << <#enum_name as ::bitfields::BitField>::BITS as u16));
-                    match value {
-                        #(#from_raw_patterns)*
-                    }
-                }
-            }
-        });
-    }
-
-    if enum_width <= 32 {
-        impls.push(quote! {
-            impl From<#enum_name> for u32 {
-                fn from(value: #enum_name) -> u32 {
-                    let raw = value as u32;
-                    debug_assert!(raw < (1 << <#enum_name as ::bitfields::BitField>::BITS as u32));
-                    raw
-                }
-            }
-
-            impl From<u32> for #enum_name {
-                fn from(value: u32) -> #enum_name {
-                    debug_assert!(value < (1 << <#enum_name as ::bitfields::BitField>::BITS as u32));
-                    match value {
-                        #(#from_raw_patterns)*
-                    }
-                }
-            }
-        });
-    }
-
-    impls.push(quote! {
-        impl From<#enum_name> for u64 {
-            fn from(value: #enum_name) -> u64 {
+            fn into_u64(value: #enum_name) -> u64 {
                 let raw = value as u64;
                 debug_assert!(raw < (1 << <#enum_name as ::bitfields::BitField>::BITS as u64));
                 raw
             }
         }
-
-        impl From<u64> for #enum_name {
-            fn from(value: u64) -> Self {
-                match value {
-                    #(#from_raw_patterns)*
-                }
-            }
-        }
-    });
-
-    quote! {
-        #[derive(Copy, Clone)]
-        #enum_input
-        #(#static_asserts)*
 
         impl ::core::fmt::Debug for #enum_name {
             fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
@@ -244,8 +172,6 @@ pub fn bitfields_enum(
                 Ok(())
             }
         }
-
-        #(#impls)*
     }
     .into()
 }
