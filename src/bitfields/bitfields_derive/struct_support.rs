@@ -78,7 +78,6 @@ impl Parse for FieldAttr {
         match ident.to_string().as_ref() {
             "readonly" => Ok(FieldAttr::Accessor(Accessor::ReadOnly)),
             "writeonly" => Ok(FieldAttr::Accessor(Accessor::WriteOnly)),
-            "readwrite" => Ok(FieldAttr::Accessor(Accessor::ReadWrite)),
             "hidden" => Ok(FieldAttr::Hidden),
             _ => Err(syn::Error::new(ident.span(), "unknown attribute")),
         }
@@ -105,7 +104,7 @@ fn parse(
         None => {
             abort!(
                 args_input.span(),
-                "a bitfield struct requires a width attribute"
+                "a bitfield struct requires a width attribute like #[bitfield(u32)]"
             );
         }
     };
@@ -313,17 +312,13 @@ pub fn bitfields_struct(
         prev_types.push(ty);
     }
 
-    // from_uXX, from_uXX_unchecked, into_uXX
-    let from_method =
-        Ident::new(&format!("from_u{}", struct_width), Span::call_site());
-    let into_method =
-        Ident::new(&format!("into_u{}", struct_width), Span::call_site());
+    // from_raw, into_raw
     methods.push(quote! {
-        pub unsafe fn #from_method(value: #struct_width) -> Self {
+        pub unsafe fn from_raw(value: #struct_width) -> Self {
             Self { raw: value }
         }
 
-        pub const fn #into_method(self) -> #struct_width {
+        pub const fn into_raw(self) -> #struct_width {
             self.raw
         }
     });

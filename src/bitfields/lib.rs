@@ -1,6 +1,5 @@
 //! This crate provides `#[bitfields]`, an attribute macro to define bitfield structs
-//! for reading/writing MMIO registers, control registers in x86-64, and CSR registers
-//! in RISC-V.
+//! like MMIO registers, control registers in x86-64, and CSR registers in RISC-V.
 //!
 //! Inspired by [tock-registers](https://github.com/tock/tock/tree/master/libraries/tock-register-interface)
 //! and [clap](https://github.com/clap-rs/clap). Also, coincidentally, it's similar to
@@ -13,15 +12,15 @@
 //! use bitfields::{bitfields, B30};
 //! use std::mem::size_of;
 //!
-//! #[bitfields(u32)]       // Derives Debug.
-//! #[derive(Copy, Clone)]  // `#[derive]` must come after `#[bitfields]`.
+//! #[bitfields(u32)]
+//! #[derive(Copy, Clone)]
 //! struct Stvec {
 //!     mode: TrapMode,
 //!     addr: B30,
 //! }
 //!
-//! #[bitfields(bits = 2)] // Derives Copy, Clone, Debug.
-//! #[derive(PartialEq)]   // `#[derive]` must come after `#[bitfields]`.
+//! #[bitfields(bits = 2)]
+//! #[derive(PartialEq)]
 //! enum TrapMode {
 //!     Direct = 0b00,
 //!     Vectored = 0b01,
@@ -37,6 +36,145 @@
 //! assert_eq!(stvec.mode(), TrapMode::Vectored);
 //! assert_eq!(stvec.addr(), 0x1234567);
 //! ```
+//!
+//! # Defining a bitfield struct
+//!
+//! To define a bitfield struct, use `#[bitfields]` attribute macro:
+//!
+//! ```
+//! use bitfields::{bitfields, B1, B2, B8, B21};
+//!
+//! #[bitfields(u32)]      // Automatically derives Debug.
+//! #[derive(Copy, Clone)] // `#[derive]` must come after `#[bitfields]`.
+//! struct MyStruct {
+//!    a: B1, // 1-bit
+//!    b: B2, // 2-bits
+//!    #[bitfield(hidden)] // Don't expose this field.
+//!    padding: B21, // 21-bits
+//!    c: B8, // 8-bits
+//! }
+//! ```
+//!
+//! ## Automatically generated methods
+//!
+//! `#[bitfields]` generates the following methods:
+//!
+//! ```ignore
+//! Struct::zeroed() -> Struct        // Returns a zeroed struct.
+//! Struct::from_raw(uXX) -> Struct   // Returns a struct from a raw value.
+//! Struct::into_raw(self) -> uXX     // Returns a raw value from a struct.
+//! Struct::FIELD_offset() -> usize   // Returns the offset of `FIELD`.
+//! Struct::FIELD_width() -> usize    // Returns the bits of `FIELD`.
+//! Struct::FIELD_range() -> RangeInclusive<usize> // Returns the bit range of `FIELD`.
+//!
+//! Struct::FIELD(&self) -> TYPE       // Returns the value of `FIELD`.
+//! Struct::set_FIELD(&mut self, TYPE) // Sets the value of `FIELD`.
+//! ```
+//!
+//! where `Struct` is the name of the struct, `FIELD` is the name of the field,
+//! `uXX` is the underlying container type (e.g., `u8`, `u16`, `u32`, `u64`).
+//!
+//! `TYPE` is the type of the field. If the field is bit types (e.g., `B1`, `B2`, `B3`),
+//! the type will be the smallest unsigned integer type that can hold the bits of the field:
+//! `u8` for `B1-B8`, `u16` for `B9-B16`, `u32` for `B17-B32`, and `u64` for `B33-B64`.
+//!
+//! If the field is an enum, `TYPE` will be the enum type itself.
+//!
+//! ### What if I give an invalid bit pattern to `into_raw`?
+//!
+//! You may wonder why `into_raw` doesn't return `Option<T>`. It always succeeds, and won't
+//! panic. This comes from the design principle of this crate: be always aware of invalid
+//! bit patterns.
+//!
+//! Checking the validity of bit patterns could result in non-negligible overhead,
+//! so we don't do it by default. Instead, it enforces you to handle invalid patterns explicitly.
+//!
+//! ## `#[bitfields]` attribute macro
+//!
+//! `#[bitfields]` attribute macro takes a single argument, which is the type of the
+//! underlying container. The container type must be one of `u8`, `u16`, `u32`, `u64`.
+//! It replaces the original struct with a new struct that has the same name, but
+//! it has a single private field of the given container type.
+//!
+//! ### Warning: it must be the first attribute of the struct!
+//!
+//! It must be the first attribute of the struct: as describe above, it replaces fields
+//! of the struct. If you put other attributes before `#[bitfields]`, they will be
+//! applied to old fields, not new fields!
+//!
+//! ```ignore
+//! #[bitfields(u32)]       // Should be the first attribute!
+//! #[derive(Copy, Clone)]  // This will be applied to the new struct.
+//! struct MyStruct {
+//!     ...
+//! }
+//! ```
+//!
+//! ## Automatically derived traits
+//!
+//! `#[bitfields]` automatically derives `Debug` trait.
+//!
+//! ## Ordering of fields
+//!
+//! While `repr(Rust)` (default representation) reorders the fields to minimize the
+//! size of the struct, `#[bitfields]` preserves the order of the fields. That is,
+//! `a` will be the least significant bits, and `c` will be the most significant bits.
+//!
+//! ## `#[bitfield]` attribute
+//!
+//! `#[bitfield]` attribute can be used for each field. Please note that it's named
+//! `bitfield` (singular), not `bitfields` (plural). Following attributes are available:
+//!
+//! - `#[bitfield(hidden)]`: Make the field hidden. Accessors for the field will not
+//!   be generated.
+//! - `#[bitfield(readonly)]`: Make the field read-only. Only a getter will be generated.
+//! - `#[bitfield(writeonly)]`: Make the field write-only. Only a setter will be generated.
+//!
+//! ## Padding
+//!
+//! The sum of filed sizes must be equal to the size of the container type. You need
+//! to add padding fields to make it so. In order not to expose accessors for padding
+//! fields, add `#[bitfield(hidden)]` attribute to the field.
+//!
+//! # Defining an enum field
+//!
+//! You can define and use an enum as a field of a bitfield struct. The enum must be
+//! annotated with `#[bitfields(bits = N)]` attribute, where `N` is the number of bits
+//! the enum occupies:
+//!
+//! ```
+//! use bitfields::{bitfields, B30};
+//! use std::mem::size_of;
+//!
+//! #[bitfields(u32)]
+//! #[derive(Copy, Clone)]
+//! struct Stvec {
+//!     mode: TrapMode,
+//!     addr: B30,
+//! }
+//!
+//! #[bitfields(bits = 2)]
+//! #[derive(PartialEq)]
+//! enum TrapMode {
+//!     Direct = 0b00,
+//!     Vectored = 0b01,
+//! }
+//! ```
+//!
+//! ## Non-exhaustive enums
+//!
+//! We say an enum is *non-exhaustive* if it has a variant that is not explicitly defined. For example,
+//! in 2-bits-wide enum, it has 4 possible values: `0b00`, `0b01`, `0b10`, and `0b11`. If the enum
+//! has less than 4 variants, it is non-exhaustive.
+//!
+//! If the enum is non-exhaustive, `#[bitfields]` will inserts a variant named `__NonExhaustive`,
+//! which is used to represent unknown values.
+//!
+//! Otherwise, if the enum is exhaustive, `#[bitfields]` will not insert `__NonExhaustive` variant.
+//!
+//! ## Automatically derived traits
+//!
+//! `#[bitfields]` automatically derives `Debug` trait.
 #![no_std]
 pub use bitfields_derive::bitfields;
 

@@ -225,7 +225,6 @@ pub fn bitfields_enum(
             fn from(value: u64) -> Self {
                 match value {
                     #(#from_raw_patterns)*
-                    _ => panic!("invalid value for {}: {:x}", stringify!(#enum_name), value),
                 }
             }
         }
