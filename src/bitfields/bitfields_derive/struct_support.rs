@@ -16,6 +16,7 @@ pub struct Field {
     pub ty: Type,
     pub accessor: Accessor,
     pub default: Option<Expr>,
+    pub hidden: bool,
 }
 
 pub struct StructDef {
@@ -28,14 +29,14 @@ struct ArgsDefinition {
     struct_width: Option<Ident>,
 }
 
-// `width` in #[bitfields(width = 32)]
+// `u32` in #[bitfields(u32)]
 #[derive(Debug)]
-pub enum StructArg {
+pub enum StructAttr {
     Width(Ident),
 }
 
-impl Parse for StructArg {
-    fn parse(input: ParseStream<'_>) -> syn::Result<StructArg> {
+impl Parse for StructAttr {
+    fn parse(input: ParseStream<'_>) -> syn::Result<StructAttr> {
         let name: Ident = input.parse()?;
         let name_str = name.to_string();
 
@@ -44,7 +45,7 @@ impl Parse for StructArg {
         } else {
             // attributes without values.
             match name_str.as_str() {
-                "u8" | "u16" | "u32" | "u64" => Ok(StructArg::Width(name)),
+                "u8" | "u16" | "u32" | "u64" => Ok(StructAttr::Width(name)),
                 _ => abort!(name, "unknown attribute"),
             }
         }
@@ -57,57 +58,42 @@ pub enum Accessor {
     ReadWrite,
 }
 
-// `0..=1` in #[bitfield(0..=1)]
-pub enum BitStructAttr {
+// `readonly` in #[bitfield(readonly)]
+pub enum FieldAttr {
     Accessor(Accessor),
     Default(Expr),
+    Hidden,
 }
 
-impl Parse for BitStructAttr {
-    fn parse(input: ParseStream<'_>) -> syn::Result<BitStructAttr> {
-        if input.peek(Ident) {
-            let ident: Ident = input.parse()?;
+impl Parse for FieldAttr {
+    fn parse(input: ParseStream<'_>) -> syn::Result<FieldAttr> {
+        let ident: Ident = input.parse()?;
 
-            if input.peek(Token![=]) {
-                // attributes with values.
-                let _ = input.parse::<Token![=]>()?;
+        if input.peek(Token![=]) {
+            // attributes with values.
+            let _ = input.parse::<Token![=]>()?;
 
-                match ident.to_string().as_ref() {
-                    "default" => {
-                        let expr: Expr = input.parse()?;
-                        Ok(BitStructAttr::Default(expr))
-                    }
-                    _ => {
-                        Err(syn::Error::new(ident.span(), "unknown attribute"))
-                    }
+            match ident.to_string().as_ref() {
+                "default" => {
+                    let expr: Expr = input.parse()?;
+                    Ok(FieldAttr::Default(expr))
                 }
-            } else {
-                match ident.to_string().as_ref() {
-                    "readonly" => {
-                        Ok(BitStructAttr::Accessor(Accessor::ReadOnly))
-                    }
-                    "writeonly" => {
-                        Ok(BitStructAttr::Accessor(Accessor::WriteOnly))
-                    }
-                    "readwrite" => {
-                        Ok(BitStructAttr::Accessor(Accessor::ReadWrite))
-                    }
-                    _ => {
-                        Err(syn::Error::new(ident.span(), "unknown attribute"))
-                    }
-                }
+                _ => Err(syn::Error::new(ident.span(), "unknown attribute")),
             }
         } else {
-            Err(syn::Error::new(
-                input.span(),
-                "expected attribute identifier",
-            ))
+            match ident.to_string().as_ref() {
+                "readonly" => Ok(FieldAttr::Accessor(Accessor::ReadOnly)),
+                "writeonly" => Ok(FieldAttr::Accessor(Accessor::WriteOnly)),
+                "readwrite" => Ok(FieldAttr::Accessor(Accessor::ReadWrite)),
+                "hidden" => Ok(FieldAttr::Hidden),
+                _ => Err(syn::Error::new(ident.span(), "unknown attribute")),
+            }
         }
     }
 }
 
 fn parse(
-    args_input: AttributeArgs<StructArg>,
+    args_input: AttributeArgs<StructAttr>,
     struct_input: &DataStruct,
     struct_span: Span,
 ) -> StructDef {
@@ -138,11 +124,11 @@ fn parse(
     }
 }
 
-fn visit_args(args: &AttributeArgs<StructArg>) -> ArgsDefinition {
+fn visit_args(args: &AttributeArgs<StructAttr>) -> ArgsDefinition {
     let mut def = ArgsDefinition { struct_width: None };
     for arg in args.iter() {
         match arg {
-            StructArg::Width(w) => {
+            StructAttr::Width(w) => {
                 def.struct_width = Some(w.clone());
             }
         }
@@ -174,8 +160,9 @@ fn visit_fields(input: &FieldsNamed) -> Vec<Field> {
                 }
 
                 // Parse #[bitfield(...)] attribute.
-                attr_args = Some(match attr.parse_args_with(
-                        Punctuated::<BitStructAttr, Token![,]>::parse_terminated,
+                attr_args = Some(
+                    match attr.parse_args_with(
+                        Punctuated::<FieldAttr, Token![,]>::parse_terminated,
                     ) {
                         Ok(parsed) => parsed,
                         Err(err) => {
@@ -187,21 +174,26 @@ fn visit_fields(input: &FieldsNamed) -> Vec<Field> {
                                 ),
                             );
                         }
-                    });
+                    },
+                );
             }
         }
 
         // Visit each attribute argument.
         let mut accessor = None;
         let mut default = None;
+        let mut hidden = false;
         if let Some(attr_args) = attr_args {
             for arg in attr_args {
                 match arg {
-                    BitStructAttr::Accessor(acc) => {
+                    FieldAttr::Accessor(acc) => {
                         accessor = Some(acc);
                     }
-                    BitStructAttr::Default(def) => {
+                    FieldAttr::Default(def) => {
                         default = Some(def);
+                    }
+                    FieldAttr::Hidden => {
+                        hidden = true;
                     }
                 }
             }
@@ -212,6 +204,7 @@ fn visit_fields(input: &FieldsNamed) -> Vec<Field> {
             ty: field.ty.clone(),
             accessor: accessor.unwrap_or(Accessor::ReadWrite),
             default,
+            hidden,
         };
 
         fields.push(field);
@@ -222,7 +215,7 @@ fn visit_fields(input: &FieldsNamed) -> Vec<Field> {
 
 pub fn bitfields_struct(
     struct_name: &Ident,
-    args_input: AttributeArgs<StructArg>,
+    args_input: AttributeArgs<StructAttr>,
     struct_input: &DataStruct,
     struct_span: Span,
 ) -> TokenStream {
@@ -234,10 +227,12 @@ pub fn bitfields_struct(
     let mut methods = Vec::with_capacity(fields.len());
     let mut prev_fields = Vec::with_capacity(fields.len());
     let mut prev_types = Vec::with_capacity(fields.len());
+    let mut debug_fields = Vec::with_capacity(fields.len());
     for Field {
         ident,
         ty,
         accessor,
+        hidden,
         ..
     } in &fields
     {
@@ -247,20 +242,26 @@ pub fn bitfields_struct(
             Accessor::ReadWrite => (true, true),
         };
 
+        let vis = if *hidden {
+            quote! {}
+        } else {
+            quote! { pub }
+        };
+
         // Offset: foo_offset()
         let offset =
             Ident::new(&format!("{}_offset", ident), Span::call_site());
         if prev_fields.is_empty() {
             methods.push(quote! {
                 #[inline]
-                pub const fn #offset() -> usize {
+                #vis const fn #offset() -> usize {
                     0
                 }
             });
         } else {
             methods.push(quote! {
                 #[inline]
-                pub const fn #offset() -> usize {
+                #vis const fn #offset() -> usize {
                     #(<#prev_types as ::bitfields::BitField>::BITS)+*
                 }
             });
@@ -270,24 +271,27 @@ pub fn bitfields_struct(
         let width = Ident::new(&format!("{}_width", ident), Span::call_site());
         methods.push(quote! {
             #[inline]
-            pub const fn #width() -> usize {
+            #vis const fn #width() -> usize {
+                use ::bitfields::BitField;
                 #ty::BITS
             }
         });
 
-        // Bit range: foo_range()
-        let range = Ident::new(&format!("{}_range", ident), Span::call_site());
-        methods.push(quote! {
-            #[inline]
-            pub const fn #range() -> ::core::ops::RangeInclusive<usize> {
-                Self::#offset()..=Self::#offset() + Self::#width() - 1
-            }
-        });
-
-        // Getter: foo()
-        if readable {
-            let getter = ident.clone();
+        if !hidden {
+            // Bit range: foo_range()
+            let range =
+                Ident::new(&format!("{}_range", ident), Span::call_site());
             methods.push(quote! {
+                #[inline]
+                pub const fn #range() -> ::core::ops::RangeInclusive<usize> {
+                    Self::#offset()..=Self::#offset() + Self::#width() - 1
+                }
+            });
+
+            // Getter: foo()
+            if readable {
+                let getter = ident.clone();
+                methods.push(quote! {
                 #[inline]
                 pub fn #getter(&self) -> <#ty as ::bitfields::BitField>::ContainerType {
                     let mask = ((1 << Self::#width()) - 1) << Self::#offset();
@@ -295,20 +299,25 @@ pub fn bitfields_struct(
                     <#ty as ::bitfields::BitField>::ContainerType::from(value)
                 }
             });
-        }
+            }
 
-        // Setter: set_foo()
-        if writable {
-            let setter =
-                Ident::new(&format!("set_{}", ident), Span::call_site());
+            // Setter: set_foo()
+            if writable {
+                let setter =
+                    Ident::new(&format!("set_{}", ident), Span::call_site());
 
-            methods.push(quote! {
+                methods.push(quote! {
                 #[inline]
                 pub fn #setter(&mut self, value: <#ty as ::bitfields::BitField>::ContainerType) {
                     let value: #struct_width = value.into();
                     debug_assert!(value < (1 << Self::#width()), concat!("value is too large for the field"));
                     self.raw |= value << Self::#offset();
                 }
+            });
+            }
+
+            debug_fields.push(quote! {
+                .field(stringify!(#ident), &self.#ident())
             });
         }
 
@@ -342,16 +351,43 @@ pub fn bitfields_struct(
         }
     }
 
+    let mut static_asserts = Vec::new();
+    if let Some(Field { ident, .. }) = fields.last() {
+        let offset =
+            Ident::new(&format!("{}_offset", ident), Span::call_site());
+        let width = Ident::new(&format!("{}_width", ident), Span::call_site());
+        static_asserts.push(quote! {
+            const _: () = assert!(
+                #struct_name::#offset() + #struct_name::#width() == 8*::core::mem::size_of::<#struct_width>(),
+                concat!(
+                    stringify!(#struct_name), " is not ", stringify!(#struct_width), " bytes",
+                    " (hint: perhaps you forgot to add padding fields?)"
+                )
+            );
+        });
+    }
+
     quote! {
         struct #struct_name {
             raw: #struct_width,
         }
+
+        #(#static_asserts)*
 
         impl core::default::Default for #struct_name {
             fn default() -> Self {
                 let mut __new = Self { raw: 0 };
                 #(#defaults)*
                 __new
+            }
+        }
+
+        impl ::core::fmt::Debug for #struct_name {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
+                f.debug_struct(stringify!(#struct_name))
+                    .field("__raw", &self.raw)
+                    #(#debug_fields)*
+                    .finish()
             }
         }
 

@@ -1,7 +1,4 @@
-use std::{
-    fmt::{self, Debug},
-    mem::size_of,
-};
+use std::mem::size_of;
 
 use bitfields::*;
 
@@ -14,20 +11,13 @@ fn derive() {
         Vectored = 0b01,
     }
 
-    impl Debug for TrapMode {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            match self {
-                TrapMode::Direct => write!(f, "Direct"),
-                TrapMode::Vectored => write!(f, "Vectored"),
-                _ => write!(f, "Unknown"),
-            }
-        }
-    }
-
     #[bitfields(u32)]
+    #[derive(Copy, Clone)]
     struct Stvec {
         // #[bitfield()]
         mode: TrapMode,
+        // #[bitfield(hidden)]
+        // pad: B3,
         // #[bitfield()]
         addr: B30,
     }

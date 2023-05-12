@@ -10,6 +10,32 @@
 //! # Examples
 //!
 //! ```
+//! use bitfields::{bitfields, B30};
+//! use std::mem::size_of;
+//!
+//! #[bitfields(u32)]  // This should come first! Derives Default.
+//! #[derive(Debug)]   // `#[derive]` must come after `#[bitfields]`.
+//! struct Stvec {
+//!     mode: TrapMode,
+//!     addr: B30,
+//! }
+//!
+//! #[derive(PartialEq)]
+//! #[bitfields(bits = 2)] // derives Copy, Clone, Debug
+//! enum TrapMode {
+//!     Direct = 0b00,
+//!     Vectored = 0b01,
+//! }
+//!
+//! assert_eq!(size_of::<Stvec>(), size_of::<u32>());
+//! let mut stvec = Stvec::default();
+//! assert_eq!(stvec.mode(), TrapMode::Direct);
+//! assert_eq!(stvec.addr(), 0);
+
+//! stvec.set_mode(TrapMode::Vectored);
+//! stvec.set_addr(0x1234567);
+//! assert_eq!(stvec.mode(), TrapMode::Vectored);
+//! assert_eq!(stvec.addr(), 0x1234567);
 //! ```
 #![no_std]
 pub use bitfields_derive::bitfields;

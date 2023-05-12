@@ -14,12 +14,12 @@ pub struct EnumDef {
     pub enum_width: usize,
 }
 
-pub enum EnumArg {
+pub enum EnumAttr {
     Width(usize),
 }
 
-impl Parse for EnumArg {
-    fn parse(input: ParseStream<'_>) -> syn::Result<EnumArg> {
+impl Parse for EnumAttr {
+    fn parse(input: ParseStream<'_>) -> syn::Result<EnumAttr> {
         let name: Ident = input.parse()?;
         let name_str = name.to_string();
 
@@ -31,7 +31,7 @@ impl Parse for EnumArg {
                 "bits" => {
                     let expr = input.parse::<Expr>()?;
                     let bits: usize = expr_into_usize(&expr)?;
-                    Ok(EnumArg::Width(bits))
+                    Ok(EnumAttr::Width(bits))
                 }
                 _ => abort!(name, "unknown attribute"),
             }
@@ -42,14 +42,14 @@ impl Parse for EnumArg {
 }
 
 fn parse(
-    args: AttributeArgs<EnumArg>,
+    args: AttributeArgs<EnumAttr>,
     _enum_input: &ItemEnum,
     enum_span: Span,
 ) -> EnumDef {
     let mut enum_width = None;
     for arg in args.iter() {
         match arg {
-            EnumArg::Width(width) => {
+            EnumAttr::Width(width) => {
                 enum_width = Some(*width);
             }
         }
@@ -76,19 +76,41 @@ fn parse(
 
 pub fn bitfields_enum(
     enum_name: &Ident,
-    args_input: AttributeArgs<EnumArg>,
+    args_input: AttributeArgs<EnumAttr>,
     mut enum_input: ItemEnum,
     enum_span: Span,
 ) -> TokenStream {
     let EnumDef { enum_width } = parse(args_input, &enum_input, enum_span);
 
     let mut from_raw_patterns = Vec::with_capacity(enum_input.variants.len());
+    let mut debug_patterns = Vec::with_capacity(enum_input.variants.len());
+    let mut static_asserts = Vec::with_capacity(enum_input.variants.len());
     for variant in &enum_input.variants {
         match &variant.discriminant {
             Some((_, expr)) => {
                 let variant = &variant.ident;
-                from_raw_patterns
-                    .push(quote! { (#expr) => #enum_name::#variant, });
+                from_raw_patterns.push(quote! {
+                    (#expr) => #enum_name::#variant,
+                });
+                debug_patterns.push(quote! {
+                    #enum_name::#variant => { write!(f, stringify!(#variant))?; },
+                });
+
+                let enum_width_str = enum_width.to_string();
+                static_asserts.push(quote! {
+                    const _: () = assert!(
+                        (#expr as usize) < (1usize << #enum_width),
+                        concat!(
+                            "discriminant of ",
+                            stringify!(#enum_name),
+                            "::",
+                            stringify!(#variant),
+                            " is out of range for ",
+                            #enum_width_str,
+                            "-bit enum",
+                        )
+                    );
+                });
             }
             None => {
                 abort!(variant.span(), "each variant must have a discriminant");
@@ -113,6 +135,9 @@ pub fn bitfields_enum(
 
         from_raw_patterns.push(quote! {
             _ => { #enum_name::__NonExhaustive },
+        });
+        debug_patterns.push(quote! {
+            #enum_name::__NonExhaustive => { write!(f, "NonExhaustive({:x})", *self as usize)?; },
         });
     }
 
@@ -207,7 +232,20 @@ pub fn bitfields_enum(
     });
 
     quote! {
+        #[derive(Copy, Clone)]
         #enum_input
+        #(#static_asserts)*
+
+        impl ::core::fmt::Debug for #enum_name {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
+                write!(f, "{}::", stringify!(#enum_name))?;
+                match self {
+                    #(#debug_patterns)*
+                }
+                Ok(())
+            }
+        }
+
         #(#impls)*
     }
     .into()
