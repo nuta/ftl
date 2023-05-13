@@ -178,11 +178,16 @@
 #![no_std]
 pub use bitfields_derive::bitfields;
 
+/// Represents a field in a bitfield struct.
 pub trait BitField {
+    /// The number of bits the field occupies.
     const BITS: usize;
+    /// The type of the value to access the field.
     type AccessorValueType;
 
+    /// Creates a value of the field from the given raw value.
     fn from_u64(value: u64) -> Self::AccessorValueType;
+    /// Converts the value of the field to the raw value.
     fn into_u64(value: Self::AccessorValueType) -> u64;
 }
 
