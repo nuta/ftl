@@ -16,10 +16,10 @@ impl fmt::Write for PrinterInternal {
 /// Prints a string.
 #[macro_export]
 macro_rules! print {
-    ($($arg:tt)*) => {{
+    ($($args:tt)*) => {{
         #![allow(unused_imports)]
         use core::fmt::Write;
-        write!($crate::print::PrinterInternal, "{}", format_args!($($arg)*)).ok();
+        let _ = write!($crate::print::PrinterInternal, $($args)*);
     }};
 }
 
@@ -28,21 +28,14 @@ macro_rules! print {
 macro_rules! println {
     // println!()
     () => {{
-        $crate::print!(
-            "\n"
-        );
+        $crate::print!("\n");
     }};
     // println!("Hello World!")
-    ($fmt:expr) => {{
-        $crate::print!(
-            concat!($fmt, "\n"),
-        );
+    ($str:literal) => {{
+        $crate::print!(concat!($str, "\n"));
     }};
     // println!("Hello {}!", "World")
-    ($fmt:expr, $($arg:tt)*) => {{
-        $crate::print!(
-            concat!($fmt, "\n"),
-            $($arg)*
-        );
+    ($fmt:literal, $($args:tt)*) => {{
+        $crate::print!(concat!($fmt, "\n"), $($args)*);
     }};
 }

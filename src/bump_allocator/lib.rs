@@ -64,7 +64,7 @@ impl BumpAllocator {
 
         self.top = new_top;
 
-        // SAFETY: `self.top` is checked to be larger than `self.bottom`.
+        // Safety: `self.top` is checked to be larger than `self.bottom`.
         unsafe { Some(NonZeroUsize::new_unchecked(self.top)) }
     }
 }

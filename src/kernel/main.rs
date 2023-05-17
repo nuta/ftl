@@ -8,6 +8,8 @@
 #![test_runner(crate::test::test_runner)]
 #![reexport_test_harness_main = "test_main"]
 
+use core::cell::RefCell;
+
 #[macro_use]
 mod print;
 
@@ -19,6 +21,10 @@ mod panic;
 mod test;
 
 extern crate alloc;
+
+cpu_local! {
+    pub static ref InterruptCounter: RefCell<usize> = RefCell::new(123);
+}
 
 pub fn kernel_main() {
     memory::init();
@@ -42,11 +48,14 @@ pub fn kernel_main() {
         core::arch::asm!("nop; li a0, 0xc0be; ecall; li a0, 0xbeef; ecall; li a0, 0xdead; ecall");
     }
 
-    use alloc::boxed::Box;
-    let t =
-        Box::new(arch::Thread::new(first_user_program as *const () as usize));
-    arch::Thread::set_current_thread(t);
-    arch::Thread::switch_test();
+    *(InterruptCounter.borrow_mut()) = 456;
+    println!("intr: {}", *InterruptCounter.borrow());
+
+    // use alloc::boxed::Box;
+    // let t =
+    //     Box::new(arch::Thread::new(first_user_program as *const () as usize));
+    // arch::Thread::set_current_thread(t);
+    // arch::Thread::switch_test();
 
     arch::shutdown();
 }

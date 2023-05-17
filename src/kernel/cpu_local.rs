@@ -1,11 +1,9 @@
 use core::{
-    marker::PhantomData,
+    cell::RefCell,
     mem::size_of,
     ops::Deref,
     ptr::{self, addr_of},
 };
-
-use paste::paste;
 
 use crate::{
     arch::{read_cpulocal_base, write_cpulocal_base},
@@ -15,13 +13,13 @@ use crate::{
 #[macro_export]
 macro_rules! __cpu_local_inner {
     ($V:vis, $N:ident, $T:ty, $E:expr) => {
-        paste! {
+        ::paste::paste! {
             #[used]
             #[link_section = ".cpu_local"]
             #[allow(non_upper_case_globals)]
-            static [<$N _INIT>]: $T = $E;
+            static [<$N _INIT>]: $crate::cpu_local::InitialValue<$T> = $crate::cpu_local::InitialValue::new_internal($E);
 
-            $V static $N: $crate::cpu_local::CpuLocal<$T> = CpuLocal::new(&[<$N _INIT>]);
+            $V static $N: $crate::cpu_local::CpuLocal<$T> = $crate::cpu_local::CpuLocal::new(&[<$N _INIT>]);
         }
     };
 }
@@ -50,17 +48,37 @@ extern "C" {
     static __cpu_local_end: u8;
 }
 
-pub struct CpuLocal<T: 'static> {
-    init: &'static T,
-    _pd: PhantomData<T>,
+/// Represents a type that can be used as a CPU-local variable.
+///
+/// The type must be Copy but only in the initialization phase: when booting
+/// a CPU, the CPU-local variables are copied from the initial value to the
+/// CPU-local area.
+///
+/// For example, while [`RefCell<T>`] is not Copy, but if `T` implements Copy
+/// it's safe to copy the initial value because it's not borrowed yet. This trait
+/// is to capture this property.
+pub trait CpuLocalable {}
+impl CpuLocalable for bool {}
+impl CpuLocalable for usize {}
+impl<T: Copy> CpuLocalable for RefCell<T> {}
+
+pub struct InitialValue<T: CpuLocalable + 'static>(T);
+
+impl<T: CpuLocalable + 'static> InitialValue<T> {
+    pub const fn new_internal(init: T) -> InitialValue<T> {
+        InitialValue(init)
+    }
 }
 
-impl<T> CpuLocal<T> {
-    pub const fn new(init: &'static T) -> CpuLocal<T> {
-        CpuLocal {
-            init,
-            _pd: PhantomData,
-        }
+unsafe impl<T: CpuLocalable + 'static> Sync for InitialValue<T> {}
+
+pub struct CpuLocal<T: CpuLocalable + 'static> {
+    init: &'static T,
+}
+
+impl<T: CpuLocalable + 'static> CpuLocal<T> {
+    pub const fn new(init: &'static InitialValue<T>) -> CpuLocal<T> {
+        CpuLocal { init: &init.0 }
     }
 
     pub fn get(&self) -> &T {
@@ -82,13 +100,17 @@ impl<T> CpuLocal<T> {
     }
 }
 
-impl<T> Deref for CpuLocal<T> {
+impl<T: CpuLocalable + 'static> Deref for CpuLocal<T> {
     type Target = T;
 
     fn deref(&self) -> &T {
         self.get()
     }
 }
+
+// Safety: It is safe to access the CPU-local variables from any CPU.
+//         Each CPU has its own CPU-local variables.
+unsafe impl<T: CpuLocalable + 'static> Sync for CpuLocal<T> {}
 
 /// Initializes the CPU-local variables. This function must be called
 /// after the memory allocator is initialized and in each CPU initialization.
