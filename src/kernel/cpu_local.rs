@@ -91,7 +91,7 @@ impl<T: CpuLocalable + 'static> CpuLocal<T> {
     }
 
     pub fn get(&self) -> &T {
-        // TODO: Cache this offset value. Use Once<T>.
+        // TODO: Cache `offset` or ultimately compute it at compile time.
         let offset = {
             let init_base;
             let init_end;
