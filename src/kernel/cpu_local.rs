@@ -26,13 +26,21 @@ macro_rules! __cpu_local_inner {
 
 /// Defines a CPU-local variable.
 ///
-/// # Examples
+/// # Syntax
+///
+/// Follow the famous lazy_static's `static ref` syntax, but wrap it with
+/// `cpu_local!` macro:
 ///
 /// ```
 /// cpu_local! {
 ///     pub static ref InterruptCounter: usize = 123;
+///     ^^^            ^^^^^^^^^^^^^^^^  ^^^^^   ^^^
+///     visibility     name              type    initial value
 /// }
 /// ```
+///
+/// The initial value must be a constant expression. Thus you can use `const fn`
+/// like `RefCell::new(123)`.
 #[macro_export]
 macro_rules! cpu_local {
     (static ref $N:ident : $T:ty = $E:expr ;) => {
