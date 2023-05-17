@@ -28,12 +28,11 @@ macro_rules! __cpu_local_inner {
 ///
 /// # Syntax
 ///
-/// Follow the famous lazy_static's `static ref` syntax, but wrap it with
-/// `cpu_local!` macro:
+/// Follow the syntax of a `static` item, but wrap it with `cpu_local!` macro:
 ///
 /// ```
 /// cpu_local! {
-///     pub static ref InterruptCounter: usize = 123;
+///     pub static InterruptCounter: usize = 123;
 ///     ^^^            ^^^^^^^^^^^^^^^^  ^^^^^   ^^^
 ///     visibility     name              type    initial value
 /// }
@@ -43,10 +42,10 @@ macro_rules! __cpu_local_inner {
 /// like `RefCell::new(123)`.
 #[macro_export]
 macro_rules! cpu_local {
-    (static ref $N:ident : $T:ty = $E:expr ;) => {
+    (static $N:ident : $T:ty = $E:expr ;) => {
         $crate::__cpu_local_inner!(, $N, $T, $E);
     };
-    (pub static ref $N:ident : $T:ty = $E:expr ;) => {
+    (pub static $N:ident : $T:ty = $E:expr ;) => {
         $crate::__cpu_local_inner!(pub, $N, $T, $E);
     };
 }
@@ -58,18 +57,19 @@ extern "C" {
 
 /// Represents a type that can be used as a CPU-local variable.
 ///
-/// The type must be Copy but only in the initialization phase: when booting
-/// a CPU, the CPU-local variables are copied from the initial value to the
-/// CPU-local area.
+/// The type must be Copy but only in the initialization phase: the value will
+/// be copied as-is only once in each CPU.
 ///
-/// For example, while [`RefCell<T>`] is not Copy, but if `T` implements Copy
-/// it's safe to copy the initial value because it's not borrowed yet. This trait
-/// is to capture this property.
+/// For example, while [`RefCell<T>`] is not Copy, if `T` implements Copy
+/// it's safe to copy the initial value (`RefCell<T>`) because it's not borrowed
+/// yet and it doesn't have CPU-specific values internnaly. This trait is to
+/// capture the property.
 pub trait CpuLocalable {}
 impl CpuLocalable for bool {}
 impl CpuLocalable for usize {}
 impl<T: Copy> CpuLocalable for RefCell<T> {}
 
+//
 pub struct InitialValue<T: CpuLocalable + 'static>(T);
 
 impl<T: CpuLocalable + 'static> InitialValue<T> {

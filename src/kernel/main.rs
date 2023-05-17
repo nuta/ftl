@@ -23,7 +23,9 @@ mod test;
 extern crate alloc;
 
 cpu_local! {
-    pub static ref InterruptCounter: RefCell<usize> = RefCell::new(123);
+    pub static InterruptCounter: RefCell<usize> = {
+        RefCell::new(123)
+    };
 }
 
 pub fn kernel_main() {
