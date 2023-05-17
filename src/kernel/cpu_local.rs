@@ -33,8 +33,8 @@ macro_rules! __cpu_local_inner {
 /// ```
 /// cpu_local! {
 ///     pub static InterruptCounter: usize = 123;
-///     ^^^            ^^^^^^^^^^^^^^^^  ^^^^^   ^^^
-///     visibility     name              type    initial value
+///     ^^^        ^^^^^^^^^^^^^^^^  ^^^^^   ^^^
+///     visibility       name        type    initial value
 /// }
 /// ```
 ///
@@ -57,19 +57,19 @@ extern "C" {
 
 /// Represents a type that can be used as a CPU-local variable.
 ///
-/// The type must be Copy but only in the initialization phase: the value will
-/// be copied as-is only once in each CPU.
+/// The type must be `Copy` but only in the initialization phase: the value will
+/// be copied as-is for each CPU. After the initialization, the value will not
+/// be copied anymore and thus the type doesn't have to be `Copy` completely.
 ///
-/// For example, while [`RefCell<T>`] is not Copy, if `T` implements Copy
-/// it's safe to copy the initial value (`RefCell<T>`) because it's not borrowed
-/// yet and it doesn't have CPU-specific values internnaly. This trait is to
-/// capture the property.
+/// For example, while [`RefCell<T>`] doesn't implement `Copy`, if `T` implements
+/// `Copy` it's safe to copy the initial value (`RefCell<T>`) because it's not
+/// borrowed yet. This trait is to capture the property.
 pub trait CpuLocalable {}
 impl CpuLocalable for bool {}
 impl CpuLocalable for usize {}
-impl<T: Copy> CpuLocalable for RefCell<T> {}
+impl<T: Copy + Send> CpuLocalable for RefCell<T> {}
 
-//
+/// A memory space for an initial value of a CPU-local variable.
 pub struct InitialValue<T: CpuLocalable + 'static>(T);
 
 impl<T: CpuLocalable + 'static> InitialValue<T> {
@@ -78,6 +78,7 @@ impl<T: CpuLocalable + 'static> InitialValue<T> {
     }
 }
 
+/// Safety: It's safe to read the initial value from any CPU.
 unsafe impl<T: CpuLocalable + 'static> Sync for InitialValue<T> {}
 
 pub struct CpuLocal<T: CpuLocalable + 'static> {
