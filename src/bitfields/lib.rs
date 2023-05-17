@@ -24,6 +24,9 @@
 //! enum TrapMode {
 //!     Direct = 0b00,
 //!     Vectored = 0b01,
+//!     // Enum must be exhaustive:
+//!     Reserved1 = 0b10,
+//!     Reserved2 = 0b11,
 //! }
 //!
 //! assert_eq!(size_of::<Stvec>(), size_of::<u32>());
@@ -158,6 +161,9 @@
 //! enum TrapMode {
 //!     Direct = 0b00,
 //!     Vectored = 0b01,
+//!     // Enum must be exhaustive:
+//!     Reserved1 = 0b10,
+//!     Reserved2 = 0b11,
 //! }
 //! ```
 //!
@@ -167,10 +173,7 @@
 //! in 2-bits-wide enum, it has 4 possible values: `0b00`, `0b01`, `0b10`, and `0b11`. If the enum
 //! has less than 4 variants, it is non-exhaustive.
 //!
-//! If the enum is non-exhaustive, `#[bitfields]` will inserts a variant named `__NonExhaustive`,
-//! which is used to represent unknown values.
-//!
-//! Otherwise, if the enum is exhaustive, `#[bitfields]` will not insert `__NonExhaustive` variant.
+//! If the enum is non-exhaustive, `#[bitfields]` will error out
 //!
 //! ## Automatically derived traits
 //!

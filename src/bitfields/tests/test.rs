@@ -9,6 +9,8 @@ fn derive() {
     enum TrapMode {
         Direct = 0b00,
         Vectored = 0b01,
+        Reserved1 = 0b10,
+        Reserved2 = 0b11,
     }
 
     #[bitfields(u32)]

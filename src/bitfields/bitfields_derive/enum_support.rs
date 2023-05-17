@@ -5,7 +5,7 @@ use quote::quote;
 use syn::{
     parse::{Parse, ParseStream},
     spanned::Spanned,
-    Expr, Ident, ItemEnum, Token, Variant,
+    Expr, Ident, ItemEnum, Token,
 };
 
 use crate::helpers::{expr_into_usize, AttributeArgs};
@@ -77,7 +77,7 @@ fn parse(
 pub fn bitfields_enum(
     enum_name: &Ident,
     args_input: AttributeArgs<EnumAttr>,
-    mut enum_input: ItemEnum,
+    enum_input: ItemEnum,
     enum_span: Span,
 ) -> TokenStream {
     let EnumDef { enum_width } = parse(args_input, &enum_input, enum_span);
@@ -118,28 +118,19 @@ pub fn bitfields_enum(
         }
     }
 
-    if from_raw_patterns.len() == 1 << enum_width {
-        // The enum is not exhaustive (assuming Rust will deny multiple variants that
-        // have the same value). It should be safe to use `unreachable_unchecked()` here.
-        from_raw_patterns.push(quote! {
-            _ => unsafe { ::core::hint::unreachable_unchecked() },
-        });
-    } else {
-        // The enum is not exhaustive. We need a catch-all pattern.
-        enum_input.variants.push(Variant {
-            ident: Ident::new("__NonExhaustive", Span::call_site()),
-            attrs: Vec::new(),
-            fields: syn::Fields::Unit,
-            discriminant: None,
-        });
-
-        from_raw_patterns.push(quote! {
-            _ => { #enum_name::__NonExhaustive },
-        });
-        debug_patterns.push(quote! {
-            #enum_name::__NonExhaustive => { write!(f, "NonExhaustive({:x})", *self as usize)?; },
-        });
+    if from_raw_patterns.len() != 1 << enum_width {
+        abort!(
+            enum_span,
+            "enum must be exhaustive (expect {} more possible patterns)",
+            (1 << enum_width) - from_raw_patterns.len()
+        );
     }
+
+    // The enum is exhaustive (assuming Rust will deny multiple variants that
+    // have the same value). It should be safe to use `unreachable_unchecked()` here.
+    from_raw_patterns.push(quote! {
+        _ => unsafe { ::core::hint::unreachable_unchecked() },
+    });
 
     quote! {
         #[derive(Copy, Clone)]
