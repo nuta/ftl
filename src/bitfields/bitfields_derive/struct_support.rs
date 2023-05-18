@@ -339,7 +339,8 @@ pub fn bitfields_struct(
     }
 
     quote! {
-        struct #struct_name {
+        // TODO: visibility
+        pub struct #struct_name {
             raw: #struct_width,
         }
 
