@@ -42,6 +42,7 @@ dependencies = [
 name = "kernel"
 version = "0.0.0"
 dependencies = [
+ "bitfields",
  "bump_allocator",
  "linked_list_allocator",
  "paste",

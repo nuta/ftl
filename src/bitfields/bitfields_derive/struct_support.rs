@@ -279,7 +279,7 @@ pub fn bitfields_struct(
             if readable {
                 let getter = ident.clone();
                 methods.push(quote! {
-                #[inline]
+                #[inline(always)]
                 pub fn #getter(&self) -> <#ty as ::bitfields::BitField>::AccessorValueType {
                     let mask = ((1 << Self::#width()) - 1) << Self::#offset();
                     let value = (self.raw & mask) >> Self::#offset();
@@ -294,7 +294,7 @@ pub fn bitfields_struct(
                     Ident::new(&format!("set_{}", ident), Span::call_site());
 
                 methods.push(quote! {
-                #[inline]
+                #[inline(always)]
                 pub fn #setter(&mut self, value: <#ty as ::bitfields::BitField>::AccessorValueType) {
                     let value = <#ty as ::bitfields::BitField>::into_u64(value) as #struct_width;
                     debug_assert!(value < (1 << Self::#width()), concat!("value is too large for the field"));
@@ -314,7 +314,7 @@ pub fn bitfields_struct(
 
     // from_raw, into_raw
     methods.push(quote! {
-        pub unsafe fn from_raw(value: #struct_width) -> Self {
+        pub const fn from_raw(value: #struct_width) -> Self {
             Self { raw: value }
         }
 

@@ -198,10 +198,12 @@ impl BitField for bool {
     const BITS: usize = 1;
     type AccessorValueType = bool;
 
+    #[inline(always)]
     fn from_u64(value: u64) -> bool {
         value != 0
     }
 
+    #[inline(always)]
     fn into_u64(value: bool) -> u64 {
         if value {
             1
@@ -220,12 +222,14 @@ macro_rules! define_bit_type {
             const BITS: usize = $bits;
             type AccessorValueType = $value_ty;
 
+            #[inline(always)]
             fn from_u64(value: u64) -> $value_ty {
                 debug_assert!((value as u64) <= ((1u128 << $bits) - 1) as u64);
 
                 value as $value_ty
             }
 
+            #[inline(always)]
             fn into_u64(value: $value_ty) -> u64 {
                 value as u64
             }
