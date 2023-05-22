@@ -4,7 +4,7 @@ use core::{
     ptr::{addr_of, NonNull},
 };
 
-use crate::lock::GiantLock;
+use crate::giant_lock::GiantLock;
 
 use bump_allocator::BumpAllocator;
 use linked_list_allocator::Heap;
