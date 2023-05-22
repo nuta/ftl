@@ -129,7 +129,7 @@ pub fn init_percpu() {
     let per_cpu_size = init_end - init_base;
 
     let percpu_base = PAGE_ALLOCATOR
-        .get_mut()
+        .borrow_mut()
         .allocate(per_cpu_size, size_of::<usize>())
         .unwrap();
     write_cpulocal_base(percpu_base.get());
