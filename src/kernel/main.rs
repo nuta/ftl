@@ -15,7 +15,7 @@ mod print;
 
 mod arch;
 mod cpu_local;
-mod lock;
+mod giant_lock;
 mod memory;
 mod panic;
 mod test;
