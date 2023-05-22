@@ -13,7 +13,8 @@ use crate::arch;
 /// mutable reference.
 ///
 /// `LockTracker` is to ensure the property and panic if it's violated, just
-/// like what `RefCell` does.
+/// like what `RefCell` does. Maybe we can disable this in release mode but
+/// I'll keep it until we're sure that this causes non-negligible overhead.
 struct LockTracker {
     lock: AtomicBool,
     locked_at: Cell<Option<&'static panic::Location<'static>>>,
@@ -73,6 +74,7 @@ pub struct GiantLock<T> {
 }
 
 impl<T> GiantLock<T> {
+    /// Creates a new `GiantLock` wrapping the given value.
     pub const fn new(inner: T) -> Self {
         Self {
             inner: UnsafeCell::new(inner),
@@ -82,8 +84,8 @@ impl<T> GiantLock<T> {
 
     /// Returns a mutable reference to the inner value.
     ///
-    /// Unlike ordinal locks, this method never blocks as the lock is always
-    /// acquired when the CPU enters the kernel mode.
+    /// Unlike ordinal locks, **this method never blocks** as the giant lock is
+    /// always acquired when the CPU enters the kernel mode.
     ///
     /// This behaves like `RefCell::borrow_mut`: it returns a mutable reference
     /// as a guard object and it'll keep the mutable borrow until the guard is
