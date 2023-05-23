@@ -7,6 +7,7 @@ mod boot;
 mod switch;
 mod thread;
 
+pub const PAGE_SIZE: usize = 4096;
 pub use thread::Thread;
 
 pub fn read_cpulocal_base() -> usize {
@@ -29,9 +30,9 @@ pub fn owns_giant_lock() -> bool {
     true // FIXME:
 }
 
-pub fn read_cpu_cycles() -> usize {
-    rdcycle() as usize
-}
+// pub fn read_cpu_cycles() -> usize {
+//     rdcycle() as usize
+// }
 
 pub fn shutdown() {
     sbi::shutdown();

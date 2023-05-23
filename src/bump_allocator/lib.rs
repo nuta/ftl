@@ -30,13 +30,18 @@ extern crate test;
 pub struct BumpAllocator {
     top: usize,
     bottom: usize,
+    frozen: bool,
 }
 
 impl BumpAllocator {
     // Creates a new bump allocator. Initially, the allocator has no memory
     // region. Call `add_region` to add a memory region.
     pub const fn new() -> BumpAllocator {
-        BumpAllocator { bottom: 0, top: 0 }
+        BumpAllocator {
+            bottom: 0,
+            top: 0,
+            frozen: false,
+        }
     }
 
     // Gives a meory region `[base, base + len)` to the allocator.
@@ -51,11 +56,18 @@ impl BumpAllocator {
 
     /// Allocates `size` bytes of memory with the given `align` bytes alignment.
     /// Returns the beginning address of the allocated memory if successful.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the allocator is frozen.
+    #[track_caller]
     pub fn allocate(
         &mut self,
         size: usize,
         align: usize,
     ) -> Option<NonZeroUsize> {
+        debug_assert!(!self.frozen, "the allocator is frozen");
+
         let aligned_size = align_up(size, align);
         let new_top = self.top.checked_sub(aligned_size)?;
         if new_top < self.bottom {
@@ -66,6 +78,13 @@ impl BumpAllocator {
 
         // Safety: `self.top` is checked to be larger than `self.bottom`.
         unsafe { Some(NonZeroUsize::new_unchecked(self.top)) }
+    }
+
+    /// Prevents further allocations. This is useful for detecting unexpected
+    /// allocations.
+    pub fn freeze(&mut self) {
+        debug_assert!(!self.frozen, "the allocator is already frozen");
+        self.frozen = true;
     }
 }
 

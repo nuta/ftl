@@ -8,8 +8,6 @@
 #![test_runner(crate::test::test_runner)]
 #![reexport_test_harness_main = "test_main"]
 
-use core::cell::RefCell;
-
 #[macro_use]
 mod print;
 
@@ -37,6 +35,8 @@ pub fn kernel_main() {
         test_main();
         unreachable!();
     }
+
+    memory::freeze_page_allocator();
 
     let mut v = alloc::vec::Vec::new();
     v.push(1);

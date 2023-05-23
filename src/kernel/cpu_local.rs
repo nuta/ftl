@@ -1,6 +1,5 @@
 use core::{
     cell::RefCell,
-    mem::size_of,
     ops::Deref,
     ptr::{self, addr_of},
     sync::atomic::AtomicU8,
@@ -8,7 +7,7 @@ use core::{
 
 use crate::{
     arch::{read_cpulocal_base, write_cpulocal_base},
-    memory::PAGE_ALLOCATOR,
+    memory::allocate_pages,
 };
 
 #[macro_export]
@@ -130,10 +129,8 @@ pub fn init_percpu() {
     let init_end = unsafe { addr_of!(__cpu_local_end) as usize };
     let per_cpu_size = init_end - init_base;
 
-    let percpu_base = PAGE_ALLOCATOR
-        .borrow_mut()
-        .allocate(per_cpu_size, size_of::<usize>())
-        .unwrap();
+    let percpu_base =
+        allocate_pages(per_cpu_size).expect("failed to allocate percpu area");
     write_cpulocal_base(percpu_base.get());
 
     // Fill the percpu area with the initial values.

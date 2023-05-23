@@ -1,10 +1,11 @@
 use core::{
     alloc::{GlobalAlloc, Layout},
     mem::size_of,
+    num::NonZeroUsize,
     ptr::{addr_of, NonNull},
 };
 
-use crate::giant_lock::GiantLock;
+use crate::{arch::PAGE_SIZE, giant_lock::GiantLock};
 
 use bump_allocator::BumpAllocator;
 use linked_list_allocator::Heap;
@@ -12,7 +13,7 @@ use linked_list_allocator::Heap;
 /// The size of the malloc heap in bytes. To be used in `core::alloc` objects.
 const MALLOC_SIZE: usize = 16 * 1024 * 1024;
 
-pub static PAGE_ALLOCATOR: GiantLock<BumpAllocator> =
+static PAGE_ALLOCATOR: GiantLock<BumpAllocator> =
     GiantLock::new(BumpAllocator::new());
 
 struct HeapAllocator(GiantLock<Heap>);
@@ -37,19 +38,31 @@ unsafe impl GlobalAlloc for HeapAllocator {
     }
 }
 
-extern "C" {
-    static __boot_heap: u8;
-    static __boot_heap_end: u8;
+#[track_caller]
+pub fn allocate_pages(size: usize) -> Option<NonZeroUsize> {
+    PAGE_ALLOCATOR.borrow_mut().allocate(size, PAGE_SIZE)
+}
+
+pub fn freeze_page_allocator() {
+    PAGE_ALLOCATOR.borrow_mut().freeze();
 }
 
 pub fn init() {
+    extern "C" {
+        static __boot_heap: u8;
+        static __boot_heap_end: u8;
+    }
+
     unsafe {
         let heap_start = addr_of!(__boot_heap) as usize;
         let heap_end = addr_of!(__boot_heap_end) as usize;
+
+        // Initialize the boot-time page allocator.
         PAGE_ALLOCATOR
             .borrow_mut()
             .add_region(heap_start, heap_end - heap_start);
 
+        // Initialize the malloc heap.
         let malloc_start = PAGE_ALLOCATOR
             .borrow_mut()
             .allocate(MALLOC_SIZE, size_of::<usize>())
