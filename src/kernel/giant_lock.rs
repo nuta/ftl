@@ -7,14 +7,15 @@ use core::{
 
 use crate::arch;
 
-/// A `GiantLockGuard` owner tracker for debugging.
+/// A mutable reference tracker.
 ///
-/// While the giant lock is already held, it does not mean there's only one
-/// mutable reference.
+/// While the giant lock prevents concurrent access to the inner value,
+/// it does not mean there's only one mutable reference.
 ///
-/// `LockTracker` is to ensure the property and panic if it's violated, just
-/// like what `RefCell` does. Maybe we can disable this in release mode but
-/// I'll keep it until we're sure that this causes non-negligible overhead.
+/// `LockTracker` is to ensure the property by panicking if it's violated,
+/// just like what `RefCell` does.
+///
+/// I plan to disable this in release build to eliminate the overhead.
 struct LockTracker {
     lock: AtomicBool,
     locked_at: Cell<Option<&'static panic::Location<'static>>>,
@@ -35,7 +36,8 @@ impl LockTracker {
             .is_err()
         {
             // Failed to acquire the lock. This means that the it's already
-            // borrowed.
+            // borrowed and it indicates a bug in the kernel (multiple mutable
+            // references).
             panic!(
                 "giant lock is already borrowed at {}",
                 self.locked_at.take().unwrap()
@@ -52,13 +54,14 @@ impl LockTracker {
             .is_err()
         {
             // Failed to release the lock. This means that the lock is not
-            // borrowed.
+            // borrowed and should never happen.
             panic!("giant lock is not borrowed");
         }
     }
 }
 
-/// A giant lock.
+/// A giant lock. TL;DR: it's `RefCell` but with `Sync` (shareable between
+/// multiple CPUs/threads).
 ///
 /// The lock will automatically be held by HAL (`arch` module) when it enters
 /// the kernel mode. Namely, all `GiantLock` objects will share the same lock
@@ -66,8 +69,8 @@ impl LockTracker {
 ///
 /// While the CPU keeps the lock, it's possible to have multiple mutable
 /// references to the inner value, which is not allowed in Rust. To ensure the
-/// property, `LockTracker` will panic if it's violated, just like what `RefCell`
-/// does.
+/// property, [`GiantLock::borrow_mut`] will panics if it's violated,
+/// just like [`RefCell::borrow_mut`].
 pub struct GiantLock<T> {
     inner: UnsafeCell<T>,
     tracker: LockTracker,
@@ -111,8 +114,14 @@ impl<T> GiantLock<T> {
     }
 }
 
+// Safety: The giant lock ensures that the inner value will be accessible at
+//         most one CPU (or thread) at a time.
 unsafe impl<T> Sync for GiantLock<T> {}
 
+/// A mutable reference to the inner value of [`GiantLock`].
+///
+/// Only one `GiantLockGuard` to a same `GiantLock` can exist at a time and
+/// the borrow will automatically be released when the it is dropped.
 pub struct GiantLockGuard<'a, T> {
     inner: &'a mut T,
     tracker: &'a LockTracker,
