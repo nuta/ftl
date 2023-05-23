@@ -22,11 +22,11 @@ mod test;
 
 extern crate alloc;
 
-cpu_local! {
-    pub static InterruptCounter: RefCell<usize> = {
-        RefCell::new(123)
-    };
-}
+// cpu_local! {
+//     pub static InterruptCounter: RefCell<usize> = {
+//         RefCell::new(123)
+//     };
+// }
 
 pub fn kernel_main() {
     memory::init();
@@ -46,12 +46,12 @@ pub fn kernel_main() {
 
     println!("\n\n\x1b[1;35mHello from Rust World!\x1b[0m\n\n");
 
-    unsafe extern "C" fn first_user_program() {
-        core::arch::asm!("nop; li a0, 0xc0be; ecall; li a0, 0xbeef; ecall; li a0, 0xdead; ecall");
-    }
+    // unsafe extern "C" fn first_user_program() {
+    //     core::arch::asm!("nop; li a0, 0xc0be; ecall; li a0, 0xbeef; ecall; li a0, 0xdead; ecall");
+    // }
 
-    *(InterruptCounter.borrow_mut()) = 456;
-    println!("intr: {}", *InterruptCounter.borrow());
+    // *(InterruptCounter.borrow_mut()) = 456;
+    // println!("intr: {}", *InterruptCounter.borrow());
 
     // use alloc::boxed::Box;
     // let t =

@@ -3,6 +3,7 @@ use core::{
     mem::size_of,
     ops::Deref,
     ptr::{self, addr_of},
+    sync::atomic::AtomicU8,
 };
 
 use crate::{
@@ -67,6 +68,7 @@ extern "C" {
 pub trait CpuLocalable {}
 impl CpuLocalable for bool {}
 impl CpuLocalable for usize {}
+impl CpuLocalable for AtomicU8 {}
 impl<T: Copy + Send> CpuLocalable for RefCell<T> {}
 
 /// A memory space for an initial value of a CPU-local variable.
@@ -117,8 +119,8 @@ impl<T: CpuLocalable + 'static> Deref for CpuLocal<T> {
     }
 }
 
-// Safety: It is safe to access the CPU-local variables from any CPU.
-//         Each CPU has its own CPU-local variables.
+// Safety: It is safe to access the CPU-local variables from any CPU
+//         because each CPU has its own CPU-local variables.
 unsafe impl<T: CpuLocalable + 'static> Sync for CpuLocal<T> {}
 
 /// Initializes the CPU-local variables. This function must be called

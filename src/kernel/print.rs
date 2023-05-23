@@ -3,7 +3,8 @@ use core::fmt;
 
 use crate::arch;
 
-/// A private struct internally used in print macros. Don't use this!
+/// A private struct internally used in print macros. Don't use this directly
+/// and use the `print!` and `println!` macros instead.
 pub struct PrinterInternal;
 
 impl fmt::Write for PrinterInternal {
@@ -13,7 +14,7 @@ impl fmt::Write for PrinterInternal {
     }
 }
 
-/// Prints a string.
+/// Prints a kernel message without a trailing newline.
 #[macro_export]
 macro_rules! print {
     ($($args:tt)*) => {{
@@ -23,7 +24,7 @@ macro_rules! print {
     }};
 }
 
-/// Prints a string and a newline.
+/// Prints a kernel message with a trailing newline.
 #[macro_export]
 macro_rules! println {
     // println!()
