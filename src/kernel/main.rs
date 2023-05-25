@@ -36,7 +36,7 @@ pub fn kernel_main() {
         unreachable!();
     }
 
-    memory::allocate_all();
+    memory::allocate_all_pages();
 
     let mut v = alloc::vec::Vec::new();
     v.push(1);
