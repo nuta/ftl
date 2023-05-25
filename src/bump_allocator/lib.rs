@@ -21,7 +21,7 @@
 
 use core::num::NonZeroUsize;
 
-use utils::alignment::align_up;
+use utils::alignment::align_down;
 
 #[cfg(test)]
 extern crate test;
@@ -30,18 +30,13 @@ extern crate test;
 pub struct BumpAllocator {
     top: usize,
     bottom: usize,
-    frozen: bool,
 }
 
 impl BumpAllocator {
     // Creates a new bump allocator. Initially, the allocator has no memory
     // region. Call `add_region` to add a memory region.
     pub const fn new() -> BumpAllocator {
-        BumpAllocator {
-            bottom: 0,
-            top: 0,
-            frozen: false,
-        }
+        BumpAllocator { bottom: 0, top: 0 }
     }
 
     // Gives a meory region `[base, base + len)` to the allocator.
@@ -56,20 +51,13 @@ impl BumpAllocator {
 
     /// Allocates `size` bytes of memory with the given `align` bytes alignment.
     /// Returns the beginning address of the allocated memory if successful.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the allocator is frozen.
     #[track_caller]
     pub fn allocate(
         &mut self,
         size: usize,
         align: usize,
     ) -> Option<NonZeroUsize> {
-        debug_assert!(!self.frozen, "the allocator is frozen");
-
-        let aligned_size = align_up(size, align);
-        let new_top = self.top.checked_sub(aligned_size)?;
+        let new_top = align_down(self.top.checked_sub(size)?, align);
         if new_top < self.bottom {
             return None;
         }
@@ -80,11 +68,25 @@ impl BumpAllocator {
         unsafe { Some(NonZeroUsize::new_unchecked(self.top)) }
     }
 
-    /// Prevents further allocations. This is useful for detecting unexpected
-    /// allocations.
-    pub fn freeze(&mut self) {
-        debug_assert!(!self.frozen, "the allocator is already frozen");
-        self.frozen = true;
+    /// Allocates all remaining memory with the given `align` bytes alignment.
+    ///
+    /// If any memory is allocated, returns the beginning address and the size
+    /// of the allocated memory.
+    #[track_caller]
+    pub fn allocate_all(
+        &mut self,
+        align: usize,
+    ) -> Option<(NonZeroUsize, usize)> {
+        self.top = align_down(self.top, align);
+        if self.top < self.bottom {
+            return None;
+        }
+
+        let size = self.top - self.bottom;
+        self.top = self.bottom;
+
+        // Safety: `self.bottom` is checked to be non-zero.
+        unsafe { Some((NonZeroUsize::new_unchecked(self.bottom), size)) }
     }
 }
 

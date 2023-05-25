@@ -43,8 +43,8 @@ pub fn allocate_pages(size: usize) -> Option<NonZeroUsize> {
     PAGE_ALLOCATOR.borrow_mut().allocate(size, PAGE_SIZE)
 }
 
-pub fn freeze_page_allocator() {
-    PAGE_ALLOCATOR.borrow_mut().freeze();
+pub fn allocate_all_pages() -> Option<(NonZeroUsize, usize)> {
+    PAGE_ALLOCATOR.borrow_mut().allocate_all(PAGE_SIZE)
 }
 
 pub fn init() {
