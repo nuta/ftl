@@ -3,7 +3,7 @@ use riscv::registers::{Sstatus, SstatusFlags};
 use super::switch::switch_to_user;
 
 #[derive(Default, Debug)]
-
+#[repr(C)] // FIXME: Should this be packed?
 pub struct Context {
     pub pc: u64,
     pub sstatus: u64,
