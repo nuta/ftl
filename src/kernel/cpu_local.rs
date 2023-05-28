@@ -91,22 +91,22 @@ impl<T: CpuLocalable + 'static> CpuLocal<T> {
         CpuLocal { init: &init.0 }
     }
 
+    pub fn offset(&self) -> usize {
+        // TODO: Cache the result
+        let init_base;
+        let init_end;
+        unsafe {
+            init_base = addr_of!(__cpu_local) as usize;
+            init_end = addr_of!(__cpu_local_end) as usize;
+        }
+        let init_addr = self.init as *const _ as usize;
+
+        debug_assert!(init_base <= init_addr && init_addr < init_end);
+        init_addr - init_base
+    }
+
     pub fn get(&self) -> &T {
-        // TODO: Cache `offset` or ultimately compute it at compile time.
-        let offset = {
-            let init_base;
-            let init_end;
-            unsafe {
-                init_base = addr_of!(__cpu_local) as usize;
-                init_end = addr_of!(__cpu_local_end) as usize;
-            }
-            let init_addr = self.init as *const _ as usize;
-
-            debug_assert!(init_base <= init_addr && init_addr < init_end);
-            init_addr - init_base
-        };
-
-        unsafe { &*((read_cpulocal_base() + offset) as *const T) }
+        unsafe { &*((read_cpulocal_base() + self.offset()) as *const T) }
     }
 }
 

@@ -38,6 +38,8 @@ pub unsafe extern "C" fn switch_to_kernel() -> ! {
     asm!(
         r#"
         csrrw tp, sscratch, tp
+        // ld tp, 0(tp)  FIXME:
+
         sd ra, {ra_offset}(tp)
         sd sp, {sp_offset}(tp)
         sd gp, {gp_offset}(tp)
