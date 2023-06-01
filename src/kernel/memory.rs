@@ -30,11 +30,12 @@ enum FrameKind {
 
 struct FrameControlBlock {
     kind: FrameKind,
+    ref_count: usize,
 }
 
 impl FrameControlBlock {
     const fn new(kind: FrameKind) -> FrameControlBlock {
-        FrameControlBlock { kind }
+        FrameControlBlock { kind, ref_count: 0 }
     }
 }
 
@@ -120,7 +121,10 @@ impl FrameZoneManager {
         }
 
         for frame in frames {
-            *frame = FrameControlBlock::new(kind);
+            // TODO: constructor
+            debug_assert_eq!(frame.ref_count, 0);
+            frame.kind = kind;
+            frame.ref_count = 1;
         }
 
         Ok(())
