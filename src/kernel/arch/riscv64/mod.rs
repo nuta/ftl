@@ -30,6 +30,11 @@ pub fn owns_giant_lock() -> bool {
     true // FIXME:
 }
 
+pub const fn is_valid_vaddr(addr: usize) -> bool {
+    // FIXME:
+    0x80000000 <= addr
+}
+
 // pub fn read_cpu_cycles() -> usize {
 //     rdcycle() as usize
 // }

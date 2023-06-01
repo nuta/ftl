@@ -5,12 +5,14 @@
 #![feature(fn_align)]
 #![feature(offset_of)]
 #![feature(custom_test_frameworks)]
+#![feature(const_mut_refs)]
 #![test_runner(crate::test::test_runner)]
 #![reexport_test_harness_main = "test_main"]
 
 #[macro_use]
 mod print;
 
+mod address;
 mod arch;
 mod cpu_local;
 mod giant_lock;
