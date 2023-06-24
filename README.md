@@ -7,28 +7,3 @@ FTL (codename) is an experimental microkernel-based operating system that strive
 - Compatible with existing POSIX software, particularly Linux binaries.
 
 FTL is currently in a quite early stage of development, also known as the _"vaporware"_ stage. Grab some popcorn and watch as I slowly make this dream a reality or throw it away 🍿
-
-
-## System Calls
-
-- `MemoryControl`
-  - `Channel`
-  - `Process`
-    - `CapTable`
-    - `Thread`
-    - `PageTable`
-      - `PageTableL1`
-      - `DataPage`
-- `InterruptControl`
-  - `Interrupt`
-- `RandControl`
-  - `Rand`
-- `DebugControl`
-  - `PutChar`
-- `TimeControl`
-  - `Uptime`
-  - `Walltime`
-
-```
-PageTable.Map()
-```

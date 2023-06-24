@@ -12,7 +12,7 @@ use crate::arch;
 /// lifetime of the referenced value: it's up to the user to ensure it's still valid
 /// when dereferencing.
 ///
-/// The address is not zero (NULL). To represent NULL-able value, use `Option<VAddr>`.
+/// To represent NULL-able value, use `Option<VAddr>`.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(transparent)]
 pub struct VAddr(NonZeroUsize);
@@ -96,7 +96,7 @@ impl VAddr {
         &*self.as_ptr()
     }
 
-    /// Returns a　mutable reference to the value at the address, as arbitrary `&'a T`.
+    /// Returns a mutable reference to the value at the address, as arbitrary `&'a T`.
     ///
     /// # Safety
     ///

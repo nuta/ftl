@@ -42,7 +42,7 @@ impl FrameControlBlock {
 enum RetypeError {
     UnalignedAddress,
     OutOfRange,
-    AlreadyUsed,
+    AlreadyInUse,
 }
 
 struct FrameZoneManager {
@@ -106,7 +106,8 @@ impl FrameZoneManager {
         len: usize,
         kind: FrameKind,
     ) -> Result<(), RetypeError> {
-        if is_aligned(vaddr.as_usize(), PAGE_SIZE) || is_aligned(len, PAGE_SIZE)
+        if !is_aligned(vaddr.as_usize(), PAGE_SIZE)
+            || !is_aligned(len, PAGE_SIZE)
         {
             return Err(RetypeError::UnalignedAddress);
         }
@@ -116,8 +117,8 @@ impl FrameZoneManager {
             .ok_or(RetypeError::OutOfRange)?;
 
         let frames = &mut self.frames[range];
-        if frames.iter().any(|f| f.kind != FrameKind::Unused) {
-            return Err(RetypeError::AlreadyUsed);
+        if !frames.iter().all(|f| f.kind == FrameKind::Unused) {
+            return Err(RetypeError::AlreadyInUse);
         }
 
         for frame in frames {

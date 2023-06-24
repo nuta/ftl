@@ -61,15 +61,14 @@ impl LockTracker {
 }
 
 /// A giant lock. TL;DR: it's `RefCell` but with `Sync` (shareable between
-/// multiple CPUs/threads).
+/// multiple CPUs).
 ///
-/// The lock will automatically be held by HAL (`arch` module) when it enters
-/// the kernel mode. Namely, all `GiantLock` objects will share the same lock
-/// and is always held until the CPU returns to the user mode.
+/// All `GiantLock` objects will share the same lock, aka "Big Kernel Lock".
+/// The lock will automatically be held in `arch` module when it enters
+/// the kernel mode and held until the CPU returns to the user mode.
 ///
-/// While the CPU keeps the lock, it's possible to have multiple mutable
-/// references to the inner value, which is not allowed in Rust. To ensure the
-/// property, [`GiantLock::borrow_mut`] will panics if it's violated,
+/// To prevent multiple mutable references to the inner value,
+/// which is not allowed in Rust, [`GiantLock::borrow_mut`] will panics
 /// just like [`RefCell::borrow_mut`].
 pub struct GiantLock<T> {
     inner: UnsafeCell<T>,
