@@ -3,7 +3,7 @@
 /// # Examples
 ///
 /// ```
-/// use utils::static_assert;
+/// use essentials::static_assert;
 ///
 /// static_assert!(1 + 1 == 2);
 /// static_assert!(1 + 1 == 2, "1 + 1 should be 2");

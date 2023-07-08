@@ -7,4 +7,4 @@ edition = "2021"
 path = "./lib.rs"
 
 [dependencies]
-utils = { path = "../utils" }
+essentials = { path = "../essentials" }

@@ -21,7 +21,7 @@
 
 use core::num::NonZeroUsize;
 
-use utils::alignment::align_down;
+use essentials::alignment::align_down;
 
 #[cfg(test)]
 extern crate test;

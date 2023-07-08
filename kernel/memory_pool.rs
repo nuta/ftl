@@ -1,7 +1,7 @@
 use core::{mem::size_of, ops::Range, slice};
 
 use crate::{address::VAddr, arch::PAGE_SIZE, object::ObjectKind};
-use utils::alignment::{align_up, is_aligned};
+use essentials::alignment::{align_up, is_aligned};
 
 struct Frame {
     kind: ObjectKind,

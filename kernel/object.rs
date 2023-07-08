@@ -1,6 +1,6 @@
 use core::mem::size_of;
 
-use utils::static_assert;
+use essentials::static_assert;
 
 use crate::{
     arch::PAGE_SIZE, process::Process, ref_count::RefCounted, thread::Thread,

@@ -1,0 +1,18 @@
+[package]
+name = "kernel"
+version = "0.0.0"
+authors = ["Seiya Nuta <nuta@seiya.me>"]
+edition = "2021"
+
+[[bin]]
+name = "kernel"
+path = "main.rs"
+
+[dependencies]
+linked_list_allocator = "0.10.5"
+essentials = { path = "../libs/essentials" }
+bitfields = { path = "../libs/bitfields" }
+proc_macros = { path = "../libs/proc_macros" }
+bump_allocator = { path = "../libs/bump_allocator" }
+riscv = { path = "../libs/riscv" }
+paste = "1.0.12"
