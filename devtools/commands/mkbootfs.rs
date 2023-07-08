@@ -22,6 +22,8 @@ pub fn main(indir: &Path, outfile: &Path) -> Result<()> {
             continue;
         }
 
+        // TODO: Don't read the whole file into memory. I bet there's a
+        //       better way to build the image :/
         let mut filedata: Vec<u8> = Vec::new();
         OpenOptions::new()
             .read(true)
