@@ -23,6 +23,7 @@ pub struct BootfsEntry {
     pub size: u32,
     pub offset: u32,
     pub entry_type: EntryType,
+    /// Null-terminated.
     pub name: [u8; NAME_LEN_MAX],
 }
 
