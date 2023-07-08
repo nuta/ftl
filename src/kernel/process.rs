@@ -1,4 +1,4 @@
-use crate::{arch, object::KernelObject, ref_count::Ref};
+use crate::{arch, object::{KernelObject, ObjectKind}, ref_count::Ref, thread::Thread};
 
 /// Allowed operations on a handle.
 ///
@@ -12,6 +12,9 @@ pub struct Rights {
 pub struct Handle {
     object: Ref<dyn KernelObject>,
     rights: Rights,
+}
+
+impl Handle {
 }
 
 /// The process control block (PCB).

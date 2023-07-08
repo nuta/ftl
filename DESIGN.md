@@ -35,7 +35,6 @@ struct Irq;
   - `Uptime`
   - `Walltime`
 
-
 # FTL
 
 ## Motivation
