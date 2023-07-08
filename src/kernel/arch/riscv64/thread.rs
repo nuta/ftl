@@ -41,56 +41,37 @@ pub struct Context {
 }
 
 impl Context {
-    pub fn new_user(pc: u64) -> Context {
+    pub fn new_user(pc: usize) -> Context {
         // TODO: Shoulnd't we inherit the sstatus by reading it?
         let mut sstatus = Sstatus::read();
         // sstatus.insert(SstatusFlags::SPIE); FIXME: set in thread initialization
         sstatus.remove(SstatusFlags::SPP);
 
         Context {
-            pc: pc,
+            pc: pc as u64,
             sstatus: sstatus.bits() as u64,
             // Other registers are set to zero.
             ..Default::default()
         }
     }
-}
 
-pub struct Thread {
-    pub context: Context,
-}
-
-impl Thread {
-    pub fn new(pc: usize) -> Thread {
-        Thread {
-            context: Context::new_user(pc as u64),
-        }
-    }
-
-    pub fn set_current_thread(thread: alloc::boxed::Box<Thread>) {
-        unsafe {
-            CURRENT = Some(thread);
-            // FIXME:
-            core::arch::asm!("mv tp, {}", in(reg)
-                current_thread() as *const Thread as usize
-            );
-        }
-    }
-
-    pub fn switch_test() -> ! {
-        unsafe {
-            switch_to_user(&current_thread().context);
-        }
-    }
+    // pub fn switch_test() -> ! {
+    //     unsafe {
+    //         core::arch::asm!("mv tp, {}", in(reg)
+    //             current_thread() as *const Context as usize
+    //         );
+    //         switch_to_user(&current_thread().context);
+    //     }
+    // }
 }
 
 // FIXME:
-static mut CURRENT: Option<alloc::boxed::Box<Thread>> = None;
+// static mut CURRENT: Option<alloc::boxed::Box<Thread>> = None;
 
-pub fn current_thread() -> &'static Thread {
-    unsafe { CURRENT.as_mut().unwrap() }
-}
+// pub fn current_thread() -> &'static Thread {
+//     unsafe { CURRENT.as_mut().unwrap() }
+// }
 
-pub fn current_thread_mut() -> &'static mut Thread {
-    unsafe { CURRENT.as_mut().unwrap() }
-}
+// pub fn current_thread_mut() -> &'static mut Thread {
+//     unsafe { CURRENT.as_mut().unwrap() }
+// }

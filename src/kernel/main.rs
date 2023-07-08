@@ -20,6 +20,7 @@ mod memory;
 mod memory_pool;
 mod panic;
 mod process;
+mod thread;
 mod test;
 
 extern crate alloc;

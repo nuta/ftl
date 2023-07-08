@@ -6,9 +6,11 @@ use riscv::{
 mod boot;
 mod switch;
 mod thread;
+mod page_table;
 
 pub const PAGE_SIZE: usize = 4096;
-pub use thread::Thread;
+pub use thread::Context;
+pub use page_table::{PageTable};
 
 pub fn read_cpulocal_base() -> usize {
     let tp: usize;

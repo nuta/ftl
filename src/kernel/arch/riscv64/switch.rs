@@ -1,6 +1,6 @@
 use core::{arch::asm, mem::offset_of};
 
-use super::thread::{current_thread, current_thread_mut, Context};
+use super::thread::{ Context};
 
 // Should never return.
 extern "C" fn trap_handler() -> ! {
@@ -14,17 +14,18 @@ extern "C" fn trap_handler() -> ! {
         asm!("csrr {}, sepc", out(reg) sepc);
     }
 
-    current_thread_mut().context.pc += 4;
+    // current_thread_mut().context.pc += 4;
     println!(
-        "trap_handler: scause={:x}, sepc={:x}, a0={:x}",
+        "trap_handler: scause={:x}, sepc={:x}",
         scause,
         sepc,
-        current_thread().context.a0
+        // current_thread().context.a0
     );
-    if current_thread().context.a0 == 0xdead {
-        panic!("User program exited");
-    }
-    super::thread::Thread::switch_test();
+    // if current_thread().context.a0 == 0xdead {
+    //     panic!("User program exited");
+    // }
+
+    panic!();
 }
 
 // The interrupt/exception/system call handler entry point. `stvec` is set to
