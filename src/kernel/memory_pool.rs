@@ -1,0 +1,120 @@
+use core::{mem::size_of, slice, ops::Range};
+
+use utils::alignment::{is_aligned, align_up};
+use crate::{address::VAddr, arch::PAGE_SIZE};
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum FrameKind {
+    Unused,
+    Reserved,
+    Process,
+    Thread,
+    Channel,
+    PageTableL0,
+    PageTableL1,
+    DataPage,
+}
+
+struct FrameControlBlock {
+    kind: FrameKind,
+    ref_count: usize,
+}
+
+impl FrameControlBlock {
+    const fn new(kind: FrameKind) -> FrameControlBlock {
+        FrameControlBlock { kind, ref_count: 0 }
+    }
+}
+
+enum RetypeError {
+    UnalignedAddress,
+    OutOfRange,
+    AlreadyInUse,
+}
+
+struct MemoryPool {
+    base: VAddr,
+    frames: &'static mut [FrameControlBlock],
+}
+
+impl MemoryPool {
+    pub fn new(vaddr: VAddr, len: usize) -> Option<MemoryPool> {
+        debug_assert!(is_aligned(vaddr.as_usize(), PAGE_SIZE));
+        debug_assert!(is_aligned(len, PAGE_SIZE));
+
+        let num_frames = len / size_of::<FrameControlBlock>();
+        if num_frames * size_of::<FrameControlBlock>() >= len {
+            return None;
+        }
+
+        let mut frames = unsafe {
+            slice::from_raw_parts_mut(vaddr.as_mut_ptr(), num_frames)
+        };
+
+        // FIXME: Optimize this initialization. We need something like memset.
+        let num_control_frames =
+            align_up(len * size_of::<FrameControlBlock>(), PAGE_SIZE)
+                / PAGE_SIZE;
+        for frame in &mut frames[0..num_control_frames] {
+            *frame = FrameControlBlock::new(FrameKind::Reserved);
+        }
+
+        for frame in &mut frames[num_control_frames..] {
+            *frame = FrameControlBlock::new(FrameKind::Unused);
+        }
+
+        Some(MemoryPool {
+            base: vaddr,
+            frames,
+        })
+    }
+
+    fn frame_range(&self, vaddr: VAddr, len: usize) -> Option<Range<usize>> {
+        debug_assert!(is_aligned(vaddr.as_usize(), PAGE_SIZE));
+        debug_assert!(is_aligned(len, PAGE_SIZE));
+
+        if vaddr < self.base {
+            return None;
+        }
+
+        let offset = vaddr.as_usize() - self.base.as_usize();
+        let start = offset / PAGE_SIZE;
+        let end = (offset + len) / PAGE_SIZE;
+        if end > self.frames.len() {
+            None
+        } else {
+            Some(start..end)
+        }
+    }
+
+    pub fn retype(
+        &mut self,
+        vaddr: VAddr,
+        len: usize,
+        kind: FrameKind,
+    ) -> Result<(), RetypeError> {
+        if !is_aligned(vaddr.as_usize(), PAGE_SIZE)
+            || !is_aligned(len, PAGE_SIZE)
+        {
+            return Err(RetypeError::UnalignedAddress);
+        }
+
+        let range = self
+            .frame_range(vaddr, len)
+            .ok_or(RetypeError::OutOfRange)?;
+
+        let frames = &mut self.frames[range];
+        if !frames.iter().all(|f| f.kind == FrameKind::Unused) {
+            return Err(RetypeError::AlreadyInUse);
+        }
+
+        for frame in frames {
+            // TODO: constructor
+            debug_assert_eq!(frame.ref_count, 0);
+            frame.kind = kind;
+            frame.ref_count = 1;
+        }
+
+        Ok(())
+    }
+}

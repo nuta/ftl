@@ -32,6 +32,12 @@ impl VAddr {
         VAddr(unsafe { NonZeroUsize::new_unchecked(addr) })
     }
 
+    /// Creates a new `VAddr` from a `NonZeroUsize`.
+    #[inline]
+    pub const fn from_nonzero_usize(addr: NonZeroUsize) -> VAddr {
+        VAddr(addr)
+    }
+
     /// Returns `self + offset`.
     ///
     /// Note that this method doesn't mutate `self`: it returns a new `VAddr`.
@@ -120,5 +126,33 @@ impl Debug for VAddr {
             8 => write!(f, "0x{:#016x}", self.as_usize()),
             _ => unreachable!(),
         }
+    }
+}
+
+/// A non-NULL physical address.
+///
+/// To represent NULL-able value, use `Option<PAddr>`.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[repr(transparent)]
+pub struct PAddr(NonZeroUsize);
+
+impl PAddr {
+    /// Creates a new `PAddr`.
+    ///
+    /// # Panics
+    ///
+    /// This function panics if `addr` is zero.
+    #[inline]
+    pub const fn new(addr: usize) -> VAddr {
+        assert!(addr != 0, "PAddr cannot be zero");
+
+        // SAFETY: The assert above ensures that `addr` is not zero.
+        PAddr(unsafe { NonZeroUsize::new_unchecked(addr) })
+    }
+
+    /// Creates a new `VAddr` from a `NonZeroUsize`.
+    #[inline]
+    pub const fn from_nonzero_usize(addr: NonZeroUsize) -> PAddr {
+        PAddr(addr)
     }
 }
