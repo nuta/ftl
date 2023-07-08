@@ -1,0 +1,17 @@
+[package]
+name = "devtools"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "devtools"
+path = "lib.rs"
+
+[[bin]]
+name = "devtools"
+path = "main.rs"
+
+[dependencies]
+clap = { version = "4.3.11", features = ["derive"] }
+essentials = { path = "../libs/essentials" }
+
