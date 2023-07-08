@@ -1,4 +1,8 @@
-use crate::{thread::Thread, arch, ref_count::Ref, object::KernelObject};
+use core::mem::size_of;
+
+use utils::static_assert;
+
+use crate::{thread::Thread, arch::{self, PAGE_SIZE}, ref_count::Ref, object::KernelObject};
 
 pub struct Handle {
     object: Ref<dyn KernelObject>,
@@ -10,3 +14,5 @@ pub struct Process {
     //  TODO:
     // indirect_handles: [HandleTable; 16],
 }
+
+static_assert!(size_of::<Process>() <= PAGE_SIZE);
