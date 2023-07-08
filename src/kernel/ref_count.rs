@@ -1,6 +1,6 @@
 use core::ptr::NonNull;
 
-pub unsafe trait RefCounted: ?sized {
+pub unsafe trait RefCounted: ?Sized {
     fn inc_ref(&self);
     fn dec_ref(&self);
 }
