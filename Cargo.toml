@@ -2,4 +2,5 @@
 members = [
     "kernel",
     "libs/*",
+    "apps/*",
 ]

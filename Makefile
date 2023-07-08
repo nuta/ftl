@@ -22,17 +22,22 @@ QEMUFLAGS += --no-reboot -d unimp,guest_errors,int,cpu_reset -D qemu-debug.log
 
 CARGO ?= cargo
 CARGOFLAGS += -Z build-std=core,alloc -Z build-std-features=compiler-builtins-mem
-CARGOFLAGS += --target kernel/arch/riscv64/riscv64-qemu-virt.json
 # RUSTFLAGS += -Z macro-backtrace
 
 ifneq ($(GDBSERVER),)
 QEMUFLAGS += -S -gdb tcp::7777
 endif
 
-.PHONY: run
-run:
+
+bootfs.bin:
 	$(PROGRESS) CARGO $@
-	RUSTFLAGS="$(RUSTFLAGS)" $(CARGO) build $(CARGOFLAGS) --manifest-path kernel/Cargo.toml
+	RUSTFLAGS="$(RUSTFLAGS)" $(CARGO) build $(CARGOFLAGS) --target libs/user/arch/riscv64/riscv64-qemu-virt.json --manifest-path apps/hello/Cargo.toml
+	cp target/riscv64-qemu-virt/$(BUILD)/hello bootfs.bin
+
+.PHONY: run
+run: hello.elf
+	$(PROGRESS) CARGO $@
+	RUSTFLAGS="$(RUSTFLAGS)" $(CARGO) build $(CARGOFLAGS) --target kernel/arch/riscv64/riscv64-qemu-virt.json --manifest-path kernel/Cargo.toml
 	cp target/riscv64-qemu-virt/$(BUILD)/kernel ftl.elf
 	$(PROGRESS) QEMU ftl.elf
 	$(QEMU) $(QEMUFLAGS) -kernel ftl.elf

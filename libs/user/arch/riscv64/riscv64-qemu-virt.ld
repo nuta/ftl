@@ -1,10 +1,9 @@
-ENTRY(boot)
+ENTRY(start)
 
 SECTIONS {
-    . = 0x80200000;
+    . = 0x10000000;
 
     .text : {
-        KEEP(*(.boot));
         *(.text .text.*);
     }
 
@@ -18,11 +17,6 @@ SECTIONS {
         *(.data .data.*);
         . = ALIGN(8);
         *(.sdata .sdata.*);
-
-        . = ALIGN(8);
-        __cpu_local = .;
-        *(.cpu_local);
-        __cpu_local_end = .;
     }
 
     .bss : ALIGN(8) {
@@ -30,14 +24,8 @@ SECTIONS {
         . = ALIGN(8);
         *(.sbss .sbss.*);
 
-        . = ALIGN(8);
-        __boot_stack_bottom = .;
-        . = . + 1024 * 1024;
-        . = ALIGN(4096);
-        __boot_stack_top = .;
-
-        __boot_heap = .;
+        __stack = .;
         . = . + 32 * 1024 * 1024;
-        __boot_heap_end = .;
+        __stack_top = .;
     }
 }
