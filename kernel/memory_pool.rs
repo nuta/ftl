@@ -35,7 +35,7 @@ impl MemoryPool {
             return None;
         }
 
-        let mut frames = unsafe {
+        let  frames = unsafe {
             slice::from_raw_parts_mut(vaddr.as_mut_ptr(), num_frames)
         };
 

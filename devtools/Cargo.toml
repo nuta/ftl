@@ -8,6 +8,9 @@ name = "devtools"
 path = "main.rs"
 
 [dependencies]
+anyhow = "1.0.71"
+better-panic = "0.3.0"
 clap = { version = "4.3.11", features = ["derive"] }
+crossterm = "0.26.1"
 essentials = { path = "../libs/essentials" }
-
+bootfs = { path = "../libs/bootfs" }
