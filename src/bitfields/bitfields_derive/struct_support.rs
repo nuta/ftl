@@ -113,7 +113,7 @@ fn parse(
 
     StructDef {
         struct_width,
-        fields: fields,
+        fields,
     }
 }
 
