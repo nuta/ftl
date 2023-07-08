@@ -1,8 +1,5 @@
-use core::mem::size_of;
 
-use utils::static_assert;
-
-use crate::{ arch::{self, PAGE_SIZE}, ref_count::Ref, object::{KernelObject, object_size_for}};
+use crate::{ arch, ref_count::Ref, object::{KernelObject, }};
 
 /// Allowed operations on a handle.
 ///
