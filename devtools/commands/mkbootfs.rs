@@ -1,9 +1,11 @@
-use std::{path::Path, fs::OpenOptions, io::Write};
+use std::{fs::OpenOptions, io::Write, path::Path};
 
-use anyhow::{bail, Result, Context};
-use bootfs::{BOOTFS_MAGIC, EntryType, NAME_LEN_MAX};
-use bytes::{BytesMut, BufMut};
-use essentials::{alignment::{align_up, is_aligned}, static_assert};
+use anyhow::{bail, Context, Result};
+use bootfs::{EntryType, BOOTFS_MAGIC, NAME_LEN_MAX};
+use bytes::{BufMut, BytesMut};
+use essentials::{
+    alignment::{align_up, is_aligned},
+};
 use glob::glob;
 use std::io::Read;
 
@@ -32,7 +34,6 @@ pub fn main(indir: &Path, outfile: &Path) -> Result<()> {
         entries.push((path, filedata, padding));
     }
 
-
     let mut image = BytesMut::new();
 
     // BootFS header.
@@ -41,8 +42,9 @@ pub fn main(indir: &Path, outfile: &Path) -> Result<()> {
 
     // Entries.
     let mut offset = 0;
-    for  (path, filedata, padding) in &entries {
-        let name = path.file_name()
+    for (path, filedata, padding) in &entries {
+        let name = path
+            .file_name()
             .context("failed to strip prefix")?
             .to_str()
             .context("failed to convert to str")?
@@ -68,11 +70,9 @@ pub fn main(indir: &Path, outfile: &Path) -> Result<()> {
     }
 
     // File data.
-    offset = 0;
-    for (path, filedata, padding) in &entries {
+    for (_, filedata, padding) in &entries {
         image.put_slice(&filedata);
         image.put_bytes(0, *padding);
-
     }
 
     let mut tmpfile = tempfile::NamedTempFile::new()

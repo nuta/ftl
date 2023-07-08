@@ -1,7 +1,5 @@
 use std::mem::size_of;
 
-use essentials::static_assert;
-
 // "\xbfBFS"
 pub const BOOTFS_MAGIC: u32 = 0x424653bf;
 
