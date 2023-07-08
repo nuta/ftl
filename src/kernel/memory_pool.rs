@@ -1,28 +1,16 @@
 use core::{mem::size_of, ops::Range, slice};
 
-use crate::{address::VAddr, arch::PAGE_SIZE};
+use crate::{address::VAddr, arch::PAGE_SIZE, object::ObjectKind};
 use utils::alignment::{align_up, is_aligned};
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-enum FrameKind {
-    Unused,
-    Reserved,
-    Process,
-    Thread,
-    Channel,
-    PageTableL0,
-    PageTableL1,
-    DataPage,
-}
-
-struct FrameControlBlock {
-    kind: FrameKind,
+struct Frame {
+    kind: ObjectKind,
     ref_count: usize,
 }
 
-impl FrameControlBlock {
-    const fn new(kind: FrameKind) -> FrameControlBlock {
-        FrameControlBlock { kind, ref_count: 0 }
+impl Frame {
+    const fn new(kind: ObjectKind) -> Frame {
+        Frame { kind, ref_count: 0 }
     }
 }
 
@@ -34,7 +22,7 @@ enum RetypeError {
 
 struct MemoryPool {
     base: VAddr,
-    frames: &'static mut [FrameControlBlock],
+    frames: &'static mut [Frame],
 }
 
 impl MemoryPool {
@@ -42,8 +30,8 @@ impl MemoryPool {
         debug_assert!(is_aligned(vaddr.as_usize(), PAGE_SIZE));
         debug_assert!(is_aligned(len, PAGE_SIZE));
 
-        let num_frames = len / size_of::<FrameControlBlock>();
-        if num_frames * size_of::<FrameControlBlock>() >= len {
+        let num_frames = len / size_of::<Frame>();
+        if num_frames * size_of::<Frame>() >= len {
             return None;
         }
 
@@ -53,14 +41,14 @@ impl MemoryPool {
 
         // FIXME: Optimize this initialization. We need something like memset.
         let num_control_frames =
-            align_up(len * size_of::<FrameControlBlock>(), PAGE_SIZE)
+            align_up(len * size_of::<Frame>(), PAGE_SIZE)
                 / PAGE_SIZE;
         for frame in &mut frames[0..num_control_frames] {
-            *frame = FrameControlBlock::new(FrameKind::Reserved);
+            *frame = Frame::new(ObjectKind::Reserved);
         }
 
         for frame in &mut frames[num_control_frames..] {
-            *frame = FrameControlBlock::new(FrameKind::Unused);
+            *frame = Frame::new(ObjectKind::Unused);
         }
 
         Some(MemoryPool {
@@ -91,7 +79,7 @@ impl MemoryPool {
         &mut self,
         vaddr: VAddr,
         len: usize,
-        kind: FrameKind,
+        kind: ObjectKind,
     ) -> Result<(), RetypeError> {
         if !is_aligned(vaddr.as_usize(), PAGE_SIZE)
             || !is_aligned(len, PAGE_SIZE)
@@ -104,7 +92,7 @@ impl MemoryPool {
             .ok_or(RetypeError::OutOfRange)?;
 
         let frames = &mut self.frames[range];
-        if !frames.iter().all(|f| f.kind == FrameKind::Unused) {
+        if !frames.iter().all(|f| f.kind == ObjectKind::Unused) {
             return Err(RetypeError::AlreadyInUse);
         }
 

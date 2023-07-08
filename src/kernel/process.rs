@@ -1,12 +1,12 @@
-use crate::{thread::Thread, arch};
+use crate::{thread::Thread, arch, ref_count::Ref, object::KernelObject};
 
-pub struct Handle {}
-
-pub struct HandleTable {}
+pub struct Handle {
+    object: Ref<dyn KernelObject>,
+}
 
 pub struct Process {
     page_table: arch::PageTable,
-    threads: LinkedList<Thread>,
     handles: [Handle; 256],
-    indirect_handles: [HandleTable; 16],
+    //  TODO:
+    // indirect_handles: [HandleTable; 16],
 }

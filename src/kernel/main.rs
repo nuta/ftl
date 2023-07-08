@@ -22,6 +22,8 @@ mod panic;
 mod process;
 mod thread;
 mod test;
+mod ref_count;
+mod object;
 
 extern crate alloc;
 

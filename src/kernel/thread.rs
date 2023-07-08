@@ -1,4 +1,4 @@
-use crate::{arch, process::Process};
+use crate::{arch};
 
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -10,5 +10,4 @@ pub enum ThreadState {
 pub struct Thread {
     state: ThreadState,
     context: arch::Context,
-    process: ParentRef<Process>,
 }
