@@ -28,14 +28,11 @@ ifneq ($(GDBSERVER),)
 QEMUFLAGS += -S -gdb tcp::7777
 endif
 
-
-bootfs.bin:
+.PHONY: run
+run:
 	$(PROGRESS) CARGO $@
 	RUSTFLAGS="$(RUSTFLAGS)" $(CARGO) build $(CARGOFLAGS) --target libs/user/arch/riscv64/riscv64-qemu-virt.json --manifest-path apps/hello/Cargo.toml
-	cp target/riscv64-qemu-virt/$(BUILD)/hello bootfs.bin
-
-.PHONY: run
-run: hello.elf
+	cp target/riscv64-qemu-virt/$(BUILD)/hello hello.elf
 	$(PROGRESS) CARGO $@
 	RUSTFLAGS="$(RUSTFLAGS)" $(CARGO) build $(CARGOFLAGS) --target kernel/arch/riscv64/riscv64-qemu-virt.json --manifest-path kernel/Cargo.toml
 	cp target/riscv64-qemu-virt/$(BUILD)/kernel ftl.elf
