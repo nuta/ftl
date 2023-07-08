@@ -87,6 +87,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "24a6904aef64d73cf10ab17ebace7befb918b82164785cb89907993be7f83813"
 
 [[package]]
+name = "bootfs"
+version = "0.1.0"
+dependencies = [
+ "essentials",
+]
+
+[[package]]
 name = "bump_allocator"
 version = "0.1.0"
 dependencies = [
