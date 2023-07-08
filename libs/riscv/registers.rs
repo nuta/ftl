@@ -47,19 +47,13 @@ pub struct Sstatus;
 
 impl Sstatus {
     pub unsafe fn write(flags: SstatusFlags) {
-        asm!(
-                "csrw sstatus, {}",
-            in(reg) flags.bits(),
-        );
+        asm!("csrw sstatus, {}", in(reg) flags.bits());
     }
 
     pub fn read() -> SstatusFlags {
         let flags: usize;
         unsafe {
-            asm!(
-                    "csrr {}, sstatus",
-                out(reg) flags,
-            );
+            asm!("csrr {}, sstatus", out(reg) flags);
         }
         SstatusFlags::from_bits_retain(flags)
     }

@@ -3,6 +3,7 @@
 
 extern crate user;
 
+#[no_mangle]
 fn main() {
     loop {}
 }
