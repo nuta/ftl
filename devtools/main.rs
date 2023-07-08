@@ -1,4 +1,4 @@
 #[no_mangle]
-fn main() {
+pub fn main() {
     println!("Hello, world!");
 }
