@@ -14,3 +14,4 @@ clap = { version = "4.3.11", features = ["derive"] }
 crossterm = "0.26.1"
 essentials = { path = "../libs/essentials" }
 bootfs = { path = "../libs/bootfs" }
+tempfile = "3.6.0"
