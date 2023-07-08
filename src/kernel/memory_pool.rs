@@ -1,7 +1,7 @@
-use core::{mem::size_of, slice, ops::Range};
+use core::{mem::size_of, ops::Range, slice};
 
-use utils::alignment::{is_aligned, align_up};
 use crate::{address::VAddr, arch::PAGE_SIZE};
+use utils::alignment::{align_up, is_aligned};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum FrameKind {

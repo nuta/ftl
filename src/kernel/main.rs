@@ -18,8 +18,8 @@ mod cpu_local;
 mod giant_lock;
 mod memory;
 mod memory_pool;
-mod process;
 mod panic;
+mod process;
 mod test;
 
 extern crate alloc;

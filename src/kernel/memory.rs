@@ -7,7 +7,11 @@ use core::{
     slice,
 };
 
-use crate::{address::{VAddr, PAddr}, arch::PAGE_SIZE, giant_lock::GiantLock};
+use crate::{
+    address::{PAddr, VAddr},
+    arch::PAGE_SIZE,
+    giant_lock::GiantLock,
+};
 
 use bump_allocator::BumpAllocator;
 use linked_list_allocator::Heap;
@@ -62,7 +66,9 @@ unsafe impl GlobalAlloc for HeapAllocator {
 ///   boot-time initialization.
 #[track_caller]
 pub fn allocate_pages(size: usize) -> Option<VAddr> {
-    PAGE_ALLOCATOR.borrow_mut().allocate(size, PAGE_SIZE)
+    PAGE_ALLOCATOR
+        .borrow_mut()
+        .allocate(size, PAGE_SIZE)
         .map(|addr| VAddr::from_nonzero_usize(addr))
 }
 
@@ -70,6 +76,11 @@ pub fn allocate_pages(size: usize) -> Option<VAddr> {
 ///
 /// Returns the address of the beginning of the range and the size of the range
 /// in bytes, or `None` if the allocation failed.
+///
+/// This function is intended to be used for giving all remaining memory that
+/// the kernel doesn't need to userland.
+///
+/// The allocated size may NOT be aligned to `PAGE_SIZE`.
 ///
 /// ## Guarantees
 ///
@@ -81,16 +92,14 @@ pub fn allocate_pages(size: usize) -> Option<VAddr> {
 ///
 /// - You can't free the allocated memory. It's intended to be used for
 ///   boot-time initialization.
-///
-/// ## Notes
-///
-/// - The allocated size may NOT be aligned to `PAGE_SIZE`.
 pub fn allocate_all_pages() -> Option<(PAddr, usize)> {
-    PAGE_ALLOCATOR.borrow_mut().allocate_all(PAGE_SIZE).map(|(addr, size)| (
-
-        PAddr::from_nonzero_usize(addr), size))
+    PAGE_ALLOCATOR
+        .borrow_mut()
+        .allocate_all(PAGE_SIZE)
+        .map(|(addr, size)| (PAddr::from_nonzero_usize(addr), size))
 }
 
+/// Initializes the memory subsystem.
 pub fn init() {
     extern "C" {
         static __boot_heap: u8;
