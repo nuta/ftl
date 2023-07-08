@@ -1,3 +1,5 @@
+use crate::ref_count::RefCounted;
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ObjectKind {
     Unused,
@@ -10,6 +12,6 @@ pub enum ObjectKind {
     DataPage,
 }
 
-pub trait KernelObject {
+pub trait KernelObject: RefCounted {
     fn kind(&self) -> ObjectKind;
 }
