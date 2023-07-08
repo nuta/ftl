@@ -1,4 +1,9 @@
-use crate::{arch, object::{KernelObject, ObjectKind}, ref_count::Ref, thread::Thread};
+use crate::{
+    arch,
+    object::{KernelObject, ObjectKind},
+    ref_count::Ref,
+    thread::Thread,
+};
 
 /// Allowed operations on a handle.
 ///
@@ -14,8 +19,7 @@ pub struct Handle {
     rights: Rights,
 }
 
-impl Handle {
-}
+impl Handle {}
 
 /// The process control block (PCB).
 ///

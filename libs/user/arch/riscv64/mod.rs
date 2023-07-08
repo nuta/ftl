@@ -7,15 +7,16 @@ extern "C" {
 #[no_mangle]
 #[naked]
 pub extern "C" fn start() {
-    asm!(
-        r#"
-        mv ra, zero
-        mv fp, zero
-        la sp, {stack_top}
-        call {main}
-        "#,
-        boot_kernel = sym boot_kernel,
-        stack_top = sym __boot_stack_top,
-        options(noreturn),
-    );
+    unsafe {
+        asm!(
+            r#"
+            mv ra, zero
+            mv fp, zero
+            la sp, {stack_top}
+            call main
+            "#,
+            stack_top = sym __stack_top,
+            options(noreturn),
+        );
+    }
 }

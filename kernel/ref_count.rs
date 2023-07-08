@@ -1,4 +1,4 @@
-use core::{ptr::NonNull, ops::Deref};
+use core::{ops::Deref, ptr::NonNull};
 
 pub unsafe trait RefCounted {
     fn inc_ref(&self);

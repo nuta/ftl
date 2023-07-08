@@ -4,5 +4,5 @@
 extern crate user;
 
 fn main() {
- loop {}
+    loop {}
 }
