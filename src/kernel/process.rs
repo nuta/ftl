@@ -2,7 +2,7 @@ use core::mem::size_of;
 
 use utils::static_assert;
 
-use crate::{ arch::{self, PAGE_SIZE}, ref_count::Ref, object::KernelObject};
+use crate::{ arch::{self, PAGE_SIZE}, ref_count::Ref, object::{KernelObject, object_size_for}};
 
 /// Allowed operations on a handle.
 ///
@@ -24,11 +24,10 @@ pub struct Handle {
 /// that are shared among the threads.
 pub struct Process {
     page_table: arch::PageTable,
-    handles: [Handle; 128],
-}
 
 // We want to keep the size of `Process` small so that a process can be
-// created as cheaply as possible. If we come to a point where we need
+// created as cheaply as possible. When we come to a point where we need
 // more handles, let's consider adding a second-level handle table,
 // similar to indirect blocks in a file system.
-static_assert!(size_of::<Process>() <= PAGE_SIZE);
+handles: [Handle; 128],
+}
