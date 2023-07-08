@@ -1,5 +1,5 @@
 use riscv::{
-    instructions::{rdcycle, wfi},
+    instructions::{ wfi},
     sbi,
 };
 

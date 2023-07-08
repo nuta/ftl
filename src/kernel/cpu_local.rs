@@ -131,13 +131,13 @@ pub fn init_percpu() {
 
     let percpu_base =
         allocate_pages(per_cpu_size).expect("failed to allocate percpu area");
-    write_cpulocal_base(percpu_base.get());
+    write_cpulocal_base(percpu_base.as_usize());
 
     // Fill the percpu area with the initial values.
     unsafe {
         ptr::copy_nonoverlapping(
             init_base as *const u8,
-            percpu_base.get() as *mut u8,
+            percpu_base.as_mut_ptr(),
             per_cpu_size,
         );
     }

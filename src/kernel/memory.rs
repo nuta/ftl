@@ -1,10 +1,7 @@
 use core::{
     alloc::{GlobalAlloc, Layout},
     mem::size_of,
-    num::NonZeroUsize,
-    ops::Range,
     ptr::{addr_of, NonNull},
-    slice,
 };
 
 use crate::{

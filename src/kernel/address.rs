@@ -143,7 +143,7 @@ impl PAddr {
     ///
     /// This function panics if `addr` is zero.
     #[inline]
-    pub const fn new(addr: usize) -> VAddr {
+    pub const fn new(addr: usize) -> PAddr {
         assert!(addr != 0, "PAddr cannot be zero");
 
         // SAFETY: The assert above ensures that `addr` is not zero.
