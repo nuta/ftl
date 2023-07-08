@@ -1,5 +1,4 @@
-use crate::{arch};
-
+use crate::arch;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum ThreadState {

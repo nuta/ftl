@@ -2,7 +2,9 @@ use core::mem::size_of;
 
 use utils::static_assert;
 
-use crate::{ref_count::RefCounted, arch::PAGE_SIZE, process::Process, thread::Thread};
+use crate::{
+    arch::PAGE_SIZE, process::Process, ref_count::RefCounted, thread::Thread,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ObjectKind {
@@ -24,7 +26,7 @@ pub const fn object_size_for(kind: ObjectKind) -> usize {
     match kind {
         ObjectKind::Unused => 0,
         ObjectKind::Reserved => 0,
-ObjectKind::Process => PAGE_SIZE,
+        ObjectKind::Process => PAGE_SIZE,
         ObjectKind::Thread => PAGE_SIZE,
         ObjectKind::Channel => PAGE_SIZE,
         ObjectKind::PageTableL0 => PAGE_SIZE,

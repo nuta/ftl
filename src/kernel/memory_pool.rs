@@ -41,8 +41,7 @@ impl MemoryPool {
 
         // FIXME: Optimize this initialization. We need something like memset.
         let num_control_frames =
-            align_up(len * size_of::<Frame>(), PAGE_SIZE)
-                / PAGE_SIZE;
+            align_up(len * size_of::<Frame>(), PAGE_SIZE) / PAGE_SIZE;
         for frame in &mut frames[0..num_control_frames] {
             *frame = Frame::new(ObjectKind::Reserved);
         }

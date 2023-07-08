@@ -18,12 +18,12 @@ mod cpu_local;
 mod giant_lock;
 mod memory;
 mod memory_pool;
+mod object;
 mod panic;
 mod process;
-mod thread;
-mod test;
 mod ref_count;
-mod object;
+mod test;
+mod thread;
 
 extern crate alloc;
 
@@ -52,6 +52,11 @@ pub fn kernel_main() {
     println!("{:#?}", v);
 
     println!("\n\n\x1b[1;35mHello from Rust World!\x1b[0m\n\n");
+
+    use core::mem::size_of;
+    println!("size_of::<Process>(): {}", size_of::<process::Process>());
+    println!("size_of::<Handle>(): {}", size_of::<process::Handle>());
+    println!("size_of::<Thread>(): {}", size_of::<thread::Thread>());
 
     // unsafe extern "C" fn first_user_program() {
     //     core::arch::asm!("nop; li a0, 0xc0be; ecall; li a0, 0xbeef; ecall; li a0, 0xdead; ecall");

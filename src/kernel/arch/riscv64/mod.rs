@@ -1,16 +1,13 @@
-use riscv::{
-    instructions::{ wfi},
-    sbi,
-};
+use riscv::{instructions::wfi, sbi};
 
 mod boot;
+mod page_table;
 mod switch;
 mod thread;
-mod page_table;
 
 pub const PAGE_SIZE: usize = 4096;
+pub use page_table::PageTable;
 pub use thread::Context;
-pub use page_table::{PageTable};
 
 pub fn read_cpulocal_base() -> usize {
     let tp: usize;

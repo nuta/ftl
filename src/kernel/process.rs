@@ -1,5 +1,4 @@
-
-use crate::{ arch, ref_count::Ref, object::{KernelObject, }};
+use crate::{arch, object::KernelObject, ref_count::Ref};
 
 /// Allowed operations on a handle.
 ///
@@ -22,9 +21,9 @@ pub struct Handle {
 pub struct Process {
     page_table: arch::PageTable,
 
-// We want to keep the size of `Process` small so that a process can be
-// created as cheaply as possible. When we come to a point where we need
-// more handles, let's consider adding a second-level handle table,
-// similar to indirect blocks in a file system.
-handles: [Handle; 128],
+    // We want to keep the size of `Process` small so that a process can be
+    // created as cheaply as possible. When we come to a point where we need
+    // more handles, let's consider adding a second-level handle table,
+    // similar to indirect blocks in a file system.
+    handles: [Handle; 128],
 }

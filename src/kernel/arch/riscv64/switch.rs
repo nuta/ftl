@@ -1,6 +1,6 @@
 use core::{arch::asm, mem::offset_of};
 
-use super::thread::{ Context};
+use super::thread::Context;
 
 // Should never return.
 extern "C" fn trap_handler() -> ! {
