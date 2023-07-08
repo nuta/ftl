@@ -24,7 +24,7 @@ pub struct Handle {
 /// that are shared among the threads.
 pub struct Process {
     page_table: arch::PageTable,
-    handles: [Handle; 256],
+    handles: [Handle; 128],
 }
 
 // We want to keep the size of `Process` small so that a process can be
