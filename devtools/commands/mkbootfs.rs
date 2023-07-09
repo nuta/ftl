@@ -66,12 +66,12 @@ pub fn main(indir: &Path, outfile: &Path) -> Result<()> {
         image.put_bytes(0, NAME_LEN_MAX - name.as_bytes().len());
 
         offset += filedata.len() + padding;
-        debug_assert!(is_aligned(offset as usize, 4096));
+        debug_assert!(is_aligned(offset, 4096));
     }
 
     // File data.
     for (_, filedata, padding) in &entries {
-        image.put_slice(&filedata);
+        image.put_slice(filedata);
         image.put_bytes(0, *padding);
     }
 
