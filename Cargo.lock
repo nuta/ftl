@@ -371,6 +371,7 @@ name = "kernel"
 version = "0.0.0"
 dependencies = [
  "bitfields",
+ "bootfs",
  "bump_allocator",
  "essentials",
  "linked_list_allocator",

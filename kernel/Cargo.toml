@@ -15,4 +15,5 @@ bitfields = { path = "../libs/bitfields" }
 proc_macros = { path = "../libs/proc_macros" }
 bump_allocator = { path = "../libs/bump_allocator" }
 riscv = { path = "../libs/riscv" }
+bootfs = { path = "../libs/bootfs" }
 paste = "1.0.12"

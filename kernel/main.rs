@@ -14,6 +14,7 @@ mod print;
 
 mod address;
 mod arch;
+mod bootfs;
 mod cpu_local;
 mod giant_lock;
 mod memory;

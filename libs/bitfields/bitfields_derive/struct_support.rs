@@ -340,6 +340,7 @@ pub fn bitfields_struct(
 
     quote! {
         // TODO: visibility
+        #[derive(Copy, Clone)] // FIXME:
         pub struct #struct_name {
             raw: #struct_width,
         }

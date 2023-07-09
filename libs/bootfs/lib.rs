@@ -1,4 +1,6 @@
-use std::mem::size_of;
+#![no_std]
+
+use core::mem::size_of;
 
 // "\xbfBFS"
 pub const BOOTFS_MAGIC: u32 = 0x424653bf;

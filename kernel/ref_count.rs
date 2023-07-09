@@ -1,10 +1,9 @@
 use core::{
-    alloc::Layout,
     mem::{size_of, MaybeUninit},
     ptr::{drop_in_place, NonNull},
 };
 
-use essentials::{alignment::align_up};
+use essentials::alignment::align_up;
 
 use crate::{
     address::VAddr,
