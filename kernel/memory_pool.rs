@@ -5,6 +5,7 @@ use essentials::alignment::{align_up, is_aligned};
 
 struct Frame {
     kind: ObjectKind,
+    /// The number of references to this frame. Only used for `DataPage`.
     ref_count: usize,
 }
 

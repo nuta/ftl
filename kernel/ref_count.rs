@@ -76,11 +76,11 @@ const fn required_num_pages<T>() -> usize {
 //   there's no runtime overhead. We just increment/decrement the counter.
 //
 // In short, consider this as `ArcMutex<T>`, i.e. integrating `Arc` and `Mutex`
-// into a single object ([`LockedRef<T>`]).
+// deeply into a single useful object ([`LockedRef<T>`]).
 type Container<T> = GiantLock<RefCounted<T>>;
 
-/// A reference-counted mutable reference. This is similar to [`Arc<Mutex<T>>`]
-/// but it's optimized for our use case.
+/// A reference-counted mutably-borrowable reference. This is similar to
+/// [`Arc<Mutex<T>>`] but it's optimized for our use case.
 pub struct LockedRef<T> {
     ptr: NonNull<Container<T>>,
 }
@@ -152,7 +152,7 @@ impl<T> Drop for LockedRef<T> {
                 // Call the destructor of the inner value (i.e. Drop).
                 drop_in_place(self.ptr.as_mut());
 
-                // Mark the memory as free (untyped).
+                // Mark the memory frames as unused.
                 let vaddr = VAddr::new(self.ptr.as_ptr() as usize);
                 let num_pages = required_num_pages::<Container<T>>();
                 retype_frames_as_unused(vaddr, num_pages);
