@@ -1,8 +1,10 @@
 use core::{
     fmt::{self, Debug},
-    mem::size_of,
-    num::NonZeroUsize,
+    mem::{size_of, align_of},
+    num::NonZeroUsize, alloc::Layout,
 };
+
+use essentials::alignment::is_aligned;
 
 use crate::arch;
 
@@ -68,6 +70,8 @@ impl VAddr {
     /// - The address is accessible (i.e. mapped in the page table).
     #[inline]
     pub const fn as_ptr<T>(self) -> *const T {
+        debug_assert!(is_aligned(self.as_usize(), align_of::<T>()));
+
         self.as_usize() as *const T
     }
 
@@ -84,6 +88,8 @@ impl VAddr {
     /// - It's safe to mutate: no concurrent access to the same address.
     #[inline]
     pub const fn as_mut_ptr<T>(self) -> *mut T {
+        debug_assert!(is_aligned(self.as_usize(), align_of::<T>()));
+
         self.as_usize() as *mut T
     }
 
@@ -99,6 +105,8 @@ impl VAddr {
     /// - The reference value is initialized.
     #[inline]
     pub const unsafe fn as_ref<'a, T>(self) -> &'a T {
+        debug_assert!(is_aligned(self.as_usize(), align_of::<T>()));
+
         &*self.as_ptr()
     }
 
@@ -115,6 +123,8 @@ impl VAddr {
     /// - It's safe to mutate: no concurrent access to the same address.
     #[inline]
     pub const unsafe fn as_mut<'a, T>(self) -> &'a mut T {
+        debug_assert!(is_aligned(self.as_usize(), align_of::<T>()));
+
         &mut *self.as_mut_ptr()
     }
 }

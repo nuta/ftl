@@ -1,9 +1,9 @@
 use core::{
-    mem::MaybeUninit,
-    ptr::{drop_in_place, NonNull},
+    mem::{MaybeUninit, size_of},
+    ptr::{drop_in_place, NonNull}, alloc::Layout,
 };
 
-use crate::giant_lock::{GiantLock, GiantLockGuard};
+use crate::{giant_lock::{GiantLock, GiantLockGuard}, address::VAddr};
 
 /// The reference counter.
 ///
@@ -59,21 +59,22 @@ pub struct LockedRef<T> {
 }
 
 impl<T> LockedRef<T> {
-    pub  fn new(
-        mut uninit_ptr: NonNull<u8>,
+    /// Creates a new `LockedRef` pointing to the given memory space
+    /// `[vaddr, vaddr + size)`.
+    pub unsafe fn new(
+        vaddr: VAddr,
+        size: usize,
         value: T,
     ) -> LockedRef<T> {
-        let mut uninit_ptr =  unsafe {
-            uninit_ptr.cast::<MaybeUninit<GiantLock<RefCounted<T>>>>()
-        };
+        debug_assert!(size >= size_of::<T>());
 
-        let container = unsafe { uninit_ptr.as_mut() };
+        // Safety: The caller must ensure that the memory space is valid.
+        let container = unsafe { vaddr.as_mut::<MaybeUninit<GiantLock<RefCounted<T>>>>() };
         container.write(GiantLock::new(RefCounted::new(value)));
-        // Safety: The container is initialized just above.
-        let ptr = unsafe { container.assume_init_ref() };
 
         LockedRef {
-            ptr: NonNull::from(ptr),
+            // Safety: The container is initialized just above.
+            ptr: NonNull::from(unsafe { container.assume_init_ref() }),
         }
     }
 
