@@ -71,9 +71,12 @@ const fn required_num_pages<T>() -> usize {
 // in typical Rust code. Of course this is intentional:
 //
 // - We don't need atomic operations to manipulate the reference counter: `GiantLock`
-//   guarantees that only one thread can access the reference counter at a time.
+//   guarantees that only one thread can access the counter at a time.
 // - In release builds, [`GiantLock::borrow_mut`] is a no-op (in the future!), so
 //   there's no runtime overhead. We just increment/decrement the counter.
+//
+// In short, consider this as `ArcMutex<T>`, i.e. integrating `Arc` and `Mutex`
+// into a single object ([`LockedRef<T>`]).
 type Container<T> = GiantLock<RefCounted<T>>;
 
 /// A reference-counted mutable reference. This is similar to [`Arc<Mutex<T>>`]
