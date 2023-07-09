@@ -1,9 +1,4 @@
-use crate::{
-    arch,
-    object::{KernelObject, ObjectKind},
-    ref_count::LockedRef,
-    thread::Thread,
-};
+use crate::arch;
 
 /// Allowed operations on a handle.
 ///

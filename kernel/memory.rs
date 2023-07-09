@@ -44,7 +44,7 @@ unsafe impl GlobalAlloc for HeapAllocator {
     }
 }
 
-/// Allocates memory pages for boot-time use.
+/// Allocates memory pages for boot-time use. `size` is the size in bytes.
 ///
 /// Returns the address of the beginning of the range or `None` if the
 /// allocation failed.

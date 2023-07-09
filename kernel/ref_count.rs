@@ -1,7 +1,6 @@
 use core::{
-    ops::Deref,
+    mem::MaybeUninit,
     ptr::{drop_in_place, NonNull},
-    sync::atomic::AtomicUsize,
 };
 
 use crate::giant_lock::{GiantLock, GiantLockGuard};
@@ -60,9 +59,23 @@ pub struct LockedRef<T> {
 }
 
 impl<T> LockedRef<T> {
-    // pub const fn new() -> LockedRef<T> {
-    //     LockedRef { ptr }
-    // }
+    pub  fn new(
+        mut uninit_ptr: NonNull<u8>,
+        value: T,
+    ) -> LockedRef<T> {
+        let mut uninit_ptr =  unsafe {
+            uninit_ptr.cast::<MaybeUninit<GiantLock<RefCounted<T>>>>()
+        };
+
+        let container = unsafe { uninit_ptr.as_mut() };
+        container.write(GiantLock::new(RefCounted::new(value)));
+        // Safety: The container is initialized just above.
+        let ptr = unsafe { container.assume_init_ref() };
+
+        LockedRef {
+            ptr: NonNull::from(ptr),
+        }
+    }
 
     pub fn borrow_mut(&self) -> GiantLockGuard<'_, RefCounted<T>> {
         (unsafe { self.ptr.as_ref() }).borrow_mut()
@@ -96,7 +109,7 @@ impl<T> Drop for LockedRef<T> {
                 drop_in_place(self.ptr.as_mut());
 
                 // Mark the memory as free (untyped).
-                // TODO:
+                // FIXME:
             }
         }
     }
