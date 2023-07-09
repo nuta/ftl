@@ -11,8 +11,8 @@ pub enum ObjectKind {
     Process,
     Thread,
     Channel,
-    PageTableL0,
-    PageTableL1,
+    PageTable,
+    SubPageTableL1,
     DataPage,
 }
 
@@ -27,8 +27,8 @@ pub const fn object_size_for(kind: ObjectKind) -> usize {
         ObjectKind::Process => PAGE_SIZE,
         ObjectKind::Thread => PAGE_SIZE,
         ObjectKind::Channel => PAGE_SIZE,
-        ObjectKind::PageTableL0 => PAGE_SIZE,
-        ObjectKind::PageTableL1 => PAGE_SIZE,
+        ObjectKind::PageTable => PAGE_SIZE,
+        ObjectKind::SubPageTableL1 => PAGE_SIZE,
         ObjectKind::DataPage => PAGE_SIZE,
     }
 }

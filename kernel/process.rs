@@ -1,4 +1,4 @@
-use crate::arch;
+use crate::{arch, ref_count::LockedRef};
 
 /// Allowed operations on a handle.
 ///
@@ -21,7 +21,7 @@ impl Handle {}
 /// A process is a collection of threads and resources (page tables and handles)
 /// that are shared among the threads.
 pub struct Process {
-    page_table: arch::PageTable,
+    page_table: LockedRef<arch::PageTable>,
 
     // We want to keep the size of `Process` small so that a process can be
     // created as cheaply as possible. When we come to a point where we need

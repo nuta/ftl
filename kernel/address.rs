@@ -1,5 +1,4 @@
 use core::{
-    alloc::Layout,
     fmt::{self, Debug},
     mem::{align_of, size_of},
     num::NonZeroUsize,
