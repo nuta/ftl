@@ -5,13 +5,13 @@ pub unsafe trait RefCounted {
     fn dec_ref(&self);
 }
 
-pub struct Ref<T: RefCounted + ?Sized> {
+pub struct OwnedRef<T: RefCounted + ?Sized> {
     ptr: NonNull<T>,
 }
 
-impl<T: RefCounted + ?Sized> Ref<T> {
-    pub const fn new(ptr: NonNull<T>) -> Ref<T> {
-        Ref {
+impl<T: RefCounted + ?Sized> OwnedRef<T> {
+    pub const fn new(ptr: NonNull<T>) -> OwnedRef<T> {
+        OwnedRef {
             ptr,
         }
     }
@@ -24,7 +24,7 @@ impl<T: RefCounted + ?Sized> Ref<T> {
     }
 }
 
-impl<T: RefCounted + ?Sized> Deref for Ref<T> {
+impl<T: RefCounted + ?Sized> Deref for OwnedRef<T> {
     type Target = T;
 
     fn deref(&self) -> &T {

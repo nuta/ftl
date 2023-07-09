@@ -1,7 +1,7 @@
 use crate::{
     arch,
     object::{KernelObject, ObjectKind},
-    ref_count::Ref,
+    ref_count::OwnedRef,
     thread::Thread,
 };
 
@@ -15,7 +15,7 @@ pub struct Rights {
 
 /// A reference to a kernel object with associated rights, aka *capability*.
 pub struct Handle {
-    object: Ref<dyn KernelObject>,
+    object: OwnedRef<dyn KernelObject>,
     rights: Rights,
 }
 
