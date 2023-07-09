@@ -62,7 +62,7 @@ impl<T> RefCounted<T> {
 }
 
 const fn required_num_pages<T>() -> usize {
-    align_up(size_of::<GiantLock<RefCounted<T>>>(), PAGE_SIZE) / PAGE_SIZE
+    align_up(size_of::<T>(), PAGE_SIZE) / PAGE_SIZE
 }
 
 pub struct LockedRef<T> {
@@ -76,16 +76,16 @@ impl<T> LockedRef<T> {
         num_pages: usize,
         value: T,
     ) -> LockedRef<T> {
-        // We'll statically compute the # of pages to release in the
-        // destructor. Make sure it's correct.
-        debug_assert!(required_num_pages::<T>() == num_pages);
-
         // Make sure MaybeUninit<T> doesn't have any memory overhead, so that
         // the casting below is safe.
         debug_assert!(
             size_of::<MaybeUninit<GiantLock<RefCounted<T>>>>()
                 == size_of::<GiantLock<RefCounted<T>>>()
         );
+
+        // We'll statically compute the # of pages to release in the
+        // destructor. Make sure it's correct.
+        debug_assert!(required_num_pages::<GiantLock<RefCounted<T>>>() == num_pages);
 
         // Safety: The caller must ensure that the memory space is valid.
         let container =
