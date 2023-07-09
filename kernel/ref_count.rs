@@ -78,10 +78,14 @@ impl<T> LockedRef<T> {
         }
     }
 
+    /// Returns the mutable reference.
+    ///
+    /// See [`GiantLock::borrow_mut`] for caveats.
     pub fn borrow_mut(&self) -> GiantLockGuard<'_, RefCounted<T>> {
         (unsafe { self.ptr.as_ref() }).borrow_mut()
     }
 
+    /// Duplicates the reference.
     pub fn inc_ref(&self) -> LockedRef<T> {
         // Safety: The destructor of `LockedRef` will decrement the reference
         //         counter.
