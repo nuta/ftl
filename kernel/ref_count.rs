@@ -67,16 +67,19 @@ const fn required_num_pages<T>() -> usize {
     align_up(size_of::<T>(), PAGE_SIZE) / PAGE_SIZE
 }
 
-// You may find this type definition weird: typically we'd use `Arc<Mutex<T>>`
-// in typical Rust code. Of course this is intentional:
-//
-// - We don't need atomic operations to manipulate the reference counter: `GiantLock`
-//   guarantees that only one thread can access the counter at a time.
-// - In release builds, [`GiantLock::borrow_mut`] is a no-op (in the future!), so
-//   there's no runtime overhead. We just increment/decrement the counter.
-//
-// In short, consider this as `ArcMutex<T>`, i.e. integrating `Arc` and `Mutex`
-// deeply into a single useful object ([`LockedRef<T>`]).
+/// The type of the value a [`LockedRef`] points to.
+///
+/// You may find this type definition weird: normally we'd use `Arc<Mutex<T>>`
+/// in Rust, however we wraps the reference counter with a lock (i.e. akin to
+/// `Mutex<Arc<T>>`). Of course this is intentional:
+///
+/// - We don't need atomic operations to manipulate the reference counter: `GiantLock`
+///   guarantees that only one thread can access the counter at a time.
+/// - In release builds, [`GiantLock::borrow_mut`] is a no-op (in the future!), so
+///   there's no runtime overhead. We just increment/decrement the counter.
+///
+/// In short, consider this as `ArcMutex<T>`, i.e. integrating `Arc` and `Mutex`
+/// deeply into a single useful object ([`LockedRef<T>`]).
 type Container<T> = GiantLock<RefCounted<T>>;
 
 /// A reference-counted mutably-borrowable reference. This is similar to
