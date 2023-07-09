@@ -6,25 +6,19 @@ use core::{
 
 use crate::giant_lock::{GiantLock, GiantLockGuard};
 
-/// A trait for types that contain a reference counter in the intrusive way.
+/// The reference counter.
 ///
 /// # Why not `Rc` or `Arc`?
 ///
 /// Rust's standard library provides [`Rc`] and [`Arc`] for reference counting.
 /// However, they are not suitable for our use case because:
 ///
-/// - For clarity, we want to make the memory layout of a reference-counted
-///   object explicit, i.e. make it intrusive!
-/// - We'll never need weak references. Instead, the userland will delete each
-///   object explicitly through a system call (lmk if you find a counter-example!).
-/// - While we don't use weak references, we still want to distinguish between
-///   always-alive and may-be-dead references: the pointer from a thread to its
-///   process should be always-alive, while the pointer from a communication channel
-///   to its destination process may be dead (e.g. `EPIPE` in UNIX).
 /// - The implementation of reference counting depends on how we lock the kernel:
 ///   if we just use a global lock [`GiantLock`] we don't need atomic operations
 ///   as the lock guarantees that only one thread can access the reference counter
 ///   at a time.
+/// - We'll never need weak references. Instead, the userland will delete each
+///   object explicitly through a system call (lmk if you find a counter-example!).
 struct RefCounted<T> {
     counter: usize,
     inner: T,
