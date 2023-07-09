@@ -9,6 +9,20 @@ struct PageAligned<T: ?Sized>(T);
 const BOOTFS_IMAGE: &'static PageAligned<[u8]> =
     &PageAligned(*include_bytes!("../bootfs.bin"));
 
+/// Converts a null-terminated C string to `&str`.
+///
+/// # Panics
+///
+/// Panics if the input is not null-terminated.
+///
+/// # Safety
+///
+/// This function assumes that the input is a valid UTF-8 string.
+pub unsafe fn cstr2str(cstr: &[u8]) -> &str {
+    let len = cstr.iter().position(|&c| c == b'\0').unwrap();
+    unsafe { from_utf8_unchecked(&cstr[..len]) }
+}
+
 pub struct Bootfs {
     header: &'static BootfsHeader,
     entries: &'static [BootfsEntry],
@@ -31,11 +45,21 @@ impl Bootfs {
 
         for entry in entries {
             // Safety: We assume the mkbootfs tool correctly generated the image.
-            let len = entry.name.iter().position(|&c| c == b'\0').unwrap();
-            let name = unsafe { from_utf8_unchecked(&entry.name[..len]) };
+            let name = unsafe { cstr2str(&entry.name) };
             println!("bootfs: found entry \"{}\"", name);
         }
 
         Bootfs { header, entries }
+    }
+
+    pub fn find_by_name(&self, name: &str) -> Option<&BootfsEntry> {
+        for entry in self.entries {
+            // TODO: Avoid converting to `&str` every time.
+            // Safety: We assume the mkbootfs tool correctly generated the image.
+            if unsafe { cstr2str(&entry.name) } == name {
+                return Some(entry);
+            }
+        }
+        None
     }
 }
