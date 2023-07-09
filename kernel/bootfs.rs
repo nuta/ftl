@@ -31,7 +31,7 @@ impl Bootfs {
 
         for entry in entries {
             // Safety: We assume the mkbootfs tool correctly generated the image.
-            let len = entry.name.iter().position(|&c| c == '\0').unwrap();
+            let len = entry.name.iter().position(|&c| c == b'\0').unwrap();
             let name = unsafe { from_utf8_unchecked(&entry.name[..len]) };
             println!("bootfs: found entry \"{}\"", name);
         }
