@@ -15,7 +15,7 @@ use crate::arch;
 /// `LockTracker` is to ensure the property by panicking if it's violated,
 /// just like what `RefCell` does.
 ///
-/// I plan to disable this in release build to eliminate the overhead.
+/// TODO: I plan to disable this in release build to eliminate the overhead.
 struct LockTracker {
     lock: AtomicBool,
     locked_at: Cell<Option<&'static panic::Location<'static>>>,
