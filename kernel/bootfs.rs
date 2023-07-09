@@ -1,4 +1,4 @@
-use core::{mem::size_of, str::from_utf8_unchecked};
+use core::{mem::size_of, slice, str::from_utf8_unchecked};
 
 use bootfs::{BootfsEntry, BootfsHeader};
 
@@ -28,6 +28,10 @@ pub struct Bootfs {
     entries: &'static [BootfsEntry],
 }
 
+pub struct BootfsFile {
+    pub data: &'static [u8],
+}
+
 impl Bootfs {
     pub fn load() -> Bootfs {
         let image = unsafe { BOOTFS_IMAGE.0.as_ptr() };
@@ -52,12 +56,19 @@ impl Bootfs {
         Bootfs { header, entries }
     }
 
-    pub fn find_by_name(&self, name: &str) -> Option<&BootfsEntry> {
+    pub fn find_by_name(&self, name: &str) -> Option<BootfsFile> {
         for entry in self.entries {
             // TODO: Avoid converting to `&str` every time.
             // Safety: We assume the mkbootfs tool correctly generated the image.
             if unsafe { cstr2str(&entry.name) } == name {
-                return Some(entry);
+                let image = unsafe { BOOTFS_IMAGE.0.as_ptr() };
+                let data = unsafe {
+                    slice::from_raw_parts(
+                        image.add(entry.offset as usize),
+                        entry.size as usize,
+                    )
+                };
+                return Some(BootfsFile { data });
             }
         }
         None
