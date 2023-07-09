@@ -2,9 +2,7 @@ use core::mem::size_of;
 
 use essentials::static_assert;
 
-use crate::{
-    arch::PAGE_SIZE, process::Process, ref_count::RefCounted, thread::Thread,
-};
+use crate::{arch::PAGE_SIZE, process::Process, thread::Thread};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ObjectKind {
@@ -18,7 +16,7 @@ pub enum ObjectKind {
     DataPage,
 }
 
-pub trait KernelObject: RefCounted {
+pub trait KernelObject {
     fn kind(&self) -> ObjectKind;
 }
 

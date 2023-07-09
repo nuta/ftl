@@ -1,7 +1,7 @@
 use crate::{
     arch,
     object::{KernelObject, ObjectKind},
-    ref_count::{OwnedRef, RefCounted},
+    ref_count::LockedRef,
     thread::Thread,
 };
 
@@ -15,7 +15,7 @@ pub struct Rights {
 
 /// A reference to a kernel object with associated rights, aka *capability*.
 pub struct Handle {
-    object: OwnedRef<dyn KernelObject>,
+    // object: LockedRef<dyn KernelObject>,
     rights: Rights,
 }
 
@@ -27,7 +27,6 @@ impl Handle {}
 /// that are shared among the threads.
 pub struct Process {
     page_table: arch::PageTable,
-    ref_count: RefCounter,
 
     // We want to keep the size of `Process` small so that a process can be
     // created as cheaply as possible. When we come to a point where we need
