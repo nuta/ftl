@@ -1,7 +1,8 @@
 use core::{
+    alloc::Layout,
     fmt::{self, Debug},
-    mem::{size_of, align_of},
-    num::NonZeroUsize, alloc::Layout,
+    mem::{align_of, size_of},
+    num::NonZeroUsize,
 };
 
 use essentials::alignment::is_aligned;

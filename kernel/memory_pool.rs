@@ -105,3 +105,7 @@ impl MemoryPool {
         Ok(())
     }
 }
+
+pub fn retype_frames_as_unused(vaddr: VAddr, num_pages: usize) {
+    todo!();
+}
