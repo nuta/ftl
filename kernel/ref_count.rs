@@ -66,9 +66,9 @@ pub struct LockedRef<T> {
 }
 
 impl<T> LockedRef<T> {
-    pub const fn new(ptr: NonNull<GiantLock<RefCounted<T>>>) -> LockedRef<T> {
-        LockedRef { ptr }
-    }
+    // pub const fn new() -> LockedRef<T> {
+    //     LockedRef { ptr }
+    // }
 
     pub fn borrow_mut(&self) -> GiantLockGuard<'_, RefCounted<T>> {
         (unsafe { self.ptr.as_ref() }).borrow_mut()
