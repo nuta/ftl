@@ -84,8 +84,9 @@ impl<T> LockedRef<T> {
         );
 
         // We'll statically compute the # of pages to release in the
-        // destructor. Make sure it's correct.
-        debug_assert!(required_num_pages::<GiantLock<RefCounted<T>>>() == num_pages);
+        // destructor. Make sure the # of pages we allocated is
+        // correct.
+        debug_assert!(num_pages == required_num_pages::<GiantLock<RefCounted<T>>>());
 
         // Safety: The caller must ensure that the memory space is valid.
         let container =
