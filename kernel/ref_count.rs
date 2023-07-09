@@ -66,7 +66,7 @@ impl<T> LockedRef<T> {
         size: usize,
         value: T,
     ) -> LockedRef<T> {
-        debug_assert!(size >= size_of::<T>());
+        debug_assert!(size >= size_of::<GiantLock<RefCounted<T>>>());
 
         // Safety: The caller must ensure that the memory space is valid.
         let container = unsafe { vaddr.as_mut::<MaybeUninit<GiantLock<RefCounted<T>>>>() };
