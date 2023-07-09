@@ -1,4 +1,8 @@
-use core::{ops::Deref, ptr::{NonNull, drop_in_place}, sync::atomic::AtomicUsize};
+use core::{
+    ops::Deref,
+    ptr::{drop_in_place, NonNull},
+    sync::atomic::AtomicUsize,
+};
 
 use crate::giant_lock::{GiantLock, GiantLockGuard};
 
@@ -31,8 +35,13 @@ impl<T> RefCounted<T> {
         RefCounted { counter: 1, inner }
     }
 
-    // Increments the reference counter.
-    fn inc_ref(&mut self) {
+    /// Increments the reference counter.
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure tracking the reference and decrementing the
+    /// reference counter when dropping the reference.
+    unsafe fn inc_ref(&mut self) {
         self.counter += 1;
 
         // TODO: Should we handle overflow?
@@ -40,6 +49,10 @@ impl<T> RefCounted<T> {
 
     /// Decrements the reference counter and returns `true` if the counter reaches
     /// zero, i.e. the caller should drop the object manually.
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure it corresponds to a previous call to [`inc_ref`].
     fn dec_ref(&mut self) -> bool {
         debug_assert!(self.counter > 0);
 
@@ -62,14 +75,23 @@ impl<T> LockedRef<T> {
     }
 
     pub fn inc_ref(&self) -> LockedRef<T> {
-        self.borrow_mut().inc_ref();
+        // Safety: The destructor of `LockedRef` will decrement the reference
+        //         counter.
+        unsafe {
+            self.borrow_mut().inc_ref();
+        }
+
         LockedRef { ptr: self.ptr }
     }
 }
 
 impl<T> Drop for LockedRef<T> {
     fn drop(&mut self) {
-        if self.borrow_mut().dec_ref() {
+        // Safety: The reference count was incremented when creating/cloning
+        //         the reference.
+        let needs_drop = unsafe { self.borrow_mut().dec_ref() };
+
+        if needs_drop {
             // The reference counter reached zero. Drop the inner value
             // and free the memory.
 
