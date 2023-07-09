@@ -8,7 +8,9 @@ use essentials::{alignment::align_up, static_assert};
 
 use crate::{
     address::VAddr,
-    giant_lock::{GiantLock, GiantLockGuard}, memory_pool::retype_frames_as_unused, arch::PAGE_SIZE,
+    arch::PAGE_SIZE,
+    giant_lock::{GiantLock, GiantLockGuard},
+    memory_pool::retype_frames_as_unused,
 };
 
 /// The reference counter.
@@ -65,8 +67,10 @@ const fn required_num_pages<T>() -> usize {
     align_up(size_of::<T>(), PAGE_SIZE) / PAGE_SIZE
 }
 
+type Container<T> = GiantLock<RefCounted<T>>;
+
 pub struct LockedRef<T> {
-    ptr: NonNull<GiantLock<RefCounted<T>>>,
+    ptr: NonNull<Container<T>>,
 }
 
 impl<T> LockedRef<T> {
@@ -79,18 +83,16 @@ impl<T> LockedRef<T> {
         // Make sure MaybeUninit<T> doesn't have any memory overhead, so that
         // the casting below is safe.
         debug_assert!(
-            size_of::<MaybeUninit<GiantLock<RefCounted<T>>>>()
-                == size_of::<GiantLock<RefCounted<T>>>()
+            size_of::<MaybeUninit<Container<T>>>() == size_of::<Container<T>>()
         );
 
         // We'll statically compute the # of pages to release in the
         // destructor. Make sure the # of pages we allocated is
         // correct.
-        debug_assert!(num_pages == required_num_pages::<GiantLock<RefCounted<T>>>());
+        debug_assert!(num_pages == required_num_pages::<Container<T>>());
 
         // Safety: The caller must ensure that the memory space is valid.
-        let container =
-            unsafe { vaddr.as_mut::<MaybeUninit<GiantLock<RefCounted<T>>>>() };
+        let container = unsafe { vaddr.as_mut::<MaybeUninit<Container<T>>>() };
         container.write(GiantLock::new(RefCounted::new(value)));
 
         // Safety: The container is initialized just above.
@@ -140,7 +142,7 @@ impl<T> Drop for LockedRef<T> {
 
                 // Mark the memory as free (untyped).
                 let vaddr = VAddr::new(self.ptr.as_ptr() as usize);
-                let num_pages = required_num_pages::<GiantLock<RefCounted<T>>>();
+                let num_pages = required_num_pages::<Container<T>>();
                 retype_frames_as_unused(vaddr, num_pages);
             }
         }
