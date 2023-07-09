@@ -122,7 +122,7 @@ impl<T> LockedRef<T> {
 
     /// Returns the mutable reference.
     ///
-    /// **Warning**: This method may panic. See [`GiantLock::borrow_mut`]
+    /// **Warning:** This method may panic. See [`GiantLock::borrow_mut`]
     /// for more details.
     pub fn borrow_mut(&self) -> GiantLockGuard<'_, RefCounted<T>> {
         (unsafe { self.ptr.as_ref() }).borrow_mut()
