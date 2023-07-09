@@ -34,7 +34,7 @@ pub struct BootfsFile {
 
 impl Bootfs {
     pub fn load() -> Bootfs {
-        let image = unsafe { BOOTFS_IMAGE.0.as_ptr() };
+        let image =  BOOTFS_IMAGE.0.as_ptr() ;
 
         // Safety: PageAligned guarantees that the data is correctly aligned.
         let header = unsafe { &*(image as *const BootfsHeader) };
@@ -61,7 +61,7 @@ impl Bootfs {
             // TODO: Avoid converting to `&str` every time.
             // Safety: We assume the mkbootfs tool correctly generated the image.
             if unsafe { cstr2str(&entry.name) } == name {
-                let image = unsafe { BOOTFS_IMAGE.0.as_ptr() };
+                let image =  BOOTFS_IMAGE.0.as_ptr() ;
                 let data = unsafe {
                     slice::from_raw_parts(
                         image.add(entry.offset as usize),
