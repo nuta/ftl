@@ -24,6 +24,7 @@ struct RefCounted<T> {
 }
 
 impl<T> RefCounted<T> {
+    /// Creates a reference counted object.
     const fn new(inner: T) -> RefCounted<T> {
         RefCounted { counter: 1, inner }
     }
@@ -72,9 +73,12 @@ impl<T> LockedRef<T> {
         let container = unsafe { vaddr.as_mut::<MaybeUninit<GiantLock<RefCounted<T>>>>() };
         container.write(GiantLock::new(RefCounted::new(value)));
 
+        // Safety: The container is initialized just above.
+        let ptr = NonNull::from(unsafe { container.assume_init_ref() });
+        debug_assert!(core::ptr::eq( ptr.as_ptr(), vaddr.as_ptr()));
+
         LockedRef {
-            // Safety: The container is initialized just above.
-            ptr: NonNull::from(unsafe { container.assume_init_ref() }),
+            ptr,
         }
     }
 
