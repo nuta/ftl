@@ -3,9 +3,7 @@ use std::{fs::OpenOptions, io::Write, path::Path};
 use anyhow::{bail, Context, Result};
 use bootfs::{EntryType, BOOTFS_MAGIC, NAME_LEN_MAX};
 use bytes::{BufMut, BytesMut};
-use essentials::{
-    alignment::{align_up, is_aligned},
-};
+use essentials::alignment::{align_up, is_aligned};
 use glob::glob;
 use std::io::Read;
 
