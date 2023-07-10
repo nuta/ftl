@@ -120,7 +120,7 @@ impl MemoryPool {
     }
 }
 
-pub fn find_frame_by_vaddr(vaddr: VAddr) -> Option<&'static Frame> {
+fn find_frame_by_vaddr(vaddr: VAddr) -> Option<&'static Frame> {
     todo!()
 }
 

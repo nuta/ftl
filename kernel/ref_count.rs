@@ -61,13 +61,15 @@ impl<T> RefCounted<T> {
         self.counter -= 1;
         self.counter == 0
     }
-}
 
-impl<T> Deref for RefCounted<T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
+    /// Returns a mutable reference to the inner value.
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure no other reference to the inner value exists,
+    /// e.g. by locking the kernel.
+    unsafe fn as_mut(&mut self) -> *mut T {
+        &mut self.inner
     }
 }
 
@@ -144,8 +146,8 @@ impl<T> SharedRef<T> {
         self.borrow_inner_mut().map(|ref_counted| {
             // Safety: GiantLockGuard ensures that only one thread can access
             //         the inner value at a time.
-            unsafe { ref_counted.as_mut() }
-    })
+            unsafe { ref_counted.inner.as_mut() }
+        })
     }
 
     /// Duplicates the reference.

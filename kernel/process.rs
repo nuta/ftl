@@ -1,4 +1,7 @@
-use crate::{arch, ref_count::{SharedRef, UniqueRef}};
+use crate::{
+    arch,
+    ref_count::{SharedRef, UniqueRef},
+};
 
 /// A reference to a kernel object with associated rights, aka *capability*.
 ///

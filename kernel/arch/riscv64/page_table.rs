@@ -2,7 +2,7 @@ use core::ptr::NonNull;
 
 use bitfields::{bitfields, B1, B10, B2, B44};
 
-use crate::{ref_count::UniqueRef, address::UAddr};
+use crate::{address::UAddr, ref_count::UniqueRef};
 
 /// The number of entries in a page table in any level.
 const ENTRIES_PER_TABLE: usize = 512;
@@ -65,7 +65,6 @@ impl PageTable {
     //     // TODO:
     // }
 }
-
 
 pub struct SubPageTableL1 {
     pub entries: [Pte; ENTRIES_PER_TABLE],

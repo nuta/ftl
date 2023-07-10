@@ -131,10 +131,11 @@ impl<'a, T> GiantLockGuard<'a, T> {
     where
         F: FnOnce(&mut T) -> &mut U,
     {
-        GiantLockGuard {
-            inner: f(self.inner),
-            tracker: self.tracker,
-        }
+        todo!()
+        // GiantLockGuard {
+        //     inner: f(self.inner),
+        //     tracker: self.tracker,
+        // }
     }
 }
 
