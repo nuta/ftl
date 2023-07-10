@@ -6,7 +6,7 @@ mod switch;
 mod thread;
 
 pub const PAGE_SIZE: usize = 4096;
-pub use page_table::PageTable;
+pub use page_table::PageTableRef;
 pub use thread::Context;
 
 pub fn read_cpulocal_base() -> usize {

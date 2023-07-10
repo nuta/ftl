@@ -1,6 +1,8 @@
+use core::ptr::NonNull;
+
 use bitfields::{bitfields, B1, B10, B2, B44};
 
-use crate::object::{KernelObject, ObjectKind};
+use crate::ref_count::UniqueRef;
 
 /// The number of entries in a page table in any level.
 const ENTRIES_PER_TABLE: usize = 512;
@@ -48,7 +50,7 @@ impl Pte {
 }
 
 /// Page table (top level).
-pub struct PageTable {
+struct PageTable {
     pub entries: [Pte; ENTRIES_PER_TABLE],
 }
 
@@ -64,8 +66,5 @@ impl PageTable {
     // }
 }
 
-impl KernelObject for PageTable {
-    fn kind(&self) -> ObjectKind {
-        ObjectKind::PageTable
-    }
-}
+/// A unique reference to a page table.
+pub struct PageTableRef(UniqueRef<PageTable>);

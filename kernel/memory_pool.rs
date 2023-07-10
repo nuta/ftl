@@ -1,4 +1,4 @@
-use core::{mem::size_of, ops::Range, slice};
+use core::{mem::size_of, ops::Range, ptr::NonNull, slice};
 
 use crate::{address::VAddr, arch::PAGE_SIZE, object::ObjectKind};
 use essentials::alignment::{align_up, is_aligned};
@@ -75,11 +75,10 @@ impl MemoryPool {
         }
     }
 
-    pub fn retype(
+    pub fn allocate(
         &mut self,
         vaddr: VAddr,
         len: usize,
-        kind: ObjectKind,
     ) -> Result<(), RetypeError> {
         if !is_aligned(vaddr.as_usize(), PAGE_SIZE)
             || !is_aligned(len, PAGE_SIZE)
@@ -97,13 +96,13 @@ impl MemoryPool {
         }
 
         for frame in frames {
-            // TODO: constructor
             debug_assert_eq!(frame.ref_count, 0);
-            frame.kind = kind;
+            // frame.kind = kind;
             frame.ref_count = 1;
         }
 
-        Ok(())
+        // Ok()
+        todo!()
     }
 }
 

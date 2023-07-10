@@ -16,10 +16,6 @@ pub enum ObjectKind {
     DataPage,
 }
 
-pub trait KernelObject {
-    fn kind(&self) -> ObjectKind;
-}
-
 pub const fn object_size_for(kind: ObjectKind) -> usize {
     match kind {
         ObjectKind::Unused => 0,

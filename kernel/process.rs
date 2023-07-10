@@ -1,18 +1,9 @@
-use crate::{arch, ref_count::LockedRef};
-
-/// Allowed operations on a handle.
-///
-/// TODO: Use bitfields to save space.
-pub struct Rights {
-    pub read: bool,
-    pub write: bool,
-}
+use crate::{arch, ref_count::SharedRef};
 
 /// A reference to a kernel object with associated rights, aka *capability*.
-pub struct Handle {
-    // object: LockedRef<dyn KernelObject>,
-    rights: Rights,
-}
+///
+/// This enum represents all objects that userland can control.
+pub enum Handle {}
 
 impl Handle {}
 
@@ -21,7 +12,7 @@ impl Handle {}
 /// A process is a collection of threads and resources (page tables and handles)
 /// that are shared among the threads.
 pub struct Process {
-    page_table: LockedRef<arch::PageTable>,
+    page_table: arch::PageTableRef,
 
     // We want to keep the size of `Process` small so that a process can be
     // created as cheaply as possible. When we come to a point where we need

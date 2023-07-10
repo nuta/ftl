@@ -1,5 +1,6 @@
 use core::{
     mem::{size_of, MaybeUninit},
+    ops::{Deref, DerefMut},
     ptr::{drop_in_place, NonNull},
 };
 
@@ -66,7 +67,7 @@ const fn required_num_pages<T>() -> usize {
     align_up(size_of::<T>(), PAGE_SIZE) / PAGE_SIZE
 }
 
-/// The type of the value a [`LockedRef`] points to.
+/// The type of the value a [`SharedRef`] points to.
 ///
 /// You may find this type definition weird: normally we'd use `Arc<Mutex<T>>`
 /// in Rust, however we wraps the reference counter with a lock (i.e. akin to
@@ -78,22 +79,22 @@ const fn required_num_pages<T>() -> usize {
 ///   there's no runtime overhead. We just increment/decrement the counter.
 ///
 /// In short, consider this as `ArcMutex<T>`, i.e. integrating `Arc` and `Mutex`
-/// deeply into a single useful object ([`LockedRef<T>`]).
+/// deeply into a single useful object ([`SharedRef<T>`]).
 type Container<T> = GiantLock<RefCounted<T>>;
 
 /// A reference-counted mutably-borrowable reference. This is similar to
 /// [`Arc<Mutex<T>>`] but it's optimized for our use case.
-pub struct LockedRef<T> {
+pub struct SharedRef<T> {
     ptr: NonNull<Container<T>>,
 }
 
-impl<T> LockedRef<T> {
-    /// Creates a new `LockedRef` pointing to the given memory space.
+impl<T> SharedRef<T> {
+    /// Creates a new `SharedRef` pointing to the given memory space.
     pub unsafe fn new(
         vaddr: VAddr,
         num_pages: usize,
         value: T,
-    ) -> LockedRef<T> {
+    ) -> SharedRef<T> {
         // Make sure MaybeUninit<T> doesn't have any memory overhead, so that
         // the casting below is safe.
         debug_assert!(
@@ -116,7 +117,7 @@ impl<T> LockedRef<T> {
         // `vaddr` when releasing the memory.
         debug_assert!(core::ptr::eq(ptr.as_ptr(), vaddr.as_ptr()));
 
-        LockedRef { ptr }
+        SharedRef { ptr }
     }
 
     /// Returns the mutable reference.
@@ -128,18 +129,18 @@ impl<T> LockedRef<T> {
     }
 
     /// Duplicates the reference.
-    pub fn inc_ref(&self) -> LockedRef<T> {
-        // Safety: The destructor of `LockedRef` will decrement the reference
+    pub fn inc_ref(&self) -> SharedRef<T> {
+        // Safety: The destructor of `SharedRef` will decrement the reference
         //         counter.
         unsafe {
             self.borrow_mut().inc_ref();
         }
 
-        LockedRef { ptr: self.ptr }
+        SharedRef { ptr: self.ptr }
     }
 }
 
-impl<T> Drop for LockedRef<T> {
+impl<T> Drop for SharedRef<T> {
     fn drop(&mut self) {
         // Safety: The reference count was incremented when creating/cloning
         //         the reference.
@@ -160,6 +161,57 @@ impl<T> Drop for LockedRef<T> {
                 let num_pages = required_num_pages::<Container<T>>();
                 retype_frames_as_unused(vaddr, num_pages);
             }
+        }
+    }
+}
+
+pub trait Destructor {
+    type Target;
+
+    fn drop(this: UniqueRef<Self::Target>);
+}
+
+/// A unique reference.
+///
+/// This is similar to [`Box<T>`]: it owns the inner value and drops it when
+/// dropped.
+pub struct UniqueRef<T> {
+    ptr: NonNull<T>,
+}
+
+impl<T> UniqueRef<T> {
+    /// Creates a new unique reference.
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure that the pointer is unique.
+    pub unsafe fn new(ptr: NonNull<T>) -> UniqueRef<T> {
+        UniqueRef { ptr }
+    }
+}
+
+impl<T> Deref for UniqueRef<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        // Safety: The compiler guarantees the pointer is still alive and no
+        //         mutable reference exists.
+        unsafe { self.ptr.as_ref() }
+    }
+}
+
+impl<T> DerefMut for UniqueRef<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        // Safety: The compiler guarantees the pointer is still alive and no
+        //         other references exist because this method requires `&mut self`.
+        unsafe { self.ptr.as_mut() }
+    }
+}
+
+impl<T> Drop for UniqueRef<T> {
+    fn drop(&mut self) {
+        unsafe {
+            // TODO:
         }
     }
 }
