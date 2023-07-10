@@ -93,12 +93,12 @@ const fn required_num_pages<T>() -> usize {
 ///
 /// In short, consider this as `ArcMutex<T>`, i.e. integrating `Arc` and `Mutex`
 /// deeply into a single useful object ([`SharedRef<T>`]).
-type Container<T> = GiantLock<RefCounted<NonNull<T>>>;
+pub type SharedRefInner<T> = GiantLock<RefCounted<NonNull<T>>>;
 
 /// A reference-counted mutably-borrowable reference. This is similar to
 /// [`Arc<Mutex<T>>`] but it's optimized for our use case.
 pub struct SharedRef<T> {
-    ptr: NonNull<Container<T>>,
+    ptr: NonNull<SharedRefInner<T>>,
 }
 
 impl<T> SharedRef<T> {
@@ -111,16 +111,18 @@ impl<T> SharedRef<T> {
         // Make sure MaybeUninit<T> doesn't have any memory overhead, so that
         // the casting below is safe.
         debug_assert!(
-            size_of::<MaybeUninit<Container<T>>>() == size_of::<Container<T>>()
+            size_of::<MaybeUninit<SharedRefInner<T>>>()
+                == size_of::<SharedRefInner<T>>()
         );
 
         // We'll statically compute the # of pages to release in the
         // destructor. Make sure the # of pages we allocated is
         // correct.
-        debug_assert!(num_pages == required_num_pages::<Container<T>>());
+        debug_assert!(num_pages == required_num_pages::<SharedRefInner<T>>());
 
         // Safety: The caller must ensure that the memory space is valid.
-        let container = unsafe { vaddr.as_mut::<MaybeUninit<Container<T>>>() };
+        let container =
+            unsafe { vaddr.as_mut::<MaybeUninit<SharedRefInner<T>>>() };
         let inner = unsafe { NonNull::new_unchecked(vaddr.as_mut_ptr()) };
         container.write(GiantLock::new(RefCounted::new(inner)));
 
@@ -180,7 +182,7 @@ impl<T> Drop for SharedRef<T> {
 
                 // Mark the memory frames as unused.
                 let vaddr = VAddr::new(self.ptr.as_ptr() as usize);
-                let num_pages = required_num_pages::<Container<T>>();
+                let num_pages = required_num_pages::<SharedRefInner<T>>();
                 retype_frames_as_unused(vaddr, num_pages);
             }
         }

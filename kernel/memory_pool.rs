@@ -1,31 +1,28 @@
-use core::{mem::size_of, ops::Range, ptr::NonNull, slice};
+use core::{
+    mem::{size_of, MaybeUninit},
+    ops::Range,
+    ptr::NonNull,
+    slice,
+};
 
-use crate::{address::VAddr, arch::PAGE_SIZE, object::ObjectKind};
+use crate::{
+    address::VAddr,
+    arch::PAGE_SIZE,
+    object::ObjectKind,
+    ref_count::{SharedRef, SharedRefInner},
+};
 use essentials::alignment::{align_up, is_aligned};
 
 struct Frame {
     kind: ObjectKind,
-    /// The number of references to this frame. Only used for `DataPage`.
-    ref_count: usize,
+    /// a memory space to construct `SharedRef<T>`.
+    shared_ref: MaybeUninit<SharedRefInner<()>>,
 }
 
 impl Frame {
     const fn new(kind: ObjectKind) -> Frame {
-        Frame { kind, ref_count: 0 }
-    }
-}
-
-pub struct SharedFrameRef {
-    vaddr: VAddr,
-}
-
-impl SharedFrameRef {
-    pub fn new(vaddr: VAddr) -> SharedFrameRef {
-        SharedFrameRef { vaddr }
-    }
-
-    pub fn vaddr(&self) -> VAddr {
-        self.vaddr
+        // Frame { kind, ref_count: 0 }
+        todo!()
     }
 }
 
@@ -109,11 +106,11 @@ impl MemoryPool {
             return Err(RetypeError::AlreadyInUse);
         }
 
-        for frame in frames {
-            debug_assert_eq!(frame.ref_count, 0);
-            // frame.kind = kind;
-            frame.ref_count = 1;
-        }
+        // for frame in frames {
+        //     debug_assert_eq!(frame.ref_count, 0);
+        //     // frame.kind = kind;
+        //     frame.ref_count = 1;
+        // }
 
         // Ok()
         todo!()

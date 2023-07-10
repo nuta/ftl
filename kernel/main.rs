@@ -58,6 +58,14 @@ pub fn kernel_main() {
     println!("size_of::<Process>(): {}", size_of::<process::Process>());
     println!("size_of::<Handle>(): {}", size_of::<process::Handle>());
     println!("size_of::<Thread>(): {}", size_of::<thread::Thread>());
+    println!(
+        "size_of::<SharedRef<u8>>(): {}",
+        size_of::<ref_count::SharedRef<u8>>()
+    );
+    println!(
+        "size_of::<SharedRefInner<u8>>(): {}",
+        size_of::<ref_count::SharedRefInner<u8>>()
+    );
 
     // unsafe extern "C" fn first_user_program() {
     //     core::arch::asm!("nop; li a0, 0xc0be; ecall; li a0, 0xbeef; ecall; li a0, 0xdead; ecall");
