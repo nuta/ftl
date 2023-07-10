@@ -50,7 +50,7 @@ impl Pte {
 }
 
 /// Page table (top level).
-struct PageTable {
+pub struct PageTable {
     pub entries: [Pte; ENTRIES_PER_TABLE],
 }
 
@@ -65,6 +65,3 @@ impl PageTable {
     //     // TODO:
     // }
 }
-
-/// A unique reference to a page table.
-pub struct PageTableRef(UniqueRef<PageTable>);

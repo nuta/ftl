@@ -166,3 +166,32 @@ impl PAddr {
         PAddr(addr)
     }
 }
+
+/// A non-NULL virtual address, including user-space addresses.
+///
+/// To represent NULL-able value, use `Option<UAddr>`.
+///
+/// # How is this different from `VAddr`?
+///
+/// This is a superset of `VAddr`: it represents all possible virtual addresses,
+/// including user-space addresses. The most notable difference is it might not
+/// be mapped in the page table, while `VAddr` is for addresses that are always
+/// accessible from the kernel.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[repr(transparent)]
+pub struct UAddr(NonZeroUsize);
+
+impl UAddr {
+    /// Creates a new `UAddr`.
+    ///
+    /// # Panics
+    ///
+    /// This function panics if `addr` is zero.
+    #[inline]
+    pub const fn new(addr: usize) -> UAddr {
+        assert!(addr != 0, "UAddr cannot be zero");
+
+        // SAFETY: The assert above ensures that `addr` is not zero.
+        UAddr(unsafe { NonZeroUsize::new_unchecked(addr) })
+    }
+}
