@@ -126,6 +126,18 @@ pub struct GiantLockGuard<'a, T> {
     tracker: &'a LockTracker,
 }
 
+impl<'a, T> GiantLockGuard<'a, T> {
+    pub fn map<U, F>(mut self, f: F) -> GiantLockGuard<'a, U>
+    where
+        F: FnOnce(&mut T) -> &mut U,
+    {
+        GiantLockGuard {
+            inner: f(self.inner),
+            tracker: self.tracker,
+        }
+    }
+}
+
 impl<'a, T> Deref for GiantLockGuard<'a, T> {
     type Target = T;
 

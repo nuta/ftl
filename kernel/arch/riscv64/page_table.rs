@@ -2,7 +2,7 @@ use core::ptr::NonNull;
 
 use bitfields::{bitfields, B1, B10, B2, B44};
 
-use crate::ref_count::UniqueRef;
+use crate::{ref_count::UniqueRef, address::UAddr};
 
 /// The number of entries in a page table in any level.
 const ENTRIES_PER_TABLE: usize = 512;
@@ -49,7 +49,7 @@ impl Pte {
     }
 }
 
-/// Page table (top level).
+/// Page table.
 pub struct PageTable {
     pub entries: [Pte; ENTRIES_PER_TABLE],
 }
@@ -61,7 +61,12 @@ impl PageTable {
         }
     }
 
-    // pub fn map_table(&mut self, uaddr: UAddr, table: &PageTable) {
+    // pub fn map_table(&mut self, uaddr: UAddr, table: &SubPageTableL1) {
     //     // TODO:
     // }
+}
+
+
+pub struct SubPageTableL1 {
+    pub entries: [Pte; ENTRIES_PER_TABLE],
 }

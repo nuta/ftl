@@ -63,11 +63,22 @@ impl<T> RefCounted<T> {
     }
 }
 
+impl<T> Deref for RefCounted<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
 const fn required_num_pages<T>() -> usize {
     align_up(size_of::<T>(), PAGE_SIZE) / PAGE_SIZE
 }
 
-/// The type of the value a [`SharedRef`] points to.
+/// The type of the value a [`SharedRef`] points to: a pointer to the inner
+/// value (`NonNull<T>`) with a reference counter (`RefCounted`) and runtime
+/// borrow checker (`GiantLock`).
+///
 ///
 /// You may find this type definition weird: normally we'd use `Arc<Mutex<T>>`
 /// in Rust, however we wraps the reference counter with a lock (i.e. akin to
@@ -80,7 +91,7 @@ const fn required_num_pages<T>() -> usize {
 ///
 /// In short, consider this as `ArcMutex<T>`, i.e. integrating `Arc` and `Mutex`
 /// deeply into a single useful object ([`SharedRef<T>`]).
-type Container<T> = GiantLock<RefCounted<T>>;
+type Container<T> = GiantLock<RefCounted<NonNull<T>>>;
 
 /// A reference-counted mutably-borrowable reference. This is similar to
 /// [`Arc<Mutex<T>>`] but it's optimized for our use case.
@@ -108,7 +119,8 @@ impl<T> SharedRef<T> {
 
         // Safety: The caller must ensure that the memory space is valid.
         let container = unsafe { vaddr.as_mut::<MaybeUninit<Container<T>>>() };
-        container.write(GiantLock::new(RefCounted::new(value)));
+        let inner = unsafe { NonNull::new_unchecked(vaddr.as_mut_ptr()) };
+        container.write(GiantLock::new(RefCounted::new(inner)));
 
         // Safety: The container is initialized just above.
         let ptr = NonNull::from(unsafe { container.assume_init_ref() });
@@ -120,12 +132,20 @@ impl<T> SharedRef<T> {
         SharedRef { ptr }
     }
 
+    fn borrow_inner_mut(&self) -> GiantLockGuard<'_, RefCounted<NonNull<T>>> {
+        (unsafe { self.ptr.as_ref() }).borrow_mut()
+    }
+
     /// Returns the mutable reference.
     ///
     /// **Warning:** This method may panic. See [`GiantLock::borrow_mut`]
     /// for more details.
-    pub fn borrow_mut(&self) -> GiantLockGuard<'_, RefCounted<T>> {
-        (unsafe { self.ptr.as_ref() }).borrow_mut()
+    pub fn borrow_mut(&self) -> GiantLockGuard<'_, T> {
+        self.borrow_inner_mut().map(|ref_counted| {
+            // Safety: GiantLockGuard ensures that only one thread can access
+            //         the inner value at a time.
+            unsafe { ref_counted.as_mut() }
+    })
     }
 
     /// Duplicates the reference.
@@ -133,7 +153,7 @@ impl<T> SharedRef<T> {
         // Safety: The destructor of `SharedRef` will decrement the reference
         //         counter.
         unsafe {
-            self.borrow_mut().inc_ref();
+            self.borrow_inner_mut().inc_ref();
         }
 
         SharedRef { ptr: self.ptr }
@@ -144,7 +164,7 @@ impl<T> Drop for SharedRef<T> {
     fn drop(&mut self) {
         // Safety: The reference count was incremented when creating/cloning
         //         the reference.
-        let needs_drop = unsafe { self.borrow_mut().dec_ref() };
+        let needs_drop = unsafe { self.borrow_inner_mut().dec_ref() };
 
         if needs_drop {
             // The reference counter reached zero. Drop the inner value

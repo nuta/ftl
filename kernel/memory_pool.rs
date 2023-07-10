@@ -15,6 +15,20 @@ impl Frame {
     }
 }
 
+pub struct SharedFrameRef {
+    vaddr: VAddr,
+}
+
+impl SharedFrameRef {
+    pub fn new(vaddr: VAddr) -> SharedFrameRef {
+        SharedFrameRef { vaddr }
+    }
+
+    pub fn vaddr(&self) -> VAddr {
+        self.vaddr
+    }
+}
+
 enum RetypeError {
     UnalignedAddress,
     OutOfRange,
@@ -104,6 +118,10 @@ impl MemoryPool {
         // Ok()
         todo!()
     }
+}
+
+pub fn find_frame_by_vaddr(vaddr: VAddr) -> Option<&'static Frame> {
+    todo!()
 }
 
 pub fn retype_frames_as_unused(vaddr: VAddr, num_pages: usize) {
