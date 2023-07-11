@@ -1,19 +1,15 @@
 use core::{
-    mem::{align_of, min_align_of, size_of, MaybeUninit},
+    mem::{self, align_of, size_of, MaybeUninit},
     ops::{Deref, DerefMut},
     ptr::{drop_in_place, NonNull},
 };
 
-use essentials::{
-    alignment::{align_up, is_aligned},
-    static_assert,
-};
+use essentials::{alignment::align_up, static_assert};
 
 use crate::{
-    address::VAddr,
+    address::PAddr,
     arch::PAGE_SIZE,
     giant_lock::{GiantLock, GiantLockGuard},
-    memory_pool::retype_frames_as_unused,
 };
 
 /// The reference counter.
@@ -84,7 +80,6 @@ const fn required_num_pages<T>() -> usize {
 /// value (`NonNull<T>`) with a reference counter (`RefCounted`) and runtime
 /// borrow checker (`GiantLock`).
 ///
-///
 /// You may find this type definition weird: normally we'd use `Arc<Mutex<T>>`
 /// in Rust, however we wraps the reference counter with a lock (i.e. akin to
 /// `Mutex<Arc<T>>`). Of course this is intentional:
@@ -97,7 +92,9 @@ const fn required_num_pages<T>() -> usize {
 /// In short, consider this as `ArcMutex<T>`, i.e. integrating `Arc` and `Mutex`
 /// deeply into a single useful object ([`SharedRef<T>`]).
 #[repr(transparent)]
-pub struct SharedRefInner<T>(GiantLock<RefCounted<NonNull<T>>>);
+pub struct SharedRefInner<T> {
+    inner: GiantLock<RefCounted<NonNull<T>>>,
+}
 
 // Make sure `SharedRefInner<T>`'s layout is the same regardless of `T`.
 static_assert!(
@@ -125,7 +122,7 @@ impl<T> SharedRef<T> {
     ///
     /// The caller must ensure:
     ///
-    /// - `header` points to a valid memory space with `size_of::<SharedRefHeader>()` bytes.
+    /// - `header` points to a valid memory space that can hold a `SharedRefInner<T>`.
     /// - `value` points to an initialized `T`.
     pub unsafe fn new(
         mut header: NonNull<MaybeUninit<SharedRefInner<T>>>,
@@ -139,9 +136,9 @@ impl<T> SharedRef<T> {
         );
 
         // Safety: The caller must ensure that the memory space is valid.
-        header
-            .as_mut()
-            .write(SharedRefInner(GiantLock::new(RefCounted::new(value))));
+        header.as_mut().write(SharedRefInner {
+            inner: GiantLock::new(RefCounted::new(value)),
+        });
 
         // Safety: The container is initialized just above.
         let ptr = NonNull::from(header.as_mut().assume_init_ref());
@@ -150,7 +147,11 @@ impl<T> SharedRef<T> {
     }
 
     fn borrow_inner_mut(&self) -> GiantLockGuard<'_, RefCounted<NonNull<T>>> {
-        (unsafe { self.ptr.as_ref() }).0.borrow_mut()
+        (unsafe { self.ptr.as_ref() }).inner.borrow_mut()
+    }
+
+    pub fn paddr(&self) -> PAddr {
+        todo!()
     }
 
     /// Returns the mutable reference.
@@ -166,14 +167,25 @@ impl<T> SharedRef<T> {
     }
 
     /// Duplicates the reference.
-    pub fn inc_ref(&self) -> SharedRef<T> {
+    pub fn inc_ref(this: &SharedRef<T>) -> SharedRef<T> {
         // Safety: The destructor of `SharedRef` will decrement the reference
         //         counter.
         unsafe {
-            self.borrow_inner_mut().inc_ref();
+            this.borrow_inner_mut().inc_ref();
         }
 
-        SharedRef { ptr: self.ptr }
+        SharedRef { ptr: this.ptr }
+    }
+
+    pub unsafe fn dec_ref(this: &SharedRef<T>) {
+        // Safety: The caller must ensure that it will not use the reference
+        //         after calling this method.
+        this.borrow_inner_mut().dec_ref();
+    }
+
+    pub unsafe fn leak(this: SharedRef<T>) {
+        // Safety: The caller must ensure that it will
+        mem::forget(this);
     }
 }
 

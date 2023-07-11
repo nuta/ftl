@@ -1,15 +1,12 @@
 use core::{
     mem::{size_of, MaybeUninit},
     ops::Range,
-    ptr::NonNull,
     slice,
 };
 
 use crate::{
-    address::VAddr,
-    arch::PAGE_SIZE,
-    object::ObjectKind,
-    ref_count::{SharedRef, SharedRefInner},
+    address::VAddr, arch::PAGE_SIZE, object::ObjectKind,
+    ref_count::SharedRefInner,
 };
 use essentials::alignment::{align_up, is_aligned};
 

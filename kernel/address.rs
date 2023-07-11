@@ -165,6 +165,12 @@ impl PAddr {
     pub const fn from_nonzero_usize(addr: NonZeroUsize) -> PAddr {
         PAddr(addr)
     }
+
+    /// Returns the address.
+    #[inline]
+    pub const fn as_usize(self) -> usize {
+        self.0.get()
+    }
 }
 
 /// A non-NULL virtual address, including user-space addresses.
@@ -193,5 +199,11 @@ impl UAddr {
 
         // SAFETY: The assert above ensures that `addr` is not zero.
         UAddr(unsafe { NonZeroUsize::new_unchecked(addr) })
+    }
+
+    /// Returns the address.
+    #[inline]
+    pub const fn as_usize(self) -> usize {
+        self.0.get()
     }
 }
