@@ -215,12 +215,6 @@ impl<T> Drop for SharedRef<T> {
     }
 }
 
-pub trait Destructor {
-    type Target;
-
-    fn drop(this: UniqueRef<Self::Target>);
-}
-
 /// A unique reference.
 ///
 /// This is similar to [`Box<T>`]: it owns the inner value and drops it when
@@ -261,6 +255,7 @@ impl<T> DerefMut for UniqueRef<T> {
 impl<T> Drop for UniqueRef<T> {
     fn drop(&mut self) {
         unsafe {
+            // Mark the memory frames as unused.
             // TODO:
         }
     }

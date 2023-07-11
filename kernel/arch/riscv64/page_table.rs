@@ -127,7 +127,8 @@ impl Drop for PageTable {
                     }
                 };
 
-                // Drop the sub page table here!
+                // Drop the sub page table here. I know this line is not
+                // necessary but just for the sake of clarity.
                 drop(table);
             }
         }
