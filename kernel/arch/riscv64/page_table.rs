@@ -1,6 +1,9 @@
 use bitfields::{bitfields, B10, B2, B44};
 
-use crate::{address::{UAddr, PAddr}, ref_count::SharedRef};
+use crate::{
+    address::{PAddr, UAddr},
+    ref_count::SharedRef,
+};
 
 /// The number of entries in a page table in any level.
 const ENTRIES_PER_TABLE: usize = 512;
@@ -116,17 +119,17 @@ impl Drop for PageTable {
                 //         safely reconstruct the SharedRef without
                 //         updating the reference count.
                 let table = unsafe {
-                if entry.is_leaf_entry() {
-                    unimplemented!("huge page")
-                } else {
-                    SharedRef::<SubPageTableL1>::from_paddr(paddr).unwrap_unchecked()
-                }
-            };
+                    if entry.is_leaf_entry() {
+                        unimplemented!("huge page")
+                    } else {
+                        SharedRef::<SubPageTableL1>::from_paddr(paddr)
+                            .unwrap_unchecked()
+                    }
+                };
 
                 // Drop the sub page table here!
                 drop(table);
             }
-
         }
     }
 }
