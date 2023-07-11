@@ -95,17 +95,17 @@ const fn required_num_pages<T>() -> usize {
 /// deeply into a single useful object ([`SharedRef<T>`]).
 type SharedRefInner<T> = GiantLock<RefCounted<NonNull<T>>>;
 
+// Make sure `SharedRefInner<T>`'s layout is the same regardless of `T`. This is
+// crucial for making `SharedRefHeader` correct.
+static_assert!(size_of::<SharedRefInner::<()>>() == size_of::<SharedRefInner::<[u8;512]>>());
+static_assert!(align_of::<SharedRefInner::<()>>() == align_of::<SharedRefInner::<[u8;512]>>());
+
 /// A opaque struct with `SharedRefInner<T>`'s layout (memory size and alignment).
 ///
 /// This should be used with [`core::mem::MaybeUninit`] to mandate the user to
 /// initialize the space.
 #[repr(transparent)]
 pub struct SharedRefHeader(GiantLock<RefCounted<NonNull<u8>>>);
-
-// Paranoia checks to make sure `SharedRefInner<T>` has the same layout independent
-// of `T`. This is crucial for making `SharedRefHeader` correct.
-static_assert!(size_of::<SharedRefInner::<()>>() == size_of::<SharedRefInner::<[u8;512]>>());
-static_assert!(align_of::<SharedRefInner::<()>>() == align_of::<SharedRefInner::<[u8;512]>>());
 
 /// A reference-counted mutably-borrowable reference. This is similar to
 /// [`Arc<Mutex<T>>`] but it's optimized for our use case.
