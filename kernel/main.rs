@@ -64,8 +64,8 @@ pub fn kernel_main() {
     );
     println!(
         "size_of::<SharedRefHeader>(): {} (align={})",
-        size_of::<ref_count::SharedRefHeader>(),
-        core::mem::min_align_of::<ref_count::SharedRefHeader>()
+        size_of::<ref_count::SharedRefInner::<u8>>(),
+        core::mem::min_align_of::<ref_count::SharedRefInner::<u8>>()
     );
 
     // unsafe extern "C" fn first_user_program() {

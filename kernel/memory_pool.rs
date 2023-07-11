@@ -9,14 +9,14 @@ use crate::{
     address::VAddr,
     arch::PAGE_SIZE,
     object::ObjectKind,
-    ref_count::{SharedRef, SharedRefHeader},
+    ref_count::{SharedRef, SharedRefInner},
 };
 use essentials::alignment::{align_up, is_aligned};
 
 struct Frame {
     kind: ObjectKind,
     /// a memory space to construct `SharedRef<T>`.
-    shared_ref: MaybeUninit<SharedRefHeader>,
+    shared_ref: MaybeUninit<SharedRefInner<()>>,
 }
 
 impl Frame {
