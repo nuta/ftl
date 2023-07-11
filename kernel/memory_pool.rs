@@ -8,7 +8,7 @@ use crate::{
     address::VAddr, arch::PAGE_SIZE, object::ObjectKind,
     ref_count::SharedRefInner,
 };
-use essentials::alignment::{align_up, is_aligned};
+use essentials::{alignment::{align_up, is_aligned}};
 
 struct Frame {
     kind: ObjectKind,
@@ -17,9 +17,12 @@ struct Frame {
 }
 
 impl Frame {
-    const fn new(kind: ObjectKind) -> Frame {
-        // Frame { kind, ref_count: 0 }
-        todo!()
+    const fn unused() -> Frame {
+        Frame { kind: ObjectKind::Unused, shared_ref: MaybeUninit::uninit() }
+    }
+
+    const fn reserved() -> Frame {
+        Frame { kind: ObjectKind::Reserved, shared_ref: MaybeUninit::uninit() }
     }
 }
 
@@ -52,11 +55,11 @@ impl MemoryPool {
         let num_control_frames =
             align_up(len * size_of::<Frame>(), PAGE_SIZE) / PAGE_SIZE;
         for frame in &mut frames[0..num_control_frames] {
-            *frame = Frame::new(ObjectKind::Reserved);
+            *frame = Frame::reserved();
         }
 
         for frame in &mut frames[num_control_frames..] {
-            *frame = Frame::new(ObjectKind::Unused);
+            *frame = Frame::unused();
         }
 
         Some(MemoryPool {

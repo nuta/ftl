@@ -348,7 +348,7 @@ pub fn bitfields_struct(
         #(#static_asserts)*
 
         impl #struct_name {
-            pub fn zeroed() -> Self {
+            pub const fn zeroed() -> Self {
                 Self { raw: 0 }
             }
         }
