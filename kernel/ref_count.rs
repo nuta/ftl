@@ -1,5 +1,5 @@
 use core::{
-    mem::{size_of, MaybeUninit, align_of},
+    mem::{align_of, size_of, MaybeUninit, min_align_of},
     ops::{Deref, DerefMut},
     ptr::{drop_in_place, NonNull},
 };
@@ -97,8 +97,14 @@ type SharedRefInner<T> = GiantLock<RefCounted<NonNull<T>>>;
 
 // Make sure `SharedRefInner<T>`'s layout is the same regardless of `T`. This is
 // crucial for making `SharedRefHeader` correct.
-static_assert!(size_of::<SharedRefInner::<()>>() == size_of::<SharedRefInner::<[u8;512]>>());
-static_assert!(align_of::<SharedRefInner::<()>>() == align_of::<SharedRefInner::<[u8;512]>>());
+static_assert!(
+    size_of::<SharedRefInner::<()>>()
+        == size_of::<SharedRefInner::<[u8; 512]>>()
+);
+static_assert!(
+    align_of::<SharedRefInner::<()>>()
+        == align_of::<SharedRefInner::<[u8; 512]>>()
+);
 
 /// A opaque struct with `SharedRefInner<T>`'s layout (memory size and alignment).
 ///
@@ -119,34 +125,23 @@ pub struct SharedRef<T> {
 impl<T> SharedRef<T> {
     /// Creates a new `SharedRef` pointing to the given memory space.
     pub unsafe fn new(
-        vaddr: VAddr,
-        num_pages: usize,
-        value: T,
+        header: VAddr,
+        len: usize,
+        value: NonNull<T>,
     ) -> SharedRef<T> {
         // Make sure MaybeUninit<T> doesn't have any memory overhead, so that
         // the casting below is safe.
-        debug_assert!(
-            size_of::<MaybeUninit<SharedRefInner<T>>>()
-                == size_of::<SharedRefInner<T>>()
-        );
-
-        // We'll statically compute the # of pages to release in the
-        // destructor. Make sure the # of pages we allocated is
-        // correct.
-        debug_assert!(num_pages == required_num_pages::<SharedRefInner<T>>());
+        debug_assert!(size_of::<MaybeUninit<SharedRefHeader>>() == size_of::<SharedRefInner<T>>());
+        debug_assert!(len == size_of::<SharedRefInner<T>>());
+        debug_assert!(is_aligned(header.as_usize(), min_align_of::<SharedRefInner<T>>()));
 
         // Safety: The caller must ensure that the memory space is valid.
-        let container =
-            unsafe { vaddr.as_mut::<MaybeUninit<SharedRefInner<T>>>() };
-        let inner = unsafe { NonNull::new_unchecked(vaddr.as_mut_ptr()) };
-        container.write(GiantLock::new(RefCounted::new(inner)));
+        let maybe_header = header
+            .as_mut::<MaybeUninit<SharedRefInner<T>>>();
+        maybe_header.write(GiantLock::new(RefCounted::new(value)));
 
         // Safety: The container is initialized just above.
-        let ptr = NonNull::from(unsafe { container.assume_init_ref() });
-
-        // This check is very crucial as we'll turn `ptr` back into
-        // `vaddr` when releasing the memory.
-        debug_assert!(core::ptr::eq(ptr.as_ptr(), vaddr.as_ptr()));
+        let ptr = NonNull::from(unsafe { maybe_header.assume_init_ref() });
 
         SharedRef { ptr }
     }
@@ -196,9 +191,10 @@ impl<T> Drop for SharedRef<T> {
                 drop_in_place(self.ptr.as_mut());
 
                 // Mark the memory frames as unused.
-                let vaddr = VAddr::new(self.ptr.as_ptr() as usize);
-                let num_pages = required_num_pages::<SharedRefInner<T>>();
-                retype_frames_as_unused(vaddr, num_pages);
+                // FIXME:
+                // let vaddr = VAddr::new(self.ptr.as_ptr() as usize);
+                // let num_pages = required_num_pages::<SharedRefInner<T>>();
+                // retype_frames_as_unused(vaddr, num_pages);
             }
         }
     }
