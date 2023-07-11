@@ -107,8 +107,11 @@ static_assert!(align_of::<SharedRefInner::<()>>() == align_of::<SharedRefInner::
 #[repr(transparent)]
 pub struct SharedRefHeader(GiantLock<RefCounted<NonNull<u8>>>);
 
-/// A reference-counted mutably-borrowable reference. This is similar to
-/// [`Arc<Mutex<T>>`] but it's optimized for our use case.
+/// A reference-counted mutably-borrowable reference.
+///
+/// This is similar to [`Arc<Mutex<T>>`]: allows multiple references to the
+/// inner value by reference couting, and allows mutable access to the inner
+/// value by big kernel lock + runtime borrow checking.
 pub struct SharedRef<T> {
     ptr: NonNull<SharedRefInner<T>>,
 }
