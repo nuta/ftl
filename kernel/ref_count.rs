@@ -1,10 +1,13 @@
 use core::{
-    mem::{align_of, size_of, MaybeUninit, min_align_of},
+    mem::{align_of, min_align_of, size_of, MaybeUninit},
     ops::{Deref, DerefMut},
     ptr::{drop_in_place, NonNull},
 };
 
-use essentials::{alignment::{align_up, is_aligned}, static_assert};
+use essentials::{
+    alignment::{align_up, is_aligned},
+    static_assert,
+};
 
 use crate::{
     address::VAddr,
@@ -131,17 +134,16 @@ impl<T> SharedRef<T> {
     ///
     /// - `header` points to a valid memory space with `size_of::<SharedRefHeader>()` bytes.
     /// - `value` points to an initialized `T`.
-    pub unsafe fn new(
-        header: VAddr,
-        value: NonNull<T>,
-    ) -> SharedRef<T> {
+    pub unsafe fn new(header: VAddr, value: NonNull<T>) -> SharedRef<T> {
         // Make sure MaybeUninit<T> doesn't have any memory overhead, so that
         // the casting below is safe.
-        debug_assert!(size_of::<MaybeUninit<SharedRefHeader>>() == size_of::<SharedRefInner<T>>());
+        debug_assert!(
+            size_of::<MaybeUninit<SharedRefHeader>>()
+                == size_of::<SharedRefInner<T>>()
+        );
 
         // Safety: The caller must ensure that the memory space is valid.
-        let maybe_header = header
-            .as_mut::<MaybeUninit<SharedRefInner<T>>>();
+        let maybe_header = header.as_mut::<MaybeUninit<SharedRefInner<T>>>();
         maybe_header.write(GiantLock::new(RefCounted::new(value)));
 
         // Safety: The container is initialized just above.
@@ -180,7 +182,7 @@ impl<T> SharedRef<T> {
 
 impl<T> Drop for SharedRef<T> {
     fn drop(&mut self) {
-        if  self.borrow_inner_mut().dec_ref() {
+        if self.borrow_inner_mut().dec_ref() {
             // The reference counter reached zero. Drop the inner value
             // and free the memory.
 
