@@ -154,6 +154,10 @@ impl<T> SharedRef<T> {
         todo!()
     }
 
+    pub unsafe fn from_paddr(paddr: PAddr) -> Option<SharedRef<T>> {
+        todo!()
+    }
+
     /// Returns the mutable reference.
     ///
     /// **Warning:** This method may panic. See [`GiantLock::borrow_mut`]

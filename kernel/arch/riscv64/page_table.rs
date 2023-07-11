@@ -1,6 +1,6 @@
 use bitfields::{bitfields, B10, B2, B44};
 
-use crate::{address::UAddr, ref_count::SharedRef};
+use crate::{address::{UAddr, PAddr}, ref_count::SharedRef};
 
 /// The number of entries in a page table in any level.
 const ENTRIES_PER_TABLE: usize = 512;
@@ -42,8 +42,10 @@ struct Pte {
 }
 
 impl Pte {
-    pub const fn invalid() -> Pte {
-        Pte::from_raw(0)
+    /// Returns if the entry is leaf (huge page) or not (points to the next
+    /// level page table).
+    pub const fn is_leaf_entry(&self) -> bool {
+        self.readable() || self.writable() || self.executable()
     }
 }
 
@@ -100,6 +102,37 @@ impl PageTable {
             SharedRef::leak(table);
         }
     }
+}
+
+impl Drop for PageTable {
+    fn drop(&mut self) {
+        for entry in self.entries {
+            if entry.valid() {
+                let paddr = PAddr::new((entry.ppn() << 10) as usize);
+
+                // Safety: map_table() requires a corresponding SharedRef
+                //         when mapping the entry. Also, we deliberately
+                //         leaked the reference count then. Thus, we can
+                //         safely reconstruct the SharedRef without
+                //         updating the reference count.
+                let table = unsafe {
+                if entry.is_leaf_entry() {
+                    unimplemented!("huge page")
+                } else {
+                    SharedRef::<SubPageTableL1>::from_paddr(paddr).unwrap_unchecked()
+                }
+            };
+
+                // Drop the sub page table here!
+                drop(table);
+            }
+
+        }
+    }
+}
+
+pub struct Page4K {
+    pub bytes: [u8; 4096],
 }
 
 pub struct SubPageTableL1 {
