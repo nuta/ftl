@@ -93,7 +93,10 @@ const fn required_num_pages<T>() -> usize {
 ///
 /// In short, consider this as `ArcMutex<T>`, i.e. integrating `Arc` and `Mutex`
 /// deeply into a single useful object ([`SharedRef<T>`]).
-pub type SharedRefInner<T> = GiantLock<RefCounted<NonNull<T>>>;
+type SharedRefInner<T> = GiantLock<RefCounted<NonNull<T>>>;
+
+#[repr(transparent)]
+pub struct SharedRefHeader(GiantLock<RefCounted<NonNull<u8>>>);
 
 /// A reference-counted mutably-borrowable reference. This is similar to
 /// [`Arc<Mutex<T>>`] but it's optimized for our use case.
