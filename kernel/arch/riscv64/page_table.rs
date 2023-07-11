@@ -1,4 +1,4 @@
-use bitfields::{bitfields, B1, B10, B2, B44};
+use bitfields::{bitfields, bool, B10, B2, B44};
 
 use crate::{address::UAddr, ref_count::SharedRef};
 
@@ -17,22 +17,22 @@ const ENTRIES_PER_TABLE: usize = 512;
 #[derive(Copy, Clone)]
 struct Pte {
     /// Valid bit. If not set, page fault occurs.
-    valid: B1,
+    valid: bool,
     /// Readable bit.
-    readable: B1,
+    readable: bool,
     /// Writable bit.
-    writable: B1,
+    writable: bool,
     /// Executable bit.
-    executable: B1,
+    executable: bool,
     /// User bit. If set, user mode can access this page.
-    user: B1,
+    user: bool,
     /// Global bit. If set, TLB entry is not invalidated on address space
     /// switch.
-    global: B1,
+    global: bool,
     /// Accessed bit.
-    accessed: B1,
+    accessed: bool,
     /// Dirty bit.
-    dirty: B1,
+    dirty: bool,
     /// Available for software (i.e. us!) to use freely.
     rsw: B2,
     /// Physical page number of the next level page table or the data page.
