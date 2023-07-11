@@ -1,4 +1,4 @@
-use bitfields::{bitfields, bool, B10, B2, B44};
+use bitfields::{bitfields, B10, B2, B44};
 
 use crate::{address::UAddr, ref_count::SharedRef};
 
