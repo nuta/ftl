@@ -4,7 +4,7 @@ use core::{
     ptr::{drop_in_place, NonNull},
 };
 
-use essentials::{alignment::align_up, static_assert};
+use essentials::{alignment::{align_up, is_aligned}, static_assert};
 
 use crate::{
     address::VAddr,
