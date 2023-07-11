@@ -42,8 +42,8 @@ struct Pte {
 }
 
 impl Pte {
-    /// Returns if the entry is leaf (huge page) or not (points to the next
-    /// level page table).
+    /// Returns if the entry is leaf (huge page). Otherwise, if `false`,
+    /// the entry points to the next level page table.
     pub const fn is_leaf_entry(&self) -> bool {
         self.readable() || self.writable() || self.executable()
     }
@@ -75,7 +75,7 @@ pub struct PageTable {
 impl PageTable {
     pub const fn new() -> Self {
         Self {
-            entries: [Pte::invalid(); ENTRIES_PER_TABLE],
+            entries: [Pte::zeroed(); ENTRIES_PER_TABLE],
         }
     }
 
