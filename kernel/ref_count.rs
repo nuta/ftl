@@ -124,16 +124,20 @@ pub struct SharedRef<T> {
 
 impl<T> SharedRef<T> {
     /// Creates a new `SharedRef` pointing to the given memory space.
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure:
+    ///
+    /// - `header` points to a valid memory space with `size_of::<SharedRefHeader>()` bytes.
+    /// - `value` points to an initialized `T`.
     pub unsafe fn new(
         header: VAddr,
-        len: usize,
         value: NonNull<T>,
     ) -> SharedRef<T> {
         // Make sure MaybeUninit<T> doesn't have any memory overhead, so that
         // the casting below is safe.
         debug_assert!(size_of::<MaybeUninit<SharedRefHeader>>() == size_of::<SharedRefInner<T>>());
-        debug_assert!(len == size_of::<SharedRefInner<T>>());
-        debug_assert!(is_aligned(header.as_usize(), min_align_of::<SharedRefInner<T>>()));
 
         // Safety: The caller must ensure that the memory space is valid.
         let maybe_header = header
@@ -176,11 +180,7 @@ impl<T> SharedRef<T> {
 
 impl<T> Drop for SharedRef<T> {
     fn drop(&mut self) {
-        // Safety: The reference count was incremented when creating/cloning
-        //         the reference.
-        let needs_drop = unsafe { self.borrow_inner_mut().dec_ref() };
-
-        if needs_drop {
+        if  self.borrow_inner_mut().dec_ref() {
             // The reference counter reached zero. Drop the inner value
             // and free the memory.
 
