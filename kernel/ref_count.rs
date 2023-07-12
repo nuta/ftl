@@ -107,7 +107,14 @@ static_assert!(
 );
 
 impl<T> SharedRefInner<T> {
-    pub fn new(value: NonNull<T>) -> SharedRefInner<T> {
+    /// Creates a new reference-counted object.
+    ///
+    /// # Safety
+    ///
+    /// The caller must create at least one reference to the inner value
+    /// right after calling this function. The initial reference count is
+    /// zero and it's UB to drop the object with zero references.
+    pub unsafe fn new(value: NonNull<T>) -> SharedRefInner<T> {
         SharedRefInner {
             inner: GiantLock::new(RefCounted::new(value)),
         }

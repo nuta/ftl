@@ -150,7 +150,9 @@ impl MemoryPool {
 
         let (first_frame, inner) =
             self.allocate(vaddr, len, || PageTable::new())?;
-        *first_frame = Frame::PageTable(SharedRefInner::new(inner));
+        // Safety: We'll create a SharedRef for this.
+        let inner = unsafe { SharedRefInner::new(inner) };
+        *first_frame = Frame::PageTable(inner);
         let sref = match first_frame {
             Frame::PageTable(ref mut inner) => SharedRef::new(inner),
             // Safety: We just filled the first frame with a PageTable.
