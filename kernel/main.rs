@@ -9,6 +9,11 @@
 #![test_runner(crate::test::test_runner)]
 #![reexport_test_harness_main = "test_main"]
 
+use crate::{
+    arch::{PageTable, PAGE_SIZE},
+    process::Process,
+};
+
 #[macro_use]
 mod print;
 
@@ -44,8 +49,6 @@ pub fn kernel_main() {
         unreachable!();
     }
 
-    memory::allocate_all_pages();
-
     let mut v = alloc::vec::Vec::new();
     v.push(1);
     v.push(2);
@@ -80,6 +83,23 @@ pub fn kernel_main() {
     //     Box::new(arch::Thread::new(first_user_program as *const () as usize));
     // arch::Thread::set_current_thread(t);
     // arch::Thread::switch_test();
+
+    let pagetable = {
+        let vaddr = memory::allocate_pages(1).unwrap();
+        memory_pool::memory_pool(vaddr)
+            .unwrap()
+            .allocate_page_table(vaddr, PAGE_SIZE)
+            .unwrap()
+    };
+    let mut process = {
+        let vaddr = memory::allocate_pages(1).unwrap();
+        memory_pool::memory_pool(vaddr)
+            .unwrap()
+            .allocate_process(vaddr, PAGE_SIZE)
+            .unwrap()
+    };
+
+    memory::allocate_all_pages();
 
     arch::shutdown();
 }

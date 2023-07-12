@@ -3,7 +3,9 @@ use crate::{arch, ref_count::UniqueRef};
 /// A reference to a kernel object with associated rights, aka *capability*.
 ///
 /// This enum represents all objects that userland can control.
-pub enum Handle {}
+pub enum Handle {
+    Free,
+}
 
 impl Handle {}
 
@@ -19,4 +21,15 @@ pub struct Process {
     // more handles, let's consider adding a second-level handle table,
     // similar to indirect blocks in a file system.
     handles: [Handle; 128],
+}
+
+impl Process {
+    /// Creates a new process.
+    pub fn new(page_table: UniqueRef<arch::PageTable>) -> Process {
+        const HANDLE_INIT: Handle = Handle::Free;
+        Process {
+            page_table,
+            handles: [HANDLE_INIT; 128],
+        }
+    }
 }

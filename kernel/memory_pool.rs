@@ -10,6 +10,7 @@ use crate::{
     address::VAddr,
     arch::{PageTable, PAGE_SIZE},
     object::ObjectKind,
+    process::Process,
     ref_count::{SharedRef, SharedRefInner},
 };
 use essentials::alignment::{align_up, is_aligned};
@@ -31,13 +32,14 @@ enum Frame {
     PageTable(SharedRefInner<PageTable>),
 }
 
-enum RetypeError {
+#[derive(Debug)]
+pub enum RetypeError {
     UnalignedAddress,
     OutOfRange,
     AlreadyInUse,
 }
 
-struct MemoryPool {
+pub struct MemoryPool {
     base: VAddr,
     frames: &'static mut [Frame],
 }
@@ -143,6 +145,8 @@ impl MemoryPool {
         vaddr: VAddr,
         len: usize,
     ) -> Result<SharedRef<PageTable>, RetypeError> {
+        // FIXME: Check the `len` size.
+
         let (first_frame, inner) =
             self.allocate(vaddr, len, || PageTable::new())?;
         *first_frame = Frame::PageTable(SharedRefInner::new(inner));
@@ -154,6 +158,18 @@ impl MemoryPool {
 
         Ok(sref)
     }
+
+    pub fn allocate_process(
+        &mut self,
+        vaddr: VAddr,
+        len: usize,
+    ) -> Result<SharedRef<Process>, RetypeError> {
+        todo!()
+    }
+}
+
+pub fn memory_pool(vaddr: VAddr) -> Option<MemoryPool> {
+    todo!()
 }
 
 fn find_frame_by_vaddr(vaddr: VAddr) -> Option<&'static Frame> {
