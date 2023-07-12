@@ -43,6 +43,9 @@ pub fn shutdown() {
 }
 
 pub fn hang() -> ! {
+    // TODO: remove this
+    shutdown();
+
     loop {
         wfi();
     }
