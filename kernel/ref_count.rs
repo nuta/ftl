@@ -163,6 +163,8 @@ impl<T> SharedRef<T> {
     /// for more details.
     pub fn borrow_mut(&self) -> GiantLockGuard<'_, T> {
         self.borrow_inner_mut().map(|ref_counted| {
+            debug_assert!(ref_counted.counter > 0);
+
             // Safety: GiantLockGuard ensures that only one thread can access
             //         the inner value at a time.
             unsafe { ref_counted.inner.as_mut() }
