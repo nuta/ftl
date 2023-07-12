@@ -91,11 +91,16 @@ impl MemoryPool {
         }
     }
 
-    fn allocate(
+    fn allocate<F,T>(
         &mut self,
         vaddr: VAddr,
         len: usize,
-    ) -> Result<&mut Frame, RetypeError> {
+        ctor: F,
+    ) -> Result<&mut Frame, RetypeError>
+
+    where
+    F: FnOnce()-> T,
+     {
         if !is_aligned(vaddr.as_usize(), PAGE_SIZE)
             || !is_aligned(len, PAGE_SIZE)
         {
@@ -121,6 +126,16 @@ impl MemoryPool {
             };
         }
 
+        // Initialize the page table and get the pointer to it.
+        let mut inner = unsafe {
+            let mut uninit: &mut MaybeUninit<PageTable> = vaddr.as_mut();
+            uninit.write(ctor());
+
+            // Now that the page table is initialized. It's safe to create a
+            // pointer to it.
+            NonNull::new_unchecked(uninit.as_ptr() as *mut PageTable)
+        };
+
         Ok(&mut frames[0])
     }
 
@@ -129,17 +144,7 @@ impl MemoryPool {
         vaddr: VAddr,
         len: usize,
     ) -> Result<SharedRef<PageTable>, RetypeError> {
-        let first_frame = self.allocate(vaddr, len)?;
-
-        // Initialize the page table and get the pointer to it.
-        let mut inner = unsafe {
-            let mut uninit: &mut MaybeUninit<PageTable> = vaddr.as_mut();
-            uninit.write(PageTable::new());
-
-            // Now that the page table is initialized. It's safe to create a
-            // pointer to it.
-            NonNull::new_unchecked(uninit.as_ptr() as *mut PageTable)
-        };
+        let first_frame = self.allocate(vaddr, len, || PageTable())?;
 
         // Fill the first frame and get a shared reference to the created object.
         *first_frame = Frame::PageTable(SharedRefInner::new(inner));
