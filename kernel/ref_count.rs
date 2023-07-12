@@ -218,11 +218,15 @@ pub struct UniqueRef<T> {
 impl<T> UniqueRef<T> {
     /// Creates a new unique reference.
     ///
-    /// # Safety
-    ///
-    /// The caller must ensure that the pointer is unique.
-    pub unsafe fn new(ptr: NonNull<T>) -> UniqueRef<T> {
-        UniqueRef { ptr }
+    /// Returns `None`
+    pub fn new(sref: SharedRef<T>) -> Option<UniqueRef<T>> {
+        let sref = sref.borrow_inner_mut();
+        if sref.counter != 1 {
+            // There are other references.
+            return None;
+        }
+
+        Some(UniqueRef { ptr: sref.inner })
     }
 }
 

@@ -9,9 +9,10 @@ use core::{
 use crate::{
     address::VAddr,
     arch::{PageTable, PAGE_SIZE},
+    giant_lock::{GiantLock, GiantLockGuard},
     object::ObjectKind,
     process::Process,
-    ref_count::{SharedRef, SharedRefInner},
+    ref_count::{SharedRef, SharedRefInner, UniqueRef},
 };
 use essentials::alignment::{align_up, is_aligned};
 
@@ -140,7 +141,7 @@ impl MemoryPool {
         Ok((&mut frames[0], inner))
     }
 
-    pub fn allocate_page_table(
+    pub fn initialize_page_table(
         &mut self,
         vaddr: VAddr,
         len: usize,
@@ -159,16 +160,20 @@ impl MemoryPool {
         Ok(sref)
     }
 
-    pub fn allocate_process(
+    pub fn initialize_process(
         &mut self,
         vaddr: VAddr,
         len: usize,
+        pagetable: UniqueRef<PageTable>,
     ) -> Result<SharedRef<Process>, RetypeError> {
         todo!()
     }
 }
 
-pub fn memory_pool(vaddr: VAddr) -> Option<MemoryPool> {
+pub fn memory_pool(
+    vaddr: VAddr,
+    len: usize,
+) -> Option<&'static GiantLock<MemoryPool>> {
     todo!()
 }
 

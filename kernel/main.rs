@@ -11,7 +11,9 @@
 
 use crate::{
     arch::{PageTable, PAGE_SIZE},
+    memory_pool::memory_pool,
     process::Process,
+    ref_count::{SharedRef, UniqueRef},
 };
 
 #[macro_use]
@@ -84,20 +86,18 @@ pub fn kernel_main() {
     // arch::Thread::set_current_thread(t);
     // arch::Thread::switch_test();
 
-    let pagetable = {
-        let vaddr = memory::allocate_pages(1).unwrap();
-        memory_pool::memory_pool(vaddr)
+    let pagetable =
+        memory::allocate_and_initialize(PAGE_SIZE, |pool, vaddr| {
+            UniqueRef::new(
+                pool.initialize_page_table(vaddr, PAGE_SIZE).unwrap(),
+            )
             .unwrap()
-            .allocate_page_table(vaddr, PAGE_SIZE)
+        });
+
+    let process = memory::allocate_and_initialize(PAGE_SIZE, |pool, vaddr| {
+        pool.initialize_process(vaddr, PAGE_SIZE, pagetable)
             .unwrap()
-    };
-    let mut process = {
-        let vaddr = memory::allocate_pages(1).unwrap();
-        memory_pool::memory_pool(vaddr)
-            .unwrap()
-            .allocate_process(vaddr, PAGE_SIZE)
-            .unwrap()
-    };
+    });
 
     memory::allocate_all_pages();
 
