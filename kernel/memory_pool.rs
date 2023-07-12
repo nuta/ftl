@@ -1,4 +1,5 @@
 use core::{
+    hint::unreachable_unchecked,
     mem::{size_of, MaybeUninit},
     ops::Range,
     ptr::NonNull,
@@ -90,11 +91,11 @@ impl MemoryPool {
         }
     }
 
-    pub fn allocate(
+    fn allocate(
         &mut self,
         vaddr: VAddr,
         len: usize,
-    ) -> Result<(), RetypeError> {
+    ) -> Result<&mut Frame, RetypeError> {
         if !is_aligned(vaddr.as_usize(), PAGE_SIZE)
             || !is_aligned(len, PAGE_SIZE)
         {
@@ -105,26 +106,30 @@ impl MemoryPool {
             .frame_range(vaddr, len)
             .ok_or(RetypeError::OutOfRange)?;
 
+        // Abort if any of the frames are already in use.
         let frames = &mut self.frames[range];
         if !frames.iter().all(|f| matches!(f, Frame::Unused)) {
             return Err(RetypeError::AlreadyInUse);
         }
 
-        // for frame in frames {
-        //     debug_assert_eq!(frame.ref_count, 0);
-        //     // frame.kind = kind;
-        //     frame.ref_count = 1;
-        // }
-
+        // Fill the frames after the first one.
         let num_frames = frames.len();
-
-        // Initialize the rest of the frames.
         for (index, frame) in frames[1..].iter_mut().enumerate() {
             *frame = Frame::Continued {
                 index: index + 1,
                 tail: index == num_frames - 1,
             };
         }
+
+        Ok(&mut frames[0])
+    }
+
+    pub fn allocate_page_table(
+        &mut self,
+        vaddr: VAddr,
+        len: usize,
+    ) -> Result<SharedRef<PageTable>, RetypeError> {
+        let first_frame = self.allocate(vaddr, len)?;
 
         // Initialize the page table and get the pointer to it.
         let mut inner = unsafe {
@@ -137,11 +142,11 @@ impl MemoryPool {
         };
 
         // Fill the first frame and get a shared reference to the created object.
-        let first_frame = &mut frames[0];
         *first_frame = Frame::PageTable(SharedRefInner::new(inner));
         let sref = match first_frame {
             Frame::PageTable(inner) => SharedRef::new(inner),
-            _ => unreachable!(),
+            // Safety: We just filled the first frame with a PageTable.
+            _ => unsafe { unreachable_unchecked() },
         };
 
         // Ok()

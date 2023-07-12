@@ -77,6 +77,7 @@ pub struct PageTable {
 
 impl PageTable {
     pub const fn new() -> Self {
+        // FIXME: Map kernel pages.
         Self {
             entries: [Pte::zeroed(); ENTRIES_PER_TABLE],
         }
