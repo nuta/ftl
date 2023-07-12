@@ -129,7 +129,7 @@ impl MemoryPool {
         }
 
         // Initialize the page table and get the pointer to it.
-        let mut inner = unsafe {
+        let mut object = unsafe {
             let mut uninit: &mut MaybeUninit<T> = vaddr.as_mut();
             uninit.write(ctor());
 
@@ -138,7 +138,7 @@ impl MemoryPool {
             NonNull::new_unchecked(uninit.as_ptr() as *mut T)
         };
 
-        Ok((&mut frames[0], inner))
+        Ok((&mut frames[0], object))
     }
 
     pub fn initialize_page_table(
@@ -148,10 +148,10 @@ impl MemoryPool {
     ) -> Result<SharedRef<PageTable>, RetypeError> {
         // FIXME: Check the `len` size.
 
-        let (first_frame, inner) =
+        let (first_frame, object) =
             self.allocate(vaddr, len, || PageTable::new())?;
         // Safety: We'll create a SharedRef for this.
-        let inner = unsafe { SharedRefInner::new(inner) };
+        let inner = unsafe { SharedRefInner::new(object) };
         *first_frame = Frame::PageTable(inner);
         let sref = match first_frame {
             Frame::PageTable(ref mut inner) => SharedRef::new(inner),
