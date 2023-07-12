@@ -13,9 +13,20 @@ use crate::{
 };
 use essentials::alignment::{align_up, is_aligned};
 
+/// A page frame.
 enum Frame {
+    /// A frame that is not being used.
     Unused,
+    /// Not available. Used by kernel or reserved by hardware.
     Reserved,
+    /// A frame that is a part of an object larger than a single frame.
+    Continued {
+        /// # of frames from the beginning of the first frame for this object.
+        index: usize,
+        /// Whether it's a last frame of the object.
+        tail: bool,
+    },
+    /// Page table.
     PageTable(SharedRefInner<PageTable>),
 }
 
@@ -105,18 +116,30 @@ impl MemoryPool {
         //     frame.ref_count = 1;
         // }
 
-        let frame = &mut frames[0];
+        let num_frames = frames.len();
 
+        // Initialize the rest of the frames.
+        for (index, frame) in frames[1..].iter_mut().enumerate() {
+            *frame = Frame::Continued {
+                index: index + 1,
+                tail: index == num_frames - 1,
+            };
+        }
+
+        // Initialize the page table and get the pointer to it.
         let mut inner = unsafe {
-            let mut inner: NonNull<MaybeUninit<PageTable>> =
-                NonNull::new_unchecked(vaddr.as_mut_ptr());
-            inner.as_mut().write(PageTable::new());
+            let mut uninit: &mut MaybeUninit<PageTable> = vaddr.as_mut();
+            uninit.write(PageTable::new());
 
-            NonNull::new_unchecked(vaddr.as_mut_ptr())
+            // Now that the page table is initialized. It's safe to create a
+            // pointer to it.
+            NonNull::new_unchecked(uninit.as_ptr() as *mut PageTable)
         };
 
-        *frame = Frame::PageTable(SharedRefInner::new(inner));
-        let sref = match frame {
+        // Fill the first frame and get a shared reference to the created object.
+        let first_frame = &mut frames[0];
+        *first_frame = Frame::PageTable(SharedRefInner::new(inner));
+        let sref = match first_frame {
             Frame::PageTable(inner) => SharedRef::new(inner),
             _ => unreachable!(),
         };
