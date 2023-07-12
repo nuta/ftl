@@ -1,29 +1,22 @@
 use core::{
     mem::{size_of, MaybeUninit},
     ops::Range,
+    ptr::NonNull,
     slice,
 };
 
 use crate::{
-    address::VAddr, arch::PAGE_SIZE, object::ObjectKind,
-    ref_count::SharedRefInner,
+    address::VAddr,
+    arch::{PageTable, PAGE_SIZE},
+    object::ObjectKind,
+    ref_count::{SharedRef, SharedRefInner},
 };
-use essentials::{alignment::{align_up, is_aligned}};
+use essentials::alignment::{align_up, is_aligned};
 
-struct Frame {
-    kind: ObjectKind,
-    /// a memory space to construct `SharedRef<T>`.
-    shared_ref: MaybeUninit<SharedRefInner<()>>,
-}
-
-impl Frame {
-    const fn unused() -> Frame {
-        Frame { kind: ObjectKind::Unused, shared_ref: MaybeUninit::uninit() }
-    }
-
-    const fn reserved() -> Frame {
-        Frame { kind: ObjectKind::Reserved, shared_ref: MaybeUninit::uninit() }
-    }
+enum Frame {
+    Unused,
+    Reserved,
+    PageTable(SharedRefInner<PageTable>),
 }
 
 enum RetypeError {
@@ -55,11 +48,11 @@ impl MemoryPool {
         let num_control_frames =
             align_up(len * size_of::<Frame>(), PAGE_SIZE) / PAGE_SIZE;
         for frame in &mut frames[0..num_control_frames] {
-            *frame = Frame::reserved();
+            *frame = Frame::Reserved;
         }
 
         for frame in &mut frames[num_control_frames..] {
-            *frame = Frame::unused();
+            *frame = Frame::Unused;
         }
 
         Some(MemoryPool {
@@ -102,7 +95,7 @@ impl MemoryPool {
             .ok_or(RetypeError::OutOfRange)?;
 
         let frames = &mut self.frames[range];
-        if !frames.iter().all(|f| f.kind == ObjectKind::Unused) {
+        if !frames.iter().all(|f| matches!(f, Frame::Unused)) {
             return Err(RetypeError::AlreadyInUse);
         }
 
@@ -111,6 +104,22 @@ impl MemoryPool {
         //     // frame.kind = kind;
         //     frame.ref_count = 1;
         // }
+
+        let frame = &mut frames[0];
+
+        let mut inner = unsafe {
+            let mut inner: NonNull<MaybeUninit<PageTable>> =
+                NonNull::new_unchecked(vaddr.as_mut_ptr());
+            inner.as_mut().write(PageTable::new());
+
+            NonNull::new_unchecked(vaddr.as_mut_ptr())
+        };
+
+        *frame = Frame::PageTable(SharedRefInner::new(inner));
+        let sref = match frame {
+            Frame::PageTable(inner) => SharedRef::new(inner),
+            _ => unreachable!(),
+        };
 
         // Ok()
         todo!()

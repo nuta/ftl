@@ -33,7 +33,7 @@ struct RefCounted<T> {
 impl<T> RefCounted<T> {
     /// Creates a reference counted object.
     const fn new(inner: T) -> RefCounted<T> {
-        RefCounted { counter: 1, inner }
+        RefCounted { counter: 0, inner }
     }
 
     /// Increments the reference counter.
@@ -106,6 +106,14 @@ static_assert!(
         == align_of::<SharedRefInner::<[u8; 512]>>()
 );
 
+impl<T> SharedRefInner<T> {
+    pub fn new(value: NonNull<T>) -> SharedRefInner<T> {
+        SharedRefInner {
+            inner: GiantLock::new(RefCounted::new(value)),
+        }
+    }
+}
+
 /// A reference-counted mutably-borrowable reference.
 ///
 /// This is similar to [`Arc<Mutex<T>>`]: allows multiple references to the
@@ -116,34 +124,18 @@ pub struct SharedRef<T> {
 }
 
 impl<T> SharedRef<T> {
-    /// Creates a new `SharedRef` pointing to the given memory space.
-    ///
-    /// # Safety
-    ///
-    /// The caller must ensure:
-    ///
-    /// - `header` points to a valid memory space that can hold a `SharedRefInner<T>`.
-    /// - `value` points to an initialized `T`.
-    pub unsafe fn new(
-        mut header: NonNull<MaybeUninit<SharedRefInner<T>>>,
-        value: NonNull<T>,
-    ) -> SharedRef<T> {
-        // Make sure MaybeUninit<T> doesn't have any memory overhead, so that
-        // the casting below is safe.
-        debug_assert!(
-            size_of::<MaybeUninit<SharedRefInner<T>>>()
-                == size_of::<SharedRefInner<T>>()
-        );
+    pub fn new(inner: &mut SharedRefInner<T>) -> SharedRef<T> {
+        // Safety: `inner` is a valid pointer.
+        let ptr = unsafe { NonNull::new_unchecked(inner as *mut _) };
+        let sref = SharedRef { ptr };
 
-        // Safety: The caller must ensure that the memory space is valid.
-        header.as_mut().write(SharedRefInner {
-            inner: GiantLock::new(RefCounted::new(value)),
-        });
+        // Safety: The destructor of `sref` will decrement the reference
+        //         counter.
+        unsafe {
+            sref.borrow_inner_mut().inc_ref();
+        }
 
-        // Safety: The container is initialized just above.
-        let ptr = NonNull::from(header.as_mut().assume_init_ref());
-
-        SharedRef { ptr }
+        sref
     }
 
     fn borrow_inner_mut(&self) -> GiantLockGuard<'_, RefCounted<NonNull<T>>> {
