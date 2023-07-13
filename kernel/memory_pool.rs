@@ -176,10 +176,14 @@ impl MemoryPool {
         Ok(first_frame)
     }
 
+    /// Frees an object.
     pub fn free(&mut self, vaddr: VAddr) -> Result<(), RetypeError> {
         debug_assert!(is_aligned(vaddr.as_usize(), PAGE_SIZE));
 
+        // Free the first frame.
         let index = self.frame_index(vaddr).ok_or(RetypeError::OutOfRange)?;
+
+        // Free consecutive frames.
         self.frames[index] = Frame::Unused;
         if index + 1 < self.frames.len() {
             for frame in &mut self.frames[(index + 1)..] {

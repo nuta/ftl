@@ -92,7 +92,7 @@ impl<T> RefCounted<T> {
 /// deeply into a single useful object ([`SharedRef<T>`]).
 #[repr(transparent)]
 pub struct SharedRefInner<T> {
-    sref: GiantLock<RefCounted<NonNull<T>>>,
+    lock: GiantLock<RefCounted<NonNull<T>>>,
 }
 
 // Make sure `SharedRefInner<T>`'s layout is the same regardless of `T`.
@@ -115,7 +115,7 @@ impl<T> SharedRefInner<T> {
     /// zero and it's UB to drop the object with zero references.
     pub unsafe fn new(value: NonNull<T>) -> SharedRefInner<T> {
         SharedRefInner {
-            sref: GiantLock::new(RefCounted::new(value)),
+            lock: GiantLock::new(RefCounted::new(value)),
         }
     }
 }
@@ -126,14 +126,14 @@ impl<T> SharedRefInner<T> {
 /// inner value by reference couting, and allows mutable access to the inner
 /// value by big kernel lock + runtime borrow checking.
 pub struct SharedRef<T> {
-    ptr: NonNull<SharedRefInner<T>>,
+    inner: NonNull<SharedRefInner<T>>,
 }
 
 impl<T> SharedRef<T> {
     pub fn new(inner: &mut SharedRefInner<T>) -> SharedRef<T> {
         // Safety: `inner` is a valid pointer.
         let ptr = unsafe { NonNull::new_unchecked(inner as *mut _) };
-        let sref = SharedRef { ptr };
+        let sref = SharedRef { inner: ptr };
 
         // Safety: The destructor of `sref` will decrement the reference
         //         counter.
@@ -145,7 +145,7 @@ impl<T> SharedRef<T> {
     }
 
     fn borrow_inner_mut(&self) -> GiantLockGuard<'_, RefCounted<NonNull<T>>> {
-        (unsafe { self.ptr.as_ref() }).sref.borrow_mut()
+        (unsafe { self.inner.as_ref() }).lock.borrow_mut()
     }
 
     pub fn paddr(&self) -> PAddr {
@@ -178,7 +178,7 @@ impl<T> SharedRef<T> {
             this.borrow_inner_mut().inc_ref();
         }
 
-        SharedRef { ptr: this.ptr }
+        SharedRef { inner: this.inner }
     }
 
     pub unsafe fn dec_ref(this: &SharedRef<T>) {
@@ -203,13 +203,13 @@ impl<T> Drop for SharedRef<T> {
             //         mutate the inner value and drop it.
             unsafe {
                 // Call the destructor of the inner value (i.e. Drop).
-                drop_in_place(self.ptr.as_mut());
+                drop_in_place(self.inner.as_mut());
 
                 // Mark the memory frames as unused.
                 let vaddr = {
                     // Note: We should drop the borrow guard before freeing
                     //       its memory.
-                    let rc = self.ptr.as_mut().sref.borrow_mut();
+                    let rc = self.inner.as_mut().lock.borrow_mut();
                     VAddr::new(rc.inner.as_ptr() as usize)
                 };
 
