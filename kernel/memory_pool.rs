@@ -94,14 +94,16 @@ impl MemoryPool {
         }
     }
 
-    fn allocate<F, T>(
+    fn initialize<F, G, T>(
         &mut self,
         vaddr: VAddr,
         len: usize,
-        ctor: F,
-    ) -> Result<(&mut Frame, NonNull<T>), RetypeError>
+        object_ctor: F,
+        frame_ctor: G,
+    ) -> Result<&mut Frame, RetypeError>
     where
         F: FnOnce() -> T,
+        G: FnOnce(NonNull<T>) -> Frame,
     {
         if !is_aligned(vaddr.as_usize(), PAGE_SIZE)
             || !is_aligned(len, PAGE_SIZE)
@@ -131,14 +133,16 @@ impl MemoryPool {
         // Initialize the page table and get the pointer to it.
         let mut object = unsafe {
             let mut uninit: &mut MaybeUninit<T> = vaddr.as_mut();
-            uninit.write(ctor());
+            uninit.write(object_ctor());
 
             // Now that the page table is initialized. It's safe to create a
             // pointer to it.
             NonNull::new_unchecked(uninit.as_ptr() as *mut T)
         };
 
-        Ok((&mut frames[0], object))
+        let first_frame = &mut frames[0];
+        *first_frame = frame_ctor(object);
+        Ok(first_frame)
     }
 
     pub fn initialize_page_table(
@@ -148,11 +152,15 @@ impl MemoryPool {
     ) -> Result<SharedRef<PageTable>, RetypeError> {
         // FIXME: Check the `len` size.
 
-        let (first_frame, object) =
-            self.allocate(vaddr, len, || PageTable::new())?;
-        // Safety: We'll create a SharedRef for this.
-        let inner = unsafe { SharedRefInner::new(object) };
-        *first_frame = Frame::PageTable(inner);
+        let first_frame = self.initialize(
+            vaddr,
+            len,
+            || PageTable::new(),
+            |object| {
+                // Safety: We'll create a SharedRef for this.
+                Frame::PageTable(unsafe { SharedRefInner::new(object) })
+            },
+        )?;
         let sref = match first_frame {
             Frame::PageTable(ref mut inner) => SharedRef::new(inner),
             // Safety: We just filled the first frame with a PageTable.
