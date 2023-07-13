@@ -177,7 +177,14 @@ impl MemoryPool {
     }
 
     /// Frees an object.
-    pub fn free(&mut self, vaddr: VAddr) -> Result<(), RetypeError> {
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure that:
+    ///
+    /// - `vaddr` points to a memory frame initialized by `initialize_*` methods.
+    /// - `vaddr` is never freed more than once.
+    pub unsafe fn free(&mut self, vaddr: VAddr) -> Result<(), RetypeError> {
         debug_assert!(is_aligned(vaddr.as_usize(), PAGE_SIZE));
 
         // Free the first frame.

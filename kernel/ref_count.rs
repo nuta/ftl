@@ -28,13 +28,13 @@ use crate::{
 ///   object explicitly through a system call (lmk if you find a counter-example!).
 struct RefCounted<T> {
     counter: usize,
-    inner: T,
+    object: T,
 }
 
 impl<T> RefCounted<T> {
     /// Creates a reference counted object.
-    const fn new(inner: T) -> RefCounted<T> {
-        RefCounted { counter: 0, inner }
+    const fn new(object: T) -> RefCounted<T> {
+        RefCounted { counter: 0, object }
     }
 
     /// Increments the reference counter.
@@ -69,7 +69,7 @@ impl<T> RefCounted<T> {
     /// The caller must ensure no other reference to the inner value exists,
     /// e.g. by locking the kernel.
     unsafe fn as_mut(&mut self) -> *mut T {
-        &mut self.inner
+        &mut self.object
     }
 }
 
@@ -126,14 +126,14 @@ impl<T> SharedRefInner<T> {
 /// inner value by reference couting, and allows mutable access to the inner
 /// value by big kernel lock + runtime borrow checking.
 pub struct SharedRef<T> {
-    inner: NonNull<SharedRefInner<T>>,
+    ptr: NonNull<SharedRefInner<T>>,
 }
 
 impl<T> SharedRef<T> {
     pub fn new(inner: &mut SharedRefInner<T>) -> SharedRef<T> {
         // Safety: `inner` is a valid pointer.
         let ptr = unsafe { NonNull::new_unchecked(inner as *mut _) };
-        let sref = SharedRef { inner: ptr };
+        let sref = SharedRef { ptr };
 
         // Safety: The destructor of `sref` will decrement the reference
         //         counter.
@@ -145,7 +145,7 @@ impl<T> SharedRef<T> {
     }
 
     fn borrow_inner_mut(&self) -> GiantLockGuard<'_, RefCounted<NonNull<T>>> {
-        (unsafe { self.inner.as_ref() }).lock.borrow_mut()
+        (unsafe { self.ptr.as_ref() }).lock.borrow_mut()
     }
 
     pub fn paddr(&self) -> PAddr {
@@ -161,12 +161,12 @@ impl<T> SharedRef<T> {
     /// **Warning:** This method may panic. See [`GiantLock::borrow_mut`]
     /// for more details.
     pub fn borrow_mut(&self) -> GiantLockGuard<'_, T> {
-        self.borrow_inner_mut().map(|ref_counted| {
-            debug_assert!(ref_counted.counter > 0);
+        self.borrow_inner_mut().map(|rc| {
+            debug_assert!(rc.counter > 0);
 
             // Safety: GiantLockGuard ensures that only one thread can access
             //         the inner value at a time.
-            unsafe { ref_counted.inner.as_mut() }
+            unsafe { rc.object.as_mut() }
         })
     }
 
@@ -178,7 +178,7 @@ impl<T> SharedRef<T> {
             this.borrow_inner_mut().inc_ref();
         }
 
-        SharedRef { inner: this.inner }
+        SharedRef { ptr: this.ptr }
     }
 
     pub unsafe fn dec_ref(this: &SharedRef<T>) {
@@ -195,23 +195,17 @@ impl<T> SharedRef<T> {
 
 impl<T> Drop for SharedRef<T> {
     fn drop(&mut self) {
-        if self.borrow_inner_mut().dec_ref() {
-            // The reference counter reached zero. Drop the inner value
-            // and free the memory.
-
+        let mut rc = self.borrow_inner_mut();
+        if rc.dec_ref() {
+            // The reference counter reached zero. Free the memory.
+            //
             // Safety: This reference was the last one, so we can safely
-            //         mutate the inner value and drop it.
+            //         free the memory.
             unsafe {
-                // Call the destructor of the inner value (i.e. Drop).
-                drop_in_place(self.inner.as_mut());
+                let vaddr = VAddr::new(rc.object.as_ptr() as usize);
 
-                // Mark the memory frames as unused.
-                let vaddr = {
-                    // Note: We should drop the borrow guard before freeing
-                    //       its memory.
-                    let rc = self.inner.as_mut().lock.borrow_mut();
-                    VAddr::new(rc.inner.as_ptr() as usize)
-                };
+                // We should not keep the borrow guard to prevent use-after-free.
+                drop(rc);
 
                 memory_pool_mut(vaddr)
                     .unwrap()
@@ -242,7 +236,9 @@ impl<T> UniqueRef<T> {
             return None;
         }
 
-        Some(UniqueRef { object: sref.inner })
+        Some(UniqueRef {
+            object: sref.object,
+        })
     }
 }
 
@@ -266,6 +262,8 @@ impl<T> DerefMut for UniqueRef<T> {
 
 impl<T> Drop for UniqueRef<T> {
     fn drop(&mut self) {
+        // Safety: The check in `UniqueRef::new` ensures that this is the last
+        //         reference.
         unsafe {
             let vaddr = VAddr::new(self.object.as_ptr() as usize);
             memory_pool_mut(vaddr)
