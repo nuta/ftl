@@ -34,6 +34,8 @@ enum Frame {
     },
     /// Page table.
     PageTable(SharedRefInner<PageTable>),
+    /// Process.
+    Process(SharedRefInner<Process>),
 }
 
 const fn object_size<T>() -> usize {
@@ -150,7 +152,7 @@ impl MemoryPool {
             };
         }
 
-        // Initialize the page table and get the pointer to it.
+        // Initialize the object and get the pointer to it.
         let mut object = unsafe {
             let mut uninit: &mut MaybeUninit<T> = vaddr.as_mut();
             uninit.write(object_ctor());
@@ -160,6 +162,7 @@ impl MemoryPool {
             NonNull::new_unchecked(uninit.as_ptr() as *mut T)
         };
 
+        // Initialize the first frame.
         let first_frame = &mut frames[0];
         *first_frame = frame_ctor(object);
         Ok(first_frame)
@@ -180,7 +183,7 @@ impl MemoryPool {
             },
         )?;
 
-        let sref: SharedRef<PageTable> = match first_frame {
+        let sref = match first_frame {
             Frame::PageTable(ref mut inner) => SharedRef::new(inner),
             // Safety: We just filled the first frame with a PageTable.
             _ => unsafe { unreachable_unchecked() },
@@ -195,7 +198,23 @@ impl MemoryPool {
         len: usize,
         pagetable: UniqueRef<PageTable>,
     ) -> Result<SharedRef<Process>, RetypeError> {
-        todo!()
+        let first_frame = self.initialize(
+            vaddr,
+            len,
+            || Process::new(pagetable),
+            |object| {
+                // Safety: We'll create a SharedRef for this below.
+                Frame::Process(unsafe { SharedRefInner::new(object) })
+            },
+        )?;
+
+        let sref = match first_frame {
+            Frame::Process(ref mut inner) => SharedRef::new(inner),
+            // Safety: We just filled the first frame with a PageTable.
+            _ => unsafe { unreachable_unchecked() },
+        };
+
+        Ok(sref)
     }
 }
 
