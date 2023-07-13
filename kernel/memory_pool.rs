@@ -175,11 +175,12 @@ impl MemoryPool {
             len,
             || PageTable::new(),
             |object| {
-                // Safety: We'll create a SharedRef for this.
+                // Safety: We'll create a SharedRef for this below.
                 Frame::PageTable(unsafe { SharedRefInner::new(object) })
             },
         )?;
-        let sref = match first_frame {
+
+        let sref: SharedRef<PageTable> = match first_frame {
             Frame::PageTable(ref mut inner) => SharedRef::new(inner),
             // Safety: We just filled the first frame with a PageTable.
             _ => unsafe { unreachable_unchecked() },
