@@ -76,7 +76,7 @@ where
 {
     let vaddr = allocate_pages(len).expect("failed to allocate pages");
     let mut pool =
-        memory_pool_mut(vaddr, len).expect("no corresponding memory pool");
+        memory_pool_mut(vaddr).expect("no corresponding memory pool");
     let mut pool_lock = pool.borrow_mut();
     initializer(&mut pool_lock, vaddr)
 }

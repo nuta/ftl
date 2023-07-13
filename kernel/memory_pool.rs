@@ -96,6 +96,14 @@ impl MemoryPool {
         })
     }
 
+    fn frame_index(&self, vaddr: VAddr) -> Option<usize> {
+        if vaddr < self.base {
+            return None;
+        }
+
+        Some((vaddr.as_usize() - self.base.as_usize()) / PAGE_SIZE)
+    }
+
     fn frame_range(&self, vaddr: VAddr, len: usize) -> Option<Range<usize>> {
         debug_assert!(is_aligned(vaddr.as_usize(), PAGE_SIZE));
         debug_assert!(is_aligned(len, PAGE_SIZE));
@@ -168,6 +176,29 @@ impl MemoryPool {
         Ok(first_frame)
     }
 
+    pub fn free(&mut self, vaddr: VAddr) -> Result<(), RetypeError> {
+        debug_assert!(is_aligned(vaddr.as_usize(), PAGE_SIZE));
+
+        let index = self.frame_index(vaddr).ok_or(RetypeError::OutOfRange)?;
+        self.frames[index] = Frame::Unused;
+        if index + 1 < self.frames.len() {
+            for frame in &mut self.frames[(index + 1)..] {
+                match frame {
+                    Frame::Continued { tail, .. } => {
+                        let tail = *tail;
+                        *frame = Frame::Unused;
+                        if tail {
+                            break;
+                        }
+                    }
+                    _ => break,
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     pub fn initialize_page_table(
         &mut self,
         vaddr: VAddr,
@@ -198,32 +229,13 @@ impl MemoryPool {
         len: usize,
         pagetable: UniqueRef<PageTable>,
     ) -> Result<SharedRef<Process>, RetypeError> {
-        let first_frame = self.initialize(
-            vaddr,
-            len,
-            || Process::new(pagetable),
-            |object| {
-                // Safety: We'll create a SharedRef for this below.
-                Frame::Process(unsafe { SharedRefInner::new(object) })
-            },
-        )?;
-
-        let sref = match first_frame {
-            Frame::Process(ref mut inner) => SharedRef::new(inner),
-            // Safety: We just filled the first frame above.
-            _ => unsafe { unreachable_unchecked() },
-        };
-
-        Ok(sref)
+        todo!()
     }
 }
 
 static MEMORY_POOL: Option<GiantLock<MemoryPool>> = None;
 
-pub fn memory_pool_mut(
-    vaddr: VAddr,
-    len: usize,
-) -> Option<&'static GiantLock<MemoryPool>> {
+pub fn memory_pool_mut(vaddr: VAddr) -> Option<&'static GiantLock<MemoryPool>> {
     MEMORY_POOL.as_ref()
 }
 

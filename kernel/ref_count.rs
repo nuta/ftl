@@ -7,9 +7,10 @@ use core::{
 use essentials::{alignment::align_up, static_assert};
 
 use crate::{
-    address::PAddr,
+    address::{PAddr, VAddr},
     arch::PAGE_SIZE,
     giant_lock::{GiantLock, GiantLockGuard},
+    memory_pool::memory_pool_mut,
 };
 
 /// The reference counter.
@@ -80,16 +81,18 @@ impl<T> RefCounted<T> {
 /// in Rust, however we wraps the reference counter with a lock (i.e. akin to
 /// `Mutex<Arc<T>>`). Of course this is intentional:
 ///
-/// - We don't need atomic operations to manipulate the reference counter: `GiantLock`
-///   guarantees that only one thread can access the counter at a time.
-/// - In release builds, [`GiantLock::borrow_mut`] is a no-op (in the future!), so
-///   there's no runtime overhead. We just increment/decrement the counter.
+/// - We don't need atomic operations to manipulate the reference counter:
+///   `GiantLock` guarantees that only one thread can access the counter at a
+///   time.
+///
+/// - In release builds, [`GiantLock::borrow_mut`] is a no-op (in the future!),
+///   so there's no runtime overhead. We just increment/decrement the counter.
 ///
 /// In short, consider this as `ArcMutex<T>`, i.e. integrating `Arc` and `Mutex`
 /// deeply into a single useful object ([`SharedRef<T>`]).
 #[repr(transparent)]
 pub struct SharedRefInner<T> {
-    inner: GiantLock<RefCounted<NonNull<T>>>,
+    sref: GiantLock<RefCounted<NonNull<T>>>,
 }
 
 // Make sure `SharedRefInner<T>`'s layout is the same regardless of `T`.
@@ -112,7 +115,7 @@ impl<T> SharedRefInner<T> {
     /// zero and it's UB to drop the object with zero references.
     pub unsafe fn new(value: NonNull<T>) -> SharedRefInner<T> {
         SharedRefInner {
-            inner: GiantLock::new(RefCounted::new(value)),
+            sref: GiantLock::new(RefCounted::new(value)),
         }
     }
 }
@@ -142,7 +145,7 @@ impl<T> SharedRef<T> {
     }
 
     fn borrow_inner_mut(&self) -> GiantLockGuard<'_, RefCounted<NonNull<T>>> {
-        (unsafe { self.ptr.as_ref() }).inner.borrow_mut()
+        (unsafe { self.ptr.as_ref() }).sref.borrow_mut()
     }
 
     pub fn paddr(&self) -> PAddr {
@@ -203,10 +206,18 @@ impl<T> Drop for SharedRef<T> {
                 drop_in_place(self.ptr.as_mut());
 
                 // Mark the memory frames as unused.
-                // FIXME:
-                // let vaddr = VAddr::new(self.ptr.as_ptr() as usize);
-                // let num_pages = required_num_pages::<SharedRefInner<T>>();
-                // retype_frames_as_unused(vaddr, num_pages);
+                let vaddr = {
+                    // Note: We should drop the borrow guard before freeing
+                    //       its memory.
+                    let rc = self.ptr.as_mut().sref.borrow_mut();
+                    VAddr::new(rc.inner.as_ptr() as usize)
+                };
+
+                memory_pool_mut(vaddr)
+                    .unwrap()
+                    .borrow_mut()
+                    .free(vaddr)
+                    .unwrap();
             }
         }
     }
@@ -217,7 +228,7 @@ impl<T> Drop for SharedRef<T> {
 /// This is similar to [`Box<T>`]: it owns the inner value and drops it when
 /// dropped.
 pub struct UniqueRef<T> {
-    ptr: NonNull<T>,
+    object: NonNull<T>,
 }
 
 impl<T> UniqueRef<T> {
@@ -231,7 +242,7 @@ impl<T> UniqueRef<T> {
             return None;
         }
 
-        Some(UniqueRef { ptr: sref.inner })
+        Some(UniqueRef { object: sref.inner })
     }
 }
 
@@ -241,7 +252,7 @@ impl<T> Deref for UniqueRef<T> {
     fn deref(&self) -> &Self::Target {
         // Safety: The compiler guarantees the pointer is still alive and no
         //         mutable reference exists.
-        unsafe { self.ptr.as_ref() }
+        unsafe { self.object.as_ref() }
     }
 }
 
@@ -249,15 +260,19 @@ impl<T> DerefMut for UniqueRef<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         // Safety: The compiler guarantees the pointer is still alive and no
         //         other references exist because this method requires `&mut self`.
-        unsafe { self.ptr.as_mut() }
+        unsafe { self.object.as_mut() }
     }
 }
 
 impl<T> Drop for UniqueRef<T> {
     fn drop(&mut self) {
         unsafe {
-            // Mark the memory frames as unused.
-            // TODO:
+            let vaddr = VAddr::new(self.object.as_ptr() as usize);
+            memory_pool_mut(vaddr)
+                .unwrap()
+                .borrow_mut()
+                .free(vaddr)
+                .unwrap();
         }
     }
 }
