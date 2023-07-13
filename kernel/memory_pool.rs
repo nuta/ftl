@@ -185,7 +185,7 @@ impl MemoryPool {
 
         let sref = match first_frame {
             Frame::PageTable(ref mut inner) => SharedRef::new(inner),
-            // Safety: We just filled the first frame with a PageTable.
+            // Safety: We just filled the first frame above.
             _ => unsafe { unreachable_unchecked() },
         };
 
@@ -210,7 +210,7 @@ impl MemoryPool {
 
         let sref = match first_frame {
             Frame::Process(ref mut inner) => SharedRef::new(inner),
-            // Safety: We just filled the first frame with a PageTable.
+            // Safety: We just filled the first frame above.
             _ => unsafe { unreachable_unchecked() },
         };
 
