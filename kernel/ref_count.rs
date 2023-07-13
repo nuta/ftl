@@ -72,10 +72,6 @@ impl<T> RefCounted<T> {
     }
 }
 
-const fn required_num_pages<T>() -> usize {
-    align_up(size_of::<T>(), PAGE_SIZE) / PAGE_SIZE
-}
-
 /// The type of the value a [`SharedRef`] points to: a pointer to the inner
 /// value (`NonNull<T>`) with a reference counter (`RefCounted`) and runtime
 /// borrow checker (`GiantLock`).

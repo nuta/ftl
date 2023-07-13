@@ -1,6 +1,6 @@
 use core::{
     hint::unreachable_unchecked,
-    mem::{size_of, MaybeUninit},
+    mem::{align_of, size_of, MaybeUninit},
     ops::Range,
     ptr::NonNull,
     slice,
@@ -14,7 +14,10 @@ use crate::{
     process::Process,
     ref_count::{SharedRef, SharedRefInner, UniqueRef},
 };
-use essentials::alignment::{align_up, is_aligned};
+use essentials::{
+    alignment::{align_up, is_aligned},
+    static_assert,
+};
 
 /// A page frame.
 enum Frame {
@@ -33,9 +36,24 @@ enum Frame {
     PageTable(SharedRefInner<PageTable>),
 }
 
+const fn object_size<T>() -> usize {
+    align_up(size_of::<T>(), PAGE_SIZE)
+}
+
+const fn object_align<T>() -> usize {
+    align_up(align_of::<T>(), PAGE_SIZE)
+}
+
+// TODO: Move this to a test.
+static_assert!(object_size::<PageTable>() == PAGE_SIZE);
+static_assert!(object_align::<PageTable>() == PAGE_SIZE);
+static_assert!(object_size::<Process>() == PAGE_SIZE);
+static_assert!(object_align::<Process>() == PAGE_SIZE);
+
 #[derive(Debug)]
 pub enum RetypeError {
     UnalignedAddress,
+    InvalidLength,
     OutOfRange,
     AlreadyInUse,
 }
@@ -105,10 +123,12 @@ impl MemoryPool {
         F: FnOnce() -> T,
         G: FnOnce(NonNull<T>) -> Frame,
     {
-        if !is_aligned(vaddr.as_usize(), PAGE_SIZE)
-            || !is_aligned(len, PAGE_SIZE)
-        {
+        if !is_aligned(vaddr.as_usize(), object_align::<T>()) {
             return Err(RetypeError::UnalignedAddress);
+        }
+
+        if object_size::<T>() != len {
+            return Err(RetypeError::InvalidLength);
         }
 
         let range = self
@@ -150,8 +170,6 @@ impl MemoryPool {
         vaddr: VAddr,
         len: usize,
     ) -> Result<SharedRef<PageTable>, RetypeError> {
-        // FIXME: Check the `len` size.
-
         let first_frame = self.initialize(
             vaddr,
             len,
