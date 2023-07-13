@@ -11,7 +11,7 @@
 
 use crate::{
     arch::{PageTable, PAGE_SIZE},
-    memory_pool::memory_pool,
+    memory_pool::memory_pool_mut,
     process::Process,
     ref_count::{SharedRef, UniqueRef},
 };

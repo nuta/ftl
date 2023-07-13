@@ -218,11 +218,13 @@ impl MemoryPool {
     }
 }
 
-pub fn memory_pool(
+static MEMORY_POOL: Option<GiantLock<MemoryPool>> = None;
+
+pub fn memory_pool_mut(
     vaddr: VAddr,
     len: usize,
 ) -> Option<&'static GiantLock<MemoryPool>> {
-    todo!()
+    MEMORY_POOL.as_ref()
 }
 
 fn find_frame_by_vaddr(vaddr: VAddr) -> Option<&'static Frame> {

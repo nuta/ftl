@@ -8,7 +8,7 @@ use crate::{
     address::{PAddr, VAddr},
     arch::PAGE_SIZE,
     giant_lock::{GiantLock, GiantLockGuard},
-    memory_pool::{memory_pool, MemoryPool},
+    memory_pool::{memory_pool_mut, MemoryPool},
 };
 
 use bump_allocator::BumpAllocator;
@@ -76,7 +76,7 @@ where
 {
     let vaddr = allocate_pages(len).expect("failed to allocate pages");
     let mut pool =
-        memory_pool(vaddr, len).expect("no corresponding memory pool");
+        memory_pool_mut(vaddr, len).expect("no corresponding memory pool");
     let mut pool_lock = pool.borrow_mut();
     initializer(&mut pool_lock, vaddr)
 }
