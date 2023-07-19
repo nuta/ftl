@@ -1,5 +1,6 @@
 use core::{
     cell::{Cell, UnsafeCell},
+    mem,
     ops::{Deref, DerefMut},
     panic,
     sync::atomic::{AtomicBool, Ordering},
@@ -121,21 +122,25 @@ unsafe impl<T> Sync for GiantLock<T> {}
 ///
 /// Only one `GiantLockGuard` to a same `GiantLock` can exist at a time and
 /// the borrow will automatically be released when the it is dropped.
+#[clippy::has_significant_drop]
 pub struct GiantLockGuard<'a, T> {
     inner: &'a mut T,
     tracker: &'a LockTracker,
 }
 
 impl<'a, T> GiantLockGuard<'a, T> {
-    pub fn map<U, F>(mut self, f: F) -> GiantLockGuard<'a, U>
+    pub fn map<U, F>(
+        mut guard: GiantLockGuard<'a, T>,
+        f: F,
+    ) -> GiantLockGuard<'a, U>
     where
-        F: FnOnce(&mut T) -> &mut U,
+        F: FnOnce(& mut T) -> & mut U,
     {
         todo!()
-        // GiantLockGuard {
-        //     inner: f(self.inner),
-        //     tracker: self.tracker,
-        // }
+        // let inner = f(guard.inner);
+        // let tracker = guard.tracker;
+        // mem::forget(guard);
+        // GiantLockGuard { inner, tracker }
     }
 }
 

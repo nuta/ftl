@@ -161,7 +161,7 @@ impl<T> SharedRef<T> {
     /// **Warning:** This method may panic. See [`GiantLock::borrow_mut`]
     /// for more details.
     pub fn borrow_mut(&self) -> GiantLockGuard<'_, T> {
-        self.borrow_inner_mut().map(|rc| {
+        GiantLockGuard::map(self.borrow_inner_mut(), |rc| {
             debug_assert!(rc.counter > 0);
 
             // Safety: GiantLockGuard ensures that only one thread can access

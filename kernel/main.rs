@@ -8,6 +8,8 @@
 #![feature(const_mut_refs)]
 #![test_runner(crate::test::test_runner)]
 #![reexport_test_harness_main = "test_main"]
+#![allow(unused)]
+#![allow(unused_variables)]
 
 use crate::{
     arch::{PageTable, PAGE_SIZE},
