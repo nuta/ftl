@@ -10,7 +10,6 @@ use crate::{
     address::VAddr,
     arch::{PageTable, PAGE_SIZE},
     giant_lock::{GiantLock, GiantLockGuard},
-    object::ObjectKind,
     process::Process,
     ref_count::{SharedRef, SharedRefInner, UniqueRef},
 };

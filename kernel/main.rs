@@ -26,7 +26,6 @@ mod cpu_local;
 mod giant_lock;
 mod memory;
 mod memory_pool;
-mod object;
 mod panic;
 mod process;
 mod ref_count;
