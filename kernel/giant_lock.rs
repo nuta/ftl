@@ -108,7 +108,7 @@ impl<T> GiantLock<T> {
         self.tracker.acquire(panic::Location::caller());
 
         GiantLockGuard {
-            inner: unsafe { &mut *self.inner.get() },
+            inner: unsafe { self.inner.get() },
             tracker: &self.tracker,
         }
     }
@@ -124,7 +124,7 @@ unsafe impl<T> Sync for GiantLock<T> {}
 /// the borrow will automatically be released when the it is dropped.
 #[clippy::has_significant_drop]
 pub struct GiantLockGuard<'a, T> {
-    inner: &'a mut T,
+    inner: *mut T,
     tracker: &'a LockTracker,
 }
 
@@ -136,11 +136,13 @@ impl<'a, T> GiantLockGuard<'a, T> {
     where
         F: FnOnce(& mut T) -> & mut U,
     {
-        todo!()
-        // let inner = f(guard.inner);
-        // let tracker = guard.tracker;
-        // mem::forget(guard);
-        // GiantLockGuard { inner, tracker }
+        let inner = f(unsafe { &mut *guard.inner });
+        let tracker = guard.tracker;
+        mem::forget(guard);
+        GiantLockGuard {
+            inner,
+            tracker,
+        }
     }
 }
 
@@ -148,13 +150,19 @@ impl<'a, T> Deref for GiantLockGuard<'a, T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
-        self.inner
+        // Safety: Holding a GiantLockGuardMut means that the giant lock is
+        //         held and the runtime borrow checker checked that there's
+        //         no other mutable reference to the inner value.
+        unsafe { &*self.inner }
     }
 }
 
 impl<'a, T> DerefMut for GiantLockGuard<'a, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        self.inner
+        // Safety: Holding a GiantLockGuardMut means that the giant lock is
+        //         held and the runtime borrow checker checked that there's
+        //         no other mutable reference to the inner value.
+        unsafe { &mut *self.inner }
     }
 }
 

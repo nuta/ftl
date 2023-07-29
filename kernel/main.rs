@@ -15,7 +15,7 @@ use crate::{
     arch::{PageTable, PAGE_SIZE},
     memory_pool::memory_pool_mut,
     process::Process,
-    ref_count::{SharedRef, UniqueRef},
+    ref_count::{SharedRef, UniqueRef}, address::{UAddr, PAddr},
 };
 
 #[macro_use]
@@ -99,6 +99,13 @@ pub fn kernel_main() {
         pool.initialize_process(vaddr, PAGE_SIZE, pagetable)
             .unwrap()
     });
+
+    let mut fs = bootfs::Bootfs::load();
+    let file = fs.find_by_name("hello").unwrap();
+
+    fn map_page(pt: &UniqueRef<PageTable>, uaddr: UAddr, paddr: PAddr) {
+        // pt.map_table(uaddr, table);
+    }
 
     memory::allocate_all_pages();
 
