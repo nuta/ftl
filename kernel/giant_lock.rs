@@ -136,8 +136,17 @@ impl<'a, T> GiantLockGuard<'a, T> {
     where
         F: FnOnce(& mut T) -> & mut U,
     {
+        // Safety: Holding a GiantLockGuard means that the giant lock is
+        //         held and the runtime borrow checker checked that there's
+        //         no other mutable reference to the inner value.
         let inner = f(unsafe { &mut *guard.inner });
         let tracker = guard.tracker;
+
+        // Create a new guard object and forget the old one, i.e. don't
+        // call the destructor for the old one.
+        //
+        // The destructor will behave in the same way for U as it does for T. In
+        // both cases, the tracker will mark the lock as not borrowed.
         mem::forget(guard);
         GiantLockGuard {
             inner,
@@ -150,7 +159,7 @@ impl<'a, T> Deref for GiantLockGuard<'a, T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
-        // Safety: Holding a GiantLockGuardMut means that the giant lock is
+        // Safety: Holding a GiantLockGuard means that the giant lock is
         //         held and the runtime borrow checker checked that there's
         //         no other mutable reference to the inner value.
         unsafe { &*self.inner }
@@ -159,7 +168,7 @@ impl<'a, T> Deref for GiantLockGuard<'a, T> {
 
 impl<'a, T> DerefMut for GiantLockGuard<'a, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        // Safety: Holding a GiantLockGuardMut means that the giant lock is
+        // Safety: Holding a GiantLockGuard means that the giant lock is
         //         held and the runtime borrow checker checked that there's
         //         no other mutable reference to the inner value.
         unsafe { &mut *self.inner }
