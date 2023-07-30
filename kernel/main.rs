@@ -6,6 +6,7 @@
 #![feature(offset_of)]
 #![feature(custom_test_frameworks)]
 #![feature(const_mut_refs)]
+#![feature(strict_provenance)]
 #![test_runner(crate::test::test_runner)]
 #![reexport_test_harness_main = "test_main"]
 #![allow(unused)]

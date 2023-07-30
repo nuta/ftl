@@ -131,11 +131,11 @@ pub struct SharedRef<T> {
 
 impl<T> SharedRef<T> {
     pub fn new(inner: &mut SharedRefInner<T>) -> SharedRef<T> {
-        // Safety: `inner` is a valid pointer.
+        // SAFETY: `inner` is a valid pointer.
         let ptr = unsafe { NonNull::new_unchecked(inner as *mut _) };
         let sref = SharedRef { ptr };
 
-        // Safety: The destructor of `sref` will decrement the reference
+        // SAFETY: The destructor of `sref` will decrement the reference
         //         counter.
         unsafe {
             sref.borrow_inner_mut().inc_ref();
@@ -148,11 +148,13 @@ impl<T> SharedRef<T> {
         (unsafe { self.ptr.as_ref() }).lock.borrow_mut()
     }
 
-    pub fn paddr(&self) -> PAddr {
-        todo!()
-    }
+    /// Returns the physical address of the object value.
+    pub fn paddr(this: &SharedRef<T>) -> PAddr {
+        let nonnull = unsafe {
+            &*this.borrow_inner_mut().as_mut()
+        };
 
-    pub unsafe fn from_paddr(paddr: PAddr) -> Option<SharedRef<T>> {
+        let vaddr = VAddr::from_nonzero_usize(nonnull.addr());
         todo!()
     }
 
@@ -164,7 +166,7 @@ impl<T> SharedRef<T> {
         GiantLockGuard::map(self.borrow_inner_mut(), |rc| {
             debug_assert!(rc.counter > 0);
 
-            // Safety: GiantLockGuard ensures that only one thread can access
+            // SAFETY: GiantLockGuard ensures that only one thread can access
             //         the inner value at a time.
             unsafe { rc.object.as_mut() }
         })
@@ -172,7 +174,7 @@ impl<T> SharedRef<T> {
 
     /// Duplicates the reference.
     pub fn inc_ref(this: &SharedRef<T>) -> SharedRef<T> {
-        // Safety: The destructor of `SharedRef` will decrement the reference
+        // SAFETY: The destructor of `SharedRef` will decrement the reference
         //         counter.
         unsafe {
             this.borrow_inner_mut().inc_ref();
@@ -182,13 +184,13 @@ impl<T> SharedRef<T> {
     }
 
     pub unsafe fn dec_ref(this: &SharedRef<T>) {
-        // Safety: The caller must ensure that it will not use the reference
+        // SAFETY: The caller must ensure that it will not use the reference
         //         after calling this method.
         this.borrow_inner_mut().dec_ref();
     }
 
     pub unsafe fn leak(this: SharedRef<T>) {
-        // Safety: The caller must ensure that it will
+        // SAFETY: The caller must ensure that it will
         mem::forget(this);
     }
 }
@@ -199,7 +201,7 @@ impl<T> Drop for SharedRef<T> {
         if rc.dec_ref() {
             // The reference counter reached zero. Free the memory.
             //
-            // Safety: This reference was the last one, so we can safely
+            // SAFETY: This reference was the last one, so we can safely
             //         free the memory.
             unsafe {
                 let vaddr = VAddr::new(rc.object.as_ptr() as usize);
@@ -246,7 +248,7 @@ impl<T> Deref for UniqueRef<T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
-        // Safety: The compiler guarantees the pointer is still alive and no
+        // SAFETY: The compiler guarantees the pointer is still alive and no
         //         mutable reference exists.
         unsafe { self.object.as_ref() }
     }
@@ -254,7 +256,7 @@ impl<T> Deref for UniqueRef<T> {
 
 impl<T> DerefMut for UniqueRef<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        // Safety: The compiler guarantees the pointer is still alive and no
+        // SAFETY: The compiler guarantees the pointer is still alive and no
         //         other references exist because this method requires `&mut self`.
         unsafe { self.object.as_mut() }
     }
@@ -262,7 +264,7 @@ impl<T> DerefMut for UniqueRef<T> {
 
 impl<T> Drop for UniqueRef<T> {
     fn drop(&mut self) {
-        // Safety: The check in `UniqueRef::new` ensures that this is the last
+        // SAFETY: The check in `UniqueRef::new` ensures that this is the last
         //         reference.
         unsafe {
             let vaddr = VAddr::new(self.object.as_ptr() as usize);

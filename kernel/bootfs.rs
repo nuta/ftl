@@ -36,7 +36,7 @@ impl Bootfs {
     pub fn load() -> Bootfs {
         let image = BOOTFS_IMAGE.0.as_ptr();
 
-        // Safety: PageAligned guarantees that the data is correctly aligned.
+        // SAFETY: PageAligned guarantees that the data is correctly aligned.
         let header = unsafe { &*(image as *const BootfsHeader) };
         assert_eq!(header.magic, bootfs::BOOTFS_MAGIC);
 
@@ -48,7 +48,7 @@ impl Bootfs {
         };
 
         for entry in entries {
-            // Safety: We assume the mkbootfs tool correctly generated the image.
+            // SAFETY: We assume the mkbootfs tool correctly generated the image.
             let name = unsafe { cstr2str(&entry.name) };
             println!("bootfs: found entry \"{}\"", name);
         }
@@ -59,10 +59,10 @@ impl Bootfs {
     pub fn find_by_name(&self, name: &str) -> Option<BootfsFile> {
         for entry in self.entries {
             // TODO: Avoid converting to `&str` every time.
-            // Safety: We assume the mkbootfs tool correctly generated the image.
+            // SAFETY: We assume the mkbootfs tool correctly generated the image.
             if unsafe { cstr2str(&entry.name) } == name {
                 let image = BOOTFS_IMAGE.0.as_ptr();
-                // Safety: We assume the mkbootfs tool correctly generated the image.
+                // SAFETY: We assume the mkbootfs tool correctly generated the image.
                 let data = unsafe {
                     slice::from_raw_parts(
                         image.add(entry.offset as usize),

@@ -2,7 +2,7 @@ use bitfields::{bitfields, B10, B2, B44};
 
 use crate::{
     address::{PAddr, UAddr},
-    ref_count::SharedRef,
+    ref_count::SharedRef, memory_pool::memory_pool_mut,
 };
 
 /// The number of entries in a page table in any level.
@@ -100,7 +100,7 @@ impl PageTable {
 
         self.entries[uaddr.vpn3()] = pte;
 
-        // Safety: We'll drop the reference count when unmapping the page table
+        // SAFETY: We'll drop the reference count when unmapping the page table
         //         entry.
         unsafe {
             SharedRef::leak(table);
@@ -114,7 +114,7 @@ impl Drop for PageTable {
             if entry.valid() {
                 let paddr = PAddr::new((entry.ppn() << 10) as usize);
 
-                // Safety: map_table() requires a corresponding SharedRef
+                // SAFETY: map_table() requires a corresponding SharedRef
                 //         when mapping the entry. Also, we deliberately
                 //         leaked the reference count then. Thus, we can
                 //         safely reconstruct the SharedRef without
@@ -123,8 +123,10 @@ impl Drop for PageTable {
                     if entry.is_leaf_entry() {
                         unimplemented!("huge page")
                     } else {
-                        SharedRef::<SubPageTableL1>::from_paddr(paddr)
-                            .unwrap_unchecked()
+                        todo!();
+                        // match paddr_to_object(paddr) {
+                        //     Frame
+                        // }
                     }
                 };
 

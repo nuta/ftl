@@ -79,7 +79,7 @@ impl<T: CpuLocalable + 'static> InitialValue<T> {
     }
 }
 
-/// Safety: It's safe to read the initial value from any CPU.
+/// SAFETY: It's safe to read the initial value from any CPU.
 unsafe impl<T: CpuLocalable + 'static> Sync for InitialValue<T> {}
 
 pub struct CpuLocal<T: CpuLocalable + 'static> {
@@ -118,7 +118,7 @@ impl<T: CpuLocalable + 'static> Deref for CpuLocal<T> {
     }
 }
 
-// Safety: It is safe to access the CPU-local variables from any CPU
+// SAFETY: It is safe to access the CPU-local variables from any CPU
 //         because each CPU has its own CPU-local variables.
 unsafe impl<T: CpuLocalable + 'static> Sync for CpuLocal<T> {}
 

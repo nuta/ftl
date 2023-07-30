@@ -114,7 +114,7 @@ impl<T> GiantLock<T> {
     }
 }
 
-// Safety: The giant lock ensures that the inner value will be accessible at
+// SAFETY: The giant lock ensures that the inner value will be accessible at
 //         most one CPU (or thread) at a time.
 unsafe impl<T> Sync for GiantLock<T> {}
 
@@ -136,7 +136,7 @@ impl<'a, T> GiantLockGuard<'a, T> {
     where
         F: FnOnce(& mut T) -> & mut U,
     {
-        // Safety: Holding a GiantLockGuard means that the giant lock is
+        // SAFETY: Holding a GiantLockGuard means that the giant lock is
         //         held and the runtime borrow checker checked that there's
         //         no other mutable reference to the inner value.
         let inner = f(unsafe { &mut *guard.inner });
@@ -159,7 +159,7 @@ impl<'a, T> Deref for GiantLockGuard<'a, T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
-        // Safety: Holding a GiantLockGuard means that the giant lock is
+        // SAFETY: Holding a GiantLockGuard means that the giant lock is
         //         held and the runtime borrow checker checked that there's
         //         no other mutable reference to the inner value.
         unsafe { &*self.inner }
@@ -168,7 +168,7 @@ impl<'a, T> Deref for GiantLockGuard<'a, T> {
 
 impl<'a, T> DerefMut for GiantLockGuard<'a, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        // Safety: Holding a GiantLockGuard means that the giant lock is
+        // SAFETY: Holding a GiantLockGuard means that the giant lock is
         //         held and the runtime borrow checker checked that there's
         //         no other mutable reference to the inner value.
         unsafe { &mut *self.inner }

@@ -219,14 +219,14 @@ impl MemoryPool {
             len,
             || PageTable::new(),
             |object| {
-                // Safety: We'll create a SharedRef for this below.
+                // SAFETY: We'll create a SharedRef for this below.
                 Frame::PageTable(unsafe { SharedRefInner::new(object) })
             },
         )?;
 
         let sref = match first_frame {
             Frame::PageTable(ref mut inner) => SharedRef::new(inner),
-            // Safety: We just filled the first frame above.
+            // SAFETY: We just filled the first frame above.
             _ => unsafe { unreachable_unchecked() },
         };
 
@@ -247,12 +247,4 @@ static MEMORY_POOL: Option<GiantLock<MemoryPool>> = None;
 
 pub fn memory_pool_mut(vaddr: VAddr) -> Option<&'static GiantLock<MemoryPool>> {
     MEMORY_POOL.as_ref()
-}
-
-fn find_frame_by_vaddr(vaddr: VAddr) -> Option<&'static Frame> {
-    todo!()
-}
-
-pub fn retype_frames_as_unused(vaddr: VAddr, num_pages: usize) {
-    todo!();
 }
