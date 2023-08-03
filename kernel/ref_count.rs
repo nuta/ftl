@@ -127,12 +127,12 @@ pub struct SharedRef<T> {
 }
 
 impl<T> SharedRef<T> {
-    pub fn new(inner: &SharedObject<T>) -> SharedRef<T> {
+    pub fn new(object: &SharedObject<T>) -> SharedRef<T> {
         // FIXME: Who initializes SharedObject?
 
-        // SAFETY: `inner` is a valid pointer.
+        // SAFETY: `object` is a valid pointer.
         let ptr =
-            unsafe { NonNull::new_unchecked(inner as *const _ as *mut _) };
+            unsafe { NonNull::new_unchecked(object as *const _ as *mut _) };
         let sref = SharedRef { ptr };
 
         // SAFETY: The destructor of `sref` will decrement the reference

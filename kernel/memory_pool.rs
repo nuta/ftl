@@ -225,7 +225,7 @@ impl MemoryPool {
         )?;
 
         let sref = match first_frame {
-            Frame::PageTable(inner) => SharedRef::new(inner),
+            Frame::PageTable(object) => SharedRef::new(object),
             // SAFETY: We just filled the first frame above.
             _ => unsafe { unreachable_unchecked() },
         };
