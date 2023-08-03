@@ -7,11 +7,11 @@ use core::{
 };
 
 use crate::{
-    address::VAddr,
+    address::{PAddr, VAddr},
     arch::{PageTable, PAGE_SIZE},
     giant_lock::{GiantLock, GiantLockGuard},
     process::Process,
-    ref_count::{SharedRef, SharedRefInner, UniqueRef},
+    ref_count::{SharedRef, SharedObject, UniqueRef},
 };
 use essentials::{
     alignment::{align_up, is_aligned},
@@ -19,7 +19,7 @@ use essentials::{
 };
 
 /// A page frame.
-enum Frame {
+pub enum Frame {
     /// A frame that is not being used.
     Unused,
     /// Not available. Used by kernel or reserved by hardware.
@@ -32,9 +32,9 @@ enum Frame {
         tail: bool,
     },
     /// Page table.
-    PageTable(SharedRefInner<PageTable>),
+    PageTable(SharedObject<PageTable>),
     /// Process.
-    Process(SharedRefInner<Process>),
+    Process(SharedObject<Process>),
 }
 
 const fn object_size<T>() -> usize {
@@ -220,12 +220,12 @@ impl MemoryPool {
             || PageTable::new(),
             |object| {
                 // SAFETY: We'll create a SharedRef for this below.
-                Frame::PageTable(unsafe { SharedRefInner::new(object) })
+                Frame::PageTable(unsafe { SharedObject::new(object) })
             },
         )?;
 
         let sref = match first_frame {
-            Frame::PageTable(ref mut inner) => SharedRef::new(inner),
+            Frame::PageTable( inner) => SharedRef::new(inner),
             // SAFETY: We just filled the first frame above.
             _ => unsafe { unreachable_unchecked() },
         };
@@ -247,4 +247,12 @@ static MEMORY_POOL: Option<GiantLock<MemoryPool>> = None;
 
 pub fn memory_pool_mut(vaddr: VAddr) -> Option<&'static GiantLock<MemoryPool>> {
     MEMORY_POOL.as_ref()
+}
+
+pub fn paddr2frame(paddr: PAddr) -> Option<GiantLockGuard<'static, Frame>> {
+    let vaddr = paddr.vaddr()?;
+    let pool = memory_pool_mut(vaddr)?;
+    let guard = pool.borrow_mut();
+    let index = guard.frame_index(vaddr)?;
+    Some(GiantLockGuard::map(guard, |pool| &mut pool.frames[index]))
 }

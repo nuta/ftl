@@ -44,9 +44,8 @@ impl<T> RefCounted<T> {
     /// The caller must ensure tracking the reference and decrementing the
     /// reference counter when dropping the reference.
     unsafe fn inc_ref(&mut self) {
-        self.counter += 1;
-
         // TODO: Should we handle overflow?
+        self.counter += 1;
     }
 
     /// Decrements the reference counter and returns `true` if the counter reaches
@@ -91,21 +90,21 @@ impl<T> RefCounted<T> {
 /// In short, consider this as `ArcMutex<T>`, i.e. integrating `Arc` and `Mutex`
 /// deeply into a single useful object ([`SharedRef<T>`]).
 #[repr(transparent)]
-pub struct SharedRefInner<T> {
+pub struct SharedObject<T> {
     lock: GiantLock<RefCounted<NonNull<T>>>,
 }
 
-// Make sure `SharedRefInner<T>`'s layout is the same regardless of `T`.
+// Make sure `SharedObject<T>`'s layout is the same regardless of `T`.
 static_assert!(
-    size_of::<SharedRefInner::<()>>()
-        == size_of::<SharedRefInner::<[u8; 512]>>()
+    size_of::<SharedObject::<()>>()
+        == size_of::<SharedObject::<[u8; 512]>>()
 );
 static_assert!(
-    align_of::<SharedRefInner::<()>>()
-        == align_of::<SharedRefInner::<[u8; 512]>>()
+    align_of::<SharedObject::<()>>()
+        == align_of::<SharedObject::<[u8; 512]>>()
 );
 
-impl<T> SharedRefInner<T> {
+impl<T> SharedObject<T> {
     /// Creates a new reference-counted object.
     ///
     /// # Safety
@@ -113,8 +112,8 @@ impl<T> SharedRefInner<T> {
     /// The caller must create at least one reference to the inner value
     /// right after calling this function. The initial reference count is
     /// zero and it's UB to drop the object with zero references.
-    pub unsafe fn new(value: NonNull<T>) -> SharedRefInner<T> {
-        SharedRefInner {
+    pub unsafe fn new(value: NonNull<T>) -> SharedObject<T> {
+        SharedObject {
             lock: GiantLock::new(RefCounted::new(value)),
         }
     }
@@ -126,13 +125,15 @@ impl<T> SharedRefInner<T> {
 /// inner value by reference couting, and allows mutable access to the inner
 /// value by big kernel lock + runtime borrow checking.
 pub struct SharedRef<T> {
-    ptr: NonNull<SharedRefInner<T>>,
+    ptr: NonNull<SharedObject<T>>,
 }
 
 impl<T> SharedRef<T> {
-    pub fn new(inner: &mut SharedRefInner<T>) -> SharedRef<T> {
+    pub fn new(inner: &SharedObject<T>) -> SharedRef<T> {
+        // FIXME: Who initializes SharedObject?
+
         // SAFETY: `inner` is a valid pointer.
-        let ptr = unsafe { NonNull::new_unchecked(inner as *mut _) };
+        let ptr = unsafe { NonNull::new_unchecked(inner as *const _ as *mut _) };
         let sref = SharedRef { ptr };
 
         // SAFETY: The destructor of `sref` will decrement the reference
@@ -150,9 +151,7 @@ impl<T> SharedRef<T> {
 
     /// Returns the physical address of the object value.
     pub fn paddr(this: &SharedRef<T>) -> PAddr {
-        let nonnull = unsafe {
-            &*this.borrow_inner_mut().as_mut()
-        };
+        let nonnull = unsafe { &*this.borrow_inner_mut().as_mut() };
 
         let vaddr = VAddr::from_nonzero_usize(nonnull.addr());
         todo!()

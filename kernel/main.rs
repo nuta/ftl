@@ -13,10 +13,11 @@
 #![allow(unused_variables)]
 
 use crate::{
+    address::{PAddr, UAddr},
     arch::{PageTable, PAGE_SIZE},
     memory_pool::memory_pool_mut,
     process::Process,
-    ref_count::{SharedRef, UniqueRef}, address::{UAddr, PAddr},
+    ref_count::{SharedRef, UniqueRef},
 };
 
 #[macro_use]
@@ -71,8 +72,8 @@ pub fn kernel_main() {
     );
     println!(
         "size_of::<SharedRefHeader>(): {} (align={})",
-        size_of::<ref_count::SharedRefInner::<u8>>(),
-        core::mem::align_of::<ref_count::SharedRefInner::<u8>>()
+        size_of::<ref_count::SharedObject::<u8>>(),
+        core::mem::align_of::<ref_count::SharedObject::<u8>>()
     );
 
     // unsafe extern "C" fn first_user_program() {

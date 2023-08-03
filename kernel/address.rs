@@ -171,6 +171,14 @@ impl PAddr {
     pub const fn as_usize(self) -> usize {
         self.0.get()
     }
+
+    /// Tries to convert this address to a virtual address.
+    ///
+    /// If this address is not mapped in the page table, this returns `None`.
+    #[inline]
+    pub fn vaddr(self) -> Option<VAddr> {
+        arch::paddr2vaddr(self)
+    }
 }
 
 /// A non-NULL virtual address, including user-space addresses.

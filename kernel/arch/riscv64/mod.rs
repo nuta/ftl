@@ -9,6 +9,8 @@ pub const PAGE_SIZE: usize = 4096;
 pub use page_table::PageTable;
 pub use thread::Context;
 
+use crate::address::{PAddr, VAddr};
+
 pub fn read_cpulocal_base() -> usize {
     let tp: usize;
     unsafe {
@@ -32,6 +34,10 @@ pub fn owns_giant_lock() -> bool {
 pub const fn is_valid_vaddr(addr: usize) -> bool {
     // FIXME:
     0x80000000 <= addr
+}
+
+pub fn paddr2vaddr(paddr: PAddr) -> Option<VAddr> {
+    todo!()
 }
 
 // pub fn read_cpu_cycles() -> usize {

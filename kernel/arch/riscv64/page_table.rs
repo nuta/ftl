@@ -2,7 +2,8 @@ use bitfields::{bitfields, B10, B2, B44};
 
 use crate::{
     address::{PAddr, UAddr},
-    ref_count::SharedRef, memory_pool::memory_pool_mut,
+    memory_pool::{memory_pool_mut, paddr2frame, Frame},
+    ref_count::SharedRef,
 };
 
 /// The number of entries in a page table in any level.
@@ -123,10 +124,15 @@ impl Drop for PageTable {
                     if entry.is_leaf_entry() {
                         unimplemented!("huge page")
                     } else {
-                        todo!();
-                        // match paddr_to_object(paddr) {
-                        //     Frame
-                        // }
+                        match paddr2frame(paddr) {
+                            Some(frame) => match *frame {
+                                Frame::PageTable(ref inner) => {
+                                    SharedRef::new(inner)
+                                }
+                                _ => unreachable!(),
+                            },
+                            _ => unreachable!(),
+                        }
                     }
                 };
 

@@ -134,7 +134,7 @@ impl<'a, T> GiantLockGuard<'a, T> {
         f: F,
     ) -> GiantLockGuard<'a, U>
     where
-        F: FnOnce(& mut T) -> & mut U,
+        F: FnOnce(&mut T) -> &mut U,
     {
         // SAFETY: Holding a GiantLockGuard means that the giant lock is
         //         held and the runtime borrow checker checked that there's
@@ -148,10 +148,7 @@ impl<'a, T> GiantLockGuard<'a, T> {
         // The destructor will behave in the same way for U as it does for T. In
         // both cases, the tracker will mark the lock as not borrowed.
         mem::forget(guard);
-        GiantLockGuard {
-            inner,
-            tracker,
-        }
+        GiantLockGuard { inner, tracker }
     }
 }
 
