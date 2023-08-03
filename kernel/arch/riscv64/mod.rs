@@ -40,6 +40,10 @@ pub fn paddr2vaddr(paddr: PAddr) -> Option<VAddr> {
     todo!()
 }
 
+pub fn vaddr2paddr(vaddr: VAddr) -> PAddr {
+    todo!()
+}
+
 // pub fn read_cpu_cycles() -> usize {
 //     rdcycle() as usize
 // }

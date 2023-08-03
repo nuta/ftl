@@ -54,13 +54,13 @@ use crate::{
 ///   object explicitly through a system call (lmk if you find a counter-example!).
 struct RefCounted<T> {
     counter: usize,
-    object: T,
+    inner: T,
 }
 
 impl<T> RefCounted<T> {
     /// Creates a reference counted object.
-    const fn new(object: T) -> RefCounted<T> {
-        RefCounted { counter: 0, object }
+    const fn new(inner: T) -> RefCounted<T> {
+        RefCounted { counter: 0, inner: inner }
     }
 
     /// Increments the reference counter.
@@ -94,7 +94,7 @@ impl<T> RefCounted<T> {
     /// The caller must ensure no other reference to the inner value exists,
     /// e.g. by locking the kernel.
     unsafe fn as_mut(&mut self) -> *mut T {
-        &mut self.object
+        &mut self.inner
     }
 }
 
@@ -153,9 +153,8 @@ pub struct SharedRef<T> {
 }
 
 impl<T> SharedRef<T> {
+    // TODO: Should we make this `unsafe`?
     pub fn new(object: &SharedObject<T>) -> SharedRef<T> {
-        // FIXME: Who initializes SharedObject?
-
         // SAFETY: `object` is a valid pointer.
         let ptr =
             unsafe { NonNull::new_unchecked(object as *const _ as *mut _) };
@@ -176,10 +175,9 @@ impl<T> SharedRef<T> {
 
     /// Returns the physical address of the object value.
     pub fn paddr(this: &SharedRef<T>) -> PAddr {
-        let nonnull = unsafe { &*this.borrow_inner_mut().as_mut() };
-
-        let vaddr = VAddr::from_nonzero_usize(nonnull.addr());
-        todo!()
+        let object = this.borrow_inner_mut();
+        let vaddr = VAddr::from_nonzero_usize(object.inner.addr());
+        arch::vaddr2paddr(vaddr)
     }
 
     /// Returns the mutable reference.
@@ -192,7 +190,7 @@ impl<T> SharedRef<T> {
 
             // SAFETY: GiantLockGuard ensures that only one thread can access
             //         the inner value at a time.
-            unsafe { rc.object.as_mut() }
+            unsafe { rc.inner.as_mut() }
         })
     }
 
@@ -228,7 +226,7 @@ impl<T> Drop for SharedRef<T> {
             // SAFETY: This reference was the last one, so we can safely
             //         free the memory.
             unsafe {
-                let vaddr = VAddr::new(rc.object.as_ptr() as usize);
+                let vaddr = VAddr::new(rc.inner.as_ptr() as usize);
 
                 // We should not keep the borrow guard to prevent use-after-free.
                 drop(rc);
@@ -263,7 +261,7 @@ impl<T> UniqueRef<T> {
         }
 
         Some(UniqueRef {
-            object: sref.object,
+            object: sref.inner,
         })
     }
 }
