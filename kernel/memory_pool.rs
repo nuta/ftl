@@ -11,7 +11,7 @@ use crate::{
     arch::{PageTable, PAGE_SIZE},
     giant_lock::{GiantLock, GiantLockGuard},
     process::Process,
-    ref_count::{SharedRef, SharedObject, UniqueRef},
+    ref_count::{SharedObject, SharedRef, UniqueRef},
 };
 use essentials::{
     alignment::{align_up, is_aligned},
@@ -225,7 +225,7 @@ impl MemoryPool {
         )?;
 
         let sref = match first_frame {
-            Frame::PageTable( inner) => SharedRef::new(inner),
+            Frame::PageTable(inner) => SharedRef::new(inner),
             // SAFETY: We just filled the first frame above.
             _ => unsafe { unreachable_unchecked() },
         };

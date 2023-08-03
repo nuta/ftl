@@ -96,12 +96,10 @@ pub struct SharedObject<T> {
 
 // Make sure `SharedObject<T>`'s layout is the same regardless of `T`.
 static_assert!(
-    size_of::<SharedObject::<()>>()
-        == size_of::<SharedObject::<[u8; 512]>>()
+    size_of::<SharedObject::<()>>() == size_of::<SharedObject::<[u8; 512]>>()
 );
 static_assert!(
-    align_of::<SharedObject::<()>>()
-        == align_of::<SharedObject::<[u8; 512]>>()
+    align_of::<SharedObject::<()>>() == align_of::<SharedObject::<[u8; 512]>>()
 );
 
 impl<T> SharedObject<T> {
@@ -133,7 +131,8 @@ impl<T> SharedRef<T> {
         // FIXME: Who initializes SharedObject?
 
         // SAFETY: `inner` is a valid pointer.
-        let ptr = unsafe { NonNull::new_unchecked(inner as *const _ as *mut _) };
+        let ptr =
+            unsafe { NonNull::new_unchecked(inner as *const _ as *mut _) };
         let sref = SharedRef { ptr };
 
         // SAFETY: The destructor of `sref` will decrement the reference
