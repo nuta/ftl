@@ -1,3 +1,29 @@
+//! Reference counting.
+//!
+//! # Relationships
+//!
+//! - `SharedRef<T>`: A reference-counted reference(s). Akin to `Arc<T>` in standard library.
+//! - `SharedObject<T>`: A metadata container for `T`.
+//!
+//! ```text
+//!
+//!    SharedRef<T>            SharedObject<T>              T
+//!  +--------------+        +----------------+        +----------+
+//! +--------------+|        |      ptr       | -----> |    T     |
+//! |     ptr      ||  ----> |   ref counter  |        +----------+
+//! +--------------+         | borrow checker |
+//!                          +----------------+
+//!
+//! ```
+//!
+//! ## Why `SharedObject<T>` does not contain `T` itself?
+//!
+//! Because `T` can be a page-size-aligned object (e.g. page table) or
+//! user-accessible pages, we cannot add reference counter in the same page.
+//!
+//! Instead, we extract the reference counter and the borrow checker from `T`
+//! and put them in `SharedObject<T>`, which is stored in page metadata ([`Frame`]).
+
 use core::{
     mem::{self, align_of, size_of, MaybeUninit},
     ops::{Deref, DerefMut},
