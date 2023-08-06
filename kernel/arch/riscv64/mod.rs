@@ -43,7 +43,9 @@ pub fn paddr2vaddr(paddr: PAddr) -> Option<VAddr> {
 }
 
 pub fn vaddr2paddr(vaddr: VAddr) -> PAddr {
-    todo!()
+    debug_assert!(vaddr.as_usize() > 0x80000000);
+    debug_assert!(vaddr.as_usize() < 0x84000000); // FIXME: use kernel-mapped region
+    PAddr::new(vaddr.as_usize())
 }
 
 // pub fn read_cpu_cycles() -> usize {

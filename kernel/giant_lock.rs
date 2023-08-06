@@ -41,7 +41,7 @@ impl LockTracker {
             // borrowed and it indicates a bug in the kernel (multiple mutable
             // references).
             panic!(
-                "giant lock is already borrowed at {}",
+                "already borrowed at {}",
                 self.locked_at.take().unwrap()
             );
         }
