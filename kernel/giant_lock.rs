@@ -30,6 +30,7 @@ impl LockTracker {
         }
     }
 
+    #[track_caller]
     fn acquire(&self, locked_at: &'static panic::Location<'static>) {
         if self
             .lock

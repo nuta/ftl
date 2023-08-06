@@ -76,7 +76,7 @@ impl MemoryPool {
         debug_assert!(is_aligned(vaddr.as_usize(), PAGE_SIZE));
         debug_assert!(is_aligned(len, PAGE_SIZE));
 
-        let num_frames = len / size_of::<Frame>();
+        let num_frames = len / PAGE_SIZE;
         if num_frames * size_of::<Frame>() >= len {
             return None;
         }
@@ -87,7 +87,7 @@ impl MemoryPool {
 
         // FIXME: Optimize this initialization. We need something like memset.
         let num_control_frames =
-            align_up(len * size_of::<Frame>(), PAGE_SIZE) / PAGE_SIZE;
+            align_up(num_frames * size_of::<Frame>(), PAGE_SIZE) / PAGE_SIZE;
         for frame in &mut frames[0..num_control_frames] {
             *frame = Frame::Reserved;
         }

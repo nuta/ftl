@@ -40,3 +40,12 @@ macro_rules! println {
         $crate::print!(concat!($fmt, "\n"), $($args)*);
     }};
 }
+
+/// Dumps the given value.
+#[macro_export]
+macro_rules! dump {
+    ($val:expr) => {{
+        let value = $val;
+        $crate::print!(concat!("{}:{}: ", stringify!($val), " = {:#?}\n"), file!(), line!(), value);
+    }};
+}

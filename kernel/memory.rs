@@ -117,25 +117,31 @@ pub fn init() {
     unsafe {
         let free_ram_start = addr_of!(__free_ram) as usize;
         let free_ram_end = addr_of!(__free_ram_end) as usize;
+        println!("free ram start: {:016x}", free_ram_start);
+        println!("free ram end:   {:016x}", free_ram_end);
 
         memory_pool::init(VAddr::new(free_ram_start), free_ram_end - free_ram_start);
         // TODO: What if the heap spans multiple memory pools?
         let pool = memory_pool_mut(VAddr::new(free_ram_start)).unwrap();
+
+        println!("memory region: {:016x} - {:016x}", pool.base().as_usize(), pool.base().as_usize() + pool.len());
 
         // Initialize the boot-time page allocator.
         PAGE_ALLOCATOR
             .borrow_mut()
             .add_region(pool.base().as_usize(), pool.len());
 
-        // Initialize the malloc heap.
+        // Allocate memory for the malloc heap.
         let malloc_start = PAGE_ALLOCATOR
-            .borrow_mut()
-            .allocate(MALLOC_SIZE, size_of::<usize>())
-            .map(|addr| addr.get() as *mut u8)
-            .expect("failed to allocate malloc heap");
+        .borrow_mut()
+        .allocate(MALLOC_SIZE, size_of::<usize>())
+        .map(|addr| addr.get() as *mut u8)
+        .expect("failed to allocate malloc heap");
+
+    // Initialize the malloc heap.
         HEAP_ALLOCATOR
-            .0
-            .borrow_mut()
-            .init(malloc_start, MALLOC_SIZE);
+        .0
+        .borrow_mut()
+        .init(malloc_start, MALLOC_SIZE);
     }
 }
