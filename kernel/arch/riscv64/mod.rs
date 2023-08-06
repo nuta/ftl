@@ -39,7 +39,13 @@ pub const fn is_valid_vaddr(addr: usize) -> bool {
 }
 
 pub fn paddr2vaddr(paddr: PAddr) -> Option<VAddr> {
-    todo!()
+    if paddr.as_usize() < 0x80000000 {
+        return None;
+    }
+
+    // FIXME: use kernel-mapped region
+
+    Some(VAddr::new(paddr.as_usize()))
 }
 
 pub fn vaddr2paddr(vaddr: VAddr) -> PAddr {

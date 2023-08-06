@@ -350,7 +350,23 @@ impl MemoryPool {
         len: usize,
         pagetable: UniqueRef<PageTable>,
     ) -> Result<SharedRef<Process>, RetypeError> {
-        todo!()
+        let first_frame = self.initialize(
+            vaddr,
+            len,
+            || Process::new(pagetable),
+            |object| {
+                // SAFETY: We'll create a SharedRef for this below.
+                Frame::Process(unsafe { SharedObject::new(object) })
+            },
+        )?;
+
+        let sref = match first_frame {
+            Frame::Process(object) => SharedRef::new(object),
+            // SAFETY: We just filled the first frame above.
+            _ => unsafe { unreachable_unchecked() },
+        };
+
+        Ok(sref)
     }
 }
 

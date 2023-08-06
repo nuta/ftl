@@ -153,5 +153,6 @@ pub fn kernel_main() {
 
     memory::allocate_all_pages();
 
+    println!("shutting down...");
     arch::shutdown();
 }
