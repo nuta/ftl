@@ -12,6 +12,8 @@ pub type Addr = u32;
 #[cfg(target_pointer_width = "32")]
 pub type Off = u32;
 
+#[derive(Debug)]
+#[repr(C)]
 pub struct Ehdr {
     pub e_ident: [u8; 16],
     pub e_type: u16,
@@ -31,12 +33,14 @@ pub struct Ehdr {
 
 #[repr(u32)]
 #[non_exhaustive]
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PhdrType {
     Null = 0,
     Load = 1,
 }
 
+#[derive(Debug)]
+#[repr(C)]
 pub struct Phdr64 {
     pub p_type: PhdrType,
     pub p_flags: u32,
@@ -69,6 +73,7 @@ pub enum ParseError {
     InvalidMagic,
 }
 
+#[derive(Debug)]
 pub struct Elf<'a> {
     pub ehdr: &'a Ehdr,
     pub phdrs: &'a [Phdr],
@@ -81,13 +86,12 @@ impl<'a> Elf<'a> {
         }
 
         let ehdr = unsafe { &*(buf.as_ptr() as *const Ehdr) };
-        if ehdr.e_ident[0..4] != [0x7f, 0x45, 0x4c, 0x46] {
+        if ehdr.e_ident[0..4] != [0x7f, b'E', b'L', b'F'] {
             return Err(ParseError::InvalidMagic);
         }
 
-        if buf.len()
-            < ehdr.e_phoff as usize + ehdr.e_phnum as usize * size_of::<Phdr>()
-        {
+        let phdrs_size = ehdr.e_phnum as usize * size_of::<Phdr>();
+        if buf.len() < ehdr.e_phoff as usize + phdrs_size {
             return Err(ParseError::BufferTooShort);
         }
 

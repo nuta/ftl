@@ -46,6 +46,11 @@ macro_rules! println {
 macro_rules! dump {
     ($val:expr) => {{
         let value = $val;
-        $crate::print!(concat!("{}:{}: ", stringify!($val), " = {:#?}\n"), file!(), line!(), value);
+        $crate::print!(
+            concat!("{}:{}: ", stringify!($val), " = {:#?}\n"),
+            file!(),
+            line!(),
+            value
+        );
     }};
 }

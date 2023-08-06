@@ -2,11 +2,11 @@
 
 use core::mem::size_of;
 
-// "\xbfBFS"
-pub const BOOTFS_MAGIC: u32 = 0x424653bf;
+pub const BOOTFS_MAGIC: [u8; 4] = [0xbf, b'B', b'F', b'S'];
 
+#[repr(C)]
 pub struct BootfsHeader {
-    pub magic: u32,
+    pub magic: [u8; 4],
     pub num_entries: u32,
 }
 
@@ -18,7 +18,7 @@ pub enum EntryType {
 pub const NAME_LEN_MAX: usize =
     64 - size_of::<EntryType>() - 2 * size_of::<u32>();
 
-#[repr(C, packed)]
+#[repr(C)]
 pub struct BootfsEntry {
     pub size: u32,
     pub offset: u32,
@@ -26,5 +26,3 @@ pub struct BootfsEntry {
     /// Null-terminated.
     pub name: [u8; NAME_LEN_MAX],
 }
-
-// static_assert!(size_of::<BootfsHeader>() == 64);

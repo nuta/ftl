@@ -59,6 +59,8 @@ impl LockTracker {
             // borrowed and should never happen.
             panic!("giant lock is not borrowed");
         }
+
+        self.locked_at.set(None);
     }
 }
 

@@ -9,7 +9,7 @@ use bitfields::{bitfields, B10, B2, B44};
 use crate::{
     address::{PAddr, UAddr},
     memory,
-    memory_pool::{memory_pool_mut, paddr2frame, Frame},
+    memory_pool::{paddr2frame, Frame},
     ref_count::{SharedRef, UniqueRef},
 };
 

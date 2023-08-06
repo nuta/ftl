@@ -1,7 +1,9 @@
-use std::{fs::OpenOptions, io::Write, path::Path};
+use std::{fs::OpenOptions, io::Write, mem::size_of, path::Path};
 
 use anyhow::{bail, Context, Result};
-use bootfs::{EntryType, BOOTFS_MAGIC, NAME_LEN_MAX};
+use bootfs::{
+    BootfsEntry, BootfsHeader, EntryType, BOOTFS_MAGIC, NAME_LEN_MAX,
+};
 use bytes::{BufMut, BytesMut};
 use essentials::alignment::{align_up, is_aligned};
 use glob::glob;
@@ -37,11 +39,14 @@ pub fn main(indir: &Path, outfile: &Path) -> Result<()> {
     let mut image = BytesMut::new();
 
     // BootFS header.
-    image.put_u32_le(BOOTFS_MAGIC);
+    image.put_slice(BOOTFS_MAGIC.as_slice());
     image.put_u32_le(entries.len().try_into().unwrap());
 
     // Entries.
-    let mut offset = 0;
+    let mut offset = align_up(
+        size_of::<BootfsHeader>() + entries.len() * size_of::<BootfsEntry>(),
+        4096,
+    );
     for (path, filedata, padding) in &entries {
         let name = path
             .file_name()
@@ -68,6 +73,8 @@ pub fn main(indir: &Path, outfile: &Path) -> Result<()> {
         offset += filedata.len() + padding;
         debug_assert!(is_aligned(offset, 4096));
     }
+
+    image.put_bytes(0, align_up(image.len(), 4096) - image.len());
 
     // File data.
     for (_, filedata, padding) in &entries {

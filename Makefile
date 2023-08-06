@@ -30,10 +30,16 @@ endif
 
 .PHONY: run
 run:
-	$(PROGRESS) CARGO $@
+	$(PROGRESS) CARGO apps/hello
 	RUSTFLAGS="$(RUSTFLAGS)" $(CARGO) build $(CARGOFLAGS) --target libs/user/arch/riscv64/riscv64-qemu-virt.json --manifest-path apps/hello/Cargo.toml
 	cp target/riscv64-qemu-virt/$(BUILD)/hello hello.elf
-	$(PROGRESS) CARGO $@
+
+	$(PROGRESS) MKBOOTFS bootfs.bin
+	cd devtools && cargo build --release
+	cp hello.elf bootfs/startup.elf
+	./target/release/devtools mkbootfs bootfs bootfs.bin
+
+	$(PROGRESS) CARGO kernel
 	RUSTFLAGS="$(RUSTFLAGS)" $(CARGO) build $(CARGOFLAGS) --target kernel/arch/riscv64/riscv64-qemu-virt.json --manifest-path kernel/Cargo.toml
 	cp target/riscv64-qemu-virt/$(BUILD)/kernel ftl.elf
 	$(PROGRESS) QEMU ftl.elf

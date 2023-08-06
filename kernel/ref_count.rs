@@ -233,7 +233,8 @@ impl<T> Drop for SharedRef<T> {
                 // We should not keep the borrow guard to prevent use-after-free.
                 drop(rc);
 
-                memory_pool_mut(vaddr).unwrap().free(vaddr).unwrap();
+                // FIXME:
+                // memory_pool_mut(vaddr).unwrap().free(vaddr).unwrap();
             }
         }
     }

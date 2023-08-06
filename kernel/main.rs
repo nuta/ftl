@@ -19,7 +19,6 @@ use essentials::alignment::align_up;
 use crate::{
     address::{PAddr, UAddr},
     arch::{PageTable, PAGE_SIZE},
-    memory_pool::memory_pool_mut,
     process::Process,
     ref_count::{SharedRef, UniqueRef},
 };
@@ -107,11 +106,13 @@ pub fn kernel_main() {
         });
 
     let mut fs = bootfs::Bootfs::load();
-    let file = fs.find_by_name("hello").unwrap();
+    let file = fs.find_by_name("startup.elf").unwrap();
 
     // Map recursively.
-    let elf = Elf::parse(file.data).expect("failed to parse the ELF file");
+    let elf = Elf::parse(file.data).expect("failed to parse startup.elf");
     for phdr in elf.phdrs {
+        // SAFETY: The ELF header should be aligned to 4KiB as each bootfs file is aligned to 4KiB.
+        let phdr = unsafe { core::ptr::read_unaligned(phdr) };
         if phdr.p_type != PhdrType::Load {
             continue;
         }
