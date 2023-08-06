@@ -34,7 +34,7 @@ use essentials::{alignment::align_up, static_assert};
 
 use crate::{
     address::{PAddr, VAddr},
-    arch::PAGE_SIZE,
+    arch::{self, PAGE_SIZE},
     giant_lock::{GiantLock, GiantLockGuard},
     memory_pool::memory_pool_mut,
 };
@@ -60,7 +60,10 @@ struct RefCounted<T> {
 impl<T> RefCounted<T> {
     /// Creates a reference counted object.
     const fn new(inner: T) -> RefCounted<T> {
-        RefCounted { counter: 0, inner: inner }
+        RefCounted {
+            counter: 0,
+            inner: inner,
+        }
     }
 
     /// Increments the reference counter.
@@ -169,15 +172,15 @@ impl<T> SharedRef<T> {
         sref
     }
 
-    fn borrow_inner_mut(&self) -> GiantLockGuard<'_, RefCounted<NonNull<T>>> {
-        (unsafe { self.ptr.as_ref() }).lock.borrow_mut()
-    }
-
     /// Returns the physical address of the object value.
     pub fn paddr(this: &SharedRef<T>) -> PAddr {
         let object = this.borrow_inner_mut();
         let vaddr = VAddr::from_nonzero_usize(object.inner.addr());
         arch::vaddr2paddr(vaddr)
+    }
+
+    fn borrow_inner_mut(&self) -> GiantLockGuard<'_, RefCounted<NonNull<T>>> {
+        (unsafe { self.ptr.as_ref() }).lock.borrow_mut()
     }
 
     /// Returns the mutable reference.
@@ -205,12 +208,11 @@ impl<T> SharedRef<T> {
         SharedRef { ptr: this.ptr }
     }
 
-    pub unsafe fn dec_ref(this: &SharedRef<T>) {
-        // SAFETY: The caller must ensure that it will not use the reference
-        //         after calling this method.
-        this.borrow_inner_mut().dec_ref();
-    }
-
+    /// Leaks the reference.
+    ///
+    /// # Safety
+    ///
+    /// The reference must be dropped manually.
     pub unsafe fn leak(this: SharedRef<T>) {
         // SAFETY: The caller must ensure that it will
         mem::forget(this);
@@ -260,9 +262,7 @@ impl<T> UniqueRef<T> {
             return None;
         }
 
-        Some(UniqueRef {
-            object: sref.inner,
-        })
+        Some(UniqueRef { object: sref.inner })
     }
 }
 

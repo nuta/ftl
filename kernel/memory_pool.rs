@@ -8,7 +8,9 @@ use core::{
 
 use crate::{
     address::{PAddr, VAddr},
-    arch::{PageTable, PAGE_SIZE},
+    arch::{
+        Page4K, PageTable, PageTableL0, PageTableL1, PageTableL2, PAGE_SIZE,
+    },
     giant_lock::{GiantLock, GiantLockGuard},
     process::Process,
     ref_count::{SharedObject, SharedRef, UniqueRef},
@@ -33,6 +35,10 @@ pub enum Frame {
     },
     /// Page table.
     PageTable(SharedObject<PageTable>),
+    PageTableL2(SharedObject<PageTableL2>),
+    PageTableL1(SharedObject<PageTableL1>),
+    PageTableL0(SharedObject<PageTableL0>),
+    Page4K(SharedObject<Page4K>),
     /// Process.
     Process(SharedObject<Process>),
 }
@@ -226,6 +232,30 @@ impl MemoryPool {
 
         let sref = match first_frame {
             Frame::PageTable(object) => SharedRef::new(object),
+            // SAFETY: We just filled the first frame above.
+            _ => unsafe { unreachable_unchecked() },
+        };
+
+        Ok(sref)
+    }
+
+    pub fn initialize_page_table_l2(
+        &mut self,
+        vaddr: VAddr,
+        len: usize,
+    ) -> Result<SharedRef<PageTableL2>, RetypeError> {
+        let first_frame = self.initialize(
+            vaddr,
+            len,
+            || PageTableL2::new(),
+            |object| {
+                // SAFETY: We'll create a SharedRef for this below.
+                Frame::PageTableL2(unsafe { SharedObject::new(object) })
+            },
+        )?;
+
+        let sref = match first_frame {
+            Frame::PageTableL2(object) => SharedRef::new(object),
             // SAFETY: We just filled the first frame above.
             _ => unsafe { unreachable_unchecked() },
         };

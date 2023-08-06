@@ -1,10 +1,19 @@
+//! Sv48 page table.
+use core::{
+    borrow::{Borrow, BorrowMut},
+    ops::DerefMut,
+};
+
 use bitfields::{bitfields, B10, B2, B44};
 
 use crate::{
     address::{PAddr, UAddr},
+    memory,
     memory_pool::{memory_pool_mut, paddr2frame, Frame},
-    ref_count::SharedRef,
+    ref_count::{SharedRef, UniqueRef},
 };
+
+use super::PAGE_SIZE;
 
 /// The number of entries in a page table in any level.
 const ENTRIES_PER_TABLE: usize = 512;
@@ -51,6 +60,10 @@ impl Pte {
     pub fn is_leaf_entry(&self) -> bool {
         self.readable() || self.writable() || self.executable()
     }
+
+    pub fn paddr(&self) -> PAddr {
+        PAddr::new((self.ppn() as usize) << 12)
+    }
 }
 
 impl UAddr {
@@ -71,12 +84,20 @@ impl UAddr {
     }
 }
 
-/// Page table.
-pub struct PageTable {
+pub struct Page4K {
+    pub bytes: [u8; 4096],
+}
+
+pub enum TableOrLeaf {
+    Table(Pte),
+    Leaf(Pte),
+}
+
+pub struct RawPageTable<const LEVEL: usize> {
     entries: [Pte; ENTRIES_PER_TABLE],
 }
 
-impl PageTable {
+impl<const LEVEL: usize> RawPageTable<LEVEL> {
     pub const fn new() -> Self {
         // FIXME: Map kernel pages.
         Self {
@@ -84,32 +105,62 @@ impl PageTable {
         }
     }
 
-    pub fn map_table(
-        &mut self,
-        uaddr: UAddr,
-        table: SharedRef<SubPageTableL1>,
-    ) {
-        let paddr = SharedRef::paddr(&table).as_usize() as u64;
+    fn lookup_unchecked(&self, index: usize) -> Option<TableOrLeaf> {
+        debug_assert!(index < ENTRIES_PER_TABLE);
+
+        let entry = self.entries[index];
+
+        if !entry.valid() {
+            return None;
+        }
+
+        if entry.is_leaf_entry() {
+            Some(TableOrLeaf::Leaf(entry))
+        } else {
+            Some(TableOrLeaf::Table(entry))
+        }
+    }
+
+    /// Maps the next level page table.
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure that `table` is a valid page table of the next
+    /// level.
+    unsafe fn map_table_unchecked(&mut self, index: usize, table: PAddr) {
+        debug_assert!(index < ENTRIES_PER_TABLE);
 
         // Check physical page number (PPN) is aligned and the reserved bits are
         // zero.
+        let paddr = table.as_usize() as u64;
         debug_assert!(paddr & 0xffc00000000003ff == 0);
 
         let mut pte = Pte::zeroed();
         pte.set_ppn(paddr >> 10);
         pte.set_valid(true);
 
-        self.entries[uaddr.vpn3()] = pte;
+        self.entries[index] = pte;
+    }
+}
 
-        // SAFETY: We'll drop the reference count when unmapping the page table
-        //         entry.
+impl RawPageTable<3> {
+    fn lookup(&self, uaddr: UAddr) -> Option<TableOrLeaf> {
+        self.lookup_unchecked(uaddr.vpn3())
+    }
+
+    fn map_table(&mut self, uaddr: UAddr, table: SharedRef<RawPageTable<2>>) {
         unsafe {
+            // SAFETY: We know that table is surely a table of level 3 thanks to
+            //         the type system.
+            self.map_table_unchecked(uaddr.vpn3(), SharedRef::paddr(&table));
+            // SAFETY: We'll drop the reference count when unmapping the page table
+            //         entry.
             SharedRef::leak(table);
         }
     }
 }
 
-impl Drop for PageTable {
+impl<const LEVEL: usize> Drop for RawPageTable<LEVEL> {
     fn drop(&mut self) {
         for entry in self.entries {
             if entry.valid() {
@@ -121,9 +172,11 @@ impl Drop for PageTable {
                 //         safely reconstruct the SharedRef without
                 //         updating the reference count.
                 let table = unsafe {
-                    if entry.is_leaf_entry() {
+                    if LEVEL > 0 && entry.is_leaf_entry() {
                         unimplemented!("huge page")
                     } else {
+                        debug_assert!(LEVEL == 0 || entry.is_leaf_entry());
+
                         match paddr2frame(paddr) {
                             Some(frame) => match *frame {
                                 Frame::PageTable(ref inner) => {
@@ -144,10 +197,39 @@ impl Drop for PageTable {
     }
 }
 
-pub struct Page4K {
-    pub bytes: [u8; 4096],
-}
+pub type PageTableL2 = RawPageTable<2>;
+pub type PageTableL1 = RawPageTable<1>;
+pub type PageTableL0 = RawPageTable<0>;
 
-pub struct SubPageTableL1 {
-    pub entries: [Pte; ENTRIES_PER_TABLE],
+#[repr(transparent)]
+pub struct PageTable(pub RawPageTable<3>);
+
+impl PageTable {
+    pub fn new() -> Self {
+        Self(RawPageTable::new())
+    }
+
+    pub fn map_recursively(&mut self, uaddr: UAddr, page: SharedRef<Page4K>) {
+        let l2table = match self.0.lookup(uaddr) {
+            Some(TableOrLeaf::Table(pte)) => match paddr2frame(pte.paddr()) {
+                Some(frame) => match *frame {
+                    Frame::PageTableL2(ref inner) => SharedRef::new(inner),
+                    _ => unreachable!(),
+                },
+                _ => unreachable!(),
+            },
+            Some(TableOrLeaf::Leaf(_)) => unreachable!(),
+            None => {
+                let l2table = memory::allocate_and_initialize(
+                    PAGE_SIZE,
+                    |pool, vaddr| {
+                        pool.initialize_page_table_l2(vaddr, PAGE_SIZE).unwrap()
+                    },
+                );
+
+                self.0.map_table(uaddr, SharedRef::inc_ref(&l2table));
+                l2table
+            }
+        };
+    }
 }

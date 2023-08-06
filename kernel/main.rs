@@ -2,6 +2,7 @@
 #![no_main]
 #![feature(naked_functions)]
 #![feature(asm_const)]
+#![feature(generic_const_exprs)]
 #![feature(fn_align)]
 #![feature(offset_of)]
 #![feature(custom_test_frameworks)]

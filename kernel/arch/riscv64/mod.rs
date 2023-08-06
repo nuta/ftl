@@ -6,7 +6,9 @@ mod switch;
 mod thread;
 
 pub const PAGE_SIZE: usize = 4096;
-pub use page_table::PageTable;
+pub use page_table::{
+    Page4K, PageTable, PageTableL0, PageTableL1, PageTableL2,
+};
 pub use thread::Context;
 
 use crate::address::{PAddr, VAddr};
