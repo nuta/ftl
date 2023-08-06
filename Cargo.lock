@@ -264,6 +264,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "elf_utils"
+version = "0.0.0"
+
+[[package]]
 name = "encode_unicode"
 version = "0.3.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -373,6 +377,7 @@ dependencies = [
  "bitfields",
  "bootfs",
  "bump_allocator",
+ "elf_utils",
  "essentials",
  "linked_list_allocator",
  "paste",

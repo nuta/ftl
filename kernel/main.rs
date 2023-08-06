@@ -13,6 +13,9 @@
 #![allow(unused)]
 #![allow(unused_variables)]
 
+use elf_utils::{Elf, PhdrType};
+use essentials::alignment::align_up;
+
 use crate::{
     address::{PAddr, UAddr},
     arch::{PageTable, PAGE_SIZE},
@@ -90,7 +93,7 @@ pub fn kernel_main() {
     // arch::Thread::set_current_thread(t);
     // arch::Thread::switch_test();
 
-    let pagetable =
+    let mut pagetable =
         memory::allocate_and_initialize(PAGE_SIZE, |pool, vaddr| {
             UniqueRef::new(
                 pool.initialize_page_table(vaddr, PAGE_SIZE).unwrap(),
@@ -98,17 +101,49 @@ pub fn kernel_main() {
             .unwrap()
         });
 
+    let mut fs = bootfs::Bootfs::load();
+    let file = fs.find_by_name("hello").unwrap();
+
+    // Map recursively.
+    let elf = Elf::parse(file.data).expect("failed to parse the ELF file");
+    for phdr in elf.phdrs {
+        if phdr.p_type != PhdrType::Load {
+            continue;
+        }
+
+        let mut off = 0;
+        while off < align_up(phdr.p_memsz as usize, PAGE_SIZE) {
+            let page4k =
+                memory::allocate_and_initialize(PAGE_SIZE, |pool, vaddr| {
+                    pool.initialize_page4k(vaddr, PAGE_SIZE)
+                })
+                .unwrap();
+
+            let filesz = phdr.p_filesz as usize;
+            if off < filesz {
+                let file_off = phdr.p_offset as usize + off;
+                page4k
+                    .borrow_mut()
+                    .write_bytes(0, &file.data[file_off..file_off + filesz]);
+            }
+
+            pagetable.map_recursively(
+                UAddr::new(phdr.p_vaddr as usize + off),
+                page4k,
+                phdr.readable(),
+                phdr.writable(),
+                phdr.executable(),
+                true,
+            );
+
+            off += PAGE_SIZE;
+        }
+    }
+
     let process = memory::allocate_and_initialize(PAGE_SIZE, |pool, vaddr| {
         pool.initialize_process(vaddr, PAGE_SIZE, pagetable)
             .unwrap()
     });
-
-    let mut fs = bootfs::Bootfs::load();
-    let file = fs.find_by_name("hello").unwrap();
-
-    fn map_page(pt: &UniqueRef<PageTable>, uaddr: UAddr, paddr: PAddr) {
-        // pt.map_table(uaddr, table);
-    }
 
     memory::allocate_all_pages();
 

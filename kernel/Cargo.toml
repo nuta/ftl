@@ -16,4 +16,5 @@ proc_macros = { path = "../libs/proc_macros" }
 bump_allocator = { path = "../libs/bump_allocator" }
 riscv = { path = "../libs/riscv" }
 bootfs = { path = "../libs/bootfs" }
+elf_utils = { path = "../libs/elf" }
 paste = "1.0.12"

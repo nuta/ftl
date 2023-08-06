@@ -62,7 +62,7 @@ impl Pte {
     }
 
     pub fn paddr(&self) -> PAddr {
-        PAddr::new((self.ppn() as usize) << 12)
+        PAddr::new((self.ppn() as usize) << 10)
     }
 }
 
@@ -86,6 +86,17 @@ impl UAddr {
 
 pub struct Page4K {
     pub bytes: [u8; 4096],
+}
+
+impl Page4K {
+    pub fn zeroed() -> Self {
+        Self { bytes: [0; 4096] }
+    }
+
+    pub fn write_bytes(&mut self, offset: usize, bytes: &[u8]) {
+        debug_assert!(offset + bytes.len() <= 4096);
+        self.bytes[offset..offset + bytes.len()].copy_from_slice(bytes);
+    }
 }
 
 pub enum TableOrLeaf {
@@ -121,7 +132,7 @@ impl<const LEVEL: usize> RawPageTable<LEVEL> {
         }
     }
 
-    /// Maps the next level page table.
+    /// Maps a next level page table.
     ///
     /// # Safety
     ///
@@ -141,6 +152,39 @@ impl<const LEVEL: usize> RawPageTable<LEVEL> {
 
         self.entries[index] = pte;
     }
+
+    /// Maps a leaf entry.
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure that `frame` is a valid page table of the next
+    /// level.
+    unsafe fn map_leaf_unchecked(
+        &mut self,
+        index: usize,
+        frame: PAddr,
+        readable: bool,
+        writable: bool,
+        executable: bool,
+        user: bool,
+    ) {
+        debug_assert!(index < ENTRIES_PER_TABLE);
+
+        // Check physical page number (PPN) is aligned and the reserved bits are
+        // zero.
+        let paddr = frame.as_usize() as u64;
+        debug_assert!(paddr & 0xffc00000000003ff == 0);
+
+        let mut pte = Pte::zeroed();
+        pte.set_ppn(paddr >> 10);
+        pte.set_valid(true);
+        pte.set_readable(readable);
+        pte.set_writable(writable);
+        pte.set_executable(executable);
+        pte.set_user(user);
+
+        self.entries[index] = pte;
+    }
 }
 
 impl RawPageTable<3> {
@@ -156,6 +200,68 @@ impl RawPageTable<3> {
             // SAFETY: We'll drop the reference count when unmapping the page table
             //         entry.
             SharedRef::leak(table);
+        }
+    }
+}
+
+impl RawPageTable<2> {
+    fn lookup(&self, uaddr: UAddr) -> Option<TableOrLeaf> {
+        self.lookup_unchecked(uaddr.vpn2())
+    }
+
+    fn map_table(&mut self, uaddr: UAddr, table: SharedRef<RawPageTable<1>>) {
+        unsafe {
+            // SAFETY: We know that table is surely a table of level 3 thanks to
+            //         the type system.
+            self.map_table_unchecked(uaddr.vpn2(), SharedRef::paddr(&table));
+            // SAFETY: We'll drop the reference count when unmapping the page table
+            //         entry.
+            SharedRef::leak(table);
+        }
+    }
+}
+
+impl RawPageTable<1> {
+    fn lookup(&self, uaddr: UAddr) -> Option<TableOrLeaf> {
+        self.lookup_unchecked(uaddr.vpn1())
+    }
+
+    fn map_table(&mut self, uaddr: UAddr, table: SharedRef<RawPageTable<0>>) {
+        unsafe {
+            // SAFETY: We know that table is surely a table of level 3 thanks to
+            //         the type system.
+            self.map_table_unchecked(uaddr.vpn1(), SharedRef::paddr(&table));
+            // SAFETY: We'll drop the reference count when unmapping the page table
+            //         entry.
+            SharedRef::leak(table);
+        }
+    }
+}
+
+impl RawPageTable<0> {
+    fn map_page4k(
+        &mut self,
+        uaddr: UAddr,
+        page: SharedRef<Page4K>,
+        readable: bool,
+        writable: bool,
+        executable: bool,
+        user: bool,
+    ) {
+        unsafe {
+            // SAFETY: We know that table is surely a table of level 3 thanks to
+            //         the type system.
+            self.map_leaf_unchecked(
+                uaddr.vpn1(),
+                SharedRef::paddr(&page),
+                readable,
+                writable,
+                executable,
+                user,
+            );
+            // SAFETY: We'll drop the reference count when unmapping the page table
+            //         entry.
+            SharedRef::leak(page);
         }
     }
 }
@@ -209,7 +315,15 @@ impl PageTable {
         Self(RawPageTable::new())
     }
 
-    pub fn map_recursively(&mut self, uaddr: UAddr, page: SharedRef<Page4K>) {
+    pub fn map_recursively(
+        &mut self,
+        uaddr: UAddr,
+        page: SharedRef<Page4K>,
+        readable: bool,
+        writable: bool,
+        executable: bool,
+        user: bool,
+    ) {
         let l2table = match self.0.lookup(uaddr) {
             Some(TableOrLeaf::Table(pte)) => match paddr2frame(pte.paddr()) {
                 Some(frame) => match *frame {
@@ -231,5 +345,57 @@ impl PageTable {
                 l2table
             }
         };
+
+        let l1table = match l2table.borrow_mut().lookup(uaddr) {
+            Some(TableOrLeaf::Table(pte)) => match paddr2frame(pte.paddr()) {
+                Some(frame) => match *frame {
+                    Frame::PageTableL1(ref inner) => SharedRef::new(inner),
+                    _ => unreachable!(),
+                },
+                _ => unreachable!(),
+            },
+            Some(TableOrLeaf::Leaf(_)) => unreachable!(),
+            None => {
+                let l1table = memory::allocate_and_initialize(
+                    PAGE_SIZE,
+                    |pool, vaddr| {
+                        pool.initialize_page_table_l1(vaddr, PAGE_SIZE).unwrap()
+                    },
+                );
+
+                l2table
+                    .borrow_mut()
+                    .map_table(uaddr, SharedRef::inc_ref(&l1table));
+                l1table
+            }
+        };
+
+        let l0table = match l1table.borrow_mut().lookup(uaddr) {
+            Some(TableOrLeaf::Table(pte)) => match paddr2frame(pte.paddr()) {
+                Some(frame) => match *frame {
+                    Frame::PageTableL0(ref inner) => SharedRef::new(inner),
+                    _ => unreachable!(),
+                },
+                _ => unreachable!(),
+            },
+            Some(TableOrLeaf::Leaf(_)) => unreachable!(),
+            None => {
+                let l0table = memory::allocate_and_initialize(
+                    PAGE_SIZE,
+                    |pool, vaddr| {
+                        pool.initialize_page_table_l0(vaddr, PAGE_SIZE).unwrap()
+                    },
+                );
+
+                l1table
+                    .borrow_mut()
+                    .map_table(uaddr, SharedRef::inc_ref(&l0table));
+                l0table
+            }
+        };
+
+        l0table
+            .borrow_mut()
+            .map_page4k(uaddr, page, readable, writable, executable, user);
     }
 }

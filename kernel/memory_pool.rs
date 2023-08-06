@@ -263,6 +263,78 @@ impl MemoryPool {
         Ok(sref)
     }
 
+    pub fn initialize_page_table_l1(
+        &mut self,
+        vaddr: VAddr,
+        len: usize,
+    ) -> Result<SharedRef<PageTableL1>, RetypeError> {
+        let first_frame = self.initialize(
+            vaddr,
+            len,
+            || PageTableL1::new(),
+            |object| {
+                // SAFETY: We'll create a SharedRef for this below.
+                Frame::PageTableL1(unsafe { SharedObject::new(object) })
+            },
+        )?;
+
+        let sref = match first_frame {
+            Frame::PageTableL1(object) => SharedRef::new(object),
+            // SAFETY: We just filled the first frame above.
+            _ => unsafe { unreachable_unchecked() },
+        };
+
+        Ok(sref)
+    }
+
+    pub fn initialize_page_table_l0(
+        &mut self,
+        vaddr: VAddr,
+        len: usize,
+    ) -> Result<SharedRef<PageTableL0>, RetypeError> {
+        let first_frame = self.initialize(
+            vaddr,
+            len,
+            || PageTableL0::new(),
+            |object| {
+                // SAFETY: We'll create a SharedRef for this below.
+                Frame::PageTableL0(unsafe { SharedObject::new(object) })
+            },
+        )?;
+
+        let sref = match first_frame {
+            Frame::PageTableL0(object) => SharedRef::new(object),
+            // SAFETY: We just filled the first frame above.
+            _ => unsafe { unreachable_unchecked() },
+        };
+
+        Ok(sref)
+    }
+
+    pub fn initialize_page4k(
+        &mut self,
+        vaddr: VAddr,
+        len: usize,
+    ) -> Result<SharedRef<Page4K>, RetypeError> {
+        let first_frame = self.initialize(
+            vaddr,
+            len,
+            || Page4K::zeroed(),
+            |object| {
+                // SAFETY: We'll create a SharedRef for this below.
+                Frame::Page4K(unsafe { SharedObject::new(object) })
+            },
+        )?;
+
+        let sref = match first_frame {
+            Frame::Page4K(object) => SharedRef::new(object),
+            // SAFETY: We just filled the first frame above.
+            _ => unsafe { unreachable_unchecked() },
+        };
+
+        Ok(sref)
+    }
+
     pub fn initialize_process(
         &mut self,
         vaddr: VAddr,
