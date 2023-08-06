@@ -32,7 +32,7 @@ SECTIONS {
 
         . = ALIGN(8);
         __boot_stack_bottom = .;
-        . = . + 1024 * 1024;
+        . = . + 4 * 1024 * 1024;
         . = ALIGN(4096);
         __boot_stack_top = .;
 

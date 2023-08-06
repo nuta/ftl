@@ -12,6 +12,7 @@ endif
 
 PROGRESS  ?= printf "  \\033[1;96m%8s\\033[0m  \\033[1;m%s\\033[0m\\n"
 
+NM ?= rust-nm
 RUST_GDB ?= riscv64-unknown-elf-gdb
 GDB ?= rust-gdb
 
@@ -42,8 +43,19 @@ run:
 	$(PROGRESS) CARGO kernel
 	RUSTFLAGS="$(RUSTFLAGS)" $(CARGO) build $(CARGOFLAGS) --target kernel/arch/riscv64/riscv64-qemu-virt.json --manifest-path kernel/Cargo.toml
 	cp target/riscv64-qemu-virt/$(BUILD)/kernel ftl.elf
+
+	$(PROGRESS) "NM" kernel.symbols
+	$(NM) ftl.elf | rustfilt | awk '{ $$2=""; print $$0 }' > kernel.symbols
+
+	$(PROGRESS) "SYMBOLS" ftl.elf
+	python3 embed-symbol-table.py kernel.symbols ftl.elf
+
 	$(PROGRESS) QEMU ftl.elf
 	$(QEMU) $(QEMUFLAGS) -kernel ftl.elf
+
+.PHONY: prerequisites
+prerequisites:
+	$(CARGO) install cargo-binutils rustfilt
 
 .PHONY: rustdoc
 rustdoc:

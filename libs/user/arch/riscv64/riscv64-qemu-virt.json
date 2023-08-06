@@ -7,6 +7,7 @@
     "eh-frame-header": false,
     "emit-debug-gdb-scripts": false,
     "features": "+m,+a,+f,+d,+c",
+    "frame-pointer": "always",
     "linker": "rust-lld",
     "linker-flavor": "ld.lld",
     "pre-link-args": {

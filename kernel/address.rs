@@ -1,5 +1,5 @@
 use core::{
-    fmt::{self, Debug},
+    fmt::{self, Debug, Display},
     mem::{align_of, size_of},
     num::NonZeroUsize,
 };
@@ -132,10 +132,16 @@ impl VAddr {
 impl Debug for VAddr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match size_of::<usize>() {
-            4 => write!(f, "0x{:#08x}", self.as_usize()),
-            8 => write!(f, "0x{:#016x}", self.as_usize()),
+            4 => write!(f, "0x{:08x}", self.as_usize()),
+            8 => write!(f, "0x{:016x}", self.as_usize()),
             _ => unreachable!(),
         }
+    }
+}
+
+impl Display for VAddr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        Debug::fmt(self, f)
     }
 }
 

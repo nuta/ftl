@@ -28,6 +28,7 @@ mod print;
 
 mod address;
 mod arch;
+mod backtrace;
 mod bootfs;
 mod cpu_local;
 mod giant_lock;

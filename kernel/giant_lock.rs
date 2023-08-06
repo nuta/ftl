@@ -40,10 +40,7 @@ impl LockTracker {
             // Failed to acquire the lock. This means that the it's already
             // borrowed and it indicates a bug in the kernel (multiple mutable
             // references).
-            panic!(
-                "already borrowed at {}",
-                self.locked_at.take().unwrap()
-            );
+            panic!("already borrowed at {}", self.locked_at.take().unwrap());
         }
 
         self.locked_at.set(Some(locked_at));
