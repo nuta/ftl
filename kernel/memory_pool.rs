@@ -1,4 +1,5 @@
 use core::{
+    cell::OnceCell,
     hint::unreachable_unchecked,
     mem::{align_of, size_of, MaybeUninit},
     ops::Range,
@@ -96,9 +97,17 @@ impl MemoryPool {
         }
 
         Some(MemoryPool {
-            base: vaddr,
+            base: vaddr.offset(num_control_frames * PAGE_SIZE),
             frames,
         })
+    }
+
+    pub fn base(&self) -> VAddr {
+        self.base
+    }
+
+    pub fn len(&self) -> usize {
+        self.frames.len() * PAGE_SIZE
     }
 
     fn frame_index(&self, vaddr: VAddr) -> Option<usize> {
@@ -345,16 +354,36 @@ impl MemoryPool {
     }
 }
 
-static MEMORY_POOL: Option<GiantLock<MemoryPool>> = None;
+static MEMORY_POOL: GiantLock<OnceCell<MemoryPool>> =
+    GiantLock::new(OnceCell::new());
 
-pub fn memory_pool_mut(vaddr: VAddr) -> Option<&'static GiantLock<MemoryPool>> {
-    MEMORY_POOL.as_ref()
+pub fn memory_pool_mut(
+    vaddr: VAddr,
+) -> Option<GiantLockGuard<'static, MemoryPool>> {
+    let pool_lock = MEMORY_POOL.borrow_mut();
+    Some(GiantLockGuard::map(pool_lock, |pool| {
+        match pool.get_mut() {
+            Some(pool) => pool,
+            None => {
+                panic!("global memory pool is not initialized");
+            }
+        }
+    }))
 }
 
 pub fn paddr2frame(paddr: PAddr) -> Option<GiantLockGuard<'static, Frame>> {
     let vaddr = paddr.vaddr()?;
-    let pool = memory_pool_mut(vaddr)?;
-    let guard = pool.borrow_mut();
+    let guard = memory_pool_mut(vaddr)?;
     let index = guard.frame_index(vaddr)?;
     Some(GiantLockGuard::map(guard, |pool| &mut pool.frames[index]))
+}
+
+pub fn init(vaddr: VAddr, len: usize) {
+    // TODO: Strictly speaking all vaddr + len pages are accessible by the kernel.
+    //       Perhaps we should use UAddr?
+    let pool = MemoryPool::new(vaddr, len)
+        .expect("failed to initialize global memory pool");
+    if let Err(_) = MEMORY_POOL.borrow_mut().set(pool) {
+        panic!("global memory pool is already initialized");
+    }
 }

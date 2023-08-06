@@ -8,7 +8,7 @@ use crate::{
     address::{PAddr, VAddr},
     arch::PAGE_SIZE,
     giant_lock::{GiantLock, GiantLockGuard},
-    memory_pool::{memory_pool_mut, MemoryPool},
+    memory_pool::{self, memory_pool_mut, MemoryPool},
 };
 
 use bump_allocator::BumpAllocator;
@@ -77,8 +77,7 @@ where
     let vaddr = allocate_pages(len).expect("failed to allocate pages");
     let mut pool =
         memory_pool_mut(vaddr).expect("no corresponding memory pool");
-    let mut pool_lock = pool.borrow_mut();
-    initializer(&mut pool_lock, vaddr)
+    initializer(&mut pool, vaddr)
 }
 
 /// Allocates all remaining memory pages.
@@ -111,18 +110,22 @@ pub fn allocate_all_pages() -> Option<(PAddr, usize)> {
 /// Initializes the memory subsystem.
 pub fn init() {
     extern "C" {
-        static __boot_heap: u8;
-        static __boot_heap_end: u8;
+        static __free_ram: u8;
+        static __free_ram_end: u8;
     }
 
     unsafe {
-        let heap_start = addr_of!(__boot_heap) as usize;
-        let heap_end = addr_of!(__boot_heap_end) as usize;
+        let free_ram_start = addr_of!(__free_ram) as usize;
+        let free_ram_end = addr_of!(__free_ram_end) as usize;
+
+        memory_pool::init(VAddr::new(free_ram_start), free_ram_end - free_ram_start);
+        // TODO: What if the heap spans multiple memory pools?
+        let pool = memory_pool_mut(VAddr::new(free_ram_start)).unwrap();
 
         // Initialize the boot-time page allocator.
         PAGE_ALLOCATOR
             .borrow_mut()
-            .add_region(heap_start, heap_end - heap_start);
+            .add_region(pool.base().as_usize(), pool.len());
 
         // Initialize the malloc heap.
         let malloc_start = PAGE_ALLOCATOR

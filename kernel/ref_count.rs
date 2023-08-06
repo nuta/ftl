@@ -233,11 +233,7 @@ impl<T> Drop for SharedRef<T> {
                 // We should not keep the borrow guard to prevent use-after-free.
                 drop(rc);
 
-                memory_pool_mut(vaddr)
-                    .unwrap()
-                    .borrow_mut()
-                    .free(vaddr)
-                    .unwrap();
+                memory_pool_mut(vaddr).unwrap().free(vaddr).unwrap();
             }
         }
     }
@@ -290,11 +286,7 @@ impl<T> Drop for UniqueRef<T> {
         //         reference.
         unsafe {
             let vaddr = VAddr::new(self.object.as_ptr() as usize);
-            memory_pool_mut(vaddr)
-                .unwrap()
-                .borrow_mut()
-                .free(vaddr)
-                .unwrap();
+            memory_pool_mut(vaddr).unwrap().free(vaddr).unwrap();
         }
     }
 }

@@ -36,8 +36,8 @@ SECTIONS {
         . = ALIGN(4096);
         __boot_stack_top = .;
 
-        __boot_heap = .;
-        . = . + 32 * 1024 * 1024;
-        __boot_heap_end = .;
+        __free_ram = .;
+        . = . + 64 * 1024 * 1024;
+        __free_ram_end = .;
     }
 }
