@@ -49,7 +49,12 @@ extern crate alloc;
 // }
 
 pub fn kernel_main() {
+    println!("\n\nFTL - Faster Than L\n");
+
+    println!("initializing memory...");
     memory::init();
+
+    println!("initializing CPU local storage...");
     cpu_local::init_percpu();
 
     #[cfg(test)]
