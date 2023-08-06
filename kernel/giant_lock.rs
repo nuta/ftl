@@ -70,7 +70,7 @@ impl LockTracker {
 ///
 /// To prevent multiple mutable references to the inner value,
 /// which is not allowed in Rust, [`GiantLock::borrow_mut`] will panics
-/// just like [`RefCell::borrow_mut`].
+/// just like `RefCell::borrow_mut`.
 pub struct GiantLock<T> {
     inner: UnsafeCell<T>,
     tracker: LockTracker,

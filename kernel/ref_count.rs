@@ -22,7 +22,7 @@
 //! user-accessible pages, we cannot add reference counter in the same page.
 //!
 //! Instead, we extract the reference counter and the borrow checker from `T`
-//! and put them in `SharedObject<T>`, which is stored in page metadata ([`Frame`]).
+//! and put them in `SharedObject<T>`, which is stored in page metadata (`Frame`).
 
 use core::{
     mem::{self, align_of, size_of, MaybeUninit},
@@ -43,7 +43,7 @@ use crate::{
 ///
 /// # Why not `Rc` or `Arc`?
 ///
-/// Rust's standard library provides [`Rc`] and [`Arc`] for reference counting.
+/// Rust's standard library provides `Rc` and `Arc` for reference counting.
 /// However, they are not suitable for our use case because:
 ///
 /// - The implementation of reference counting depends on how we lock the kernel:
@@ -79,7 +79,7 @@ impl<T> RefCounted<T> {
     ///
     /// # Safety
     ///
-    /// The caller must ensure it corresponds to a previous call to [`inc_ref`].
+    /// The caller must ensure it corresponds to a previous call to [`RefCounted::inc_ref`].
     fn dec_ref(&mut self) -> bool {
         debug_assert!(self.counter > 0);
 
@@ -145,7 +145,7 @@ impl<T> SharedObject<T> {
 
 /// A reference-counted mutably-borrowable reference.
 ///
-/// This is similar to [`Arc<Mutex<T>>`]: allows multiple references to the
+/// This is similar to `Arc<Mutex<T>>`: allows multiple references to the
 /// inner value by reference couting, and allows mutable access to the inner
 /// value by big kernel lock + runtime borrow checking.
 pub struct SharedRef<T> {
@@ -243,7 +243,7 @@ impl<T> Drop for SharedRef<T> {
 
 /// A unique reference.
 ///
-/// This is similar to [`Box<T>`]: it owns the inner value and drops it when
+/// This is similar to `Box<T>`: it owns the inner value and drops it when
 /// dropped.
 pub struct UniqueRef<T> {
     object: NonNull<T>,

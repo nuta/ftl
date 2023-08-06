@@ -42,7 +42,7 @@ impl Context {
     pub fn new_user(pc: usize) -> Context {
         // TODO: Shoulnd't we inherit the sstatus by reading it?
         let mut sstatus = Sstatus::read();
-        // sstatus.insert(SstatusFlags::SPIE); FIXME: set in thread initialization
+        // sstatus.insert(SstatusFlags::SPIE);
         sstatus.remove(SstatusFlags::SPP);
 
         Context {
