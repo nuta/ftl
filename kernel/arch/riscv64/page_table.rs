@@ -176,7 +176,6 @@ impl<const LEVEL: usize> RawPageTable<LEVEL> {
         debug_assert!(paddr & 0xffc00000000003ff == 0);
 
         let mut pte = Pte::zeroed();
-        println!("map_leaf_unchecked: paddr = {:#x}", paddr);
         pte.set_ppn(paddr >> 12);
         pte.set_valid(true);
         pte.set_readable(readable);

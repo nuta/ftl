@@ -142,7 +142,6 @@ pub fn kernel_main() {
                     .write_bytes(0, &file.data[file_off..file_off + filesz]);
             }
 
-            println!("mapping {:#x}", phdr.p_vaddr as usize + off,);
             pagetable.map_recursively(
                 UAddr::new(phdr.p_vaddr as usize + off),
                 page4k,
