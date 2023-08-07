@@ -335,7 +335,7 @@ impl PageTable {
                 pte.set_executable(true);
                 pte.set_user(false);
                 pte.set_global(true);
-                pte.set_ppn(paddr.as_usize() as u64 >> 12);
+                pte.set_ppn(paddr.as_usize() as u64 >> 10);
                 l2table.entries[uaddr.vpn2()] = pte;
 
                 offset += 1 * GB;

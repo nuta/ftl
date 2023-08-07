@@ -64,7 +64,7 @@ impl Context {
         let table_ppn = table_paddr.as_usize() >> 12;
         const SATP_SV48: usize = 9 << 60;
         unsafe {
-            println!("switching page table");
+            println!("switching page table: {:x}", SATP_SV48 | table_ppn);
             asm!(r#"
             sfence.vma zero, zero
             csrw satp, {satp}
