@@ -24,12 +24,12 @@ impl Scheduler {
 
 static SCHEDULER: GiantLock<Scheduler> = GiantLock::new(Scheduler::new());
 
-fn idle() {
+fn idle() -> ! {
     // TODO:
     panic!("No runnable thread");
 }
 
-pub fn yield_to_user() {
+pub fn yield_to_user() -> ! {
     let next = SCHEDULER.borrow_mut().schedule();
     match next {
         Some(thread) => {

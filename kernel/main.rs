@@ -174,7 +174,4 @@ pub fn kernel_main() {
     memory::allocate_all_pages();
 
     scheduler::yield_to_user();
-
-    println!("shutting down...");
-    arch::shutdown();
 }

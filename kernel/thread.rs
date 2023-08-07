@@ -34,7 +34,7 @@ impl Thread {
         self.state = ThreadState::Runnable;
     }
 
-    pub fn switch_to(this: &SharedRef<Thread>) {
+    pub fn switch_to(this: &SharedRef<Thread>) -> ! {
         // FIXME:
         this.borrow_mut().context.switch_to_this();
     }
