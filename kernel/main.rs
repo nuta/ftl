@@ -13,13 +13,15 @@
 #![allow(unused)]
 #![allow(unused_variables)]
 
+use core::num::NonZeroUsize;
+
 use elf_utils::{Elf, PhdrType};
 use essentials::alignment::{align_up, is_aligned};
 
 use crate::{
     address::{PAddr, UAddr},
     arch::{PageTable, PAGE_SIZE},
-    process::Process,
+    process::{Process, Handle, HandleId},
     ref_count::{SharedRef, UniqueRef},
 };
 
@@ -155,14 +157,21 @@ pub fn kernel_main() {
 
     let pc = UAddr::new(elf.ehdr.e_entry as usize);
     let process = memory::allocate_and_initialize(PAGE_SIZE, |pool, vaddr| {
-        pool.initialize_process(vaddr, PAGE_SIZE, pagetable, pc)
+        pool.initialize_process(vaddr, PAGE_SIZE, pagetable)
+            .unwrap()
+    });
+    let thread = memory::allocate_and_initialize(PAGE_SIZE, |pool, vaddr| {
+        pool.initialize_thread(vaddr, PAGE_SIZE, SharedRef::inc_ref(&process), pc)
             .unwrap()
     });
 
+    process.borrow_mut().set_handle(HandleId::new(NonZeroUsize::new(1).unwrap()), Handle::Thread(SharedRef::inc_ref(&thread)));
+
+    // TODO:
     memory::allocate_all_pages();
 
     // FIXME: Release the lock.
-    process.borrow_mut().switch_to_this();
+    thread.borrow_mut().switch_to_this();
 
     println!("shutting down...");
     arch::shutdown();

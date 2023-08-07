@@ -15,7 +15,7 @@ use crate::{
     backtrace,
     giant_lock::{GiantLock, GiantLockGuard},
     process::Process,
-    ref_count::{SharedObject, SharedRef, UniqueRef},
+    ref_count::{SharedObject, SharedRef, UniqueRef}, thread::Thread,
 };
 use essentials::{
     alignment::{align_up, is_aligned},
@@ -41,8 +41,8 @@ pub enum Frame {
     PageTableL1(SharedObject<PageTableL1>),
     PageTableL0(SharedObject<PageTableL0>),
     Page4K(SharedObject<Page4K>),
-    /// Process.
     Process(SharedObject<Process>),
+    Thread(SharedObject<Thread>),
 }
 
 const fn object_size<T>() -> usize {
@@ -58,6 +58,8 @@ static_assert!(object_size::<PageTable>() == PAGE_SIZE);
 static_assert!(object_align::<PageTable>() == PAGE_SIZE);
 static_assert!(object_size::<Process>() == PAGE_SIZE);
 static_assert!(object_align::<Process>() == PAGE_SIZE);
+static_assert!(object_size::<Thread>() == PAGE_SIZE);
+static_assert!(object_align::<Thread>() == PAGE_SIZE);
 
 #[derive(Debug)]
 pub enum RetypeError {
@@ -350,12 +352,11 @@ impl MemoryPool {
         vaddr: VAddr,
         len: usize,
         pagetable: UniqueRef<PageTable>,
-        pc: UAddr,
     ) -> Result<SharedRef<Process>, RetypeError> {
         let first_frame = self.initialize(
             vaddr,
             len,
-            || Process::new(pagetable, pc),
+            || Process::new(pagetable),
             |object| {
                 // SAFETY: We'll create a SharedRef for this below.
                 Frame::Process(unsafe { SharedObject::new(object) })
@@ -364,6 +365,32 @@ impl MemoryPool {
 
         let sref = match first_frame {
             Frame::Process(object) => SharedRef::new(object),
+            // SAFETY: We just filled the first frame above.
+            _ => unsafe { unreachable_unchecked() },
+        };
+
+        Ok(sref)
+    }
+
+    pub fn initialize_thread(
+        &mut self,
+        vaddr: VAddr,
+        len: usize,
+        process: SharedRef<Process>,
+        pc: UAddr,
+    ) -> Result<SharedRef<Thread>, RetypeError> {
+        let first_frame = self.initialize(
+            vaddr,
+            len,
+            || Thread::new(process, pc),
+            |object| {
+                // SAFETY: We'll create a SharedRef for this below.
+                Frame::Thread(unsafe { SharedObject::new(object) })
+            },
+        )?;
+
+        let sref = match first_frame {
+            Frame::Thread(object) => SharedRef::new(object),
             // SAFETY: We just filled the first frame above.
             _ => unsafe { unreachable_unchecked() },
         };

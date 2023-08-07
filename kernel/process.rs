@@ -1,20 +1,35 @@
-use crate::{address::UAddr, arch, ref_count::UniqueRef};
+use core::num::NonZeroUsize;
+
+use crate::{address::UAddr, arch, ref_count::{UniqueRef, SharedRef}, thread::Thread};
 
 /// A reference to a kernel object with associated rights, aka *capability*.
 ///
 /// This enum represents all objects that userland can control.
 pub enum Handle {
     Free,
+    Thread(SharedRef<Thread>),
 }
 
 impl Handle {}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct HandleId(NonZeroUsize);
+
+impl HandleId {
+    pub const fn new(index: NonZeroUsize) -> HandleId {
+        HandleId(index)
+    }
+
+    pub fn index(self) -> usize {
+        self.0.get() - 1
+    }
+}
 
 /// The process control block (PCB).
 ///
 /// A process is a collection of threads and resources (page tables and handles)
 /// that are shared among the threads.
 pub struct Process {
-    context: arch::Context,
     page_table: UniqueRef<arch::PageTable>,
 
     // We want to keep the size of `Process` small so that a process can be
@@ -26,16 +41,27 @@ pub struct Process {
 
 impl Process {
     /// Creates a new process.
-    pub fn new(page_table: UniqueRef<arch::PageTable>, pc: UAddr) -> Process {
+    pub fn new(page_table: UniqueRef<arch::PageTable>) -> Process {
         const HANDLE_INIT: Handle = Handle::Free;
         Process {
-            context: arch::Context::new_user(pc),
             page_table,
             handles: [HANDLE_INIT; 128],
         }
     }
 
-    pub fn switch_to_this(&self) {
-        self.context.switch_to_this(&self.page_table);
+    pub fn page_table(&self) -> &UniqueRef<arch::PageTable> {
+        &self.page_table
+    }
+
+    pub fn get_handle(&self, id: HandleId) -> Option<&Handle> {
+        self.handles.get(id.index())
+    }
+
+    pub fn set_handle(&mut self, id: HandleId, handle: Handle) {
+        // TODO: Avoid panicking.
+        assert!(id.index() < self.handles.len());
+        assert!(matches!(self.handles[id.index()], Handle::Free));
+
+        self.handles[id.index()] = handle;
     }
 }
