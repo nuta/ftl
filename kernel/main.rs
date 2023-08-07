@@ -14,7 +14,7 @@
 #![allow(unused_variables)]
 
 use elf_utils::{Elf, PhdrType};
-use essentials::alignment::align_up;
+use essentials::alignment::{align_up, is_aligned};
 
 use crate::{
     address::{PAddr, UAddr},
@@ -120,8 +120,12 @@ pub fn kernel_main() {
             continue;
         }
 
+        assert!(is_aligned(phdr.p_vaddr as usize, PAGE_SIZE));
+
         let mut off = 0;
+        println!("phdr: {:#x?}", phdr);
         while off < align_up(phdr.p_memsz as usize, PAGE_SIZE) {
+
             let page4k =
                 memory::allocate_and_initialize(PAGE_SIZE, |pool, vaddr| {
                     pool.initialize_page4k(vaddr, PAGE_SIZE)
@@ -136,6 +140,10 @@ pub fn kernel_main() {
                     .write_bytes(0, &file.data[file_off..file_off + filesz]);
             }
 
+            println!(
+                "mapping {:#x}",
+                phdr.p_vaddr as usize + off,
+            );
             pagetable.map_recursively(
                 UAddr::new(phdr.p_vaddr as usize + off),
                 page4k,

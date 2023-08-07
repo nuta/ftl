@@ -5,6 +5,7 @@ use core::{
 };
 
 use bitfields::{bitfields, B10, B2, B44};
+use essentials::alignment::is_aligned;
 
 use crate::{
     address::{PAddr, UAddr},
@@ -175,6 +176,7 @@ impl<const LEVEL: usize> RawPageTable<LEVEL> {
         debug_assert!(paddr & 0xffc00000000003ff == 0);
 
         let mut pte = Pte::zeroed();
+        println!("map_leaf_unchecked: paddr = {:#x}", paddr);
         pte.set_ppn(paddr >> 12);
         pte.set_valid(true);
         pte.set_readable(readable);
@@ -251,7 +253,7 @@ impl RawPageTable<0> {
             // SAFETY: We know that table is surely a table of level 3 thanks to
             //         the type system.
             self.map_leaf_unchecked(
-                uaddr.vpn1(),
+                uaddr.vpn0(),
                 SharedRef::paddr(&page),
                 readable,
                 writable,
@@ -352,6 +354,8 @@ impl PageTable {
         executable: bool,
         user: bool,
     ) {
+        debug_assert!(is_aligned(uaddr.as_usize(), PAGE_SIZE));
+
         let l2table = match self.0.lookup(uaddr) {
             Some(TableOrLeaf::Table(pte)) => match paddr2frame(pte.paddr()) {
                 Some(frame) => match *frame {

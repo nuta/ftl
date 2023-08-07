@@ -7,25 +7,25 @@ SECTIONS {
         *(.text .text.*);
     }
 
-    .rodata : ALIGN(8) {
+    .rodata : ALIGN(4096) {
         *(.rodata .rodata.*);
         . = ALIGN(8);
         *(.srodata .srodata.*);
     }
 
-    .data : ALIGN(8) {
+    .data : ALIGN(4096) {
         *(.data .data.*);
         . = ALIGN(8);
         *(.sdata .sdata.*);
     }
 
-    .bss : ALIGN(8) {
+    .bss : ALIGN(4096) {
         *(.bss .bss.*);
         . = ALIGN(8);
         *(.sbss .sbss.*);
 
         __stack = .;
-        . = . + 32 * 1024 * 1024;
+        . = . + 2 * 1024 * 1024;
         __stack_top = .;
     }
 }
