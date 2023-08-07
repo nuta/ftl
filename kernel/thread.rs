@@ -14,14 +14,16 @@ pub struct Thread {
 
 impl Thread {
     pub fn new(process: SharedRef<Process>, pc: UAddr) -> Thread {
+        let context = arch::Context::new_user(&process, pc);
         Thread {
             process,
             state: ThreadState::Blocked,
-            context: arch::Context::new_user(pc),
+            context,
         }
     }
 
     pub fn switch_to_this(&self) {
-        self.context.switch_to_this(self.process.borrow_mut().page_table());
+        // FIXME: don't borrow!
+        self.context.switch_to_this();
     }
 }
