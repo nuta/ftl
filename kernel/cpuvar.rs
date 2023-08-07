@@ -31,9 +31,15 @@ pub fn cpuvar() -> &'static Cpuvar {
     }
 }
 
-/// Initializes the CPU-local variables. This function must be called
-/// after the memory allocator is initialized and in each CPU initialization.
-pub fn init() {
+/// Initializes the CPU-local variables and kernel stack
+///
+/// # Note
+///
+/// This function must be called:
+///
+/// - After the memory allocator is initialized and
+/// - In each CPU initialization.
+pub fn init_percpu() {
     // Allocate the percpu area and the per-CPU kernel stack.
     let allocated =
         allocate_pages(KERNEL_STACK_SIZE + size_of::<Cpuvar>()).expect("failed to allocate percpu area");
