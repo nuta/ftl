@@ -1,6 +1,6 @@
 use core::{arch::global_asm, fmt, mem::size_of, slice, str};
 
-use alloc::{boxed::Box, vec::Vec};
+use arrayvec::ArrayVec;
 
 use crate::{address::VAddr, arch};
 
@@ -95,29 +95,31 @@ pub fn backtrace() {
     });
 }
 
-pub struct CapturedBacktraceFrame {
+pub struct CapturedFrame {
     pub vaddr: VAddr,
     pub offset: usize,
     pub symbol_name: &'static str,
 }
 
 pub struct CapturedBacktrace {
-    pub trace: Box<Vec<CapturedBacktraceFrame>>,
+    pub trace: ArrayVec<CapturedFrame, 16>,
 }
 
 impl CapturedBacktrace {
     /// Returns a saved backtrace.
     pub fn capture() -> CapturedBacktrace {
-        let mut trace = Box::new(Vec::new());
+        let mut trace = ArrayVec::new();
         arch::backtrace(|_, vaddr| {
             if let Some(symbol) = resolve_symbol(vaddr) {
-                trace.push(CapturedBacktraceFrame {
+                println!(">>>    {} {}", vaddr, symbol.name);
+                let _ = trace.try_push(CapturedFrame {
                     vaddr,
                     symbol_name: symbol.name,
                     offset: vaddr.as_usize() - symbol.addr.as_usize(),
                 });
             }
         });
+
         CapturedBacktrace { trace }
     }
 }

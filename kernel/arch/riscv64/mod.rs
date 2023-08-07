@@ -36,7 +36,7 @@ pub fn owns_giant_lock() -> bool {
 
 pub const fn is_valid_vaddr(addr: usize) -> bool {
     // FIXME:
-    0x80000000 <= addr
+    0x80000000 <= addr && addr < 0x88000000
 }
 
 pub fn paddr2vaddr(paddr: PAddr) -> Option<VAddr> {
@@ -51,7 +51,7 @@ pub fn paddr2vaddr(paddr: PAddr) -> Option<VAddr> {
 
 pub fn vaddr2paddr(vaddr: VAddr) -> PAddr {
     debug_assert!(vaddr.as_usize() > 0x80000000);
-    debug_assert!(vaddr.as_usize() < 0x84000000); // FIXME: use kernel-mapped region
+    debug_assert!(vaddr.as_usize() < 0x88000000); // FIXME: use kernel-mapped region
     PAddr::new(vaddr.as_usize())
 }
 

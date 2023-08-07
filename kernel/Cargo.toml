@@ -18,3 +18,4 @@ riscv = { path = "../libs/riscv" }
 bootfs = { path = "../libs/bootfs" }
 elf_utils = { path = "../libs/elf" }
 paste = "1.0.12"
+arrayvec = { version = "0.7.4", default-features = false }

@@ -1,5 +1,5 @@
 use crate::arch::hang;
-use crate::{cpu_local, backtrace::backtrace};
+use crate::{backtrace::backtrace, cpu_local};
 use core::panic::PanicInfo;
 use core::sync::atomic::{AtomicU8, Ordering};
 

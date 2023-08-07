@@ -30,7 +30,6 @@ impl LockTracker {
         }
     }
 
-    #[track_caller]
     fn acquire(&self, locked_at: CapturedBacktrace) {
         if self
             .lock
@@ -104,7 +103,6 @@ impl<T> GiantLock<T> {
     /// - It is already borrowed.
     /// - The giant lock is not held by the current CPU (presumerably a bug in
     ///   `arch` module).
-    #[track_caller]
     pub fn borrow_mut(&self) -> GiantLockGuard<'_, T> {
         debug_assert!(arch::owns_giant_lock());
 

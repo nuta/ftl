@@ -21,8 +21,7 @@ static PAGE_ALLOCATOR: GiantLock<BumpAllocator> =
     GiantLock::new(BumpAllocator::new());
 
 #[global_allocator]
-static HEAP_ALLOCATOR: HeapAllocator =
-    HeapAllocator(LockedHeap::empty());
+static HEAP_ALLOCATOR: HeapAllocator = HeapAllocator(LockedHeap::empty());
 
 /// A heap allocator to enable alloc crate in the kernel. Intended to be used
 /// for debugging purposes only: we prefer not to do dynamic memory allocation
@@ -34,11 +33,16 @@ struct HeapAllocator(LockedHeap);
 
 unsafe impl GlobalAlloc for HeapAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        self.0
-            .lock()
-            .allocate_first_fit(layout)
-            .ok()
-            .map_or(core::ptr::null_mut(), |allocation| allocation.as_ptr())
+        match self.0.lock().allocate_first_fit(layout) {
+            Ok(nonnull) => {
+                println!("alloc: {:?} {:p}", layout, nonnull.as_ptr());
+                nonnull.as_ptr()
+            }
+            Err(()) => {
+                println!("OOM: {:?}", layout);
+                core::ptr::null_mut()
+            }
+        }
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
@@ -130,6 +134,10 @@ pub fn init() {
             .0
             .lock()
             .init(heap_start as *mut u8, heap_end - heap_start);
+        println!(
+            "global allocator is ready ({} KB)",
+            (heap_end - heap_start) / 1024
+        );
 
         println!("free ram start: {:016x}", free_ram_start);
         println!("free ram end:   {:016x}", free_ram_end);
