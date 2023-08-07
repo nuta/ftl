@@ -30,7 +30,7 @@ mod address;
 mod arch;
 mod backtrace;
 mod bootfs;
-mod cpu_local;
+mod cpuvar;
 mod giant_lock;
 mod memory;
 mod memory_pool;
@@ -55,7 +55,7 @@ pub fn kernel_main() {
     memory::init();
 
     println!("initializing CPU local storage...");
-    cpu_local::init();
+    cpuvar::init();
 
     #[cfg(test)]
     {

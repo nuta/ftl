@@ -2,7 +2,7 @@ use core::{arch::asm, mem::offset_of};
 
 use super::thread::Context;
 
-use crate::cpu_local::KERNEL_STACK_SIZE;
+use crate::cpuvar::KERNEL_STACK_SIZE;
 
 // Should never return.
 extern "C" fn trap_handler() -> ! {
