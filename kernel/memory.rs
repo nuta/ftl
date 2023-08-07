@@ -12,7 +12,7 @@ use crate::{
 };
 
 use bump_allocator::BumpAllocator;
-use linked_list_allocator::Heap;
+use linked_list_allocator::{Heap, LockedHeap};
 
 /// The size of the malloc heap in bytes. To be used in `core::alloc` objects.
 const MALLOC_SIZE: usize = 16 * 1024 * 1024;
@@ -22,17 +22,20 @@ static PAGE_ALLOCATOR: GiantLock<BumpAllocator> =
 
 #[global_allocator]
 static HEAP_ALLOCATOR: HeapAllocator =
-    HeapAllocator(GiantLock::new(Heap::empty()));
+    HeapAllocator(LockedHeap::empty());
 
 /// A heap allocator to enable alloc crate in the kernel. Intended to be used
 /// for debugging purposes only: we prefer not to do dynamic memory allocation
 /// in the kernel and instead userland specifies kernel memory space as needed.
-struct HeapAllocator(GiantLock<Heap>);
+///
+/// Don't use GiantLock<T> here because it internally uses the heap allocator
+/// itself to save the backtrace.
+struct HeapAllocator(LockedHeap);
 
 unsafe impl GlobalAlloc for HeapAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         self.0
-            .borrow_mut()
+            .lock()
             .allocate_first_fit(layout)
             .ok()
             .map_or(core::ptr::null_mut(), |allocation| allocation.as_ptr())
@@ -40,7 +43,7 @@ unsafe impl GlobalAlloc for HeapAllocator {
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
         self.0
-            .borrow_mut()
+            .lock()
             .deallocate(NonNull::new_unchecked(ptr), layout)
     }
 }
@@ -112,11 +115,22 @@ pub fn init() {
     extern "C" {
         static __free_ram: u8;
         static __free_ram_end: u8;
+        static __heap: u8;
+        static __heap_end: u8;
     }
 
     unsafe {
         let free_ram_start = addr_of!(__free_ram) as usize;
         let free_ram_end = addr_of!(__free_ram_end) as usize;
+        let heap_start = addr_of!(__heap) as usize;
+        let heap_end = addr_of!(__heap_end) as usize;
+
+        // Initialize the malloc heap.
+        HEAP_ALLOCATOR
+            .0
+            .lock()
+            .init(heap_start as *mut u8, heap_end - heap_start);
+
         println!("free ram start: {:016x}", free_ram_start);
         println!("free ram end:   {:016x}", free_ram_end);
 
@@ -137,18 +151,5 @@ pub fn init() {
         PAGE_ALLOCATOR
             .borrow_mut()
             .add_region(pool.base().as_usize(), pool.len());
-
-        // Allocate memory for the malloc heap.
-        let malloc_start = PAGE_ALLOCATOR
-            .borrow_mut()
-            .allocate(MALLOC_SIZE, size_of::<usize>())
-            .map(|addr| addr.get() as *mut u8)
-            .expect("failed to allocate malloc heap");
-
-        // Initialize the malloc heap.
-        HEAP_ALLOCATOR
-            .0
-            .borrow_mut()
-            .init(malloc_start, MALLOC_SIZE);
     }
 }

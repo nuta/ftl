@@ -1,5 +1,5 @@
 use crate::arch::hang;
-use crate::cpu_local;
+use crate::{cpu_local, backtrace::backtrace};
 use core::panic::PanicInfo;
 use core::sync::atomic::{AtomicU8, Ordering};
 
@@ -16,11 +16,12 @@ fn panic(info: &PanicInfo) -> ! {
             // First panic: Try whatever we can do including complicated stuff
             // which may panic again.
             println!("kernel panic: {}", info);
+            backtrace();
             hang();
         }
         1 => {
             // Double panics: paniked while handling a panic.
-            println!("kernel panic: {:?}", info);
+            println!("double kernel panic: {:?}", info);
             hang();
         }
         _ => {

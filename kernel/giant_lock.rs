@@ -6,7 +6,7 @@ use core::{
     sync::atomic::{AtomicBool, Ordering},
 };
 
-use crate::arch;
+use crate::{arch, backtrace::CapturedBacktrace};
 
 /// A mutable reference tracker.
 ///
@@ -19,7 +19,7 @@ use crate::arch;
 /// TODO: I plan to disable this in release build to eliminate the overhead.
 struct LockTracker {
     lock: AtomicBool,
-    locked_at: Cell<Option<&'static panic::Location<'static>>>,
+    locked_at: Cell<Option<CapturedBacktrace>>,
 }
 
 impl LockTracker {
@@ -31,7 +31,7 @@ impl LockTracker {
     }
 
     #[track_caller]
-    fn acquire(&self, locked_at: &'static panic::Location<'static>) {
+    fn acquire(&self, locked_at: CapturedBacktrace) {
         if self
             .lock
             .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
@@ -40,7 +40,10 @@ impl LockTracker {
             // Failed to acquire the lock. This means that the it's already
             // borrowed and it indicates a bug in the kernel (multiple mutable
             // references).
-            panic!("already borrowed at {}", self.locked_at.take().unwrap());
+            panic!(
+                "already borrowed at:\n{:?}",
+                self.locked_at.take().unwrap()
+            );
         }
 
         self.locked_at.set(Some(locked_at));
@@ -105,7 +108,7 @@ impl<T> GiantLock<T> {
     pub fn borrow_mut(&self) -> GiantLockGuard<'_, T> {
         debug_assert!(arch::owns_giant_lock());
 
-        self.tracker.acquire(panic::Location::caller());
+        self.tracker.acquire(CapturedBacktrace::capture());
 
         GiantLockGuard {
             inner: unsafe { self.inner.get() },

@@ -30,11 +30,13 @@ SECTIONS {
         . = ALIGN(8);
         *(.sbss .sbss.*);
 
-        . = ALIGN(8);
-        __boot_stack_bottom = .;
         . = . + 4 * 1024 * 1024;
         . = ALIGN(4096);
         __boot_stack_top = .;
+
+        __heap = .;
+        . = . + 16 * 1024 * 1024;
+        __heap_end = .;
 
         __free_ram = .;
         . = . + 64 * 1024 * 1024;

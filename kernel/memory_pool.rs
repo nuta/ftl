@@ -377,8 +377,6 @@ static MEMORY_POOL: GiantLock<OnceCell<MemoryPool>> =
 pub fn memory_pool_mut(
     vaddr: VAddr,
 ) -> Option<GiantLockGuard<'static, MemoryPool>> {
-    crate::backtrace::backtrace();
-
     let pool_lock = MEMORY_POOL.borrow_mut();
     Some(GiantLockGuard::map(pool_lock, |pool| {
         match pool.get_mut() {
