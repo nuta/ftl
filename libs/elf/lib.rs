@@ -59,9 +59,11 @@ impl Phdr {
     pub fn readable(&self) -> bool {
         self.p_flags & 0x4 != 0
     }
+
     pub fn writable(&self) -> bool {
         self.p_flags & 0x2 != 0
     }
+
     pub fn executable(&self) -> bool {
         self.p_flags & 0x1 != 0
     }
