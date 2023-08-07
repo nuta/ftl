@@ -62,7 +62,7 @@ impl Pte {
     }
 
     pub fn paddr(&self) -> PAddr {
-        PAddr::new((self.ppn() as usize) << 10)
+        PAddr::new((self.ppn() as usize) << 12)
     }
 }
 
@@ -146,7 +146,7 @@ impl<const LEVEL: usize> RawPageTable<LEVEL> {
         debug_assert!(paddr & 0xffc00000000003ff == 0);
 
         let mut pte = Pte::zeroed();
-        pte.set_ppn(paddr >> 10);
+        pte.set_ppn(paddr >> 12);
         pte.set_valid(true);
 
         self.entries[index] = pte;
@@ -175,7 +175,7 @@ impl<const LEVEL: usize> RawPageTable<LEVEL> {
         debug_assert!(paddr & 0xffc00000000003ff == 0);
 
         let mut pte = Pte::zeroed();
-        pte.set_ppn(paddr >> 10);
+        pte.set_ppn(paddr >> 12);
         pte.set_valid(true);
         pte.set_readable(readable);
         pte.set_writable(writable);
@@ -269,8 +269,6 @@ impl<const LEVEL: usize> Drop for RawPageTable<LEVEL> {
     fn drop(&mut self) {
         for entry in self.entries {
             if entry.valid() {
-                let paddr = PAddr::new((entry.ppn() << 10) as usize);
-
                 // SAFETY: map_table() requires a corresponding SharedRef
                 //         when mapping the entry. Also, we deliberately
                 //         leaked the reference count then. Thus, we can
@@ -282,7 +280,7 @@ impl<const LEVEL: usize> Drop for RawPageTable<LEVEL> {
                     } else {
                         debug_assert!(LEVEL == 0 || entry.is_leaf_entry());
 
-                        match paddr2frame(paddr) {
+                        match paddr2frame(entry.paddr()) {
                             Some(frame) => match *frame {
                                 Frame::PageTable(ref inner) => {
                                     SharedRef::new(inner)
@@ -335,7 +333,7 @@ impl PageTable {
                 pte.set_executable(true);
                 pte.set_user(false);
                 pte.set_global(true);
-                pte.set_ppn(paddr.as_usize() as u64 >> 10);
+                pte.set_ppn(paddr.as_usize() as u64 >> 12);
                 l2table.entries[uaddr.vpn2()] = pte;
 
                 offset += 1 * GB;

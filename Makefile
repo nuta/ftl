@@ -17,7 +17,7 @@ RUST_GDB ?= riscv64-unknown-elf-gdb
 GDB ?= rust-gdb
 
 QEMU ?= $(QEMU_PREFIX)qemu-system-riscv64
-QEMUFLAGS += -smp 1 -m 128 -machine virt,aclint=on -bios default
+QEMUFLAGS += -smp 1 -m 128 -machine virt -bios default
 QEMUFLAGS += -nographic -serial mon:stdio
 QEMUFLAGS += --no-reboot -d unimp,guest_errors,int,cpu_reset -D qemu-debug.log
 
