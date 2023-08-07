@@ -131,13 +131,14 @@ pub unsafe extern "C" fn switch_to_kernel() -> ! {
 
 pub unsafe fn switch_to_user(context: &Context) -> ! {
     println!("switch_to_user: pc={:x}", context.pc);
-    core::arch::asm!(
+    asm!(
         r#"
         csrw sepc, {user_pc}
         csrw sstatus, {sstatus}
         csrw sscratch, {user_tp}
+        mv tp, {context}
         ld ra, {ra_offset}(tp)
-        // ld sp, {sp_offset}(tp) FIXME:
+        ld sp, {sp_offset}(tp)
         ld gp, {gp_offset}(tp)
         ld t0, {t0_offset}(tp)
         ld t1, {t1_offset}(tp)
@@ -169,10 +170,10 @@ pub unsafe fn switch_to_user(context: &Context) -> ! {
         csrrw tp, sscratch, tp
         sret
         "#,
+        context = in(reg) context,
         user_pc = in(reg) context.pc,
         sstatus = in(reg) context.sstatus,
         user_tp = in(reg) context.tp,
-        // FIXME: Add context offset in TP
         ra_offset = const offset_of!(Context, ra),
         sp_offset = const offset_of!(Context, sp),
         gp_offset = const offset_of!(Context, gp),

@@ -110,7 +110,6 @@ pub struct RawPageTable<const LEVEL: usize> {
 
 impl<const LEVEL: usize> RawPageTable<LEVEL> {
     pub const fn new() -> Self {
-        // FIXME: Map kernel pages.
         Self {
             entries: [Pte::zeroed(); ENTRIES_PER_TABLE],
         }
@@ -311,8 +310,39 @@ pub type PageTableL0 = RawPageTable<0>;
 pub struct PageTable(pub RawPageTable<3>);
 
 impl PageTable {
-    pub fn new() -> Self {
-        Self(RawPageTable::new())
+    pub fn new() -> PageTable {
+        PageTable(RawPageTable::new())
+    }
+
+    pub fn map_kernel_pages(&mut self){
+        let l2table =
+            memory::allocate_and_initialize(PAGE_SIZE, |pool, vaddr| {
+                pool.initialize_page_table_l2(vaddr, PAGE_SIZE).unwrap()
+            });
+
+        {
+            let mut offset = 0;
+            const GB: usize = 1024 * 1024 * 1024;
+            let mut l2table = l2table.borrow_mut();
+            while offset < 1 * GB {
+                let uaddr = UAddr::new(0x00000000_80000000 + offset);
+                let paddr = PAddr::new(0x00000000_80000000 + offset);
+
+                let mut pte = Pte::zeroed();
+                pte.set_valid(true);
+                pte.set_readable(true);
+                pte.set_writable(true);
+                pte.set_executable(true);
+                pte.set_user(false);
+                pte.set_global(true);
+                pte.set_ppn(paddr.as_usize() as u64 >> 12);
+                l2table.entries[uaddr.vpn2()] = pte;
+
+                offset += 1 * GB;
+            }
+        }
+
+        self.0.map_table(UAddr::new(0x00000000_80000000), SharedRef::inc_ref(&l2table));
     }
 
     pub fn map_recursively(

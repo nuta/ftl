@@ -43,7 +43,7 @@ where
         }
 
         unsafe {
-            fp = (*frame).fp.saturating_sub(size_of::<StackFrame>() as u64); // FIXME: why?
+            fp = (*frame).fp.saturating_sub(size_of::<StackFrame>() as u64);
             ra = (*frame).ra;
         }
     }

@@ -1,4 +1,4 @@
-use crate::{arch, ref_count::UniqueRef};
+use crate::{address::UAddr, arch, ref_count::UniqueRef};
 
 /// A reference to a kernel object with associated rights, aka *capability*.
 ///
@@ -14,6 +14,7 @@ impl Handle {}
 /// A process is a collection of threads and resources (page tables and handles)
 /// that are shared among the threads.
 pub struct Process {
+    context: arch::Context,
     page_table: UniqueRef<arch::PageTable>,
 
     // We want to keep the size of `Process` small so that a process can be
@@ -25,11 +26,16 @@ pub struct Process {
 
 impl Process {
     /// Creates a new process.
-    pub fn new(page_table: UniqueRef<arch::PageTable>) -> Process {
+    pub fn new(page_table: UniqueRef<arch::PageTable>, pc: UAddr) -> Process {
         const HANDLE_INIT: Handle = Handle::Free;
         Process {
+            context: arch::Context::new_user(pc),
             page_table,
             handles: [HANDLE_INIT; 128],
         }
+    }
+
+    pub fn switch_to_this(&self) {
+        self.context.switch_to_this(&self.page_table);
     }
 }

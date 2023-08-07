@@ -1,4 +1,10 @@
+use core::arch::asm;
+
 use riscv::registers::{Sstatus, SstatusFlags};
+
+use crate::{address::UAddr, ref_count::UniqueRef};
+
+use super::{switch::switch_to_user, PageTable};
 
 #[derive(Default, Debug)]
 #[repr(C)] // FIXME: Should this be packed?
@@ -39,28 +45,42 @@ pub struct Context {
 }
 
 impl Context {
-    pub fn new_user(pc: usize) -> Context {
+    pub fn new_user(pc: UAddr) -> Context {
         // TODO: Shoulnd't we inherit the sstatus by reading it?
         let mut sstatus = Sstatus::read();
         // sstatus.insert(SstatusFlags::SPIE);
         sstatus.remove(SstatusFlags::SPP);
 
         Context {
-            pc: pc as u64,
+            pc: pc.as_usize() as u64,
             sstatus: sstatus.bits() as u64,
             // Other registers are set to zero.
             ..Default::default()
         }
     }
 
-    // pub fn switch_test() -> ! {
-    //     unsafe {
-    //         core::arch::asm!("mv tp, {}", in(reg)
-    //             current_thread() as *const Context as usize
-    //         );
-    //         switch_to_user(&current_thread().context);
-    //     }
-    // }
+    pub fn switch_to_this(&self, pagetable: &UniqueRef<PageTable>) -> ! {
+        let table_paddr = UniqueRef::paddr(pagetable);
+        let table_ppn = table_paddr.as_usize() >> 12;
+        const SATP_SV48: usize = 9 << 60;
+        unsafe {
+            println!("switching page table");
+            asm!(r#"
+            sfence.vma zero, zero
+            csrw satp, {satp}
+            sfence.vma zero, zero
+            "#,
+                satp = in(reg) (SATP_SV48 | table_ppn),
+            );
+
+            // core::arch::asm!("mv tp, {}", in(reg)
+            //     current_thread() as *const Context as usize
+            // );
+            println!("switching context");
+
+            switch_to_user(&self);
+        }
+    }
 }
 
 // FIXME:

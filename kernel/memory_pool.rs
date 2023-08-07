@@ -8,7 +8,7 @@ use core::{
 };
 
 use crate::{
-    address::{PAddr, VAddr},
+    address::{PAddr, UAddr, VAddr},
     arch::{
         Page4K, PageTable, PageTableL0, PageTableL1, PageTableL2, PAGE_SIZE,
     },
@@ -350,11 +350,12 @@ impl MemoryPool {
         vaddr: VAddr,
         len: usize,
         pagetable: UniqueRef<PageTable>,
+        pc: UAddr,
     ) -> Result<SharedRef<Process>, RetypeError> {
         let first_frame = self.initialize(
             vaddr,
             len,
-            || Process::new(pagetable),
+            || Process::new(pagetable, pc),
             |object| {
                 // SAFETY: We'll create a SharedRef for this below.
                 Frame::Process(unsafe { SharedObject::new(object) })

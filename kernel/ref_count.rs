@@ -261,6 +261,12 @@ impl<T> UniqueRef<T> {
 
         Some(UniqueRef { object: sref.inner })
     }
+
+    /// Returns the physical address of the object value.
+    pub fn paddr(this: &UniqueRef<T>) -> PAddr {
+        let vaddr = VAddr::from_nonzero_usize(this.object.addr());
+        arch::vaddr2paddr(vaddr)
+    }
 }
 
 impl<T> Deref for UniqueRef<T> {

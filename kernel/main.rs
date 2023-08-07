@@ -105,6 +105,8 @@ pub fn kernel_main() {
             )
             .unwrap()
         });
+    // FIXME:
+    pagetable.map_kernel_pages();
 
     let mut fs = bootfs::Bootfs::load();
     let file = fs.find_by_name("startup.elf").unwrap();
@@ -147,12 +149,16 @@ pub fn kernel_main() {
         }
     }
 
+    let pc = UAddr::new(elf.ehdr.e_entry as usize);
     let process = memory::allocate_and_initialize(PAGE_SIZE, |pool, vaddr| {
-        pool.initialize_process(vaddr, PAGE_SIZE, pagetable)
+        pool.initialize_process(vaddr, PAGE_SIZE, pagetable, pc)
             .unwrap()
     });
 
     memory::allocate_all_pages();
+
+    // FIXME: Release the lock.
+    process.borrow_mut().switch_to_this();
 
     println!("shutting down...");
     arch::shutdown();
