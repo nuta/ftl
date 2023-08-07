@@ -107,6 +107,7 @@ pub struct CapturedBacktrace {
 
 impl CapturedBacktrace {
     /// Returns a saved backtrace.
+    #[track_caller]
     pub fn capture() -> CapturedBacktrace {
         let mut trace = ArrayVec::new();
         arch::backtrace(|_, vaddr| {
