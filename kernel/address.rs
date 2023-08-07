@@ -221,3 +221,19 @@ impl UAddr {
         self.0.get()
     }
 }
+
+impl Debug for UAddr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match size_of::<usize>() {
+            4 => write!(f, "0x{:08x}", self.as_usize()),
+            8 => write!(f, "0x{:016x}", self.as_usize()),
+            _ => unreachable!(),
+        }
+    }
+}
+
+impl Display for UAddr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        Debug::fmt(self, f)
+    }
+}

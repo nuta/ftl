@@ -346,7 +346,8 @@ impl PageTable {
             }
         };
 
-        let l1table = match l2table.borrow_mut().lookup(uaddr) {
+        let pte2 = l2table.borrow_mut().lookup(uaddr);
+        let l1table = match pte2 {
             Some(TableOrLeaf::Table(pte)) => match paddr2frame(pte.paddr()) {
                 Some(frame) => match *frame {
                     Frame::PageTableL1(ref inner) => SharedRef::new(inner),
@@ -370,7 +371,8 @@ impl PageTable {
             }
         };
 
-        let l0table = match l1table.borrow_mut().lookup(uaddr) {
+        let pte1 = l1table.borrow_mut().lookup(uaddr);
+        let l0table = match pte1 {
             Some(TableOrLeaf::Table(pte)) => match paddr2frame(pte.paddr()) {
                 Some(frame) => match *frame {
                     Frame::PageTableL0(ref inner) => SharedRef::new(inner),
