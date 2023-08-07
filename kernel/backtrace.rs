@@ -111,7 +111,6 @@ impl CapturedBacktrace {
         let mut trace = ArrayVec::new();
         arch::backtrace(|_, vaddr| {
             if let Some(symbol) = resolve_symbol(vaddr) {
-                println!(">>>    {} {}", vaddr, symbol.name);
                 let _ = trace.try_push(CapturedFrame {
                     vaddr,
                     symbol_name: symbol.name,
