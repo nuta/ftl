@@ -22,8 +22,20 @@ impl Thread {
         }
     }
 
-    pub fn switch_to_this(&self) {
-        // FIXME: don't borrow!
-        self.context.switch_to_this();
+    pub fn block(&mut self) {
+        debug_assert!(self.state != ThreadState::Blocked);
+
+        self.state = ThreadState::Blocked;
+    }
+
+    pub fn resume(&mut self) {
+        debug_assert!(self.state != ThreadState::Runnable);
+
+        self.state = ThreadState::Runnable;
+    }
+
+    pub fn switch_to(this: &SharedRef<Thread>) {
+        // FIXME:
+        this.borrow_mut().context.switch_to_this();
     }
 }

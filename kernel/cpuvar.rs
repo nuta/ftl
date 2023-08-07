@@ -8,18 +8,18 @@ use core::{
 
 use crate::{
     arch::{read_cpuvar_addr, write_cpuvar_addr},
-    memory::allocate_pages,
+    memory::allocate_pages, ref_count::SharedRef, thread::Thread,
 };
 
 #[repr(C)]
 pub struct Cpuvar {
-    pub panic_counter: AtomicU8,
+    pub current_thread: Option<SharedRef<Thread>>,
 }
 
 impl Cpuvar {
     pub const fn new() -> Cpuvar {
         Cpuvar {
-            panic_counter: AtomicU8::new(0),
+            current_thread: None,
         }
     }
 }

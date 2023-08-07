@@ -39,6 +39,7 @@ mod memory_pool;
 mod panic;
 mod process;
 mod ref_count;
+mod scheduler;
 mod test;
 mod thread;
 
@@ -166,12 +167,13 @@ pub fn kernel_main() {
     });
 
     process.borrow_mut().set_handle(HandleId::new(NonZeroUsize::new(1).unwrap()), Handle::Thread(SharedRef::inc_ref(&thread)));
+    thread.borrow_mut().resume();
+    scheduler::add_thread(thread);
 
     // TODO:
     memory::allocate_all_pages();
 
-    // FIXME: Release the lock.
-    thread.borrow_mut().switch_to_this();
+    scheduler::yield_to_user();
 
     println!("shutting down...");
     arch::shutdown();

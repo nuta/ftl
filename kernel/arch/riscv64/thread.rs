@@ -70,9 +70,9 @@ impl Context {
     pub fn switch_to_this(&self) -> ! {
         unsafe {
             asm!(r#"
-            sfence.vma zero, zero
-            csrw satp, {satp}
-            sfence.vma zero, zero
+                sfence.vma zero, zero
+                csrw satp, {satp}
+                sfence.vma zero, zero
             "#,
                 satp = in(reg) (self.satp),
             );
@@ -80,14 +80,3 @@ impl Context {
         }
     }
 }
-
-// FIXME:
-// static mut CURRENT: Option<alloc::boxed::Box<Thread>> = None;
-
-// pub fn current_thread() -> &'static Thread {
-//     unsafe { CURRENT.as_mut().unwrap() }
-// }
-
-// pub fn current_thread_mut() -> &'static mut Thread {
-//     unsafe { CURRENT.as_mut().unwrap() }
-// }
