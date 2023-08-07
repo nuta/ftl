@@ -197,6 +197,11 @@ impl<T> SharedRef<T> {
         })
     }
 
+    pub unsafe fn force_borrow(&self) -> NonNull<T> {
+        let ref_counted = self.ptr.as_ref().lock.force_borrow_mut();
+        *(*ref_counted).as_mut()
+    }
+
     /// Duplicates the reference.
     pub fn inc_ref(this: &SharedRef<T>) -> SharedRef<T> {
         // SAFETY: The destructor of `SharedRef` will decrement the reference

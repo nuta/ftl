@@ -113,6 +113,17 @@ impl<T> GiantLock<T> {
             tracker: &self.tracker,
         }
     }
+
+    /// Returns a raw pointer to the inner value without checking
+    /// the borrow checker.
+    ///
+    /// # Safety
+    ///
+    /// This method skips runtime borrow checking and may break the single
+    /// mutable reference rule.
+    pub unsafe fn force_borrow_mut(&self) -> *mut T {
+        self.inner.get()
+    }
 }
 
 // SAFETY: The giant lock ensures that the inner value will be accessible at

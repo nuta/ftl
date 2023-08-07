@@ -1,4 +1,4 @@
-use crate::{arch::{self, PageTable}, address::UAddr, ref_count::{SharedRef, UniqueRef}, process::Process};
+use crate::{arch::{self, PageTable}, address::UAddr, ref_count::{SharedRef, UniqueRef}, process::Process, cpuvar::cpuvar_mut};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum ThreadState {
@@ -22,6 +22,10 @@ impl Thread {
         }
     }
 
+    pub fn state(&self) -> ThreadState {
+        self.state
+    }
+
     pub fn block(&mut self) {
         debug_assert!(self.state != ThreadState::Blocked);
 
@@ -35,8 +39,8 @@ impl Thread {
     }
 
     pub fn switch_to(this: SharedRef<Thread>) -> ! {
-        // FIXME: change current thread in Cpuvar
-        // FIXME:　no lock here
-        this.borrow_mut().context.switch_to_this();
+        let thread = unsafe { SharedRef::force_borrow(&this).as_ref() };
+        cpuvar_mut().current_thread = Some(this);
+        thread.context.switch_to_this();
     }
 }

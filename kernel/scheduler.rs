@@ -1,6 +1,6 @@
 use alloc::vec::Vec;
 
-use crate::{ref_count::SharedRef, giant_lock::GiantLock, thread::Thread, cpuvar::cpuvar};
+use crate::{ref_count::SharedRef, giant_lock::GiantLock, thread::{Thread, ThreadState}, cpuvar::{cpuvar, cpuvar_mut}};
 
 pub struct Scheduler {
     threads: Vec<SharedRef<Thread>>,
@@ -30,10 +30,17 @@ fn idle() -> ! {
 }
 
 pub fn yield_to_user() -> ! {
-    // FIXME: push current thread to scheduler
-    // let current = cpuvar().current_thread.take();
+    let next = {
+        let mut scheduler = SCHEDULER.borrow_mut();
+        let current = cpuvar_mut().current_thread.take();
+        if let Some(thread) = current {
+            if thread.borrow_mut().state() == ThreadState::Runnable {
+                scheduler.add_thread(thread);
+            }
+        }
+        scheduler.schedule()
+    };
 
-    let next = SCHEDULER.borrow_mut().schedule();
     match next {
         Some(thread) => {
             Thread::switch_to(thread);
