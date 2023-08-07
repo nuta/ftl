@@ -86,7 +86,7 @@ pub unsafe extern "C" fn switch_to_kernel() -> ! {
         sd a0, {tp_offset}(tp)
 
         // cpuvar base of the current CPU
-        ld tp, {cpuvar_base_offset}(tp)
+        ld tp, {cpuvar_addr_offset}(tp)
 
         // kernel stack
         li a0, {kernel_stack_offset}
@@ -98,7 +98,7 @@ pub unsafe extern "C" fn switch_to_kernel() -> ! {
         trap_handler = sym trap_handler,
         pc_offset = const offset_of!(Context, pc),
         sstatus_offset = const offset_of!(Context, sstatus),
-        cpuvar_base_offset = const offset_of!(Context, cpuvar_base),
+        cpuvar_addr_offset = const offset_of!(Context, cpuvar_addr),
         kernel_stack_offset = const -(KERNEL_STACK_SIZE as isize),
         ra_offset = const offset_of!(Context, ra),
         sp_offset = const offset_of!(Context, sp),
@@ -143,7 +143,7 @@ pub unsafe fn switch_to_user(context: &Context) -> ! {
         csrw sstatus, {sstatus}
         csrw sscratch, {user_tp}
         mv a0, {context}
-        ld tp, {cpuvar_base_offset}(a0)
+        ld tp, {cpuvar_addr_offset}(a0)
         mv tp, a0
         ld ra, {ra_offset}(tp)
         ld sp, {sp_offset}(tp)
@@ -182,7 +182,7 @@ pub unsafe fn switch_to_user(context: &Context) -> ! {
         user_pc = in(reg) context.pc,
         sstatus = in(reg) context.sstatus,
         user_tp = in(reg) context.tp,
-        cpuvar_base_offset = const offset_of!(Context, cpuvar_base),
+        cpuvar_addr_offset = const offset_of!(Context, cpuvar_addr),
         ra_offset = const offset_of!(Context, ra),
         sp_offset = const offset_of!(Context, sp),
         gp_offset = const offset_of!(Context, gp),

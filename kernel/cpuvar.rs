@@ -1,12 +1,13 @@
 use core::{
     cell::RefCell,
+    mem::size_of,
     ops::Deref,
     ptr::{self, addr_of},
-    sync::atomic::AtomicU8, mem::size_of,
+    sync::atomic::AtomicU8,
 };
 
 use crate::{
-    arch::{read_cpulocal_base, write_cpulocal_base},
+    arch::{read_cpuvar_addr, write_cpuvar_addr},
     memory::allocate_pages,
 };
 
@@ -26,9 +27,11 @@ impl Cpuvar {
 pub const KERNEL_STACK_SIZE: usize = 1 * 1024 * 1024;
 
 pub fn cpuvar() -> &'static Cpuvar {
-    unsafe {
-        &*(read_cpulocal_base() as *const Cpuvar)
-    }
+    debug_assert!(
+        read_cpuvar_addr() != 0,
+        "cpuvar() called before init_percpu()"
+    );
+    unsafe { &*(read_cpuvar_addr() as *const Cpuvar) }
 }
 
 /// Initializes the CPU-local variables and kernel stack
@@ -41,8 +44,8 @@ pub fn cpuvar() -> &'static Cpuvar {
 /// - In each CPU initialization.
 pub fn init_percpu() {
     // Allocate the percpu area and the per-CPU kernel stack.
-    let allocated =
-        allocate_pages(KERNEL_STACK_SIZE + size_of::<Cpuvar>()).expect("failed to allocate percpu area");
+    let allocated = allocate_pages(KERNEL_STACK_SIZE + size_of::<Cpuvar>())
+        .expect("failed to allocate percpu area");
 
     // First KERNEL_STACK_SIZE bytes are for the per-CPU kernel stack.
     let percpu = allocated.offset(KERNEL_STACK_SIZE);
@@ -52,5 +55,5 @@ pub fn init_percpu() {
         ptr::write(percpu.as_mut_ptr(), Cpuvar::new());
     }
 
-    write_cpulocal_base(percpu.as_usize());
+    write_cpuvar_addr(percpu.as_usize());
 }

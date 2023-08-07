@@ -14,17 +14,16 @@ pub use page_table::{
 };
 pub use thread::Context;
 
-pub fn read_cpulocal_base() -> usize {
+pub fn read_cpuvar_addr() -> usize {
     let tp: usize;
     unsafe {
         core::arch::asm!("mv {}, tp", out(reg) tp);
     }
 
-    debug_assert!(tp != 0);
     tp
 }
 
-pub fn write_cpulocal_base(base: usize) {
+pub fn write_cpuvar_addr(base: usize) {
     unsafe {
         core::arch::asm!("mv tp, {}", in(reg) base);
     }

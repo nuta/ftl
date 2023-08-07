@@ -5,11 +5,11 @@ pub const PAGE_SIZE: usize = 4096;
 pub struct Context {}
 pub struct PageTable {}
 
-pub fn read_cpulocal_base() -> usize {
+pub fn read_cpuvar_addr() -> usize {
     unimplemented!()
 }
 
-pub fn write_cpulocal_base(base: usize) {
+pub fn write_cpuvar_addr(base: usize) {
     unimplemented!()
 }
 

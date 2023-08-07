@@ -1,3 +1,5 @@
+use crate::arch::write_cpuvar_addr;
+
 use super::switch::switch_to_kernel;
 use riscv::{
     registers::{Stvec, TrapMode},
@@ -30,6 +32,10 @@ pub unsafe extern "C" fn boot() {
 #[no_mangle]
 pub fn boot_kernel() {
     println!();
+
+    // Mark cpuvar as invalid.
+    write_cpuvar_addr(0);
+
     unsafe {
         Stvec::write(switch_to_kernel as *const () as usize, TrapMode::Direct);
     }

@@ -9,7 +9,7 @@ use super::{switch::switch_to_user, PageTable};
 #[derive(Default, Debug)]
 #[repr(C)] // FIXME: Should this be packed?
 pub struct Context {
-    pub cpuvar_base: u64,
+    pub cpuvar_addr: u64,
     pub pc: u64,
     pub sstatus: u64,
     pub ra: u64,

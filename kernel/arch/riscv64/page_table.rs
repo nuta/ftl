@@ -314,7 +314,7 @@ impl PageTable {
         PageTable(RawPageTable::new())
     }
 
-    pub fn map_kernel_pages(&mut self){
+    pub fn map_kernel_pages(&mut self) {
         let l2table =
             memory::allocate_and_initialize(PAGE_SIZE, |pool, vaddr| {
                 pool.initialize_page_table_l2(vaddr, PAGE_SIZE).unwrap()
@@ -342,7 +342,10 @@ impl PageTable {
             }
         }
 
-        self.0.map_table(UAddr::new(0x00000000_80000000), SharedRef::inc_ref(&l2table));
+        self.0.map_table(
+            UAddr::new(0x00000000_80000000),
+            SharedRef::inc_ref(&l2table),
+        );
     }
 
     pub fn map_recursively(
