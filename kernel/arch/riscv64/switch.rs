@@ -2,6 +2,8 @@ use core::{arch::asm, mem::offset_of};
 
 use super::thread::Context;
 
+use crate::cpu_local::KERNEL_STACK_SIZE;
+
 // Should never return.
 extern "C" fn trap_handler() -> ! {
     let scause: u64;
@@ -37,10 +39,9 @@ extern "C" fn trap_handler() -> ! {
 #[repr(align(4))]
 pub unsafe extern "C" fn switch_to_kernel() -> ! {
     asm!(
+        // tp points to the current thread's context
         r#"
         csrrw tp, sscratch, tp
-        // ld tp, 0(tp)  FIXME:
-
         sd ra, {ra_offset}(tp)
         sd sp, {sp_offset}(tp)
         sd gp, {gp_offset}(tp)
@@ -72,9 +73,6 @@ pub unsafe extern "C" fn switch_to_kernel() -> ! {
         sd s10, {s10_offset}(tp)
         sd s11, {s11_offset}(tp)
 
-        // set the kernel stack
-        // ld sp, kernel_sp_offset(tp) FIXME:
-
         // user pc
         csrr a0, sepc
         sd a0, {pc_offset}(tp)
@@ -87,13 +85,21 @@ pub unsafe extern "C" fn switch_to_kernel() -> ! {
         csrr a0, sscratch
         sd a0, {tp_offset}(tp)
 
-        j {trap_handler}
+        // cpuvar base of the current CPU
+        ld tp, {cpuvar_base_offset}(tp)
+
+        // kernel stack
+        li a0, {kernel_stack_offset}
+        add sp, tp, a0
+
+        call {trap_handler}
         "#
         ,
         trap_handler = sym trap_handler,
-        // FIXME: Add context offset in TP
         pc_offset = const offset_of!(Context, pc),
         sstatus_offset = const offset_of!(Context, sstatus),
+        cpuvar_base_offset = const offset_of!(Context, cpuvar_base),
+        kernel_stack_offset = const -(KERNEL_STACK_SIZE as isize),
         ra_offset = const offset_of!(Context, ra),
         sp_offset = const offset_of!(Context, sp),
         gp_offset = const offset_of!(Context, gp),
@@ -136,7 +142,9 @@ pub unsafe fn switch_to_user(context: &Context) -> ! {
         csrw sepc, {user_pc}
         csrw sstatus, {sstatus}
         csrw sscratch, {user_tp}
-        mv tp, {context}
+        mv a0, {context}
+        ld tp, {cpuvar_base_offset}(a0)
+        mv tp, a0
         ld ra, {ra_offset}(tp)
         ld sp, {sp_offset}(tp)
         ld gp, {gp_offset}(tp)
@@ -174,6 +182,7 @@ pub unsafe fn switch_to_user(context: &Context) -> ! {
         user_pc = in(reg) context.pc,
         sstatus = in(reg) context.sstatus,
         user_tp = in(reg) context.tp,
+        cpuvar_base_offset = const offset_of!(Context, cpuvar_base),
         ra_offset = const offset_of!(Context, ra),
         sp_offset = const offset_of!(Context, sp),
         gp_offset = const offset_of!(Context, gp),

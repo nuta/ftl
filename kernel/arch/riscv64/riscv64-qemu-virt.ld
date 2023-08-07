@@ -18,11 +18,6 @@ SECTIONS {
         *(.data .data.*);
         . = ALIGN(8);
         *(.sdata .sdata.*);
-
-        . = ALIGN(8);
-        __cpu_local = .;
-        *(.cpu_local);
-        __cpu_local_end = .;
     }
 
     .bss : ALIGN(8) {

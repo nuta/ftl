@@ -2,7 +2,7 @@ use core::{
     cell::RefCell,
     ops::Deref,
     ptr::{self, addr_of},
-    sync::atomic::AtomicU8,
+    sync::atomic::AtomicU8, mem::size_of,
 };
 
 use crate::{
@@ -10,135 +10,41 @@ use crate::{
     memory::allocate_pages,
 };
 
-#[macro_export]
-macro_rules! __cpu_local_inner {
-    ($V:vis, $N:ident, $T:ty, $E:expr) => {
-        ::paste::paste! {
-            #[used]
-            #[link_section = ".cpu_local"]
-            #[allow(non_upper_case_globals)]
-            static [<$N _INIT>]: $crate::cpu_local::InitialValue<$T> = $crate::cpu_local::InitialValue::new_internal($E);
+#[repr(C)]
+pub struct Cpuvar {
+    pub panic_counter: AtomicU8,
+}
 
-            $V static $N: $crate::cpu_local::CpuLocal<$T> = $crate::cpu_local::CpuLocal::new(&[<$N _INIT>]);
+impl Cpuvar {
+    pub const fn new() -> Cpuvar {
+        Cpuvar {
+            panic_counter: AtomicU8::new(0),
         }
-    };
-}
-
-/// Defines a CPU-local variable.
-///
-/// # Syntax
-///
-/// Follow the syntax of a `static` item, but wrap it with `cpu_local!` macro:
-///
-/// ```
-/// cpu_local! {
-///     pub static InterruptCounter: usize = 123;
-///     ^^^        ^^^^^^^^^^^^^^^^  ^^^^^   ^^^
-///     visibility       name        type    initial value
-/// }
-/// ```
-///
-/// The initial value must be a constant expression. Thus you can use `const fn`
-/// like `RefCell::new(123)`.
-#[macro_export]
-macro_rules! cpu_local {
-    (static $N:ident : $T:ty = $E:expr ;) => {
-        $crate::__cpu_local_inner!(, $N, $T, $E);
-    };
-    (pub static $N:ident : $T:ty = $E:expr ;) => {
-        $crate::__cpu_local_inner!(pub, $N, $T, $E);
-    };
-}
-
-extern "C" {
-    static __cpu_local: u8;
-    static __cpu_local_end: u8;
-}
-
-/// Represents a type that can be used as a CPU-local variable.
-///
-/// The type must be `Copy` but only in the initialization phase: the value will
-/// be copied as-is for each CPU. After the initialization, the value will not
-/// be copied anymore and thus the type doesn't have to be `Copy` completely.
-///
-/// For example, while [`RefCell<T>`] doesn't implement `Copy`, if `T` implements
-/// `Copy` it's safe to copy the initial value (`RefCell<T>`) because it's not
-/// borrowed yet. This trait is to capture the property.
-pub trait CpuLocalable {}
-impl CpuLocalable for bool {}
-impl CpuLocalable for usize {}
-impl CpuLocalable for AtomicU8 {}
-impl<T: Copy + Send> CpuLocalable for RefCell<T> {}
-
-/// A memory space for an initial value of a CPU-local variable.
-pub struct InitialValue<T: CpuLocalable + 'static>(T);
-
-impl<T: CpuLocalable + 'static> InitialValue<T> {
-    pub const fn new_internal(init: T) -> InitialValue<T> {
-        InitialValue(init)
     }
 }
 
-/// SAFETY: It's safe to read the initial value from any CPU.
-unsafe impl<T: CpuLocalable + 'static> Sync for InitialValue<T> {}
+pub const KERNEL_STACK_SIZE: usize = 1 * 1024 * 1024;
 
-pub struct CpuLocal<T: CpuLocalable + 'static> {
-    init: &'static T,
-}
-
-impl<T: CpuLocalable + 'static> CpuLocal<T> {
-    pub const fn new(init: &'static InitialValue<T>) -> CpuLocal<T> {
-        CpuLocal { init: &init.0 }
-    }
-
-    pub fn offset(&self) -> usize {
-        // TODO: Cache the result
-        let init_base;
-        let init_end;
-        unsafe {
-            init_base = addr_of!(__cpu_local) as usize;
-            init_end = addr_of!(__cpu_local_end) as usize;
-        }
-        let init_addr = self.init as *const _ as usize;
-
-        debug_assert!(init_base <= init_addr && init_addr < init_end);
-        init_addr - init_base
-    }
-
-    pub fn get(&self) -> &T {
-        unsafe { &*((read_cpulocal_base() + self.offset()) as *const T) }
+pub fn cpuvar() -> &'static Cpuvar {
+    unsafe {
+        &*(read_cpulocal_base() as *const Cpuvar)
     }
 }
-
-impl<T: CpuLocalable + 'static> Deref for CpuLocal<T> {
-    type Target = T;
-
-    fn deref(&self) -> &T {
-        self.get()
-    }
-}
-
-// SAFETY: It is safe to access the CPU-local variables from any CPU
-//         because each CPU has its own CPU-local variables.
-unsafe impl<T: CpuLocalable + 'static> Sync for CpuLocal<T> {}
 
 /// Initializes the CPU-local variables. This function must be called
 /// after the memory allocator is initialized and in each CPU initialization.
-pub fn init_percpu() {
-    let init_base = unsafe { addr_of!(__cpu_local) as usize };
-    let init_end = unsafe { addr_of!(__cpu_local_end) as usize };
-    let per_cpu_size = init_end - init_base;
+pub fn init() {
+    // Allocate the percpu area and the per-CPU kernel stack.
+    let allocated =
+        allocate_pages(KERNEL_STACK_SIZE + size_of::<Cpuvar>()).expect("failed to allocate percpu area");
 
-    let percpu_base =
-        allocate_pages(per_cpu_size).expect("failed to allocate percpu area");
-    write_cpulocal_base(percpu_base.as_usize());
+    // First KERNEL_STACK_SIZE bytes are for the per-CPU kernel stack.
+    let percpu = allocated.offset(KERNEL_STACK_SIZE);
 
-    // Fill the percpu area with the initial values.
+    // SAFETY: `percpu` is a valid pointer to the percpu area.
     unsafe {
-        ptr::copy_nonoverlapping(
-            init_base as *const u8,
-            percpu_base.as_mut_ptr(),
-            per_cpu_size,
-        );
+        ptr::write(percpu.as_mut_ptr(), Cpuvar::new());
     }
+
+    write_cpulocal_base(percpu.as_usize());
 }

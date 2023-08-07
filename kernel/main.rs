@@ -55,7 +55,7 @@ pub fn kernel_main() {
     memory::init();
 
     println!("initializing CPU local storage...");
-    cpu_local::init_percpu();
+    cpu_local::init();
 
     #[cfg(test)]
     {
