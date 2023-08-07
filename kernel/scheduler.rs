@@ -33,9 +33,7 @@ pub fn yield_to_user() -> ! {
     let next = SCHEDULER.borrow_mut().schedule();
     match next {
         Some(thread) => {
-            // FIXME: set current thread here
-            // FIXME: no locking
-            Thread::switch_to(&thread);
+            Thread::switch_to(thread);
         }
         None => {
             idle();
