@@ -1,4 +1,7 @@
-use core::{hint, sync::atomic::{AtomicBool, Ordering, AtomicUsize}};
+use core::{
+    hint,
+    sync::atomic::{AtomicBool, AtomicUsize, Ordering},
+};
 
 use riscv::{instructions::wfi, sbi};
 
@@ -10,7 +13,10 @@ mod thread;
 mod trap;
 
 pub const PAGE_SIZE: usize = 4096;
-use crate::address::{PAddr, VAddr};
+use crate::{
+    address::{PAddr, VAddr},
+    arch::riscv64::page_table::KERNEL_MAPPED_SIZE,
+};
 pub use backtrace::backtrace;
 pub use page_table::{
     Page4K, PageTable, PageTableL0, PageTableL1, PageTableL2,
@@ -58,38 +64,30 @@ pub fn owns_giant_lock() -> bool {
 }
 
 pub const fn is_valid_vaddr(addr: usize) -> bool {
-    // FIXME:
-    0x80000000 <= addr && addr < 0x88000000
+    addr <= 0x80000000 && addr < 0x80000000 + KERNEL_MAPPED_SIZE
 }
 
 pub fn paddr2vaddr(paddr: PAddr) -> Option<VAddr> {
-    if paddr.as_usize() < 0x80000000 {
+    if is_valid_vaddr(paddr.as_usize()) {
         return None;
     }
-
-    // FIXME: use kernel-mapped region
 
     Some(VAddr::new(paddr.as_usize()))
 }
 
 pub fn vaddr2paddr(vaddr: VAddr) -> PAddr {
-    debug_assert!(vaddr.as_usize() > 0x80000000);
-    debug_assert!(vaddr.as_usize() < 0x88000000); // FIXME: use kernel-mapped region
+    // While VAddr is guaranteed to be valid acessible address, it might contain
+    // an invalid address. Just check it to be sure.
+    debug_assert!(is_valid_vaddr(vaddr.as_usize()));
+
     PAddr::new(vaddr.as_usize())
 }
-
-// pub fn read_cpu_cycles() -> usize {
-//     rdcycle() as usize
-// }
 
 pub fn shutdown() {
     sbi::shutdown();
 }
 
 pub fn hang() -> ! {
-    // TODO: remove this
-    shutdown();
-
     loop {
         wfi();
     }

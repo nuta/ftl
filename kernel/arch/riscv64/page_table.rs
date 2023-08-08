@@ -5,7 +5,7 @@ use core::{
 };
 
 use bitfields::{bitfields, B10, B2, B44};
-use essentials::alignment::is_aligned;
+use essentials::{alignment::is_aligned, units::GB};
 
 use crate::{
     address::{PAddr, UAddr},
@@ -15,6 +15,8 @@ use crate::{
 };
 
 use super::PAGE_SIZE;
+
+pub const KERNEL_MAPPED_SIZE: usize = 4 * GB;
 
 /// The number of entries in a page table in any level.
 const ENTRIES_PER_TABLE: usize = 512;
@@ -321,9 +323,8 @@ impl PageTable {
 
         {
             let mut offset = 0;
-            const GB: usize = 1024 * 1024 * 1024;
             let mut l2table = l2table.borrow_mut();
-            while offset < 1 * GB {
+            while offset < KERNEL_MAPPED_SIZE {
                 let uaddr = UAddr::new(0x00000000_80000000 + offset);
                 let paddr = PAddr::new(0x00000000_80000000 + offset);
 

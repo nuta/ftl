@@ -2,7 +2,10 @@ use core::{arch::asm, mem::offset_of};
 
 use super::{thread::Context, trap::trap_handler};
 
-use crate::{arch::{self, giant_unlock}, cpuvar::KERNEL_STACK_SIZE};
+use crate::{
+    arch::{self, giant_unlock},
+    cpuvar::KERNEL_STACK_SIZE,
+};
 
 // The interrupt/exception/system call handler entry point. `stvec` is set to
 // this address.

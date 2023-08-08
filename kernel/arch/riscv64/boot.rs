@@ -1,4 +1,4 @@
-use crate::{arch::{write_cpuvar_addr, giant_lock} };
+use crate::arch::{giant_lock, write_cpuvar_addr};
 
 use super::switch::switch_to_kernel;
 use riscv::{
