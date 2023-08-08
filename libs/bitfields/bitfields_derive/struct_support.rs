@@ -6,7 +6,7 @@ use syn::{
     parse::{Parse, ParseStream},
     punctuated::Punctuated,
     spanned::Spanned,
-    DataStruct, Fields, FieldsNamed, Ident, Token, Type, Attribute, Visibility,
+    Attribute, DataStruct, Fields, FieldsNamed, Ident, Token, Type, Visibility,
 };
 
 use crate::helpers::AttributeArgs;

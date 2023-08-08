@@ -100,7 +100,7 @@ impl Page4K {
     }
 }
 
-pub enum TableOrLeaf {
+enum TableOrLeaf {
     Table(Pte),
     Leaf(Pte),
 }

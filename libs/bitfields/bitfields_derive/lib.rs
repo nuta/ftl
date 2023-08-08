@@ -21,9 +21,7 @@ pub fn bitfields(args: TokenStream, item: TokenStream) -> TokenStream {
             let enum_name = &item_input.ident;
             let args_input =
                 parse_macro_input!(args as AttributeArgs<EnumAttr>);
-            bitfields_enum(enum_name, args_input, enum_input, item_input.span(),
-
-        )
+            bitfields_enum(enum_name, args_input, enum_input, item_input.span())
         }
         Data::Struct(ref struct_input) => {
             let struct_name = &item_input.ident;

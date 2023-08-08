@@ -62,7 +62,11 @@ impl Process {
         self.handles.get(id.index())
     }
 
-    pub fn set_handle(&mut self, id: HandleId, handle: Handle) -> Result<(), ()> {
+    pub fn set_handle(
+        &mut self,
+        id: HandleId,
+        handle: Handle,
+    ) -> Result<(), ()> {
         if id.index() >= self.handles.len() {
             return Err(()); // TODO: correct error
         }

@@ -90,16 +90,11 @@ impl MemoryPool {
             slice::from_raw_parts_mut(vaddr.as_mut_ptr(), num_frames)
         };
 
-        // FIXME: Optimize this initialization. We need something like memset.
         let num_control_frames =
             align_up(num_frames * size_of::<Frame>(), PAGE_SIZE) / PAGE_SIZE;
-        for frame in &mut frames[0..num_control_frames] {
-            *frame = Frame::Reserved;
-        }
 
-        for frame in &mut frames[num_control_frames..] {
-            *frame = Frame::Unused;
-        }
+        frames[0..num_control_frames].fill_with(|| Frame::Reserved);
+        frames[num_control_frames..].fill_with(|| Frame::Unused);
 
         Some(MemoryPool {
             base: vaddr.offset(num_control_frames * PAGE_SIZE),
