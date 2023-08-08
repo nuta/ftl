@@ -1,6 +1,11 @@
 use core::num::NonZeroUsize;
 
-use crate::{address::UAddr, arch, ref_count::{UniqueRef, SharedRef}, thread::Thread};
+use crate::{
+    address::UAddr,
+    arch,
+    ref_count::{SharedRef, UniqueRef},
+    thread::Thread,
+};
 
 /// A reference to a kernel object with associated rights, aka *capability*.
 ///

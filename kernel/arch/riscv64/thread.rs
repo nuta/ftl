@@ -2,7 +2,11 @@ use core::arch::asm;
 
 use riscv::registers::{Sstatus, SstatusFlags};
 
-use crate::{address::UAddr, ref_count::{UniqueRef, SharedRef}, process::Process};
+use crate::{
+    address::UAddr,
+    process::Process,
+    ref_count::{SharedRef, UniqueRef},
+};
 
 use super::{switch::switch_to_user, PageTable};
 

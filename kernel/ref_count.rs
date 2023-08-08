@@ -263,9 +263,13 @@ impl<T> UniqueRef<T> {
             return None;
         }
 
-        let uref = UniqueRef { object: guard.inner };
+        let uref = UniqueRef {
+            object: guard.inner,
+        };
 
-        // Don't drop the guard and keep the object mutably borrowed.
+        // Don't drop the guard and keep the object mutably borrowed. We never
+        // reference the object as SharedRef again, but if we do, the runtime
+        // borrow checker should catch it.
         mem::forget(guard);
 
         // Now the sref is turned into uref, so we should not call sref's

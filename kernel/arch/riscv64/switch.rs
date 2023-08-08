@@ -1,34 +1,8 @@
 use core::{arch::asm, mem::offset_of};
 
-use super::thread::Context;
+use super::{thread::Context, trap::trap_handler};
 
 use crate::cpuvar::KERNEL_STACK_SIZE;
-
-// Should never return.
-extern "C" fn trap_handler() -> ! {
-    let scause: u64;
-    unsafe {
-        asm!("csrr {}, scause", out(reg) scause);
-    }
-
-    let sepc: u64;
-    unsafe {
-        asm!("csrr {}, sepc", out(reg) sepc);
-    }
-
-    // current_thread_mut().context.pc += 4;
-    println!(
-        "trap_handler: scause={:x}, sepc={:x}",
-        scause,
-        sepc,
-        // current_thread().context.a0
-    );
-    // if current_thread().context.a0 == 0xdead {
-    //     panic!("User program exited");
-    // }
-
-    panic!();
-}
 
 // The interrupt/exception/system call handler entry point. `stvec` is set to
 // this address.
@@ -89,8 +63,7 @@ pub unsafe extern "C" fn switch_to_kernel() -> ! {
         ld tp, {cpuvar_addr_offset}(tp)
 
         // kernel stack
-        li a0, {kernel_stack_offset}
-        add sp, tp, a0
+        mv sp, tp
 
         call {trap_handler}
         "#
@@ -99,7 +72,6 @@ pub unsafe extern "C" fn switch_to_kernel() -> ! {
         pc_offset = const offset_of!(Context, pc),
         sstatus_offset = const offset_of!(Context, sstatus),
         cpuvar_addr_offset = const offset_of!(Context, cpuvar_addr),
-        kernel_stack_offset = const -(KERNEL_STACK_SIZE as isize),
         ra_offset = const offset_of!(Context, ra),
         sp_offset = const offset_of!(Context, sp),
         gp_offset = const offset_of!(Context, gp),
@@ -144,7 +116,7 @@ pub unsafe fn switch_to_user(context: &Context) -> ! {
         csrw sstatus, {sstatus}
         csrw sscratch, {user_tp}
         mv a0, {context}
-        ld tp, {cpuvar_addr_offset}(a0)
+        sd tp, {cpuvar_addr_offset}(a0)
         mv tp, a0
         ld ra, {ra_offset}(tp)
         ld sp, {sp_offset}(tp)

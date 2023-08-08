@@ -5,6 +5,7 @@ mod boot;
 mod page_table;
 mod switch;
 mod thread;
+mod trap;
 
 pub const PAGE_SIZE: usize = 4096;
 use crate::address::{PAddr, VAddr};

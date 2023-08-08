@@ -14,8 +14,10 @@ use crate::{
     },
     backtrace,
     giant_lock::{GiantLock, GiantLockGuard},
+    memory::allocate_pages,
     process::Process,
-    ref_count::{SharedObject, SharedRef, UniqueRef}, thread::Thread, memory::allocate_pages,
+    ref_count::{SharedObject, SharedRef, UniqueRef},
+    thread::Thread,
 };
 use essentials::{
     alignment::{align_up, is_aligned},
@@ -193,7 +195,11 @@ impl MemoryPool {
         Ok(first_frame)
     }
 
-    pub unsafe fn retype(&mut self, vaddr: VAddr, len: usize) -> Result<Range<usize>, RetypeError> {
+    pub unsafe fn retype(
+        &mut self,
+        vaddr: VAddr,
+        len: usize,
+    ) -> Result<Range<usize>, RetypeError> {
         let range = self
             .frame_range(vaddr, len)
             .ok_or(RetypeError::OutOfRange)?;
@@ -423,7 +429,7 @@ impl MemoryPool {
 }
 
 fn initialize<'a, F, T>(
-   mut memory_pool: GiantLockGuard<'a, MemoryPool>,
+    mut memory_pool: GiantLockGuard<'a, MemoryPool>,
     vaddr: VAddr,
     len: usize,
     object_ctor: F,
@@ -439,9 +445,7 @@ where
         return Err(RetypeError::UnalignedAddress);
     }
 
-    let range = unsafe {
-        memory_pool.retype(vaddr, len)?
-    };
+    let range = unsafe { memory_pool.retype(vaddr, len)? };
 
     // Allow object_ctor to borrow memory_pool.
     drop(memory_pool);
@@ -463,12 +467,10 @@ pub fn initialize_page_table(
     vaddr: VAddr,
     len: usize,
 ) -> Result<UniqueRef<PageTable>, RetypeError> {
-    let (range, object) = initialize(
-        memory_pool_mut(vaddr).unwrap(),
-        vaddr,
-        len,
-        || PageTable::new()
-    )?;
+    let (range, object) =
+        initialize(memory_pool_mut(vaddr).unwrap(), vaddr, len, || {
+            PageTable::new()
+        })?;
 
     let mut memory_pool = memory_pool_mut(vaddr).unwrap();
     let first_frame = &mut memory_pool.frames[range.start];
@@ -476,7 +478,9 @@ pub fn initialize_page_table(
     *first_frame = Frame::PageTable(unsafe { SharedObject::new(object) });
 
     let uref = match first_frame {
-        Frame::PageTable(object) => UniqueRef::new( SharedRef::new(object)).unwrap(),
+        Frame::PageTable(object) => {
+            UniqueRef::new(SharedRef::new(object)).unwrap()
+        }
         // SAFETY: We just filled the first frame above.
         _ => unsafe { unreachable_unchecked() },
     };

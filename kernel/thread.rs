@@ -1,4 +1,10 @@
-use crate::{arch::{self, PageTable}, address::UAddr, ref_count::{SharedRef, UniqueRef}, process::Process, cpuvar::cpuvar_mut};
+use crate::{
+    address::UAddr,
+    arch::{self, PageTable},
+    cpuvar::cpuvar_mut,
+    process::Process,
+    ref_count::{SharedRef, UniqueRef},
+};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum ThreadState {
@@ -24,6 +30,10 @@ impl Thread {
 
     pub fn state(&self) -> ThreadState {
         self.state
+    }
+
+    pub fn context_mut(&mut self) -> &mut arch::Context {
+        &mut self.context
     }
 
     pub fn block(&mut self) {

@@ -21,7 +21,7 @@ use essentials::alignment::{align_up, is_aligned};
 use crate::{
     address::{PAddr, UAddr},
     arch::{PageTable, PAGE_SIZE},
-    process::{Process, Handle, HandleId},
+    process::{Handle, HandleId, Process},
     ref_count::{SharedRef, UniqueRef},
 };
 
@@ -67,7 +67,8 @@ pub fn kernel_main() {
     }
 
     println!("initializing first process...");
-    let mut pagetable = memory_pool::allocate_page_table().expect("failed to allocate page table");
+    let mut pagetable = memory_pool::allocate_page_table()
+        .expect("failed to allocate page table");
     // TODO:
     println!("initializing mapping kernel pages...");
     pagetable.map_kernel_pages();
@@ -123,11 +124,19 @@ pub fn kernel_main() {
             .unwrap()
     });
     let thread = memory::allocate_and_initialize(PAGE_SIZE, |pool, vaddr| {
-        pool.initialize_thread(vaddr, PAGE_SIZE, SharedRef::inc_ref(&process), pc)
-            .unwrap()
+        pool.initialize_thread(
+            vaddr,
+            PAGE_SIZE,
+            SharedRef::inc_ref(&process),
+            pc,
+        )
+        .unwrap()
     });
 
-    process.borrow_mut().set_handle(HandleId::new(NonZeroUsize::new(1).unwrap()), Handle::Thread(SharedRef::inc_ref(&thread)));
+    process.borrow_mut().set_handle(
+        HandleId::new(NonZeroUsize::new(1).unwrap()),
+        Handle::Thread(SharedRef::inc_ref(&thread)),
+    );
     thread.borrow_mut().resume();
     scheduler::add_thread(thread);
 

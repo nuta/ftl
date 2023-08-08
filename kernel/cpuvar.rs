@@ -1,5 +1,5 @@
 use core::{
-    cell::{RefCell, RefMut, Ref},
+    cell::{Ref, RefCell, RefMut},
     mem::size_of,
     ops::Deref,
     ptr::{self, addr_of},
@@ -8,17 +8,21 @@ use core::{
 
 use crate::{
     arch::{read_cpuvar_addr, write_cpuvar_addr},
-    memory::allocate_pages, ref_count::SharedRef, thread::Thread,
+    memory::allocate_pages,
+    ref_count::SharedRef,
+    thread::Thread,
 };
 
 #[repr(C)]
 pub struct CpuVar {
+    pub magic: u32,
     pub current_thread: Option<SharedRef<Thread>>,
 }
 
 impl CpuVar {
     pub const fn new() -> RefCell<CpuVar> {
         RefCell::new(CpuVar {
+            magic: 0xc12c12,
             current_thread: None,
         })
     }
@@ -32,15 +36,21 @@ pub fn cpuvar_refcell() -> &'static RefCell<CpuVar> {
         "cpuvar() called before init_percpu()"
     );
 
+    println!("cpuvar_refcell: {:x}", read_cpuvar_addr());
     unsafe { &*(read_cpuvar_addr() as *const RefCell<CpuVar>) }
 }
 
 pub fn cpuvar() -> Ref<'static, CpuVar> {
-    cpuvar_refcell().borrow()
+    let guard = cpuvar_refcell().borrow();
+    debug_assert_eq!(guard.magic, 0xc12c12, "invalid cpuvar magic");
+    guard
 }
 
 pub fn cpuvar_mut() -> RefMut<'static, CpuVar> {
-    cpuvar_refcell().borrow_mut()
+    let guard = cpuvar_refcell().borrow_mut();
+    debug_assert_eq!(guard.magic, 0xc12c12, "invalid cpuvar magic");
+    println!("OK cpuvar_mut");
+    guard
 }
 
 /// Initializes the CPU-local variables and kernel stack
