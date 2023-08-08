@@ -1,4 +1,4 @@
-use core::{hint, sync::atomic::{AtomicBool, Ordering}};
+use core::{hint, sync::atomic::{AtomicBool, Ordering, AtomicUsize}};
 
 use riscv::{instructions::wfi, sbi};
 
@@ -53,7 +53,8 @@ pub fn giant_unlock() {
 }
 
 pub fn owns_giant_lock() -> bool {
-    true // FIXME:
+    // TODO: Check owner CPU ID
+    GIANT_LOCK.load(Ordering::Relaxed)
 }
 
 pub const fn is_valid_vaddr(addr: usize) -> bool {

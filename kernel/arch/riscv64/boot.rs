@@ -1,4 +1,4 @@
-use crate::arch::write_cpuvar_addr;
+use crate::{arch::{write_cpuvar_addr, giant_lock} };
 
 use super::switch::switch_to_kernel;
 use riscv::{
@@ -32,6 +32,7 @@ pub unsafe extern "C" fn boot() {
 #[no_mangle]
 pub fn boot_kernel() {
     println!();
+    giant_lock();
 
     // Mark cpuvar as invalid.
     write_cpuvar_addr(0);
