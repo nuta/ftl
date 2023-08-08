@@ -1,3 +1,5 @@
+use core::{hint, sync::atomic::{AtomicBool, Ordering}};
+
 use riscv::{instructions::wfi, sbi};
 
 mod backtrace;
@@ -28,6 +30,26 @@ pub fn write_cpuvar_addr(base: usize) {
     unsafe {
         core::arch::asm!("mv tp, {}", in(reg) base);
     }
+}
+
+static GIANT_LOCK: AtomicBool = AtomicBool::new(false);
+
+pub fn giant_lock() {
+    while GIANT_LOCK
+        .compare_exchange_weak(
+            false,
+            true,
+            Ordering::Acquire,
+            Ordering::Relaxed,
+        )
+        .is_err()
+    {
+        hint::spin_loop();
+    }
+}
+
+pub fn giant_unlock() {
+    GIANT_LOCK.store(false, Ordering::Release);
 }
 
 pub fn owns_giant_lock() -> bool {

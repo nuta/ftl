@@ -2,7 +2,7 @@ use core::{arch::asm, mem::offset_of};
 
 use super::{thread::Context, trap::trap_handler};
 
-use crate::cpuvar::KERNEL_STACK_SIZE;
+use crate::{arch::{self, giant_unlock}, cpuvar::KERNEL_STACK_SIZE};
 
 // The interrupt/exception/system call handler entry point. `stvec` is set to
 // this address.
@@ -109,6 +109,8 @@ pub unsafe extern "C" fn switch_to_kernel() -> ! {
 
 #[inline]
 pub unsafe fn switch_to_user(context: &Context) -> ! {
+    giant_unlock();
+
     asm!(
         r#"
         csrw sepc, {user_pc}

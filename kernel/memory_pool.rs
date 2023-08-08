@@ -93,6 +93,7 @@ impl MemoryPool {
         let num_control_frames =
             align_up(num_frames * size_of::<Frame>(), PAGE_SIZE) / PAGE_SIZE;
 
+        // TODO: use memset
         frames[0..num_control_frames].fill_with(|| Frame::Reserved);
         frames[num_control_frames..].fill_with(|| Frame::Unused);
 

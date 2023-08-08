@@ -1,6 +1,7 @@
 use core::arch::asm;
 
 use crate::{
+    arch::giant_lock,
     cpuvar::cpuvar_mut,
     scheduler::{self, yield_to_user},
 };
@@ -16,6 +17,8 @@ pub extern "C" fn trap_handler() -> ! {
     unsafe {
         asm!("csrr {}, sepc", out(reg) sepc);
     }
+
+    giant_lock();
 
     if scause == 8 {
         let mut cpuvar = cpuvar_mut();
