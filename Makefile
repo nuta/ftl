@@ -61,6 +61,10 @@ prerequisites:
 rustdoc:
 	$(CARGO) doc --workspace
 
+.PHONY: clippy
+clippy:
+	RUSTFLAGS="$(RUSTFLAGS)" $(CARGO) build $(CARGOFLAGS) --target kernel/arch/riscv64/riscv64-qemu-virt.json --manifest-path kernel/Cargo.toml
+
 .PHONY: check
 check:
 	RUSTFLAGS="$(RUSTFLAGS)" $(CARGO) watch -c -- $(CARGO) check $(CARGOFLAGS) --target kernel/arch/riscv64/riscv64-qemu-virt.json --manifest-path kernel/Cargo.toml
