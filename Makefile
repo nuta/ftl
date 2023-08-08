@@ -63,7 +63,7 @@ rustdoc:
 
 .PHONY: clippy
 clippy:
-	RUSTFLAGS="$(RUSTFLAGS)" $(CARGO) build $(CARGOFLAGS) --target kernel/arch/riscv64/riscv64-qemu-virt.json --manifest-path kernel/Cargo.toml
+	RUSTFLAGS="$(RUSTFLAGS)" $(CARGO) clippy $(CARGOFLAGS) --target kernel/arch/riscv64/riscv64-qemu-virt.json --manifest-path kernel/Cargo.toml
 
 .PHONY: check
 check:

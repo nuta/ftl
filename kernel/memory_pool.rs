@@ -671,7 +671,7 @@ pub fn init(vaddr: VAddr, len: usize) {
     //       Perhaps we should use UAddr?
     let pool = MemoryPool::new(vaddr, len)
         .expect("failed to initialize global memory pool");
-    if let Err(_) = MEMORY_POOL.borrow_mut().set(pool) {
+    if MEMORY_POOL.borrow_mut().set(pool).is_err() {
         panic!("global memory pool is already initialized");
     }
 }

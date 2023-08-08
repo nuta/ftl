@@ -60,10 +60,7 @@ struct RefCounted<T> {
 impl<T> RefCounted<T> {
     /// Creates a reference counted object.
     const fn new(inner: T) -> RefCounted<T> {
-        RefCounted {
-            counter: 0,
-            inner: inner,
-        }
+        RefCounted { counter: 0, inner }
     }
 
     /// Increments the reference counter.

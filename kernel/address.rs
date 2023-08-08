@@ -27,8 +27,11 @@ impl VAddr {
     /// This function panics if `addr` is zero or not valid address.
     #[inline]
     pub const fn new(addr: usize) -> VAddr {
-        assert!(addr != 0, "VAddr cannot be zero");
-        assert!(arch::is_valid_vaddr(addr), "VAddr is not a valid address");
+        debug_assert!(addr != 0, "VAddr cannot be zero");
+        debug_assert!(
+            arch::is_valid_vaddr(addr),
+            "VAddr is not a valid address"
+        );
 
         // SAFETY: The assert above ensures that `addr` is not zero.
         VAddr(unsafe { NonZeroUsize::new_unchecked(addr) })

@@ -80,7 +80,7 @@ impl Context {
             "#,
                 satp = in(reg) (self.satp),
             );
-            switch_to_user(&self);
+            switch_to_user(self);
         }
     }
 }

@@ -52,7 +52,7 @@ fn resolve_symbol(vaddr: VAddr) -> Option<Symbol> {
     };
 
     // Do a binary search.
-    let mut l = -1 as isize;
+    let mut l = -1_isize;
     let mut r = num_symbols as isize;
     while r - l > 1 {
         let mid = (l + r) / 2;

@@ -6,7 +6,7 @@ use bootfs::{BootfsEntry, BootfsHeader};
 #[repr(align(4096))]
 struct PageAligned<T: ?Sized>(T);
 
-const BOOTFS_IMAGE: &'static PageAligned<[u8]> =
+const BOOTFS_IMAGE: &PageAligned<[u8]> =
     &PageAligned(*include_bytes!("../bootfs.bin"));
 
 /// Converts a null-terminated C string to `&str`.

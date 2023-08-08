@@ -6,6 +6,8 @@ use core::{
     sync::atomic::AtomicU8,
 };
 
+use essentials::units::MB;
+
 use crate::{
     arch::{read_cpuvar_addr, write_cpuvar_addr},
     memory::allocate_pages,
@@ -28,7 +30,7 @@ impl CpuVar {
     }
 }
 
-pub const KERNEL_STACK_SIZE: usize = 1 * 1024 * 1024;
+pub const KERNEL_STACK_SIZE: usize = 1 * MB;
 
 pub fn cpuvar_refcell() -> &'static RefCell<CpuVar> {
     debug_assert!(

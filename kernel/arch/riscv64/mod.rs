@@ -64,7 +64,7 @@ pub fn owns_giant_lock() -> bool {
 }
 
 pub const fn is_valid_vaddr(addr: usize) -> bool {
-    addr <= 0x80000000 && addr < 0x80000000 + KERNEL_MAPPED_SIZE
+    0x80000000 <= addr && addr < 0x80000000 + KERNEL_MAPPED_SIZE
 }
 
 pub fn paddr2vaddr(paddr: PAddr) -> Option<VAddr> {
