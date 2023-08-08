@@ -15,8 +15,6 @@ pub enum Handle {
     Thread(SharedRef<Thread>),
 }
 
-impl Handle {}
-
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct HandleId(NonZeroUsize);
 
