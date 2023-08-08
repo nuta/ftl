@@ -45,12 +45,6 @@ mod thread;
 
 extern crate alloc;
 
-// cpu_local! {
-//     pub static InterruptCounter: RefCell<usize> = {
-//         RefCell::new(123)
-//     };
-// }
-
 pub fn kernel_main() {
     println!("\nFTL - Faster Than L\n");
 
@@ -89,7 +83,6 @@ pub fn kernel_main() {
         assert!(is_aligned(phdr.p_vaddr as usize, PAGE_SIZE));
 
         let mut off = 0;
-        println!("phdr: {:#x?}", phdr);
         while off < align_up(phdr.p_memsz as usize, PAGE_SIZE) {
             let page4k =
                 memory::allocate_and_initialize(PAGE_SIZE, |pool, vaddr| {

@@ -6,7 +6,7 @@ use syn::{
     parse::{Parse, ParseStream},
     punctuated::Punctuated,
     spanned::Spanned,
-    DataStruct, Fields, FieldsNamed, Ident, Token, Type,
+    DataStruct, Fields, FieldsNamed, Ident, Token, Type, Attribute, Visibility,
 };
 
 use crate::helpers::AttributeArgs;
@@ -206,6 +206,8 @@ pub fn bitfields_struct(
     args_input: AttributeArgs<StructAttr>,
     struct_input: &DataStruct,
     struct_span: Span,
+    struct_attrs: Vec<Attribute>,
+    struct_vis: Visibility,
 ) -> TokenStream {
     let StructDef {
         struct_width,
@@ -339,9 +341,8 @@ pub fn bitfields_struct(
     }
 
     quote! {
-        // TODO: visibility
-        #[derive(Copy, Clone)] // FIXME:
-        pub struct #struct_name {
+        #(#struct_attrs)*
+        #struct_vis struct #struct_name {
             raw: #struct_width,
         }
 

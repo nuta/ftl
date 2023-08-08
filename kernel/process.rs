@@ -62,11 +62,16 @@ impl Process {
         self.handles.get(id.index())
     }
 
-    pub fn set_handle(&mut self, id: HandleId, handle: Handle) {
-        // TODO: Avoid panicking.
-        assert!(id.index() < self.handles.len());
-        assert!(matches!(self.handles[id.index()], Handle::Free));
+    pub fn set_handle(&mut self, id: HandleId, handle: Handle) -> Result<(), ()> {
+        if id.index() >= self.handles.len() {
+            return Err(()); // TODO: correct error
+        }
+
+        if !matches!(self.handles[id.index()], Handle::Free) {
+            return Err(()); // TODO: correct error
+        }
 
         self.handles[id.index()] = handle;
+        Ok(())
     }
 }

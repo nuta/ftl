@@ -133,7 +133,6 @@ pub fn bitfields_enum(
     });
 
     quote! {
-        #[derive(Copy, Clone)]
         #enum_input
         #(#static_asserts)*
 

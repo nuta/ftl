@@ -37,13 +37,13 @@ impl Thread {
     }
 
     pub fn block(&mut self) {
-        debug_assert!(self.state != ThreadState::Blocked);
+        debug_assert!(self.state == ThreadState::Runnable);
 
         self.state = ThreadState::Blocked;
     }
 
     pub fn resume(&mut self) {
-        debug_assert!(self.state != ThreadState::Runnable);
+        debug_assert!(self.state == ThreadState::Blocked);
 
         self.state = ThreadState::Runnable;
     }
