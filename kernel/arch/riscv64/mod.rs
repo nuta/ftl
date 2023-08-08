@@ -68,7 +68,7 @@ pub const fn is_valid_vaddr(addr: usize) -> bool {
 }
 
 pub fn paddr2vaddr(paddr: PAddr) -> Option<VAddr> {
-    if is_valid_vaddr(paddr.as_usize()) {
+    if !is_valid_vaddr(paddr.as_usize()) {
         return None;
     }
 
