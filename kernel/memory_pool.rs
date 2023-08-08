@@ -15,7 +15,7 @@ use crate::{
     backtrace,
     giant_lock::{GiantLock, GiantLockGuard},
     process::Process,
-    ref_count::{SharedObject, SharedRef, UniqueRef}, thread::Thread,
+    ref_count::{SharedObject, SharedRef, UniqueRef}, thread::Thread, memory::allocate_pages,
 };
 use essentials::{
     alignment::{align_up, is_aligned},
@@ -191,6 +191,29 @@ impl MemoryPool {
         let first_frame = &mut frames[0];
         *first_frame = frame_ctor(object);
         Ok(first_frame)
+    }
+
+    pub unsafe fn retype(&mut self, vaddr: VAddr, len: usize) -> Result<Range<usize>, RetypeError> {
+        let range = self
+            .frame_range(vaddr, len)
+            .ok_or(RetypeError::OutOfRange)?;
+
+        // Abort if any of the frames are already in use.
+        let frames = &mut self.frames[range.clone()];
+        if !frames.iter().all(|f| matches!(f, Frame::Unused)) {
+            return Err(RetypeError::AlreadyInUse);
+        }
+
+        // Fill the frames after the first one.
+        let num_frames = frames.len();
+        for (index, frame) in frames[1..].iter_mut().enumerate() {
+            *frame = Frame::Continued {
+                index: index + 1,
+                tail: index == num_frames - 1,
+            };
+        }
+
+        Ok(range)
     }
 
     /// Frees an object.
@@ -398,6 +421,226 @@ impl MemoryPool {
         Ok(sref)
     }
 }
+
+fn initialize<'a, F, T>(
+   mut memory_pool: GiantLockGuard<'a, MemoryPool>,
+    vaddr: VAddr,
+    len: usize,
+    object_ctor: F,
+) -> Result<(Range<usize>, NonNull<T>), RetypeError>
+where
+    F: FnOnce() -> T,
+{
+    if object_size::<T>() != len {
+        return Err(RetypeError::InvalidLength);
+    }
+
+    if !is_aligned(vaddr.as_usize(), object_align::<T>()) {
+        return Err(RetypeError::UnalignedAddress);
+    }
+
+    let range = unsafe {
+        memory_pool.retype(vaddr, len)?
+    };
+
+    // Allow object_ctor to borrow memory_pool.
+    drop(memory_pool);
+
+    // Initialize the object and get the pointer to it.
+    let mut object = unsafe {
+        let mut uninit: &mut MaybeUninit<T> = vaddr.as_mut();
+        uninit.write(object_ctor());
+
+        // Now that the page table is initialized. It's safe to create a
+        // pointer to it.
+        NonNull::new_unchecked(uninit.as_ptr() as *mut T)
+    };
+
+    Ok((range, object))
+}
+
+pub fn initialize_page_table(
+    vaddr: VAddr,
+    len: usize,
+) -> Result<UniqueRef<PageTable>, RetypeError> {
+    let (range, object) = initialize(
+        memory_pool_mut(vaddr).unwrap(),
+        vaddr,
+        len,
+        || PageTable::new()
+    )?;
+
+    let mut memory_pool = memory_pool_mut(vaddr).unwrap();
+    let first_frame = &mut memory_pool.frames[range.start];
+    // SAFETY: We'll create a SharedRef for this below.
+    *first_frame = Frame::PageTable(unsafe { SharedObject::new(object) });
+
+    let uref = match first_frame {
+        Frame::PageTable(object) => UniqueRef::new( SharedRef::new(object)).unwrap(),
+        // SAFETY: We just filled the first frame above.
+        _ => unsafe { unreachable_unchecked() },
+    };
+
+    Ok(uref)
+}
+
+pub fn allocate_page_table() -> Result<UniqueRef<PageTable>, RetypeError> {
+    let vaddr = allocate_pages(PAGE_SIZE).expect("failed to allocate pages");
+    initialize_page_table(vaddr, PAGE_SIZE)
+}
+
+// pub fn initialize_page_table_l2(
+//     memory_pool: &GiantLock<MemoryPool>,
+//     vaddr: VAddr,
+//     len: usize,
+// ) -> Result<SharedRef<PageTableL2>, RetypeError> {
+//     let first_frame = initialize(
+//         memory_pool,
+//         vaddr,
+//         len,
+//         || PageTableL2::new(),
+//         |object| {
+//             // SAFETY: We'll create a SharedRef for this below.
+//             Frame::PageTableL2(unsafe { SharedObject::new(object) })
+//         },
+//     )?;
+
+//     let sref = match first_frame {
+//         Frame::PageTableL2(object) => SharedRef::new(object),
+//         // SAFETY: We just filled the first frame above.
+//         _ => unsafe { unreachable_unchecked() },
+//     };
+
+//     Ok(sref)
+// }
+
+// pub fn initialize_page_table_l1(
+//     memory_pool: &GiantLock<MemoryPool>,
+//     vaddr: VAddr,
+//     len: usize,
+// ) -> Result<SharedRef<PageTableL1>, RetypeError> {
+//     let first_frame = initialize(
+//         memory_pool,
+//         vaddr,
+//         len,
+//         || PageTableL1::new(),
+//         |object| {
+//             // SAFETY: We'll create a SharedRef for this below.
+//             Frame::PageTableL1(unsafe { SharedObject::new(object) })
+//         },
+//     )?;
+
+//     let sref = match first_frame {
+//         Frame::PageTableL1(object) => SharedRef::new(object),
+//         // SAFETY: We just filled the first frame above.
+//         _ => unsafe { unreachable_unchecked() },
+//     };
+
+//     Ok(sref)
+// }
+
+// pub fn initialize_page_table_l0(
+//     memory_pool: &GiantLock<MemoryPool>,
+//     vaddr: VAddr,
+//     len: usize,
+// ) -> Result<SharedRef<PageTableL0>, RetypeError> {
+//     let first_frame = initialize(
+//         memory_pool,
+//         vaddr,
+//         len,
+//         || PageTableL0::new(),
+//         |object| {
+//             // SAFETY: We'll create a SharedRef for this below.
+//             Frame::PageTableL0(unsafe { SharedObject::new(object) })
+//         },
+//     )?;
+
+//     let sref = match first_frame {
+//         Frame::PageTableL0(object) => SharedRef::new(object),
+//         // SAFETY: We just filled the first frame above.
+//         _ => unsafe { unreachable_unchecked() },
+//     };
+
+//     Ok(sref)
+// }
+
+// pub fn initialize_page4k(
+//     memory_pool: &GiantLock<MemoryPool>,
+//     vaddr: VAddr,
+//     len: usize,
+// ) -> Result<SharedRef<Page4K>, RetypeError> {
+//     let first_frame = initialize(
+//         memory_pool,
+//         vaddr,
+//         len,
+//         || Page4K::zeroed(),
+//         |object| {
+//             // SAFETY: We'll create a SharedRef for this below.
+//             Frame::Page4K(unsafe { SharedObject::new(object) })
+//         },
+//     )?;
+
+//     let sref = match first_frame {
+//         Frame::Page4K(object) => SharedRef::new(object),
+//         // SAFETY: We just filled the first frame above.
+//         _ => unsafe { unreachable_unchecked() },
+//     };
+
+//     Ok(sref)
+// }
+
+// pub fn initialize_process(
+//     memory_pool: &GiantLock<MemoryPool>,
+//     vaddr: VAddr,
+//     len: usize,
+//     pagetable: UniqueRef<PageTable>,
+// ) -> Result<SharedRef<Process>, RetypeError> {
+//     let first_frame = initialize(
+//         memory_pool,
+//         vaddr,
+//         len,
+//         || Process::new(pagetable),
+//         |object| {
+//             // SAFETY: We'll create a SharedRef for this below.
+//             Frame::Process(unsafe { SharedObject::new(object) })
+//         },
+//     )?;
+
+//     let sref = match first_frame {
+//         Frame::Process(object) => SharedRef::new(object),
+//         // SAFETY: We just filled the first frame above.
+//         _ => unsafe { unreachable_unchecked() },
+//     };
+
+//     Ok(sref)
+// }
+
+// pub fn initialize_thread(
+//     memory_pool: &GiantLock<MemoryPool>,
+//     vaddr: VAddr,
+//     len: usize,
+//     process: SharedRef<Process>,
+//     pc: UAddr,
+// ) -> Result<SharedRef<Thread>, RetypeError> {
+//     let first_frame = initialize(
+//         memory_pool,
+//         vaddr,
+//         len,
+//         || Thread::new(process, pc),
+//         |object| {
+//             // SAFETY: We'll create a SharedRef for this below.
+//             Frame::Thread(unsafe { SharedObject::new(object) })
+//         },
+//     )?;
+
+//     let sref = match first_frame {
+//         Frame::Thread(object) => SharedRef::new(object),
+//         // SAFETY: We just filled the first frame above.
+//         _ => unsafe { unreachable_unchecked() },
+//     };
+
+//     Ok(sref)
+// }
 
 static MEMORY_POOL: GiantLock<OnceCell<MemoryPool>> =
     GiantLock::new(OnceCell::new());

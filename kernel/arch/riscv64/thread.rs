@@ -7,7 +7,7 @@ use crate::{address::UAddr, ref_count::{UniqueRef, SharedRef}, process::Process}
 use super::{switch::switch_to_user, PageTable};
 
 #[derive(Default, Debug)]
-#[repr(C)] // FIXME: Should this be packed?
+#[repr(C)]
 pub struct Context {
     pub cpuvar_addr: u64,
     pub satp: u64,

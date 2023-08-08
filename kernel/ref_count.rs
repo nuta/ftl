@@ -238,8 +238,7 @@ impl<T> Drop for SharedRef<T> {
                 // We should not keep the borrow guard to prevent use-after-free.
                 drop(rc);
 
-                // FIXME:
-                // memory_pool_mut(vaddr).unwrap().free(vaddr).unwrap();
+                memory_pool_mut(vaddr).unwrap().free(vaddr).unwrap();
             }
         }
     }
@@ -258,13 +257,22 @@ impl<T> UniqueRef<T> {
     ///
     /// Returns `None`
     pub fn new(sref: SharedRef<T>) -> Option<UniqueRef<T>> {
-        let sref = sref.borrow_inner_mut();
-        if sref.counter != 1 {
+        let guard = sref.borrow_inner_mut();
+        if guard.counter != 1 {
             // There are other references.
             return None;
         }
 
-        Some(UniqueRef { object: sref.inner })
+        let uref = UniqueRef { object: guard.inner };
+
+        // Don't drop the guard and keep the object mutably borrowed.
+        mem::forget(guard);
+
+        // Now the sref is turned into uref, so we should not call sref's
+        // destructor.
+        mem::forget(sref);
+
+        Some(uref)
     }
 
     /// Returns the physical address of the object value.

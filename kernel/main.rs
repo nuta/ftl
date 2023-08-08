@@ -66,16 +66,13 @@ pub fn kernel_main() {
         unreachable!();
     }
 
-    let mut pagetable =
-        memory::allocate_and_initialize(PAGE_SIZE, |pool, vaddr| {
-            UniqueRef::new(
-                pool.initialize_page_table(vaddr, PAGE_SIZE).unwrap(),
-            )
-            .unwrap()
-        });
-    // FIXME:
+    println!("initializing first process...");
+    let mut pagetable = memory_pool::allocate_page_table().expect("failed to allocate page table");
+    // TODO:
+    println!("initializing mapping kernel pages...");
     pagetable.map_kernel_pages();
 
+    println!("loading bootfs...");
     let mut fs = bootfs::Bootfs::load();
     let file = fs.find_by_name("startup.elf").unwrap();
 
