@@ -34,7 +34,9 @@ unsafe fn syscall(
 fn main() {
     loop {
         unsafe {
-            let _ = syscall(b'A' as usize, 0, 0, 0, 0, 0);
+            for i in 0..1000 {
+                let _ = syscall(i, 0, 0, 0, 0, 0);
+            }
         }
     }
 }

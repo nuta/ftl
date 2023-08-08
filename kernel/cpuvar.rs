@@ -36,7 +36,6 @@ pub fn cpuvar_refcell() -> &'static RefCell<CpuVar> {
         "cpuvar() called before init_percpu()"
     );
 
-    println!("cpuvar_refcell: {:x}", read_cpuvar_addr());
     unsafe { &*(read_cpuvar_addr() as *const RefCell<CpuVar>) }
 }
 
@@ -49,7 +48,6 @@ pub fn cpuvar() -> Ref<'static, CpuVar> {
 pub fn cpuvar_mut() -> RefMut<'static, CpuVar> {
     let guard = cpuvar_refcell().borrow_mut();
     debug_assert_eq!(guard.magic, 0xc12c12, "invalid cpuvar magic");
-    println!("OK cpuvar_mut");
     guard
 }
 

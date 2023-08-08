@@ -18,17 +18,19 @@ pub extern "C" fn trap_handler() -> ! {
     }
 
     if scause == 8 {
-        println!("system call");
         let mut cpuvar = cpuvar_mut();
-        let current = cpuvar
+        let mut current = cpuvar
             .current_thread
             .as_mut()
-            .expect("no current thread");
+            .expect("no current thread")
+            .borrow_mut();
+        let context = current.context_mut();
 
-        println!("checking pc");
-        loop {}
-        println!("pc={:x}", current.borrow_mut().context_mut().pc);
-        current.borrow_mut().context_mut().pc += 4;
+        println!("system call: a0={:x}", context.a0);
+        context.pc += 4;
+
+        drop(current);
+        drop(cpuvar);
 
         yield_to_user();
     }

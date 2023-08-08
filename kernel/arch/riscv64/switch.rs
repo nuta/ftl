@@ -109,7 +109,6 @@ pub unsafe extern "C" fn switch_to_kernel() -> ! {
 
 #[inline]
 pub unsafe fn switch_to_user(context: &Context) -> ! {
-    println!("switch_to_user: pc={:x}", context.pc);
     asm!(
         r#"
         csrw sepc, {user_pc}

@@ -50,7 +50,6 @@ pub fn yield_to_user() -> ! {
 
     match next {
         Some(thread) => {
-            println!("switch to #{:x}", thread.borrow_mut().context_mut().pc);
             Thread::switch_to(thread);
         }
         None => {
