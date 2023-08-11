@@ -1,7 +1,7 @@
 #![cfg(test)]
 
-use core::hint::black_box;
 use crate::arch;
+use core::hint::black_box;
 
 struct Benchmark {
     cpu_cycles_avg: usize,
