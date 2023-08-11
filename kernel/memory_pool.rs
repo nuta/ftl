@@ -55,14 +55,6 @@ const fn object_align<T>() -> usize {
     align_up(align_of::<T>(), PAGE_SIZE)
 }
 
-// TODO: Move this to a test.
-static_assert!(object_size::<PageTable>() == PAGE_SIZE);
-static_assert!(object_align::<PageTable>() == PAGE_SIZE);
-static_assert!(object_size::<Process>() == PAGE_SIZE);
-static_assert!(object_align::<Process>() == PAGE_SIZE);
-static_assert!(object_size::<Thread>() == PAGE_SIZE);
-static_assert!(object_align::<Thread>() == PAGE_SIZE);
-
 #[derive(Debug)]
 pub enum RetypeError {
     UnalignedAddress,
@@ -673,5 +665,21 @@ pub fn init(vaddr: VAddr, len: usize) {
         .expect("failed to initialize global memory pool");
     if MEMORY_POOL.borrow_mut().set(pool).is_err() {
         panic!("global memory pool is already initialized");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use proc_macros::test;
+    use crate::{arch::{PAGE_SIZE, PageTable}, memory_pool::{object_align, object_size}, thread::Thread, process::Process};
+
+    #[test]
+    fn object_sizes() {
+        assert_eq!(object_size::<PageTable>() , PAGE_SIZE);
+        assert_eq!(object_align::<PageTable>() , PAGE_SIZE);
+        assert_eq!(object_size::<Process>() , PAGE_SIZE);
+        assert_eq!(object_align::<Process>() , PAGE_SIZE);
+        assert_eq!(object_size::<Thread>() , PAGE_SIZE);
+        assert_eq!(object_align::<Thread>() , PAGE_SIZE);
     }
 }

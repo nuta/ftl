@@ -71,10 +71,16 @@ check:
 
 .PHONY: test
 test:
-	$(CARGO) test $(CARGOFLAGS) --manifest-path kernel/Cargo.toml
+	$(CARGO) test $(CARGOFLAGS) --target kernel/arch/riscv64/riscv64-qemu-virt.json --manifest-path kernel/Cargo.toml
+
+	$(PROGRESS) "NM" kernel.symbols
+	$(NM) ftl.test.elf | rustfilt | awk '{ $$2=""; print $$0 }' > kernel.test.symbols
+
+	$(PROGRESS) "SYMBOLS" ftl.test.elf
+	python3 embed-symbol-table.py kernel.test.symbols ftl.test.elf
+
 	$(PROGRESS) QEMU ftl.test.elf
 	$(QEMU) $(QEMUFLAGS) -kernel ftl.test.elf
-
 
 .PHONY: gdb
 gdb:

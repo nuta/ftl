@@ -1,18 +1,10 @@
 #![cfg(test)]
 
 use core::hint::black_box;
-
-use proc_macros::test;
-
 use crate::arch;
 
 struct Benchmark {
     cpu_cycles_avg: usize,
-}
-
-#[test]
-fn test_case123() {
-    println!("test_case output");
 }
 
 pub struct Testing {
@@ -56,7 +48,7 @@ impl Testing {
 }
 
 pub fn test_runner(tests: &[&dyn Fn(&mut Testing)]) {
-    println!("running tests!");
+    println!("running tests...");
     for test in tests {
         let mut testing = Testing::new();
 

@@ -38,6 +38,15 @@ pub fn write_cpuvar_addr(base: usize) {
     }
 }
 
+pub fn read_cpu_cycles() -> usize {
+    let mut cycles: usize;
+    unsafe {
+        core::arch::asm!("rdtime {}", out(reg) cycles);
+    }
+
+    cycles
+}
+
 static GIANT_LOCK: AtomicBool = AtomicBool::new(false);
 
 pub fn giant_lock() {
