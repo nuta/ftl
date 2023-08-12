@@ -30,7 +30,7 @@ use core::{
     ptr::{drop_in_place, NonNull},
 };
 
-use essentials::{alignment::align_up, static_assert};
+use essentials::{alignment::align_up, static_assert, traits::UnwrapExt};
 
 use crate::{
     address::{PAddr, VAddr},
@@ -235,7 +235,7 @@ impl<T> Drop for SharedRef<T> {
                 // We should not keep the borrow guard to prevent use-after-free.
                 drop(rc);
 
-                memory_pool_mut(vaddr).unwrap().free(vaddr).unwrap();
+                memory_pool_mut(vaddr).unwrap_always().free(vaddr).unwrap_always();
             }
         }
     }
@@ -307,7 +307,7 @@ impl<T> Drop for UniqueRef<T> {
         //         reference.
         unsafe {
             let vaddr = VAddr::new(self.object.as_ptr() as usize);
-            memory_pool_mut(vaddr).unwrap().free(vaddr).unwrap();
+            memory_pool_mut(vaddr).unwrap_always().free(vaddr).unwrap_always();
         }
     }
 }

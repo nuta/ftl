@@ -5,4 +5,5 @@
 pub mod macros;
 
 pub mod alignment;
+pub mod traits;
 pub mod units;

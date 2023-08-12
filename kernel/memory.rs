@@ -12,6 +12,7 @@ use crate::{
 };
 
 use bump_allocator::BumpAllocator;
+use essentials::traits::UnwrapExt;
 use linked_list_allocator::{Heap, LockedHeap};
 
 /// The size of the malloc heap in bytes. To be used in `core::alloc` objects.
@@ -147,7 +148,7 @@ pub fn init() {
             free_ram_end - free_ram_start,
         );
         // TODO: What if the heap spans multiple memory pools?
-        let pool = memory_pool_mut(VAddr::new(free_ram_start)).unwrap();
+        let pool = memory_pool_mut(VAddr::new(free_ram_start)).unwrap_or_panic();
 
         println!(
             "memory region: {:016x} - {:016x}",
