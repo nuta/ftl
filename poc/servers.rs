@@ -6,7 +6,8 @@ struct Pcb {
     local_port: Option<u16>,
 }
 
-enum OwnedHandle {
+enum Tracked {
+    Signal(Signal),
     Houston(Channel),
     Client { ch: Channel, pcb: Rc<RefCell<Pcb>> },
     Data { ch: Channel, pcb: Rc<RefCell<Pcb>> },
@@ -15,23 +16,35 @@ enum OwnedHandle {
 
 pub fn udp_main(env: Environ) {
     let mut eventq = EventQueue::new();
-    let mut handles: HashMap<Handle, OwnedHandle> = HashMap::new();
+    let mut handles: HashMap<Handle, Tracked> = HashMap::new();
+
+    eventq.listen(env.signal, Ready::READABLE);
+    handles.insert(env.signal, Tracked::Signal(env.signal));
+    eventq.listen(env.deps.houston.ch, Ready::READABLE);
+    handles.insert(env.deps.houston.ch, Tracked::Houston(env.deps.houston_ch));
+    eventq.listen(env.deps.ip.ch, Ready::READABLE);
+    handles.insert(env.deps.ip.ch, Tracked::Ip(env.deps.ip_ch));
+
+    // TODO:  export here
+
     // Wait for a handle to be ready...
     for Event { handle, ready } in eventq.into_infinite_iter() {
         // Handle the ready handle.
         match (&mut handles[&handle], ready) {
-            (OwnedHandle::Houston { ch }, Ready::READABLE) => match ch.recv() {
+            (Tracked::Houston { ch }, Ready::READABLE) => match ch.recv() {
                 Message::New => {
-                    let new_ch = Channel::new();
+                    let new_ch = Channel::new();  
                     let handle = new_ch.handle();
+
+                    eventq.listen(&handle, Ready::READABLE);
                     handles.insert(
                         handle,
-                        OwnedHandle::Client {
+                        Tracked::Client {
                             ch: new_ch,
                             pcb: Rc::new(RefCell::new(Pcb { local_port: None })),
                         },
                     );
-
+                    
                     let reply = Message::NewReply { ch: handle };
                     ch.send(reply);
                 }
@@ -40,7 +53,7 @@ pub fn udp_main(env: Environ) {
                 }
             },
             // Read a message from the client, process it, and reply.
-            (OwnedHandle::Client { ch, pcb }, Ready::READABLE) => match ch.recv() {
+            (Tracked::Client { ch, pcb }, Ready::READABLE) => match ch.recv() {
                 Message::Bind { local_port } => {
                     let reply: Message = pcb.borrow_mut().bind(local_port).into();
                     clients.send(reply);
