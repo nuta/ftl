@@ -10,7 +10,26 @@ struct Ring {
 }
 
 /// A single-producer, single-consumer bidirectional message queue.
-pub struct Channel {
-    tx: *mut Ring,
-    rx: *const Ring,
+pub struct Channel {}
+
+impl Channel {
+    pub fn new() -> Channel {
+        todo!()
+    }
+
+    /// Send a message.
+    ///
+    /// This operation is non-blocking: if the queue is full, this method will
+    /// return [`Error::WouldBlock`].
+    pub fn send(&self, message: Message) -> crate::Result<()> {
+        todo!()
+    }
+
+    /// Receive a message.
+    ///
+    /// This operation is non-blocking: if the queue is full, this method will
+    /// return [`Error::WouldBlock`].
+    pub fn recv(&self) -> crate::Result<Message> {
+        todo!()
+    }
 }
