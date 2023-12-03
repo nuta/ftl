@@ -1,0 +1,10 @@
+[package]
+name = "ftl_devtools"
+version = "0.0.0"
+edition = "2021"
+
+[[bin]]
+name = "ftl"
+path = "main.rs"
+
+[dependencies]
