@@ -1,6 +1,9 @@
-use core::cell::UnsafeCell;
-
 use alloc::collections::VecDeque;
+
+use crate::{
+    arch::{channel_call, channel_close, channel_create, channel_recv, channel_send},
+    Error, Handle,
+};
 
 #[derive(Debug)]
 pub enum Message {
@@ -21,11 +24,14 @@ pub enum SendError {
 }
 
 /// A single-producer, single-consumer bidirectional message queue.
-pub struct Channel {}
+pub struct Channel {
+    handle: Handle,
+}
 
 impl Channel {
-    pub fn new() -> Channel {
-        todo!()
+    pub fn new() -> crate::Result<Channel> {
+        let handle = channel_create()?;
+        Ok(Channel { handle })
     }
 
     /// Sends a message.
@@ -33,7 +39,7 @@ impl Channel {
     /// This operation is non-blocking: if the queue is full, this method will
     /// return [`crate::Error::WouldBlock`].
     pub fn send(&mut self, message: Message) -> Result<(), SendError> {
-        todo!()
+        channel_send(self.handle, message)
     }
 
     /// Receives a message.
@@ -41,11 +47,21 @@ impl Channel {
     /// This operation is non-blocking: if the queue is empty, this method will
     /// return `Ok(None)`.
     pub fn recv(&mut self) -> crate::Result<Option<Message>> {
-        todo!()
+        channel_recv(self.handle)
     }
 
     /// Sends a message and waits for a reply.
     pub fn call(&mut self, message: Message) -> crate::Result<Message> {
-        todo!()
+        channel_call(self.handle, message)
+    }
+}
+
+impl Drop for Channel {
+    fn drop(&mut self) {
+        // We ignore the error in release build because there's nothing we can
+        // do. At least warn the user in debug build.
+        if let Err(err) = channel_close(self.handle) {
+            debug_warn!("failed to close channel: {:?}", err);
+        }
     }
 }

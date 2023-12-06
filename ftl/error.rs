@@ -4,6 +4,7 @@ pub enum Error {
     /// The operation would block. Actually FTL doesn't provide any blocking APIs,
     /// but "would block" is very intuitive for UNIX programmers.
     WouldBlock,
+    SomethingElse,
 }
 
 /// The result type in FTL APIs.

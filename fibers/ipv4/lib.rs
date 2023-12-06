@@ -4,14 +4,6 @@ use ftl::channel::Message;
 use ftl::event_queue::{Event, EventQueue, Interest};
 use ftl::warn;
 
-pub struct Deps {
-    arp: ftl::channel::Channel,
-}
-
-pub struct Environ {
-    deps: Deps,
-}
-
 #[derive(Debug)]
 enum Context {
     Arp,
