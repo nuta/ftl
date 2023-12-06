@@ -18,7 +18,7 @@ static NEXT_HANDLE: AtomicU32 = AtomicU32::new(1);
 static HANDLES: Lazy<Mutex<HashMap<Handle, Arc<Mutex<Object>>>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
 
-fn open_channel<'a>(
+fn open_as_channel<'a>(
     handles: &'a MutexGuard<'a, HashMap<Handle, Arc<Mutex<Object>>>>,
     handle: Handle,
 ) -> crate::Result<MappedMutexGuard<'a, RawChannel>> {
@@ -27,7 +27,7 @@ fn open_channel<'a>(
         .ok_or(crate::Error::HandleNotFound)?
         .lock();
 
-    if matches!(&*object_lock, Object::Channel(_)) {
+    if !matches!(*object_lock, Object::Channel(_)) {
         return Err(crate::Error::HandleTypeMismatch);
     }
 
@@ -65,7 +65,7 @@ pub fn channel_create() -> crate::Result<Handle> {
 
 pub fn channel_send(handle: Handle, message: Message) -> Result<(), SendError> {
     let handles = HANDLES.lock();
-    let mut self_ch = open_channel(&handles, handle).map_err(SendError::Error)?;
+    let mut self_ch = open_as_channel(&handles, handle).map_err(SendError::Error)?;
     match self_ch.peer {
         Some(ref peer_ch) => {
             peer_ch.lock().rx.push_back(message);
