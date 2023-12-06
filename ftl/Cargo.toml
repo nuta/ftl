@@ -8,3 +8,11 @@ path = "lib.rs"
 
 [dependencies]
 hashbrown = "0.14"
+
+once_cell = { version = "1.18.0", optional = true }
+parking_lot = { version = "0.12.1", optional = true }
+
+[features]
+default = ["arch_host"]
+arch_host = ["once_cell", "parking_lot"]
+
