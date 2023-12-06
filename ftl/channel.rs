@@ -2,7 +2,10 @@ use core::cell::UnsafeCell;
 
 use alloc::collections::VecDeque;
 
-pub struct Message {}
+#[derive(Debug)]
+pub enum Message {
+    Packet { pkt: usize },
+}
 
 /// A single-producer, single-consumer FIFO queue.
 struct Ring {

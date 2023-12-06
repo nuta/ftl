@@ -1,37 +1,51 @@
-use crate::Handle;
+use core::num::NonZeroU32;
+use hashbrown::HashMap;
 
-pub struct Ready(u32);
+use crate::{
+    channel::{Channel, Message},
+    Handle,
+};
 
-impl Ready {
-    pub const READABLE: Ready = Ready(0b0001);
-    pub const WRITABLE: Ready = Ready(0b0010);
-}
-
-pub struct Interest(u32);
+pub struct Interest(NonZeroU32);
 
 impl Interest {
-    pub const READABLE: Interest = Interest(0b0001);
-    pub const WRITABLE: Interest = Interest(0b0010);
+    pub const MESSAGE: Interest = Interest(unsafe { NonZeroU32::new_unchecked(1 << 0) });
 }
 
-pub struct Event {
-    pub ready: Ready,
-    pub handle: Handle,
+#[derive(Debug)]
+#[non_exhaustive]
+pub enum Event {
+    Message(Message),
 }
 
-pub struct EventQueue {}
+pub struct EventQueue<C> {
+    contexts: HashMap<Handle, C>,
+}
 
-impl EventQueue {
-    pub fn new() -> EventQueue {
+impl<C> EventQueue<C> {
+    pub fn new() -> EventQueue<C> {
         todo!()
     }
 
-    pub fn register(&mut self, handle: Handle, interest: Interest) -> crate::Result<()> {
+    pub fn register_channel(
+        &mut self,
+        channel: &Channel,
+        interest: Interest,
+        ctx: C,
+    ) -> crate::Result<()> {
+        todo!();
+        Ok(())
+    }
+
+    pub fn next(&mut self) -> Option<(&mut C, Event)> {
         todo!()
     }
 
-    /// Blocks until an event is ready.
-    pub fn poll(&mut self) -> crate::Result<Event> {
+    pub fn iter(&mut self) -> Iter<'_, C> {
         todo!()
     }
+}
+
+pub struct Iter<'a, C> {
+    eventq: &'a mut EventQueue<C>,
 }

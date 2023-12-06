@@ -7,3 +7,4 @@ edition = "2021"
 path = "lib.rs"
 
 [dependencies]
+hashbrown = "0.14"
