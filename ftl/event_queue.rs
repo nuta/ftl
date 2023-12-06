@@ -45,7 +45,3 @@ impl<C> EventQueue<C> {
         todo!()
     }
 }
-
-pub struct Iter<'a, C> {
-    eventq: &'a mut EventQueue<C>,
-}
