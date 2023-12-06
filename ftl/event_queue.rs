@@ -40,8 +40,4 @@ impl<C> EventQueue<C> {
     pub fn next(&mut self) -> Option<(&mut C, Event)> {
         todo!()
     }
-
-    pub fn iter(&mut self) -> Iter<'_, C> {
-        todo!()
-    }
 }
