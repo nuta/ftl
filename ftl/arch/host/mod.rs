@@ -65,7 +65,7 @@ pub fn channel_create() -> crate::Result<Handle> {
 
 pub fn channel_send(handle: Handle, message: Message) -> Result<(), SendError> {
     let handles = HANDLES.lock();
-    let self_ch = open_channel(&handles, handle).map_err(SendError::Error)?;
+    let mut self_ch = open_channel(&handles, handle).map_err(SendError::Error)?;
     match self_ch.peer {
         Some(ref peer_ch) => {
             peer_ch.lock().rx.push_back(message);
