@@ -1,18 +1,11 @@
-use alloc::collections::VecDeque;
-
 use crate::{
     arch::{channel_call, channel_close, channel_create, channel_recv, channel_send},
-    Error, Handle,
+    Handle,
 };
 
 #[derive(Debug)]
 pub enum Message {
     Packet { pkt: usize },
-}
-
-/// A single-producer, single-consumer FIFO queue.
-struct Ring {
-    messages: VecDeque<Message>,
 }
 
 /// The error type returned by [`Channel::send`].

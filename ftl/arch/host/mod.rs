@@ -38,12 +38,33 @@ macro_rules! log {
     }};
 }
 
-static NEXT_HANDLE: AtomicU32 = AtomicU32::new(1);
-static HANDLES: Lazy<Mutex<HashMap<Handle, Arc<Object>>>> =
-    Lazy::new(|| Mutex::new(HashMap::new()));
+static HANDLES: Lazy<Mutex<HandleTable>> = Lazy::new(|| Mutex::new(HandleTable::new()));
 
-fn alloc_handle_id() -> Handle {
-    Handle::from_raw(NEXT_HANDLE.fetch_add(1, Ordering::SeqCst))
+struct HandleTable {
+    next_id: AtomicU32,
+    handles: HashMap<Handle, Arc<Object>>,
+}
+
+impl HandleTable {
+    pub fn new() -> HandleTable {
+        HandleTable {
+            next_id: AtomicU32::new(1),
+            handles: HashMap::new(),
+        }
+    }
+
+    pub fn insert(&mut self, object: Arc<Object>) -> Handle {
+        let handle = Handle::from_raw(self.next_id.fetch_add(1, Ordering::SeqCst));
+        self.handles.insert(handle, object);
+        handle
+    }
+
+    pub fn get_as_channel(&self, handle: Handle) -> crate::Result<&Arc<Mutex<Channel>>> {
+        self.handles
+            .get(&handle)
+            .ok_or(Error::HandleNotFound)?
+            .as_channel()
+    }
 }
 
 pub enum Object {
@@ -66,9 +87,6 @@ pub struct Channel {
 }
 
 pub fn channel_create() -> crate::Result<(Handle, Handle)> {
-    let handle1 = alloc_handle_id();
-    let handle2 = alloc_handle_id();
-
     let ch1 = Arc::new(Mutex::new(Channel {
         rx: VecDeque::new(),
         peer: None,
@@ -83,22 +101,20 @@ pub fn channel_create() -> crate::Result<(Handle, Handle)> {
     ch2.lock().peer = Some(ch1.clone());
 
     let mut handles = HANDLES.lock();
-    handles.insert(handle1, Arc::new(Object::Channel(ch1)));
-    handles.insert(handle1, Arc::new(Object::Channel(ch2)));
+    let handle1 = handles.insert(Arc::new(Object::Channel(ch1)));
+    let handle2 = handles.insert(Arc::new(Object::Channel(ch2)));
 
     Ok((handle1, handle2))
 }
 
 pub fn channel_send(handle: Handle, message: Message) -> Result<(), SendError> {
     let handles = HANDLES.lock();
-    let mut self_ch = handles
-        .get(&handle)
-        .ok_or(SendError::Error(Error::HandleNotFound))?
-        .as_channel()
+    let ch = handles
+        .get_as_channel(handle)
         .map_err(SendError::Error)?
         .lock();
 
-    match self_ch.peer {
+    match ch.peer {
         Some(ref peer_ch) => {
             peer_ch.lock().rx.push_back(message);
         }
@@ -111,10 +127,15 @@ pub fn channel_send(handle: Handle, message: Message) -> Result<(), SendError> {
 }
 
 pub fn channel_recv(handle: Handle) -> crate::Result<Option<Message>> {
-    todo!()
+    let handles = HANDLES.lock();
+    let mut ch = handles.get_as_channel(handle)?.lock();
+    Ok(ch.rx.pop_front())
 }
 
 pub fn channel_call(handle: Handle, message: Message) -> crate::Result<Message> {
+    let handles = HANDLES.lock();
+    let mut ch = handles.get_as_channel(handle)?.lock();
+
     todo!()
 }
 
