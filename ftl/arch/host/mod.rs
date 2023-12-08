@@ -1,5 +1,6 @@
 use std::{
     collections::{HashMap, VecDeque},
+    fmt,
     sync::{
         atomic::{AtomicU32, Ordering},
         Arc,
@@ -13,6 +14,29 @@ use crate::{
     channel::{Message, SendError},
     Error, Handle,
 };
+
+pub struct Printer;
+
+impl fmt::Write for Printer {
+    fn write_str(&mut self, s: &str) -> fmt::Result {
+        use std::io::{stderr, Write};
+        stderr().write_all(s.as_bytes()).unwrap();
+
+        Ok(())
+    }
+}
+
+#[macro_export]
+macro_rules! log {
+    ($level:expr, $message:literal) => {{
+        use core::fmt::Write;
+        let _ = write!($crate::arch::Printer, "{}\n", $message);
+    }};
+    ($level:expr, $format:literal, $($arg:tt)*) => {{
+        use core::fmt::Write;
+        let _ = write!($crate::arch::Printer, concat!($format, "\n"), $($arg)*);
+    }};
+}
 
 static NEXT_HANDLE: AtomicU32 = AtomicU32::new(1);
 static HANDLES: Lazy<Mutex<HashMap<Handle, Arc<Object>>>> =

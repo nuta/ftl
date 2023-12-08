@@ -1,5 +1,3 @@
-use core::fmt;
-
 enum Level {
     Debug,
     Info,
@@ -7,36 +5,13 @@ enum Level {
     Error,
 }
 
-pub struct Printer;
-
-impl fmt::Write for Printer {
-    fn write_str(&mut self, s: &str) -> fmt::Result {
-        use std::io::{stderr, Write};
-        stderr().write_all(s.as_bytes()).unwrap();
-
-        Ok(())
-    }
-}
-
-#[macro_export]
-macro_rules! log {
-    ($level:expr, $message:literal) => {{
-        use core::fmt::Write;
-        let _ = write!($crate::logger::Printer, "{}\n", $message);
-    }};
-    ($level:expr, $format:literal, $($arg:tt)*) => {{
-        use core::fmt::Write;
-        let _ = write!($crate::logger::Printer, concat!($format, "\n"), $($arg)*);
-    }};
-}
-
 #[macro_export]
 macro_rules! debug {
     ($message:literal) => {{
-        $crate::log!($crate::logger::Level::Debug, $message);
+        $crate::arch::log!($crate::logger::Level::Debug, $message);
     }};
     ($format:literal, $($arg:tt)*) => {{
-        $crate::log!($crate::logger::Level::Debug, $format, $($arg)*);
+        $crate::arch::log!($crate::logger::Level::Debug, $format, $($arg)*);
     }};
 }
 

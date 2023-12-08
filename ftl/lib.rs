@@ -5,11 +5,11 @@ extern crate alloc;
 #[macro_use]
 pub mod logger;
 
-mod arch;
 mod error;
 mod handle;
 mod poll;
 
+pub mod arch;
 pub mod channel;
 pub mod event_queue;
 
