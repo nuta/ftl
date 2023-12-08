@@ -25,6 +25,11 @@ Ruby on Rails, but for developing microkernel operating systems.
 
 ## TODOs
 
+- Tests in std
+- io_uring
+- Erlang
+- Channel message transaction ID
+
 - IDL
 - Environ & Houston
 - Benchmarks

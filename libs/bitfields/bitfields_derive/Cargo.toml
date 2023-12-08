@@ -1,0 +1,14 @@
+[package]
+name = "ftl_bitfields_derive"
+version = "0.0.0"
+edition = "2021"
+
+[lib]
+path = "lib.rs"
+proc-macro = true
+
+[dependencies]
+proc-macro-error = "1.0.4"
+proc-macro2 = "1.0.56"
+quote = "1.0.26"
+syn = { version = "2.0.15", features = ["full"] }
