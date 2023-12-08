@@ -7,71 +7,79 @@ use std::{
 };
 
 use once_cell::sync::Lazy;
-use parking_lot::{MappedMutexGuard, Mutex, MutexGuard};
+use parking_lot::Mutex;
 
 use crate::{
     channel::{Message, SendError},
-    Handle,
+    Error, Handle,
 };
 
 static NEXT_HANDLE: AtomicU32 = AtomicU32::new(1);
-static HANDLES: Lazy<Mutex<HashMap<Handle, Arc<Mutex<Object>>>>> =
+static HANDLES: Lazy<Mutex<HashMap<Handle, Arc<Object>>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
-
-fn open_as_channel<'a>(
-    handles: &'a MutexGuard<'a, HashMap<Handle, Arc<Mutex<Object>>>>,
-    handle: Handle,
-) -> crate::Result<MappedMutexGuard<'a, RawChannel>> {
-    let object_lock = handles
-        .get(&handle)
-        .ok_or(crate::Error::HandleNotFound)?
-        .lock();
-
-    if !matches!(*object_lock, Object::Channel(_)) {
-        return Err(crate::Error::HandleTypeMismatch);
-    }
-
-    Ok(MutexGuard::map(object_lock, |object| match object {
-        Object::Channel(ch) => ch,
-        _ => unreachable!(),
-    }))
-}
 
 fn alloc_handle_id() -> Handle {
     Handle::from_raw(NEXT_HANDLE.fetch_add(1, Ordering::SeqCst))
 }
 
 pub enum Object {
-    Channel(RawChannel),
+    Channel(Arc<Mutex<Channel>>),
     Other,
 }
 
-pub struct RawChannel {
-    rx: VecDeque<Message>,
-    peer: Option<Arc<Mutex<RawChannel>>>,
+impl Object {
+    pub fn as_channel(&self) -> crate::Result<&Arc<Mutex<Channel>>> {
+        match self {
+            Object::Channel(ch) => Ok(ch),
+            _ => Err(Error::HandleTypeMismatch)?,
+        }
+    }
 }
 
-pub fn channel_create() -> crate::Result<Handle> {
-    let handle = alloc_handle_id();
-    HANDLES.lock().insert(
-        handle,
-        Arc::new(Mutex::new(Object::Channel(RawChannel {
-            rx: VecDeque::new(),
-            peer: None,
-        }))),
-    );
-    Ok(handle)
+pub struct Channel {
+    rx: VecDeque<Message>,
+    peer: Option<Arc<Mutex<Channel>>>,
+}
+
+pub fn channel_create() -> crate::Result<(Handle, Handle)> {
+    let handle1 = alloc_handle_id();
+    let handle2 = alloc_handle_id();
+
+    let ch1 = Arc::new(Mutex::new(Channel {
+        rx: VecDeque::new(),
+        peer: None,
+    }));
+
+    let ch2 = Arc::new(Mutex::new(Channel {
+        rx: VecDeque::new(),
+        peer: None,
+    }));
+
+    ch1.lock().peer = Some(ch2.clone());
+    ch2.lock().peer = Some(ch1.clone());
+
+    let mut handles = HANDLES.lock();
+    handles.insert(handle1, Arc::new(Object::Channel(ch1)));
+    handles.insert(handle1, Arc::new(Object::Channel(ch2)));
+
+    Ok((handle1, handle2))
 }
 
 pub fn channel_send(handle: Handle, message: Message) -> Result<(), SendError> {
     let handles = HANDLES.lock();
-    let mut self_ch = open_as_channel(&handles, handle).map_err(SendError::Error)?;
+    let mut self_ch = handles
+        .get(&handle)
+        .ok_or(SendError::Error(Error::HandleNotFound))?
+        .as_channel()
+        .map_err(SendError::Error)?
+        .lock();
+
     match self_ch.peer {
         Some(ref peer_ch) => {
             peer_ch.lock().rx.push_back(message);
         }
         None => {
-            self_ch.rx.push_back(message);
+            return Err(SendError::Error(crate::Error::ClosedByPeer));
         }
     }
 

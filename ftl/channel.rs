@@ -29,9 +29,9 @@ pub struct Channel {
 }
 
 impl Channel {
-    pub fn new() -> crate::Result<Channel> {
-        let handle = channel_create()?;
-        Ok(Channel { handle })
+    pub fn new() -> crate::Result<(Channel, Channel)> {
+        let (handle1, handle2) = channel_create()?;
+        Ok((Channel { handle: handle1 }, Channel { handle: handle2 }))
     }
 
     /// Sends a message.
