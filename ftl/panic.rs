@@ -3,7 +3,7 @@ use core::{
     sync::atomic::{AtomicU8, Ordering},
 };
 
-use crate::arch::hang;
+use crate::{arch::hang, backtrace::backtrace};
 
 static PANIC_COUNTER: AtomicU8 = AtomicU8::new(0);
 
@@ -16,6 +16,7 @@ fn panic(info: &PanicInfo) -> ! {
             // First panic: Try whatever we can do including complicated stuff
             // which may panic again.
             println!("kernel panic: {}", info);
+            backtrace();
             hang();
         }
         1 => {

@@ -3,6 +3,8 @@ ENTRY(boot)
 SECTIONS {
     . = 0x80200000;
 
+    __kernel_start = .;
+
     .text :{
         KEEP(*(.text.boot));
         *(.text .text.*);
@@ -22,7 +24,11 @@ SECTIONS {
         __bss_end = .;
     }
 
-    . = ALIGN(16);
-    . += 8 * 1024 * 1024; /* 8MB */
+    . = ALIGN(4096);
+    . += 8 * 1024 * 1024; /* 8 MB */
     __boot_stack_top = .;
+
+    __free_ram = .;
+    . += 64 * 1024 * 1024; /* 64 MB */
+    __free_ram_end = .;
 }

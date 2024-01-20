@@ -8,4 +8,5 @@ edition.workspace = true
 path = "lib.rs"
 
 [dependencies]
+arrayvec = { version = "0.7.4", default-features = false }
 bump_allocator = { path = "../libs/bump_allocator" }
