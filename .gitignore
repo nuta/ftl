@@ -1,0 +1,6 @@
+/target
+/.vscode/settings.json
+*.tmp
+*.log
+*.elf
+*.map
