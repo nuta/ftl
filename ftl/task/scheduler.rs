@@ -7,3 +7,9 @@ use super::fiber::RawFiber;
 pub struct Scheduler {
     run_queue: VecDeque<Arc<Mutex<RawFiber>>>,
 }
+
+impl Scheduler {
+    pub fn switch(&mut self) {
+        // TODO:
+    }
+}

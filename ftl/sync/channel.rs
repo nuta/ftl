@@ -4,13 +4,19 @@ use crate::result::Error;
 use crate::sync::mutex::Mutex;
 use crate::task::fiber::RawFiber;
 
-pub enum Message {}
+#[derive(Debug)]
+pub enum Message {
+    Ping(&'static str),
+    Pong(&'static str),
+}
 
+#[derive(Debug)]
 pub struct SendError {
     pub error: Error,
     pub message: Message,
 }
 
+#[derive(Debug)]
 pub enum CallError {
     SendError(SendError),
     ReceiveError(Error),

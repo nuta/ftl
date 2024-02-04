@@ -39,6 +39,26 @@ pub fn boot(bootinfo: BootInfo) -> ! {
     map.insert("world", 2);
     println!("map = {:?}", map);
 
+    use crate::{
+        sync::channel::{Channel, Message},
+        task::fiber::Fiber,
+    };
+    let (ch1_tx, ch1_rx) = Channel::new().unwrap();
+    let (ch2_tx, ch2_rx) = Channel::new().unwrap();
+    Fiber::spawn(move || {
+        println!("filber1: sending...");
+        ch1_tx.send(Message::Ping("42")).unwrap();
+        let msg = ch2_rx.receive().unwrap();
+        println!("filber1: received {:?}", msg);
+    });
+
+    Fiber::spawn(move || {
+        println!("filber2: receiving...");
+        let msg = ch1_rx.receive().unwrap();
+        println!("filber2: received {:?}", msg);
+        ch2_tx.send(Message::Pong("42")).unwrap();
+    });
+
     loop {
         arch::idle();
     }
