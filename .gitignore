@@ -1,4 +1,5 @@
 /target
+/build
 /.vscode/settings.json
 *.tmp
 *.log

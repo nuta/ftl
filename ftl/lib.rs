@@ -7,8 +7,11 @@ pub mod print;
 
 pub mod arch;
 pub mod boot;
+pub mod handle;
+pub mod result;
+pub mod sync;
+pub mod task;
 
 mod allocator;
 mod backtrace;
-mod giant_lock;
 mod panic;

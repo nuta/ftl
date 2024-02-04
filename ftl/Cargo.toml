@@ -9,4 +9,5 @@ path = "lib.rs"
 
 [dependencies]
 arrayvec = { version = "0.7.4", default-features = false }
+spin = "0.9.8"
 bump_allocator = { path = "../libs/bump_allocator" }

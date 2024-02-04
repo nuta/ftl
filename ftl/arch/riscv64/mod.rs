@@ -1,9 +1,4 @@
-use core::{
-    arch::asm,
-    hint,
-    mem::size_of,
-    sync::atomic::{AtomicBool, Ordering},
-};
+use core::{arch::asm, mem::size_of};
 
 mod sbi;
 
@@ -25,26 +20,6 @@ pub fn console_write(bytes: &[u8]) {
     for byte in bytes {
         sbi::console_putchar(*byte);
     }
-}
-
-static GIANT_LOCK: AtomicBool = AtomicBool::new(false);
-
-pub fn giant_lock() {
-    while GIANT_LOCK
-        .compare_exchange_weak(false, true, Ordering::Acquire, Ordering::Relaxed)
-        .is_err()
-    {
-        hint::spin_loop();
-    }
-}
-
-pub fn giant_unlock() {
-    GIANT_LOCK.store(false, Ordering::Release);
-}
-
-pub fn owns_giant_lock() -> bool {
-    // TODO: Check owner CPU ID
-    GIANT_LOCK.load(Ordering::Relaxed)
 }
 
 pub fn backtrace<F>(mut callback: F)
