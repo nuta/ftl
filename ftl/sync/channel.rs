@@ -11,9 +11,15 @@ pub struct SendError {
     pub message: Message,
 }
 
+pub enum CallError {
+    SendError(SendError),
+    ReceiveError(Error),
+}
+
 pub(crate) struct RawChannel {
     peer: Option<Arc<Mutex<RawChannel>>>,
     rx_queue: VecDeque<Message>,
+    capacity: usize,
     receiver: Option<Arc<Mutex<RawFiber>>>,
 }
 
@@ -22,12 +28,14 @@ impl RawChannel {
         let raw_a = RawChannel {
             peer: None,
             rx_queue: VecDeque::new(),
+            capacity: 16, // TODO:
             receiver: None,
         };
 
         let raw_b = RawChannel {
             peer: None,
             rx_queue: VecDeque::new(),
+            capacity: 16, // TODO:
             receiver: None,
         };
 
@@ -36,6 +44,38 @@ impl RawChannel {
         a.lock().peer = Some(b.clone());
         b.lock().peer = Some(a.clone());
         (a, b)
+    }
+
+    pub fn send(&mut self, message: Message) -> Result<(), SendError> {
+        let Some(peer_lock) = self.peer.as_ref() else {
+            return Err(SendError {
+                error: Error::ClosedByPeer,
+                message,
+            });
+        };
+
+        let mut peer = peer_lock.lock();
+        if peer.rx_queue.len() >= peer.capacity {
+            return Err(SendError {
+                error: Error::Full,
+                message,
+            });
+        }
+
+        peer.rx_queue.push_back(message);
+        if let Some(receiver) = peer.receiver.as_ref() {
+            receiver.lock().resume_if_blocked();
+        }
+
+        Ok(())
+    }
+
+    pub fn receive(&mut self) -> Result<Option<Message>, Error> {
+        if let Some(message) = self.rx_queue.pop_front() {
+            return Ok(Some(message));
+        }
+
+        Ok(None)
     }
 }
 
@@ -50,29 +90,24 @@ impl Channel {
     }
 
     pub fn send(&mut self, message: Message) -> Result<(), SendError> {
-        let ch = self.raw.lock();
-        let Some(peer_lock) = ch.peer.as_ref() else {
-            return Err(SendError {
-                error: Error::ClosedByPeer,
-                message,
-            });
-        };
-
-        let mut peer = peer_lock.lock();
-        peer.rx_queue.push_back(message);
-        if let Some(receiver) = peer.receiver.as_ref() {
-            receiver.lock().resume_if_blocked();
-        }
-
-        Ok(())
+        self.raw.lock().send(message)
     }
 
     pub fn receive(&mut self) -> Result<Option<Message>, Error> {
-        let mut ch = self.raw.lock();
-        if let Some(message) = ch.rx_queue.pop_front() {
-            return Ok(Some(message));
-        }
+        self.raw.lock().receive()
+    }
 
-        Err(Error::Empty)
+    pub fn call(&mut self, message: Message) -> Result<Message, CallError> {
+        let mut raw = self.raw.lock();
+        raw.send(message).map_err(CallError::SendError)?;
+
+        loop {
+            if let Some(message) = raw.receive().map_err(CallError::ReceiveError)? {
+                return Ok(message);
+            }
+
+            drop(raw);
+            todo!("wait for response");
+        }
     }
 }

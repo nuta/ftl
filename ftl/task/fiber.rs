@@ -1,6 +1,9 @@
 use alloc::sync::Arc;
 
-use crate::sync::{channel::RawChannel, mutex::Mutex};
+use crate::{
+    arch,
+    sync::{channel::RawChannel, mutex::Mutex},
+};
 
 enum BlockedBy {
     ChannelReceive(Arc<Mutex<RawChannel>>),
@@ -13,14 +16,14 @@ enum State {
 
 pub(crate) struct RawFiber {
     state: State,
-    // ctx: arch::Context,
+    ctx: arch::Context,
 }
 
 impl RawFiber {
-    pub fn new() -> Self {
+    pub fn new(pc: usize, sp: usize) -> Self {
         Self {
             state: State::Runnable,
-            // ctx: arch::Context::new(),
+            ctx: arch::Context::new(pc, sp),
         }
     }
 
@@ -30,3 +33,9 @@ impl RawFiber {
         }
     }
 }
+
+pub struct Fiber {
+    raw: Arc<Mutex<RawFiber>>,
+}
+
+impl Fiber {}

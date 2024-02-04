@@ -2,6 +2,17 @@ use core::{arch::asm, mem::size_of};
 
 mod sbi;
 
+pub struct Context {
+    pub pc: usize,
+    pub sp: usize,
+}
+
+impl Context {
+    pub fn new(pc: usize, sp: usize) -> Self {
+        Self { pc, sp }
+    }
+}
+
 pub fn idle() {
     unsafe {
         asm!("wfi");
