@@ -1,4 +1,4 @@
-use alloc::sync::Arc;
+use alloc::{boxed::Box, sync::Arc};
 
 use crate::{
     arch,
@@ -20,10 +20,10 @@ pub(crate) struct RawFiber {
 }
 
 impl RawFiber {
-    pub fn new(pc: usize, sp: usize) -> Self {
+    pub fn new(pc: usize, sp: usize, arg: usize) -> Self {
         Self {
             state: State::Runnable,
-            ctx: arch::Context::new(pc, sp),
+            ctx: arch::Context::new(pc, sp, arg),
         }
     }
 
@@ -38,4 +38,22 @@ pub struct Fiber {
     raw: Arc<Mutex<RawFiber>>,
 }
 
-impl Fiber {}
+fn native_entry(arg: usize) {
+    let closure = unsafe { Box::from_raw(arg as *mut Box<dyn FnOnce()>) };
+    closure();
+    todo!("fiber has returned to native_entry");
+}
+
+impl Fiber {
+    pub fn spawn<F>(f: F) -> Fiber
+    where
+        F: FnOnce() + Send + Sync + 'static,
+    {
+        let closure = Box::new(f);
+        let pc = native_entry as usize;
+        let sp = 0;
+        let arg = Box::into_raw(closure) as usize;
+        let raw = Arc::new(Mutex::new(RawFiber::new(pc, sp, arg)));
+        Self { raw }
+    }
+}

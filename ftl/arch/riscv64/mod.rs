@@ -5,11 +5,12 @@ mod sbi;
 pub struct Context {
     pub pc: usize,
     pub sp: usize,
+    pub arg: usize,
 }
 
 impl Context {
-    pub fn new(pc: usize, sp: usize) -> Self {
-        Self { pc, sp }
+    pub fn new(pc: usize, sp: usize, arg: usize) -> Self {
+        Self { pc, sp, arg }
     }
 }
 

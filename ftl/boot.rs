@@ -43,8 +43,8 @@ pub fn boot(bootinfo: BootInfo) -> ! {
         sync::channel::{Channel, Message},
         task::fiber::Fiber,
     };
-    let (ch1_tx, ch1_rx) = Channel::new().unwrap();
-    let (ch2_tx, ch2_rx) = Channel::new().unwrap();
+    let (mut ch1_tx, mut ch1_rx) = Channel::new().unwrap();
+    let (mut ch2_tx, mut ch2_rx) = Channel::new().unwrap();
     Fiber::spawn(move || {
         println!("filber1: sending...");
         ch1_tx.send(Message::Ping("42")).unwrap();
