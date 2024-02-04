@@ -5,6 +5,8 @@ use crate::{
     sync::{channel::RawChannel, mutex::Mutex},
 };
 
+use super::scheduler::GLOBAL_SCHEDULER;
+
 enum BlockedBy {
     ChannelReceive(Arc<Mutex<RawChannel>>),
 }
@@ -25,6 +27,10 @@ impl RawFiber {
             state: State::Runnable,
             ctx: arch::Context::new(pc, sp, arg),
         }
+    }
+
+    pub fn restore(&mut self) {
+        self.ctx.restore();
     }
 
     pub fn resume_if_blocked(&mut self) {
@@ -54,6 +60,9 @@ impl Fiber {
         let sp = 0;
         let arg = Box::into_raw(closure) as usize;
         let raw = Arc::new(Mutex::new(RawFiber::new(pc, sp, arg)));
+
+        GLOBAL_SCHEDULER.add(raw.clone());
+
         Self { raw }
     }
 }

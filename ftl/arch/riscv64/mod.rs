@@ -12,6 +12,23 @@ impl Context {
     pub fn new(pc: usize, sp: usize, arg: usize) -> Self {
         Self { pc, sp, arg }
     }
+
+    pub fn restore(&self) -> ! {
+        unsafe {
+            asm!("
+                mv sp, {sp}
+                mv a0, {arg}
+                mv a1, {pc}
+                call {after_restore}
+            ",
+            sp = in(reg) self.sp,
+            arg = in(reg) self.arg,
+            pc = in(reg) self.pc,
+            after_restore = sym crate::task::scheduler::after_restore,
+            options(noreturn)
+            );
+        }
+    }
 }
 
 pub fn idle() {

@@ -14,4 +14,8 @@ impl<T> Mutex<T> {
     pub fn lock(&self) -> MutexGuard<T> {
         self.inner.lock()
     }
+
+    pub unsafe fn force_unlock(&self) {
+        self.inner.force_unlock()
+    }
 }

@@ -59,6 +59,8 @@ pub fn boot(bootinfo: BootInfo) -> ! {
         ch2_tx.send(Message::Pong("42")).unwrap();
     });
 
+    crate::task::scheduler::GLOBAL_SCHEDULER.switch();
+
     loop {
         arch::idle();
     }
