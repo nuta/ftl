@@ -50,10 +50,29 @@ impl Channel {
     }
 
     pub fn send(&mut self, message: Message) -> Result<(), SendError> {
-        todo!()
+        let ch = self.raw.lock();
+        let Some(peer_lock) = ch.peer.as_ref() else {
+            return Err(SendError {
+                error: Error::ClosedByPeer,
+                message,
+            });
+        };
+
+        let mut peer = peer_lock.lock();
+        peer.rx_queue.push_back(message);
+        if let Some(receiver) = peer.receiver.as_ref() {
+            receiver.lock().resume_if_blocked();
+        }
+
+        Ok(())
     }
 
     pub fn receive(&mut self) -> Result<Option<Message>, Error> {
-        todo!()
+        let mut ch = self.raw.lock();
+        if let Some(message) = ch.rx_queue.pop_front() {
+            return Ok(Some(message));
+        }
+
+        Err(Error::Empty)
     }
 }
