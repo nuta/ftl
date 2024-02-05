@@ -8,12 +8,12 @@ use crate::{
 use super::scheduler::GLOBAL_SCHEDULER;
 
 enum BlockedBy {
-    // ChannelReceive(Arc<Mutex<RawChannel>>),
+    ChannelReceive(Arc<Mutex<RawChannel>>),
 }
 
 enum State {
     Runnable,
-    // Blocked(BlockedBy),
+    Blocked(BlockedBy),
 }
 
 pub(crate) struct RawFiber {
@@ -33,8 +33,8 @@ impl RawFiber {
         matches!(self.state, State::Runnable)
     }
 
-    pub fn restore(&mut self) -> ! {
-        self.ctx.restore();
+    pub unsafe fn context_mut_ptr(&mut self) -> *mut arch::Context {
+        &mut self.ctx as *mut arch::Context
     }
 
     pub fn resume_if_blocked(&mut self) {
@@ -48,10 +48,9 @@ pub struct Fiber {
     raw: Arc<Mutex<RawFiber>>,
 }
 
-fn native_entry(arg: usize) {
+extern "C" fn native_entry(arg: usize) {
     let closure = unsafe { Box::from_raw(arg as *mut Box<dyn FnOnce()>) };
     closure();
-    todo!("fiber has returned to native_entry");
 }
 
 impl Fiber {
@@ -59,9 +58,19 @@ impl Fiber {
     where
         F: FnOnce() + Send + Sync + 'static,
     {
-        let closure = Box::new(f);
+        println!("box::new");
+        let i = 0; // FIXME: force allocating heap
+        let wrapper = move || {
+            f();
+            panic!("thread has returned to wrapper: {}", i);
+        };
+
+        let closure = Box::new(wrapper);
+        println!("box::new done");
+
         let pc = native_entry as usize;
         let arg = Box::into_raw(closure) as usize;
+        println!("pc: {:#x}, arg: {:#x}", pc, arg);
         let raw = Arc::new(Mutex::new(RawFiber::new_kernel(pc, arg)));
 
         GLOBAL_SCHEDULER.add(raw.clone());

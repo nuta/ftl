@@ -2,7 +2,11 @@ use core::mem::ManuallyDrop;
 
 use alloc::{collections::VecDeque, sync::Arc};
 
-use crate::{sync::mutex::Mutex, task::fiber::RawFiber};
+use crate::{
+    arch::{self, cpuvar_mut},
+    sync::mutex::Mutex,
+    task::fiber::RawFiber,
+};
 
 pub static GLOBAL_SCHEDULER: Scheduler = Scheduler::new();
 
@@ -13,14 +17,6 @@ struct Inner {
 
 pub struct Scheduler {
     inner: Mutex<Inner>,
-}
-
-pub(crate) fn after_restore() {
-    unsafe {
-        let inner = GLOBAL_SCHEDULER.inner.lock();
-        let current = inner.current.as_ref().unwrap();
-        current.force_unlock();
-    }
 }
 
 impl Scheduler {
@@ -39,7 +35,7 @@ impl Scheduler {
         self.inner.lock().run_queue.push_back(fiber);
     }
 
-    pub fn switch_to_next(&self) {
+    pub fn switch_to_next(&self) -> ! {
         let mut inner = self.inner.lock();
         if let Some(current) = inner.current.take() {
             if current.lock().is_runnable() {
@@ -47,16 +43,18 @@ impl Scheduler {
             }
         }
 
-        let Some(next) = inner.run_queue.pop_front() else {
+        let Some(next_lock) = inner.run_queue.pop_front() else {
             todo!("no fibers to run")
         };
 
-        inner.current = Some(next.clone());
-        drop(inner);
+        {
+            let mut next = next_lock.lock();
+            let cpuvar = cpuvar_mut();
+            cpuvar.context = unsafe { next.context_mut_ptr() };
+            inner.current = Some(next_lock.clone());
+            drop(inner);
+        }
 
-        // Wrap the lock guard in `ManuallyDrop` to prevent it from being
-        // released. We'll release it in `after_restore`.
-        let mut next = ManuallyDrop::new(next.lock());
-        next.restore();
+        arch::restore_context();
     }
 }

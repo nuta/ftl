@@ -34,6 +34,8 @@ pub fn boot(bootinfo: BootInfo) -> ! {
         }
     }
 
+    arch::init();
+
     let mut map = alloc::collections::BTreeMap::new();
     map.insert("hello", 1);
     map.insert("world", 2);
@@ -43,20 +45,37 @@ pub fn boot(bootinfo: BootInfo) -> ! {
         sync::channel::{Channel, Message},
         task::fiber::Fiber,
     };
-    let (mut ch1_tx, mut ch1_rx) = Channel::new().unwrap();
-    let (mut ch2_tx, mut ch2_rx) = Channel::new().unwrap();
+
+    // let (mut ch1_tx, mut ch1_rx) = Channel::new().unwrap();
+    // let (mut ch2_tx, mut ch2_rx) = Channel::new().unwrap();
+    // Fiber::spawn(move || {
+    //     println!("filber1: sending...");
+    //     ch1_tx.send(Message::Ping("42")).unwrap();
+    //     let msg = ch2_rx.receive().unwrap();
+    //     println!("filber1: received {:?}", msg);
+    // });
+
+    // Fiber::spawn(move || {
+    //     println!("filber2: receiving...");
+    //     let msg = ch1_rx.receive().unwrap();
+    //     println!("filber2: received {:?}", msg);
+    //     ch2_tx.send(Message::Pong("42")).unwrap();
+    // });
+
     Fiber::spawn(move || {
-        println!("filber1: sending...");
-        ch1_tx.send(Message::Ping("42")).unwrap();
-        let msg = ch2_rx.receive().unwrap();
-        println!("filber1: received {:?}", msg);
+        println!("fiber A: hello");
+        for i in 0.. {
+            crate::arch::yield_cpu();
+            println!("fiber A: {}", i);
+        }
     });
 
     Fiber::spawn(move || {
-        println!("filber2: receiving...");
-        let msg = ch1_rx.receive().unwrap();
-        println!("filber2: received {:?}", msg);
-        ch2_tx.send(Message::Pong("42")).unwrap();
+        println!("fiber B: world");
+        for i in 0.. {
+            crate::arch::yield_cpu();
+            println!("fiber B: {}", i);
+        }
     });
 
     crate::task::scheduler::GLOBAL_SCHEDULER.switch_to_next();

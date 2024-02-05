@@ -44,7 +44,7 @@ sources += \
 .PHONY: run
 run: ftl.elf
 	$(PROGRESS) "QEMU" "ftl.elf"
-	$(QEMU) $(QEMUFLAGS) -kernel ftl.elf | tee kernel.log
+	$(QEMU) $(QEMUFLAGS) -kernel ftl.elf
 
 .PHONY: gdb
 gdb:

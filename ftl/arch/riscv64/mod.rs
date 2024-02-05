@@ -1,13 +1,202 @@
-use core::{arch::asm, mem::size_of};
+use core::{arch::asm, mem::offset_of, mem::size_of};
 
-use crate::allocator::alloc_pages;
+use alloc::boxed::Box;
+
+use crate::{allocator::alloc_pages, task::scheduler::GLOBAL_SCHEDULER};
 
 mod sbi;
 
+#[inline(always)]
+fn set_sscratch(value: usize) {
+    unsafe {
+        asm!("csrw sscratch, {}", in(reg) value);
+    }
+}
+
+pub fn init() {
+    let cpuvar = CpuVar {
+        context: core::ptr::null_mut(),
+    };
+
+    let cpuvar_ptr = Box::leak(Box::new(cpuvar));
+    set_sscratch(cpuvar_ptr as *mut CpuVar as usize);
+}
+
+#[inline(always)]
+fn get_sscratch() -> usize {
+    let value: usize;
+    unsafe {
+        asm!("csrr {}, sscratch", out(reg) value);
+    }
+    value
+}
+
+#[repr(C)]
+pub struct CpuVar {
+    pub context: *mut Context,
+}
+
+// FIXME: Implement RefCell-like runtime borrow checker
+pub fn cpuvar_mut() -> &'static mut CpuVar {
+    let sscratch = get_sscratch();
+    let cpuvar = sscratch as *mut CpuVar;
+    unsafe { &mut *cpuvar }
+}
+
+extern "C" fn switch_to_next() -> ! {
+    GLOBAL_SCHEDULER.switch_to_next();
+}
+
+/// # Why `#[naked]`?
+///
+/// - To get the correct return address from `ra`. `#[naked]` prevents inlining.
+/// - To eliminate the needless prologue.
+#[naked]
+pub extern "C" fn yield_cpu() {
+    unsafe {
+        asm!(
+            r#"
+                csrr a0, sscratch
+                ld a0, {context_offset}(a0)
+
+                sd ra, {ra_offset}(a0)
+                sd sp, {sp_offset}(a0)
+                sd s0, {s0_offset}(a0)
+                sd s1, {s1_offset}(a0)
+                sd s2, {s2_offset}(a0)
+                sd s3, {s3_offset}(a0)
+                sd s4, {s4_offset}(a0)
+                sd s5, {s5_offset}(a0)
+                sd s6, {s6_offset}(a0)
+                sd s7, {s7_offset}(a0)
+                sd s8, {s8_offset}(a0)
+                sd s9, {s9_offset}(a0)
+                sd s10, {s10_offset}(a0)
+                sd s11, {s11_offset}(a0)
+                j {switch_to_next}
+            "#,
+            context_offset = const offset_of!(CpuVar, context),
+            ra_offset = const offset_of!(Context, ra),
+            sp_offset = const offset_of!(Context, sp),
+            s0_offset = const offset_of!(Context, s0),
+            s1_offset = const offset_of!(Context, s1),
+            s2_offset = const offset_of!(Context, s2),
+            s3_offset = const offset_of!(Context, s3),
+            s4_offset = const offset_of!(Context, s4),
+            s5_offset = const offset_of!(Context, s5),
+            s6_offset = const offset_of!(Context, s6),
+            s7_offset = const offset_of!(Context, s7),
+            s8_offset = const offset_of!(Context, s8),
+            s9_offset = const offset_of!(Context, s9),
+            s10_offset = const offset_of!(Context, s10),
+            s11_offset = const offset_of!(Context, s11),
+            switch_to_next = sym switch_to_next,
+            options(noreturn)
+        )
+    }
+}
+
+/// Restores an in-kernel Fiber context from ssctrach.
+// #[naked]
+pub extern "C" fn restore_context() -> ! {
+    let a0: usize;
+    unsafe {
+        asm!(
+            r#"
+                csrr a0, sscratch
+                ld a0, {context_offset}(a0)
+                mv {a0}, a0
+            "#,
+            context_offset = const offset_of!(CpuVar, context),
+            a0 = out(reg) a0,
+        );
+    }
+
+    println!(
+        "restore_context: ctx_a0={:08x}, ctx={:08x}, ra={:08x}, s0={:08x} ({}), s1={:08x} ({})",
+        a0,
+        unsafe { (&*cpuvar_mut().context) as *const _ as usize },
+        unsafe { (&*cpuvar_mut().context).ra },
+        unsafe { (&*cpuvar_mut().context).s0 },
+        offset_of!(Context, s0),
+        unsafe { (&*cpuvar_mut().context).s1 },
+        offset_of!(Context, s1),
+    );
+    unsafe {
+        asm!(
+            r#"
+                csrr a0, sscratch
+                ld a0, {context_offset}(a0)
+
+                ld ra, {ra_offset}(a0)
+                ld sp, {sp_offset}(a0)
+                ld s0, {s0_offset}(a0)
+                ld s1, {s1_offset}(a0)
+                ld s2, {s2_offset}(a0)
+                ld s3, {s3_offset}(a0)
+                ld s4, {s4_offset}(a0)
+                ld s5, {s5_offset}(a0)
+                ld s6, {s6_offset}(a0)
+                ld s7, {s7_offset}(a0)
+                ld s8, {s8_offset}(a0)
+                ld s9, {s9_offset}(a0)
+                ld s10, {s10_offset}(a0)
+                ld s11, {s11_offset}(a0)
+                ret
+            "#,
+            context_offset = const offset_of!(CpuVar, context),
+            ra_offset = const offset_of!(Context, ra),
+            sp_offset = const offset_of!(Context, sp),
+            s0_offset = const offset_of!(Context, s0),
+            s1_offset = const offset_of!(Context, s1),
+            s2_offset = const offset_of!(Context, s2),
+            s3_offset = const offset_of!(Context, s3),
+            s4_offset = const offset_of!(Context, s4),
+            s5_offset = const offset_of!(Context, s5),
+            s6_offset = const offset_of!(Context, s6),
+            s7_offset = const offset_of!(Context, s7),
+            s8_offset = const offset_of!(Context, s8),
+            s9_offset = const offset_of!(Context, s9),
+            s10_offset = const offset_of!(Context, s10),
+            s11_offset = const offset_of!(Context, s11),
+            options(noreturn)
+        )
+    }
+}
+
+#[naked]
+extern "C" fn kernel_entry() -> ! {
+    unsafe {
+        asm!(
+            r#"
+                mv fp, zero
+                mv ra, s0
+                mv a0, s1
+                j .
+                ret
+            "#,
+            options(noreturn)
+        )
+    }
+}
+
+#[derive(Debug)]
+#[repr(C)]
 pub struct Context {
-    pub pc: usize,
-    pub sp: usize,
-    pub arg: usize,
+    ra: usize,
+    sp: usize,
+    s0: usize,
+    s1: usize,
+    s2: usize,
+    s3: usize,
+    s4: usize,
+    s5: usize,
+    s6: usize,
+    s7: usize,
+    s8: usize,
+    s9: usize,
+    s10: usize,
+    s11: usize,
 }
 
 impl Context {
@@ -15,23 +204,21 @@ impl Context {
         let stack_size = 64 * 1024;
         let sp_bottom = alloc_pages(stack_size / 4096).expect("failed to allocate stack");
         let sp = sp_bottom + stack_size;
-        Self { pc, sp, arg }
-    }
-
-    pub fn restore(&self) -> ! {
-        unsafe {
-            asm!("
-                mv sp, {sp}
-                mv a0, {arg}
-                mv a1, {pc}
-                call {after_restore}
-            ",
-            sp = in(reg) self.sp,
-            arg = in(reg) self.arg,
-            pc = in(reg) self.pc,
-            after_restore = sym crate::task::scheduler::after_restore,
-            options(noreturn)
-            );
+        Self {
+            ra: kernel_entry as usize,
+            sp,
+            s0: pc,
+            s1: arg,
+            s2: 0,
+            s3: 0,
+            s4: 0,
+            s5: 0,
+            s6: 0,
+            s7: 0,
+            s8: 0,
+            s9: 0,
+            s10: 0,
+            s11: 0,
         }
     }
 }
