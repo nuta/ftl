@@ -13,15 +13,6 @@ impl Context {
         Self { pc, sp, arg }
     }
 
-    /// # `inline(always)` is essential!
-    ///
-    /// The `inline(always)` attribute is essential for this method to
-    /// get the correct return address.
-    #[inline(always)]
-    pub fn save(&mut self) {
-        // TODO:
-    }
-
     pub fn restore(&self) -> ! {
         unsafe {
             asm!("

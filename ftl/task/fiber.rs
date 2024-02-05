@@ -29,13 +29,8 @@ impl RawFiber {
         }
     }
 
-    /// # `inline(always)` is essential!
-    ///
-    /// The `inline(always)` attribute is essential for this method to
-    /// get the correct return address.
-    #[inline(always)]
-    pub fn save(&mut self) {
-        self.ctx.save();
+    pub fn is_runnable(&self) -> bool {
+        matches!(self.state, State::Runnable)
     }
 
     pub fn restore(&mut self) -> ! {
