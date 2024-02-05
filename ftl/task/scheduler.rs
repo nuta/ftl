@@ -1,4 +1,4 @@
-use core::mem;
+use core::mem::{self, ManuallyDrop};
 
 use alloc::{collections::VecDeque, sync::Arc};
 
@@ -42,6 +42,7 @@ impl Scheduler {
     pub fn switch(&self) {
         let mut inner = self.inner.lock();
         if let Some(current) = inner.current.take() {
+            current.lock().save();
             inner.run_queue.push_back(current);
         }
 
@@ -49,11 +50,13 @@ impl Scheduler {
             inner.current = Some(next.clone());
             drop(inner);
 
-            let mut next = next.lock();
+            // Wrap the lock guard in `ManuallyDrop` to prevent it from being
+            // released. We'll release it in `after_restore`.
+            let mut next = ManuallyDrop::new(next.lock());
+            todo!("switch to the next fiber");
             next.restore();
-
-            // We'll release the lock when the fiber is resumed.
-            mem::forget(next);
         }
+
+        todo!("no fibers to run")
     }
 }
