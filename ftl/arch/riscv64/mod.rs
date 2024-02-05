@@ -99,29 +99,6 @@ pub extern "C" fn yield_cpu() {
 /// Restores an in-kernel Fiber context from ssctrach.
 // #[naked]
 pub extern "C" fn restore_context() -> ! {
-    let a0: usize;
-    unsafe {
-        asm!(
-            r#"
-                csrr a0, sscratch
-                ld a0, {context_offset}(a0)
-                mv {a0}, a0
-            "#,
-            context_offset = const offset_of!(CpuVar, context),
-            a0 = out(reg) a0,
-        );
-    }
-
-    println!(
-        "restore_context: ctx_a0={:08x}, ctx={:08x}, ra={:08x}, s0={:08x} ({}), s1={:08x} ({})",
-        a0,
-        unsafe { (&*cpuvar_mut().context) as *const _ as usize },
-        unsafe { (&*cpuvar_mut().context).ra },
-        unsafe { (&*cpuvar_mut().context).s0 },
-        offset_of!(Context, s0),
-        unsafe { (&*cpuvar_mut().context).s1 },
-        offset_of!(Context, s1),
-    );
     unsafe {
         asm!(
             r#"
@@ -164,15 +141,15 @@ pub extern "C" fn restore_context() -> ! {
     }
 }
 
+#[no_mangle]
 #[naked]
 extern "C" fn kernel_entry() -> ! {
     unsafe {
         asm!(
             r#"
                 mv fp, zero
-                mv ra, s0
-                mv a0, s1
-                j .
+                mv ra, s1
+                mv a0, s2
                 ret
             "#,
             options(noreturn)
@@ -207,9 +184,9 @@ impl Context {
         Self {
             ra: kernel_entry as usize,
             sp,
-            s0: pc,
-            s1: arg,
-            s2: 0,
+            s0: 0, // fp
+            s1: pc,
+            s2: arg,
             s3: 0,
             s4: 0,
             s5: 0,

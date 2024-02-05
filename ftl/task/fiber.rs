@@ -49,7 +49,8 @@ pub struct Fiber {
 }
 
 extern "C" fn native_entry(arg: usize) {
-    let closure = unsafe { Box::from_raw(arg as *mut Box<dyn FnOnce()>) };
+    println!("native_entry: {:#x}", arg);
+    let closure = unsafe { Box::from_raw(arg as *mut Box<dyn FnOnce() + Send + Sync + 'static>) };
     closure();
 }
 
