@@ -39,3 +39,11 @@ unsafe impl GlobalAlloc for GlobalAllocator {
         /* Do nothing: this is well-known limitation of bump allocator! */
     }
 }
+
+pub fn alloc_pages(num_pages: usize) -> Option<usize> {
+    GLOBAL_ALLOCATOR
+        .inner
+        .lock()
+        .allocate(num_pages * 4096, 4096)
+        .map(|addr| addr.get())
+}

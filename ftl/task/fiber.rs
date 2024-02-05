@@ -8,12 +8,12 @@ use crate::{
 use super::scheduler::GLOBAL_SCHEDULER;
 
 enum BlockedBy {
-    ChannelReceive(Arc<Mutex<RawChannel>>),
+    // ChannelReceive(Arc<Mutex<RawChannel>>),
 }
 
 enum State {
     Runnable,
-    Blocked(BlockedBy),
+    // Blocked(BlockedBy),
 }
 
 pub(crate) struct RawFiber {
@@ -22,10 +22,10 @@ pub(crate) struct RawFiber {
 }
 
 impl RawFiber {
-    pub fn new(pc: usize, sp: usize, arg: usize) -> Self {
+    pub fn new_kernel(pc: usize, arg: usize) -> Self {
         Self {
             state: State::Runnable,
-            ctx: arch::Context::new(pc, sp, arg),
+            ctx: arch::Context::new_kernel(pc, arg),
         }
     }
 
@@ -61,9 +61,8 @@ impl Fiber {
     {
         let closure = Box::new(f);
         let pc = native_entry as usize;
-        let sp = 0;
         let arg = Box::into_raw(closure) as usize;
-        let raw = Arc::new(Mutex::new(RawFiber::new(pc, sp, arg)));
+        let raw = Arc::new(Mutex::new(RawFiber::new_kernel(pc, arg)));
 
         GLOBAL_SCHEDULER.add(raw.clone());
 

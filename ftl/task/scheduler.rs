@@ -57,7 +57,6 @@ impl Scheduler {
         // Wrap the lock guard in `ManuallyDrop` to prevent it from being
         // released. We'll release it in `after_restore`.
         let mut next = ManuallyDrop::new(next.lock());
-        todo!("switch to the next fiber");
         next.restore();
     }
 }

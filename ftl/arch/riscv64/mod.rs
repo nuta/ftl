@@ -1,5 +1,7 @@
 use core::{arch::asm, mem::size_of};
 
+use crate::allocator::alloc_pages;
+
 mod sbi;
 
 pub struct Context {
@@ -9,7 +11,10 @@ pub struct Context {
 }
 
 impl Context {
-    pub fn new(pc: usize, sp: usize, arg: usize) -> Self {
+    pub fn new_kernel(pc: usize, arg: usize) -> Self {
+        let stack_size = 64 * 1024;
+        let sp_bottom = alloc_pages(stack_size / 4096).expect("failed to allocate stack");
+        let sp = sp_bottom + stack_size;
         Self { pc, sp, arg }
     }
 
