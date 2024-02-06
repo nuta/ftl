@@ -8,8 +8,8 @@ use crate::task::scheduler::GLOBAL_SCHEDULER;
 
 #[derive(Debug)]
 pub enum Message {
-    Ping(&'static str),
-    Pong(&'static str),
+    Ping(usize),
+    Pong(usize),
 }
 
 #[derive(Debug)]

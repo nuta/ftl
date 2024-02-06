@@ -53,18 +53,19 @@ pub fn boot(bootinfo: BootInfo) -> ! {
     let (mut ch1_tx, mut ch1_rx) = Channel::new().unwrap();
     let (mut ch2_tx, mut ch2_rx) = Channel::new().unwrap();
     Fiber::spawn(move || {
-        println!("filber1: sending...");
-        ch1_tx.send(Message::Ping("21")).unwrap();
-        let msg = ch2_rx.receive().unwrap();
-        println!("filber1: received {:?}", msg);
+        for i in 0.. {
+            ch1_tx.send(Message::Ping(i)).unwrap();
+            let msg = ch2_rx.receive().unwrap();
+            println!("filber1: received {:?}", msg);
+        }
     });
 
     Fiber::spawn(move || {
-        println!("filber2: receiving...");
-        let msg = ch1_rx.receive().unwrap();
-        println!("filber2: received {:?}", msg);
-        ch2_tx.send(Message::Pong("42")).unwrap();
-        println!("fiber2: sent");
+        for i in 0.. {
+            let msg = ch1_rx.receive().unwrap();
+            println!("filber2: received {:?}", msg);
+            ch2_tx.send(Message::Pong(i + 100000000)).unwrap();
+        }
     });
 
     // Fiber::spawn(move || {
