@@ -5,3 +5,4 @@
 *.log
 *.elf
 *.map
+.gdb_history

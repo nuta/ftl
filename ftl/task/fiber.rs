@@ -48,9 +48,9 @@ pub struct Fiber {
     raw: Arc<Mutex<RawFiber>>,
 }
 
-extern "C" fn native_entry(arg: usize) {
-    println!("native_entry: {:#x}", arg);
-    let closure = unsafe { Box::from_raw(arg as *mut Box<dyn FnOnce() + Send + Sync + 'static>) };
+extern "C" fn native_entry(arg: *mut Box<dyn FnOnce()>) {
+    println!("native_entry");
+    let closure = unsafe { Box::from_raw(arg) };
     closure();
 }
 
@@ -59,19 +59,14 @@ impl Fiber {
     where
         F: FnOnce() + Send + Sync + 'static,
     {
-        println!("box::new");
-        let i = 0; // FIXME: force allocating heap
-        let wrapper = move || {
-            f();
-            panic!("thread has returned to wrapper: {}", i);
-        };
+        Fiber::do_spawn(Box::new(f))
+    }
 
-        let closure = Box::new(wrapper);
-        println!("box::new done");
-
+    fn do_spawn(f: Box<dyn FnOnce()>) -> Fiber {
         let pc = native_entry as usize;
-        let arg = Box::into_raw(closure) as usize;
-        println!("pc: {:#x}, arg: {:#x}", pc, arg);
+        let closure = Box::into_raw(Box::new(f));
+        let arg = closure as usize;
+        println!("pc: {:#x}, arg: {:#x}", pc, closure as usize);
         let raw = Arc::new(Mutex::new(RawFiber::new_kernel(pc, arg)));
 
         GLOBAL_SCHEDULER.add(raw.clone());
