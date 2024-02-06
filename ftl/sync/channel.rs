@@ -1,8 +1,10 @@
 use alloc::{collections::VecDeque, sync::Arc};
 
+use crate::arch::yield_cpu;
 use crate::result::Error;
 use crate::sync::mutex::Mutex;
 use crate::task::fiber::RawFiber;
+use crate::task::scheduler::GLOBAL_SCHEDULER;
 
 #[derive(Debug)]
 pub enum Message {
@@ -79,6 +81,10 @@ impl RawChannel {
     pub fn receive(&mut self) -> Result<Option<Message>, Error> {
         if let Some(message) = self.rx_queue.pop_front() {
             return Ok(Some(message));
+        } else {
+            let current = GLOBAL_SCHEDULER.current();
+            current.lock().block();
+            self.receiver = Some(current);
         }
 
         Ok(None)
@@ -99,8 +105,22 @@ impl Channel {
         self.raw.lock().send(message)
     }
 
-    pub fn receive(&mut self) -> Result<Option<Message>, Error> {
-        self.raw.lock().receive()
+    pub fn receive(&mut self) -> Result<Message, Error> {
+        loop {
+            let result = {
+                let mut raw = self.raw.lock();
+                raw.receive()?
+            };
+
+            match result {
+                Some(message) => {
+                    return Ok(message);
+                }
+                None => {
+                    yield_cpu();
+                }
+            }
+        }
     }
 
     pub fn call(&mut self, message: Message) -> Result<Message, CallError> {

@@ -1,6 +1,10 @@
 use arrayvec::ArrayVec;
 
-use crate::{allocator::GLOBAL_ALLOCATOR, arch, print::ByteSize};
+use crate::{
+    allocator::GLOBAL_ALLOCATOR,
+    arch::{self, yield_cpu},
+    print::ByteSize,
+};
 
 /// A free region of memory available for software.
 #[derive(Debug)]
@@ -46,37 +50,38 @@ pub fn boot(bootinfo: BootInfo) -> ! {
         task::fiber::Fiber,
     };
 
-    // let (mut ch1_tx, mut ch1_rx) = Channel::new().unwrap();
-    // let (mut ch2_tx, mut ch2_rx) = Channel::new().unwrap();
-    // Fiber::spawn(move || {
-    //     println!("filber1: sending...");
-    //     ch1_tx.send(Message::Ping("42")).unwrap();
-    //     let msg = ch2_rx.receive().unwrap();
-    //     println!("filber1: received {:?}", msg);
-    // });
-
-    // Fiber::spawn(move || {
-    //     println!("filber2: receiving...");
-    //     let msg = ch1_rx.receive().unwrap();
-    //     println!("filber2: received {:?}", msg);
-    //     ch2_tx.send(Message::Pong("42")).unwrap();
-    // });
-
+    let (mut ch1_tx, mut ch1_rx) = Channel::new().unwrap();
+    let (mut ch2_tx, mut ch2_rx) = Channel::new().unwrap();
     Fiber::spawn(move || {
-        println!("fiber A: hello");
-        for i in 0.. {
-            crate::arch::yield_cpu();
-            println!("fiber A: {}", i);
-        }
+        println!("filber1: sending...");
+        ch1_tx.send(Message::Ping("21")).unwrap();
+        let msg = ch2_rx.receive().unwrap();
+        println!("filber1: received {:?}", msg);
     });
 
     Fiber::spawn(move || {
-        println!("fiber B: world");
-        for i in 0.. {
-            crate::arch::yield_cpu();
-            println!("fiber B: {}", i);
-        }
+        println!("filber2: receiving...");
+        let msg = ch1_rx.receive().unwrap();
+        println!("filber2: received {:?}", msg);
+        ch2_tx.send(Message::Pong("42")).unwrap();
+        println!("fiber2: sent");
     });
+
+    // Fiber::spawn(move || {
+    //     println!("fiber A: hello");
+    //     for i in 0.. {
+    //         crate::arch::yield_cpu();
+    //         println!("fiber A: {}", i);
+    //     }
+    // });
+
+    // Fiber::spawn(move || {
+    //     println!("fiber B: world");
+    //     for i in 0.. {
+    //         crate::arch::yield_cpu();
+    //         println!("fiber B: {}", i);
+    //     }
+    // });
 
     crate::task::scheduler::GLOBAL_SCHEDULER.switch_to_next();
 
