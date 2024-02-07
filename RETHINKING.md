@@ -36,6 +36,8 @@ What's more, some people think kernel is slow, or want to inject code.
 
 ### Nano-services: process is just one of isolation mechanism
 
+Running fibers in the kernel space sounds like hybrid kernel, but with stronger and finer-grained isolation.
+
 ### API-first design: microkernel with compromises
 
 
