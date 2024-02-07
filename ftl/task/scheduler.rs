@@ -54,7 +54,10 @@ impl Scheduler {
 
             let Some(next_id) = guard.run_queue.pop_front() else {
                 todo!("no fibers to run")
+                // TODO: return idle thread
             };
+
+            assert!(next_id != current.id());
 
             let next_lock = guard.fibers.get(&next_id).unwrap().clone();
             let mut next = next_lock.lock();
