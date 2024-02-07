@@ -64,16 +64,15 @@ impl Scheduler {
             todo!("no fibers to run")
         };
 
-        {
-            let next_lock = guard.fibers.get(&next_id).unwrap().clone();
-            let mut next = next_lock.lock();
-            println!("switching to fiber {}", next.id());
-            let cpuvar = cpuvar_mut();
-            cpuvar.context = unsafe { next.context_mut_ptr() };
-            guard.current = Some(next_lock.clone());
-            drop(guard);
-        }
+        let next_lock = guard.fibers.get(&next_id).unwrap().clone();
+        let mut next = next_lock.lock();
+        println!("switching to fiber {}", next.id());
+        let cpuvar = cpuvar_mut();
+        cpuvar.context = unsafe { next.context_mut_ptr() };
+        guard.current = Some(next_lock.clone());
 
+        drop(guard);
+        drop(next);
         arch::restore_context();
     }
 }
