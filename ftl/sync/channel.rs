@@ -82,7 +82,7 @@ impl RawChannel {
         if let Some(message) = self.rx_queue.pop_front() {
             return Ok(Some(message));
         } else {
-            let current = GLOBAL_SCHEDULER.current();
+            let current = GLOBAL_SCHEDULER.lock().current();
             current.lock().block();
             self.receiver = Some(current);
         }

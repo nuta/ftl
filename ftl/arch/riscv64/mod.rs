@@ -2,7 +2,10 @@ use core::{arch::asm, mem::offset_of, mem::size_of};
 
 use alloc::boxed::Box;
 
-use crate::{allocator::alloc_pages, task::scheduler::GLOBAL_SCHEDULER};
+use crate::{
+    allocator::alloc_pages,
+    task::scheduler::{Scheduler, GLOBAL_SCHEDULER},
+};
 
 mod sbi;
 
@@ -44,7 +47,7 @@ pub fn cpuvar_mut() -> &'static mut CpuVar {
 }
 
 extern "C" fn switch_to_next() -> ! {
-    GLOBAL_SCHEDULER.switch_to_next();
+    Scheduler::switch_to_next(GLOBAL_SCHEDULER.lock());
 }
 
 /// # Why `#[naked]`?

@@ -4,6 +4,7 @@ use crate::{
     allocator::GLOBAL_ALLOCATOR,
     arch::{self, yield_cpu},
     print::ByteSize,
+    task::scheduler::{Scheduler, GLOBAL_SCHEDULER},
 };
 
 /// A free region of memory available for software.
@@ -84,7 +85,7 @@ pub fn boot(bootinfo: BootInfo) -> ! {
     //     }
     // });
 
-    crate::task::scheduler::GLOBAL_SCHEDULER.switch_to_next();
+    Scheduler::switch_to_next(GLOBAL_SCHEDULER.lock());
 
     loop {
         arch::idle();

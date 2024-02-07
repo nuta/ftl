@@ -8,6 +8,7 @@ use alloc::{boxed::Box, sync::Arc};
 use crate::{
     arch::{self, yield_cpu},
     sync::{channel::RawChannel, mutex::Mutex},
+    task::scheduler::Scheduler,
 };
 
 use super::scheduler::GLOBAL_SCHEDULER;
@@ -47,7 +48,7 @@ impl RawFiber {
     pub fn resume_if_blocked(&mut self) {
         if matches!(self.state, State::Blocked) {
             self.state = State::Runnable;
-            GLOBAL_SCHEDULER.resume(self.id);
+            GLOBAL_SCHEDULER.lock().resume(self.id);
         }
     }
 
@@ -92,7 +93,7 @@ impl Fiber {
         extern "C" fn native_entry(arg: *mut Box<dyn FnOnce()>) {
             let closure = unsafe { Box::from_raw(arg) };
             closure();
-            GLOBAL_SCHEDULER.exit_current();
+            Scheduler::exit_current(GLOBAL_SCHEDULER.lock());
         }
 
         let main = move || {
@@ -105,7 +106,7 @@ impl Fiber {
         let arg = closure as usize;
         let raw = Arc::new(Mutex::new(RawFiber::new_kernel(id, pc, arg)));
 
-        GLOBAL_SCHEDULER.add(raw.clone());
+        GLOBAL_SCHEDULER.lock().add(raw.clone());
 
         Self { raw }
     }
