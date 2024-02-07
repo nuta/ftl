@@ -1,6 +1,6 @@
 use alloc::{collections::VecDeque, sync::Arc};
 
-use crate::arch::yield_cpu;
+use crate::arch::{cpuvar_ref, yield_cpu};
 use crate::result::Error;
 use crate::sync::mutex::Mutex;
 use crate::task::fiber::RawFiber;
@@ -72,7 +72,9 @@ impl RawChannel {
 
         peer.rx_queue.push_back(message);
         if let Some(receiver) = peer.receiver.as_ref() {
+            println!(">>> resuming receiver");
             receiver.lock().resume_if_blocked();
+            println!(">>> resumed receiver");
         }
 
         Ok(())
@@ -82,9 +84,10 @@ impl RawChannel {
         if let Some(message) = self.rx_queue.pop_front() {
             return Ok(Some(message));
         } else {
-            let current = GLOBAL_SCHEDULER.lock().current();
+            let current = cpuvar_ref().current.clone();
             current.lock().block();
             self.receiver = Some(current);
+            println!(">>> block done");
         }
 
         Ok(None)
@@ -117,6 +120,7 @@ impl Channel {
                     return Ok(message);
                 }
                 None => {
+                    println!(">>> yielding CPU...");
                     yield_cpu();
                 }
             }

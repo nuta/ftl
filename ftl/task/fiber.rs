@@ -25,6 +25,14 @@ pub(crate) struct RawFiber {
 }
 
 impl RawFiber {
+    pub fn new_idle() -> Self {
+        Self {
+            id: FiberId::alloc(),
+            state: State::Blocked,
+            ctx: arch::Context::new_idle(),
+        }
+    }
+
     pub fn new_kernel(id: FiberId, pc: usize, arg: usize) -> Self {
         Self {
             id,

@@ -1,10 +1,14 @@
 use core::{arch::asm, mem::offset_of, mem::size_of};
 
-use alloc::boxed::Box;
+use alloc::{boxed::Box, sync::Arc};
 
 use crate::{
     allocator::alloc_pages,
-    task::scheduler::{Scheduler, GLOBAL_SCHEDULER},
+    sync::mutex::Mutex,
+    task::{
+        fiber::RawFiber,
+        scheduler::{Scheduler, GLOBAL_SCHEDULER},
+    },
 };
 
 mod sbi;
@@ -14,15 +18,6 @@ fn set_sscratch(value: usize) {
     unsafe {
         asm!("csrw sscratch, {}", in(reg) value);
     }
-}
-
-pub fn init() {
-    let cpuvar = CpuVar {
-        context: core::ptr::null_mut(),
-    };
-
-    let cpuvar_ptr = Box::leak(Box::new(cpuvar));
-    set_sscratch(cpuvar_ptr as *mut CpuVar as usize);
 }
 
 #[inline(always)]
@@ -37,6 +32,26 @@ fn get_sscratch() -> usize {
 #[repr(C)]
 pub struct CpuVar {
     pub context: *mut Context,
+    pub current: Arc<Mutex<RawFiber>>,
+    pub idle: Arc<Mutex<RawFiber>>,
+}
+
+pub fn init() {
+    let idle = Arc::new(Mutex::new(RawFiber::new_idle()));
+    let cpuvar = CpuVar {
+        context: core::ptr::null_mut(),
+        current: idle.clone(),
+        idle,
+    };
+
+    let cpuvar_ptr = Box::leak(Box::new(cpuvar));
+    set_sscratch(cpuvar_ptr as *mut CpuVar as usize);
+}
+
+pub fn cpuvar_ref() -> &'static CpuVar {
+    let sscratch = get_sscratch();
+    let cpuvar = sscratch as *const CpuVar;
+    unsafe { &*cpuvar }
 }
 
 // FIXME: Implement RefCell-like runtime borrow checker
@@ -180,6 +195,25 @@ pub struct Context {
 }
 
 impl Context {
+    pub fn new_idle() -> Self {
+        Self {
+            ra: 0,
+            sp: 0,
+            s0: 0,
+            s1: 0,
+            s2: 0,
+            s3: 0,
+            s4: 0,
+            s5: 0,
+            s6: 0,
+            s7: 0,
+            s8: 0,
+            s9: 0,
+            s10: 0,
+            s11: 0,
+        }
+    }
+
     pub fn new_kernel(pc: usize, arg: usize) -> Self {
         let stack_size = 64 * 1024;
         let sp_bottom = alloc_pages(stack_size / 4096).expect("failed to allocate stack");

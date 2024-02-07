@@ -3,7 +3,7 @@ use hashbrown::HashMap;
 use spin::{Lazy, MutexGuard};
 
 use crate::{
-    arch::{self, cpuvar_mut},
+    arch::{self, cpuvar_mut, cpuvar_ref},
     sync::mutex::Mutex,
     task::fiber::RawFiber,
 };
@@ -14,7 +14,6 @@ pub(crate) static GLOBAL_SCHEDULER: Lazy<Mutex<Scheduler>> =
     Lazy::new(|| Mutex::new(Scheduler::new()));
 
 pub(crate) struct Scheduler {
-    current: Option<Arc<Mutex<RawFiber>>>,
     fibers: HashMap<FiberId, Arc<Mutex<RawFiber>>>,
     run_queue: VecDeque<FiberId>,
 }
@@ -22,15 +21,9 @@ pub(crate) struct Scheduler {
 impl Scheduler {
     pub fn new() -> Scheduler {
         Scheduler {
-            current: None,
             fibers: HashMap::new(),
             run_queue: VecDeque::new(),
         }
-    }
-
-    // FIXME: Don't clone
-    pub fn current(&self) -> Arc<Mutex<RawFiber>> {
-        self.current.clone().unwrap()
     }
 
     pub fn add(&mut self, fiber: Arc<Mutex<RawFiber>>) {
@@ -44,35 +37,35 @@ impl Scheduler {
     }
 
     pub fn exit_current<'a>(mut guard: MutexGuard<'a, Self>) -> ! {
-        let current_id = guard.current.as_ref().unwrap().lock().id();
+        let current_id = cpuvar_ref().current.lock().id();
         guard.fibers.remove(&current_id);
         guard.run_queue.retain(|id| *id != current_id);
-        guard.current = None;
+        cpuvar_mut().current = cpuvar_mut().idle.clone();
 
         Self::switch_to_next(guard);
     }
 
     pub fn switch_to_next<'a>(mut guard: MutexGuard<'a, Self>) -> ! {
-        if let Some(current_lock) = guard.current.take() {
-            let current = current_lock.lock();
+        {
+            let current = cpuvar_ref().current.lock();
             if current.is_runnable() {
                 guard.run_queue.push_back(current.id());
             }
+
+            let Some(next_id) = guard.run_queue.pop_front() else {
+                todo!("no fibers to run")
+            };
+
+            let next_lock = guard.fibers.get(&next_id).unwrap().clone();
+            let mut next = next_lock.lock();
+            println!("switching to fiber {}", next.id());
+            let cpuvar = cpuvar_mut();
+            cpuvar.context = unsafe { next.context_mut_ptr() };
+            drop(next);
+            cpuvar_mut().current = next_lock;
         }
 
-        let Some(next_id) = guard.run_queue.pop_front() else {
-            todo!("no fibers to run")
-        };
-
-        let next_lock = guard.fibers.get(&next_id).unwrap().clone();
-        let mut next = next_lock.lock();
-        println!("switching to fiber {}", next.id());
-        let cpuvar = cpuvar_mut();
-        cpuvar.context = unsafe { next.context_mut_ptr() };
-        guard.current = Some(next_lock.clone());
-
         drop(guard);
-        drop(next);
         arch::restore_context();
     }
 }
