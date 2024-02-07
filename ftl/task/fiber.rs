@@ -5,7 +5,10 @@ use core::{
 
 use alloc::{boxed::Box, sync::Arc};
 
-use crate::{arch, sync::mutex::Mutex};
+use crate::{
+    arch::{self, yield_cpu},
+    sync::{channel::RawChannel, mutex::Mutex},
+};
 
 use super::scheduler::GLOBAL_SCHEDULER;
 
@@ -14,24 +17,18 @@ enum State {
     Blocked,
 }
 
-struct Inner {
+pub(crate) struct RawFiber {
+    id: FiberId,
     state: State,
     ctx: arch::Context,
 }
 
-pub(crate) struct KernelFiber {
-    id: FiberId,
-    inner: Mutex<Inner>,
-}
-
-impl KernelFiber {
+impl RawFiber {
     pub fn new_kernel(id: FiberId, pc: usize, arg: usize) -> Self {
         Self {
             id,
-            inner: Mutex::new(Inner {
-                state: State::Runnable,
-                ctx: arch::Context::new_kernel(pc, arg),
-            }),
+            state: State::Runnable,
+            ctx: arch::Context::new_kernel(pc, arg),
         }
     }
 
@@ -40,26 +37,23 @@ impl KernelFiber {
     }
 
     pub fn is_runnable(&self) -> bool {
-        matches!(self.inner.lock().state, State::Runnable)
+        matches!(self.state, State::Runnable)
     }
 
-    pub fn resume_if_blocked(&self) {
-        let mut inner = self.inner.lock();
-        if matches!(inner.state, State::Blocked) {
-            inner.state = State::Runnable;
+    pub unsafe fn context_mut_ptr(&mut self) -> *mut arch::Context {
+        &mut self.ctx as *mut arch::Context
+    }
+
+    pub fn resume_if_blocked(&mut self) {
+        if matches!(self.state, State::Blocked) {
+            self.state = State::Runnable;
             GLOBAL_SCHEDULER.resume(self.id);
         }
     }
 
-    pub fn block(&self) {
-        let mut inner = self.inner.lock();
-        debug_assert!(matches!(inner.state, State::Runnable));
-        inner.state = State::Blocked;
-    }
-
-    pub unsafe fn context_mut_ptr(&self) -> *mut arch::Context {
-        let mut inner = self.inner.lock();
-        &mut inner.ctx as *mut arch::Context
+    pub fn block(&mut self) {
+        debug_assert!(matches!(self.state, State::Runnable));
+        self.state = State::Blocked;
     }
 }
 
@@ -80,17 +74,19 @@ impl fmt::Display for FiberId {
     }
 }
 
-pub struct Fiber {}
+pub struct Fiber {
+    raw: Arc<Mutex<RawFiber>>,
+}
 
 impl Fiber {
-    pub fn spawn<F>(f: F)
+    pub fn spawn<F>(f: F) -> Fiber
     where
         F: FnOnce() + Send + Sync + 'static,
     {
         Fiber::do_spawn(Box::new(f))
     }
 
-    fn do_spawn(f: Box<dyn FnOnce()>) {
+    fn do_spawn(f: Box<dyn FnOnce()>) -> Fiber {
         let id = FiberId::alloc();
 
         extern "C" fn native_entry(arg: *mut Box<dyn FnOnce()>) {
@@ -107,7 +103,10 @@ impl Fiber {
         let pc = native_entry as usize;
         let closure = Box::into_raw(Box::new(main));
         let arg = closure as usize;
-        let raw = Arc::new(KernelFiber::new_kernel(id, pc, arg));
+        let raw = Arc::new(Mutex::new(RawFiber::new_kernel(id, pc, arg)));
+
         GLOBAL_SCHEDULER.add(raw.clone());
+
+        Self { raw }
     }
 }

@@ -3,7 +3,7 @@ use alloc::{collections::VecDeque, sync::Arc};
 use crate::arch::yield_cpu;
 use crate::result::Error;
 use crate::sync::mutex::Mutex;
-use crate::task::fiber::KernelFiber;
+use crate::task::fiber::RawFiber;
 use crate::task::scheduler::GLOBAL_SCHEDULER;
 
 #[derive(Debug)]
@@ -28,7 +28,7 @@ pub(crate) struct RawChannel {
     peer: Option<Arc<Mutex<RawChannel>>>,
     rx_queue: VecDeque<Message>,
     capacity: usize,
-    receiver: Option<Arc<KernelFiber>>,
+    receiver: Option<Arc<Mutex<RawFiber>>>,
 }
 
 impl RawChannel {
@@ -72,7 +72,7 @@ impl RawChannel {
 
         peer.rx_queue.push_back(message);
         if let Some(receiver) = peer.receiver.as_ref() {
-            receiver.resume_if_blocked();
+            receiver.lock().resume_if_blocked();
         }
 
         Ok(())
@@ -83,7 +83,7 @@ impl RawChannel {
             return Ok(Some(message));
         } else {
             let current = GLOBAL_SCHEDULER.current();
-            current.block();
+            current.lock().block();
             self.receiver = Some(current);
         }
 
