@@ -5,16 +5,15 @@ use spin::Lazy;
 use crate::{
     arch::{self, cpuvar_mut},
     sync::mutex::Mutex,
-    task::fiber::RawFiber,
 };
 
-use super::fiber::FiberId;
+use super::fiber::{FiberId, KernelFiber};
 
 pub(crate) static GLOBAL_SCHEDULER: Lazy<Scheduler> = Lazy::new(|| Scheduler::new());
 
 struct Inner {
-    current: Option<Arc<Mutex<RawFiber>>>,
-    fibers: HashMap<FiberId, Arc<Mutex<RawFiber>>>,
+    current: Option<Arc<KernelFiber>>,
+    fibers: HashMap<FiberId, Arc<KernelFiber>>,
     run_queue: VecDeque<FiberId>,
 }
 
@@ -36,13 +35,13 @@ impl Scheduler {
     }
 
     // FIXME: Don't clone
-    pub fn current(&self) -> Arc<Mutex<RawFiber>> {
+    pub fn current(&self) -> Arc<KernelFiber> {
         self.inner.lock().current.clone().unwrap()
     }
 
-    pub fn add(&self, fiber: Arc<Mutex<RawFiber>>) {
+    pub fn add(&self, fiber: Arc<KernelFiber>) {
         let mut inner = self.inner.lock();
-        let id = fiber.lock().id();
+        let id = fiber.id();
         inner.run_queue.push_back(id);
         inner.fibers.insert(id, fiber);
     }
@@ -55,7 +54,7 @@ impl Scheduler {
     pub fn exit_current(&self) -> ! {
         {
             let mut inner = self.inner.lock();
-            let current_id = inner.current.as_ref().unwrap().lock().id();
+            let current_id = inner.current.as_ref().unwrap().id();
             inner.fibers.remove(&current_id);
             inner.run_queue.retain(|id| *id != current_id);
             inner.current = None;
@@ -65,8 +64,7 @@ impl Scheduler {
 
     pub fn switch_to_next(&self) -> ! {
         let mut inner = self.inner.lock();
-        if let Some(current_lock) = inner.current.take() {
-            let current = current_lock.lock();
+        if let Some(current) = inner.current.take() {
             if current.is_runnable() {
                 inner.run_queue.push_back(current.id());
             }
@@ -77,12 +75,11 @@ impl Scheduler {
         };
 
         {
-            let next_lock = inner.fibers.get(&next_id).unwrap().clone();
-            let mut next = next_lock.lock();
+            let next = inner.fibers.get(&next_id).unwrap().clone();
             println!("switching to fiber {}", next.id());
             let cpuvar = cpuvar_mut();
             cpuvar.context = unsafe { next.context_mut_ptr() };
-            inner.current = Some(next_lock.clone());
+            inner.current = Some(next.clone());
             drop(inner);
         }
 
