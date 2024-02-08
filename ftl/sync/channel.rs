@@ -3,7 +3,7 @@ use alloc::{collections::VecDeque, sync::Arc};
 use crate::arch::{cpuvar_ref, yield_cpu};
 use crate::result::Error;
 use crate::sync::mutex::Mutex;
-use crate::task::fiber::RawFiber;
+use crate::task::fiber::{Fiber, FiberState, RawFiber};
 use crate::task::scheduler::GLOBAL_SCHEDULER;
 
 #[derive(Debug)]
@@ -73,7 +73,7 @@ impl RawChannel {
         peer.rx_queue.push_back(message);
         if let Some(receiver) = peer.receiver.as_ref() {
             println!(">>> resuming receiver");
-            receiver.lock().resume_if_blocked();
+            GLOBAL_SCHEDULER.lock().resume(receiver.clone());
             println!(">>> resumed receiver");
         }
 
@@ -85,7 +85,7 @@ impl RawChannel {
             return Ok(Some(message));
         } else {
             let current = cpuvar_ref().current.clone();
-            current.lock().block();
+            current.lock().set_state(FiberState::Blocked);
             self.receiver = Some(current);
             println!(">>> block done");
         }

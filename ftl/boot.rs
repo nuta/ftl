@@ -2,7 +2,7 @@ use arrayvec::ArrayVec;
 
 use crate::{
     allocator::GLOBAL_ALLOCATOR,
-    arch::{self, yield_cpu},
+    arch,
     print::ByteSize,
     task::scheduler::{Scheduler, GLOBAL_SCHEDULER},
 };

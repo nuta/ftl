@@ -5,22 +5,19 @@ use core::{
 
 use alloc::{boxed::Box, sync::Arc};
 
-use crate::{
-    arch::{self, yield_cpu},
-    sync::{channel::RawChannel, mutex::Mutex},
-    task::scheduler::Scheduler,
-};
+use crate::{arch, sync::mutex::Mutex, task::scheduler::Scheduler};
 
 use super::scheduler::GLOBAL_SCHEDULER;
 
-enum State {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FiberState {
     Runnable,
     Blocked,
 }
 
 pub(crate) struct RawFiber {
     id: FiberId,
-    state: State,
+    state: FiberState,
     ctx: arch::Context,
 }
 
@@ -28,7 +25,7 @@ impl RawFiber {
     pub fn new_idle() -> Self {
         Self {
             id: FiberId::alloc(),
-            state: State::Blocked,
+            state: FiberState::Blocked,
             ctx: arch::Context::new_idle(),
         }
     }
@@ -36,7 +33,7 @@ impl RawFiber {
     pub fn new_kernel(id: FiberId, pc: usize, arg: usize) -> Self {
         Self {
             id,
-            state: State::Runnable,
+            state: FiberState::Blocked,
             ctx: arch::Context::new_kernel(pc, arg),
         }
     }
@@ -45,24 +42,17 @@ impl RawFiber {
         self.id
     }
 
-    pub fn is_runnable(&self) -> bool {
-        matches!(self.state, State::Runnable)
+    pub fn state(&self) -> FiberState {
+        self.state
     }
 
     pub unsafe fn context_mut_ptr(&mut self) -> *mut arch::Context {
         &mut self.ctx as *mut arch::Context
     }
 
-    pub fn resume_if_blocked(&mut self) {
-        if matches!(self.state, State::Blocked) {
-            self.state = State::Runnable;
-            GLOBAL_SCHEDULER.lock().resume(self.id);
-        }
-    }
-
-    pub fn block(&mut self) {
-        debug_assert!(matches!(self.state, State::Runnable));
-        self.state = State::Blocked;
+    pub fn set_state(&mut self, new_state: FiberState) {
+        debug_assert!(self.state != new_state);
+        self.state = new_state;
     }
 }
 
@@ -114,7 +104,7 @@ impl Fiber {
         let arg = closure as usize;
         let raw = Arc::new(Mutex::new(RawFiber::new_kernel(id, pc, arg)));
 
-        GLOBAL_SCHEDULER.lock().add(raw.clone());
+        GLOBAL_SCHEDULER.lock().resume(raw.clone());
 
         Self { raw }
     }
