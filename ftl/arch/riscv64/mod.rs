@@ -6,7 +6,7 @@ use crate::{
     allocator::alloc_pages,
     sync::mutex::Mutex,
     task::{
-        fiber::RawFiber,
+        fiber::Fiber,
         scheduler::{Scheduler, GLOBAL_SCHEDULER},
     },
 };
@@ -32,12 +32,12 @@ fn get_sscratch() -> usize {
 #[repr(C)]
 pub struct CpuVar {
     pub context: *mut Context,
-    pub current: Arc<Mutex<RawFiber>>,
-    pub idle: Arc<Mutex<RawFiber>>,
+    pub current: Arc<Mutex<Fiber>>,
+    pub idle: Arc<Mutex<Fiber>>,
 }
 
 pub fn init() {
-    let idle = Arc::new(Mutex::new(RawFiber::new_idle()));
+    let idle = Arc::new(Mutex::new(Fiber::new_idle()));
     let cpuvar = CpuVar {
         context: core::ptr::null_mut(),
         current: idle.clone(),

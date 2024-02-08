@@ -4,7 +4,7 @@ use spin::{Lazy, MutexGuard};
 use crate::{
     arch::{self, cpuvar_mut, cpuvar_ref},
     sync::mutex::Mutex,
-    task::fiber::RawFiber,
+    task::fiber::Fiber,
 };
 
 use super::fiber::FiberState;
@@ -13,7 +13,7 @@ pub(crate) static GLOBAL_SCHEDULER: Lazy<Mutex<Scheduler>> =
     Lazy::new(|| Mutex::new(Scheduler::new()));
 
 pub(crate) struct Scheduler {
-    run_queue: VecDeque<Arc<Mutex<RawFiber>>>,
+    run_queue: VecDeque<Arc<Mutex<Fiber>>>,
 }
 
 impl Scheduler {
@@ -23,7 +23,7 @@ impl Scheduler {
         }
     }
 
-    pub fn resume(&mut self, fiber: Arc<Mutex<RawFiber>>) {
+    pub fn resume(&mut self, fiber: Arc<Mutex<Fiber>>) {
         fiber.lock().set_state(FiberState::Runnable);
         self.run_queue.push_back(fiber);
     }

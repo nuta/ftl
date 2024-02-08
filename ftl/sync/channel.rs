@@ -3,7 +3,7 @@ use alloc::{collections::VecDeque, sync::Arc};
 use crate::arch::{cpuvar_ref, yield_cpu};
 use crate::result::Error;
 use crate::sync::mutex::Mutex;
-use crate::task::fiber::{Fiber, FiberState, RawFiber};
+use crate::task::fiber::{Fiber, FiberState};
 use crate::task::scheduler::GLOBAL_SCHEDULER;
 
 #[derive(Debug)]
@@ -28,7 +28,7 @@ pub(crate) struct RawChannel {
     peer: Option<Arc<Mutex<RawChannel>>>,
     rx_queue: VecDeque<Message>,
     capacity: usize,
-    receiver: Option<Arc<Mutex<RawFiber>>>,
+    receiver: Option<Arc<Mutex<Fiber>>>,
 }
 
 impl RawChannel {

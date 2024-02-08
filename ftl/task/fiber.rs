@@ -9,19 +9,67 @@ use crate::{arch, sync::mutex::Mutex, task::scheduler::Scheduler};
 
 use super::scheduler::GLOBAL_SCHEDULER;
 
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct FiberId(usize);
+
+impl FiberId {
+    pub fn alloc() -> FiberId {
+        // TODO: wrap around and check for duplicates
+        static NEXT_ID: AtomicUsize = AtomicUsize::new(1);
+        Self(NEXT_ID.fetch_add(1, Ordering::Relaxed))
+    }
+}
+
+impl fmt::Display for FiberId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "#{}", self.0)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FiberState {
     Runnable,
     Blocked,
 }
 
-pub(crate) struct RawFiber {
+pub(crate) struct Fiber {
     id: FiberId,
     state: FiberState,
     ctx: arch::Context,
 }
 
-impl RawFiber {
+impl Fiber {
+    pub fn spawn<F>(f: F) -> Arc<Mutex<Fiber>>
+    where
+        F: FnOnce() + Send + Sync + 'static,
+    {
+        Fiber::do_spawn(Box::new(f))
+    }
+
+    fn do_spawn(f: Box<dyn FnOnce()>) -> Arc<Mutex<Fiber>> {
+        let id = FiberId::alloc();
+
+        extern "C" fn native_entry(arg: *mut Box<dyn FnOnce()>) {
+            let closure = unsafe { Box::from_raw(arg) };
+            closure();
+            Scheduler::exit_current(GLOBAL_SCHEDULER.lock());
+        }
+
+        let main = move || {
+            f();
+            println!("fiber {} exited", id);
+        };
+
+        let pc = native_entry as usize;
+        let closure = Box::into_raw(Box::new(main));
+        let arg = closure as usize;
+        let fiber = Fiber::new_kernel(id, pc, arg);
+        let fiber = Arc::new(Mutex::new(fiber));
+
+        GLOBAL_SCHEDULER.lock().resume(fiber.clone());
+        fiber
+    }
+
     pub fn new_idle() -> Self {
         Self {
             id: FiberId::alloc(),
@@ -53,59 +101,5 @@ impl RawFiber {
     pub fn set_state(&mut self, new_state: FiberState) {
         debug_assert!(self.state != new_state);
         self.state = new_state;
-    }
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-pub struct FiberId(usize);
-
-impl FiberId {
-    pub fn alloc() -> FiberId {
-        // TODO: wrap around and check for duplicates
-        static NEXT_ID: AtomicUsize = AtomicUsize::new(1);
-        Self(NEXT_ID.fetch_add(1, Ordering::Relaxed))
-    }
-}
-
-impl fmt::Display for FiberId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "#{}", self.0)
-    }
-}
-
-pub struct Fiber {
-    raw: Arc<Mutex<RawFiber>>,
-}
-
-impl Fiber {
-    pub fn spawn<F>(f: F) -> Fiber
-    where
-        F: FnOnce() + Send + Sync + 'static,
-    {
-        Fiber::do_spawn(Box::new(f))
-    }
-
-    fn do_spawn(f: Box<dyn FnOnce()>) -> Fiber {
-        let id = FiberId::alloc();
-
-        extern "C" fn native_entry(arg: *mut Box<dyn FnOnce()>) {
-            let closure = unsafe { Box::from_raw(arg) };
-            closure();
-            Scheduler::exit_current(GLOBAL_SCHEDULER.lock());
-        }
-
-        let main = move || {
-            f();
-            println!("fiber {} exited", id);
-        };
-
-        let pc = native_entry as usize;
-        let closure = Box::into_raw(Box::new(main));
-        let arg = closure as usize;
-        let raw = Arc::new(Mutex::new(RawFiber::new_kernel(id, pc, arg)));
-
-        GLOBAL_SCHEDULER.lock().resume(raw.clone());
-
-        Self { raw }
     }
 }
