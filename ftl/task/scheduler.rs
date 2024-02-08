@@ -28,6 +28,10 @@ impl Scheduler {
         self.run_queue.push_back(fiber);
     }
 
+    pub fn block(&mut self, fiber: &Arc<Mutex<Fiber>>) {
+        fiber.lock().set_state(FiberState::Blocked);
+    }
+
     pub fn exit_current<'a>(guard: MutexGuard<'a, Self>) -> ! {
         Self::do_switch_to_next(guard);
     }

@@ -72,9 +72,7 @@ impl RawChannel {
 
         peer.rx_queue.push_back(message);
         if let Some(receiver) = peer.receiver.as_ref() {
-            println!(">>> resuming receiver");
             GLOBAL_SCHEDULER.lock().resume(receiver.clone());
-            println!(">>> resumed receiver");
         }
 
         Ok(())
@@ -85,9 +83,8 @@ impl RawChannel {
             return Ok(Some(message));
         } else {
             let current = cpuvar_ref().current.clone();
-            current.lock().set_state(FiberState::Blocked);
+            GLOBAL_SCHEDULER.lock().block(&current);
             self.receiver = Some(current);
-            println!(">>> block done");
         }
 
         Ok(None)
