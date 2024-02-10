@@ -5,4 +5,4 @@ edition = "2021"
 
 [workspace]
 resolver = "2"
-members = ["ftl", "boot/riscv64", "libs/*"]
+members = ["api", "boot/riscv64", "libs/*"]
