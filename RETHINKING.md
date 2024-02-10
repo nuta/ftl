@@ -22,11 +22,11 @@ What's more, some people think kernel is slow, or want to inject code.
 
 ## Five design principles towards general-purpose microkernels
 
-- Performance: many-core, nano-services
-- Flexibility: Nano-services
-- Security: Nano-services
-- Compatibility: unmodified Linux
-- Contributors: API-first, Neat DX
+- Performance by: many-core, nano-services
+- Flexibility by: Nano-services
+- Security by: Nano-services
+- Compatibility by: unmodified Linux
+- Contributors by: API-first, Neat DX
 
 ### Design OS as a distributed system
 
