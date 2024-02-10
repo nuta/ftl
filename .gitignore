@@ -1,6 +1,7 @@
 /target
 /build
 /.vscode/settings.json
+/libs/ftl_loader
 *.tmp
 *.log
 *.elf
