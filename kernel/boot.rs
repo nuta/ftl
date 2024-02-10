@@ -19,6 +19,7 @@ pub struct FreeMem {
 #[derive(Debug)]
 pub struct BootInfo {
     pub free_mems: ArrayVec<FreeMem, 8>,
+    pub fiber_inits: &'static [fn()],
 }
 
 pub fn boot(bootinfo: BootInfo) -> ! {
@@ -50,6 +51,10 @@ pub fn boot(bootinfo: BootInfo) -> ! {
         sync::channel::{Channel, Message},
         task::fiber::Fiber,
     };
+
+    for main in bootinfo.fiber_inits.iter() {
+        Fiber::spawn(main);
+    }
 
     let (mut ch1_tx, mut ch1_rx) = Channel::new().unwrap();
     let (mut ch2_tx, mut ch2_rx) = Channel::new().unwrap();

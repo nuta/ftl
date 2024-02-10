@@ -98,7 +98,7 @@ version = "0.0.0"
 dependencies = [
  "arrayvec",
  "ftl_kernel",
- "ping",
+ "ftl_loader",
 ]
 
 [[package]]
@@ -204,6 +204,7 @@ name = "ftl_loader"
 version = "0.0.0"
 dependencies = [
  "ping",
+ "pong",
 ]
 
 [[package]]

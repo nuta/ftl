@@ -31,5 +31,8 @@ unsafe extern "C" fn riscv64_boot(_hartid: u64, _dtb_addr: u64) -> ! {
         size: free_ram_end - free_ram,
     });
 
-    ftl_kernel::boot::boot(BootInfo { free_mems });
+    ftl_kernel::boot::boot(BootInfo {
+        free_mems,
+        fiber_inits: ftl_loader::FIBER_INITS,
+    });
 }
