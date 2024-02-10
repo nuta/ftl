@@ -10,4 +10,4 @@ path = "main.rs"
 
 [dependencies]
 arrayvec = { version = "0.7.4", default-features = false }
-ftl = { path = "../../api" }
+ftl_kernel = { path = "../../kernel" }

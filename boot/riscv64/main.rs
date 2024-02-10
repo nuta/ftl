@@ -4,7 +4,7 @@
 use core::arch::global_asm;
 
 use arrayvec::ArrayVec;
-use ftl::boot::{BootInfo, FreeMem};
+use ftl_kernel::boot::{BootInfo, FreeMem};
 
 global_asm!(include_str!("boot.S"));
 
@@ -31,5 +31,5 @@ unsafe extern "C" fn riscv64_boot(_hartid: u64, _dtb_addr: u64) -> ! {
         size: free_ram_end - free_ram,
     });
 
-    ftl::boot::boot(BootInfo { free_mems });
+    ftl_kernel::boot::boot(BootInfo { free_mems });
 }

@@ -1,5 +1,5 @@
 [package]
-name = "ftl"
+name = "ftl_kernel"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
