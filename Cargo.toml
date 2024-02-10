@@ -5,4 +5,4 @@ edition = "2021"
 
 [workspace]
 resolver = "2"
-members = ["kernel", "api", "fibers/*", "boot/riscv64", "libs/*"]
+members = ["kernel", "api", "fibers/*", "boot/riscv64", "libs/*", "devtools"]
