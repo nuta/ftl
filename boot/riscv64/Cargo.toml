@@ -11,3 +11,5 @@ path = "main.rs"
 [dependencies]
 arrayvec = { version = "0.7.4", default-features = false }
 ftl_kernel = { path = "../../kernel" }
+
+ping = { path = "../../fibers/ping" }

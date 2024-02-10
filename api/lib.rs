@@ -1,6 +1,6 @@
 #![no_std]
 
-mod print;
-mod syscall;
-
+pub mod print;
 pub mod thread;
+
+mod syscall;

@@ -29,6 +29,7 @@ RUST_GDB ?= rust-gdb
 CARGO    := cargo
 PROGRESS := printf "  \\033[1;96m%8s\\033[0m  \\033[1;m%s\\033[0m\\n"
 
+RUSTFLAGS += -Z macro-backtrace
 CARGOFLAGS += -Z build-std=core,alloc -Z build-std-features=compiler-builtins-mem
 CARGOFLAGS += --target boot/$(ARCH)/$(ARCH)-$(MACHINE).json
 
@@ -53,5 +54,5 @@ gdb:
 
 ftl.elf: $(sources) Makefile
 	$(PROGRESS) "CARGO" "boot/$(ARCH)"
-	$(CARGO) build $(CARGOFLAGS) --manifest-path boot/$(ARCH)/Cargo.toml
+	RUSTFLAGS="$(RUSTFLAGS)" $(CARGO) build $(CARGOFLAGS) --manifest-path boot/$(ARCH)/Cargo.toml
 	cp target/$(ARCH)-$(MACHINE)/$(BUILD)/boot_$(ARCH) ftl.elf

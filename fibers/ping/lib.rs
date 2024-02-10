@@ -2,10 +2,15 @@
 
 use ftl_api::println;
 
-pub fn main() {
-    println!("fiber A: hello");
-    for i in 0.. {
-        crate::arch::yield_cpu();
-        println!("fiber A: {}", i);
+#[link_section = ".ftl.fiber_mains"]
+pub static __MAIN: extern "C" fn() = {
+    extern "C" fn main() {
+        println!("fiber A: hello");
+        for i in 0.. {
+            ftl_api::thread::yield_cpu();
+            println!("fiber A: {}", i);
+        }
     }
-}
+
+    main
+};
