@@ -261,6 +261,9 @@ dependencies = [
 [[package]]
 name = "pong"
 version = "0.0.0"
+dependencies = [
+ "ftl_api",
+]
 
 [[package]]
 name = "proc-macro2"

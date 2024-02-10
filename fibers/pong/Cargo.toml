@@ -8,3 +8,4 @@ edition.workspace = true
 path = "lib.rs"
 
 [dependencies]
+ftl_api = { path = "../../api" }
