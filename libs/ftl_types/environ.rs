@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::handle::HandleId;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Environ {
     pub deps: BTreeMap<String, HandleId>,
 }

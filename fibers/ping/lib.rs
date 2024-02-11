@@ -3,7 +3,7 @@
 use ftl_api::{environ::Environ, println};
 use ftl_autogen::fibers::ping::Deps;
 
-pub fn main(env: Environ) {
+pub fn main(mut env: Environ) {
     let deps = env.parse_deps::<Deps>();
 
     println!("fiber A: hello");

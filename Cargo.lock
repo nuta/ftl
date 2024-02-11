@@ -185,6 +185,7 @@ version = "0.0.0"
 dependencies = [
  "ftl_kernel",
  "ftl_types",
+ "serde",
  "serde_json",
 ]
 
