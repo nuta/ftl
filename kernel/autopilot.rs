@@ -3,7 +3,7 @@ use ftl_types::{environ::Environ, handle::HandleId};
 
 use crate::{boot::BootInfo, channel::Channel, fiber::Fiber};
 
-pub fn init(bootinfo: &BootInfo) {
+pub fn start(bootinfo: &BootInfo) {
     let (ping_ch, pong_ch) = Channel::new().unwrap();
     let mut ping_ch = Some(ping_ch);
     let mut pong_ch = Some(pong_ch);

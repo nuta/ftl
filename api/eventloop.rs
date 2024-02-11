@@ -1,8 +1,7 @@
 use alloc::collections::BTreeMap;
+use ftl_types::{error::FtlError, handle::HandleId};
 
-use crate::{handle::HandleId, result::Result};
-
-use super::channel::Channel;
+use crate::channel::Channel;
 
 enum ObjectKind {
     Channel,
@@ -28,7 +27,7 @@ impl<State> Eventloop<State> {
         }
     }
 
-    pub fn add_channel(&mut self, ch: Channel) -> Result<()> {
+    pub fn add_channel(&mut self, ch: Channel) -> Result<(), FtlError> {
         todo!()
     }
 

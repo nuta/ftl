@@ -25,7 +25,7 @@ pub fn boot(bootinfo: BootInfo) -> ! {
 
     memory::init(&bootinfo);
     arch::init();
-    autopilot::init(&bootinfo);
+    autopilot::start(&bootinfo);
 
     Scheduler::switch_to_next(GLOBAL_SCHEDULER.lock());
 
