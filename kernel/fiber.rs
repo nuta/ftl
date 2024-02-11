@@ -5,7 +5,7 @@ use core::{
 
 use alloc::{boxed::Box, sync::Arc};
 
-use crate::{arch, sync::mutex::Mutex, task::scheduler::Scheduler};
+use crate::{arch, lock::Mutex, scheduler::Scheduler};
 
 use super::scheduler::GLOBAL_SCHEDULER;
 

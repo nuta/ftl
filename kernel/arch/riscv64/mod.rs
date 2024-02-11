@@ -4,11 +4,9 @@ use alloc::{boxed::Box, sync::Arc};
 
 use crate::{
     allocator::alloc_pages,
-    sync::mutex::Mutex,
-    task::{
-        fiber::Fiber,
-        scheduler::{Scheduler, GLOBAL_SCHEDULER},
-    },
+    fiber::Fiber,
+    lock::Mutex,
+    scheduler::{Scheduler, GLOBAL_SCHEDULER},
 };
 
 mod sbi;

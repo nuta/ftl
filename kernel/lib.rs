@@ -10,11 +10,11 @@ pub mod print;
 
 pub mod arch;
 pub mod boot;
-pub mod handle;
-pub mod result;
-pub mod sync;
-pub mod task;
+pub mod channel;
+pub mod fiber;
+pub mod scheduler;
 
 mod allocator;
 mod backtrace;
+mod lock;
 mod panic;

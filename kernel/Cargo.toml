@@ -12,3 +12,4 @@ arrayvec = { version = "0.7.4", default-features = false }
 hashbrown = "0.14.3"
 spin = "0.9.8"
 bump_allocator = { path = "../libs/bump_allocator" }
+ftl_types = { path = "../libs/ftl_types" }

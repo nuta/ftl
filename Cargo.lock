@@ -178,6 +178,7 @@ name = "ftl_api"
 version = "0.0.0"
 dependencies = [
  "ftl_kernel",
+ "ftl_types",
 ]
 
 [[package]]
@@ -195,6 +196,7 @@ version = "0.0.0"
 dependencies = [
  "arrayvec",
  "bump_allocator",
+ "ftl_types",
  "hashbrown",
  "spin",
 ]
@@ -206,6 +208,10 @@ dependencies = [
  "ping",
  "pong",
 ]
+
+[[package]]
+name = "ftl_types"
+version = "0.0.0"
 
 [[package]]
 name = "hashbrown"

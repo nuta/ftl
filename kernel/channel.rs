@@ -1,10 +1,10 @@
 use alloc::{collections::VecDeque, sync::Arc};
+use ftl_types::error::FtlError;
 
 use crate::arch::{cpuvar_ref, yield_cpu};
-use crate::result::Error;
-use crate::sync::mutex::Mutex;
-use crate::task::fiber::{Fiber, FiberState};
-use crate::task::scheduler::GLOBAL_SCHEDULER;
+use crate::fiber::Fiber;
+use crate::lock::Mutex;
+use crate::scheduler::GLOBAL_SCHEDULER;
 
 #[derive(Debug)]
 pub enum Message {
@@ -14,14 +14,14 @@ pub enum Message {
 
 #[derive(Debug)]
 pub struct SendError {
-    pub error: Error,
+    pub error: FtlError,
     pub message: Message,
 }
 
 #[derive(Debug)]
 pub enum CallError {
     SendError(SendError),
-    ReceiveError(Error),
+    ReceiveError(FtlError),
 }
 
 pub(crate) struct RawChannel {
@@ -57,7 +57,7 @@ impl RawChannel {
     pub fn send(&mut self, message: Message) -> Result<(), SendError> {
         let Some(peer_lock) = self.peer.as_ref() else {
             return Err(SendError {
-                error: Error::ClosedByPeer,
+                error: FtlError::ClosedByPeer,
                 message,
             });
         };
@@ -65,7 +65,7 @@ impl RawChannel {
         let mut peer = peer_lock.lock();
         if peer.rx_queue.len() >= peer.capacity {
             return Err(SendError {
-                error: Error::Full,
+                error: FtlError::Full,
                 message,
             });
         }
@@ -78,7 +78,7 @@ impl RawChannel {
         Ok(())
     }
 
-    pub fn receive(&mut self) -> Result<Option<Message>, Error> {
+    pub fn receive(&mut self) -> Result<Option<Message>, FtlError> {
         if let Some(message) = self.rx_queue.pop_front() {
             return Ok(Some(message));
         } else {
@@ -96,7 +96,7 @@ pub struct Channel {
 }
 
 impl Channel {
-    pub fn new() -> Result<(Channel, Channel), Error> {
+    pub fn new() -> Result<(Channel, Channel), FtlError> {
         let (raw_a, raw_b) = RawChannel::new();
         Ok((Channel { raw: raw_a }, Channel { raw: raw_b }))
     }
@@ -105,7 +105,7 @@ impl Channel {
         self.raw.lock().send(message)
     }
 
-    pub fn receive(&mut self) -> Result<Message, Error> {
+    pub fn receive(&mut self) -> Result<Message, FtlError> {
         loop {
             let result = {
                 let mut raw = self.raw.lock();

@@ -9,3 +9,4 @@ path = "lib.rs"
 
 [dependencies]
 ftl_kernel = { path = "../kernel" }
+ftl_types = { path = "../libs/ftl_types" }

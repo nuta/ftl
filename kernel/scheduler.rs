@@ -3,8 +3,8 @@ use spin::{Lazy, MutexGuard};
 
 use crate::{
     arch::{self, cpuvar_mut, cpuvar_ref},
-    sync::mutex::Mutex,
-    task::fiber::Fiber,
+    fiber::Fiber,
+    lock::Mutex,
 };
 
 use super::fiber::FiberState;
