@@ -2,6 +2,11 @@ use core::alloc::{GlobalAlloc, Layout};
 
 use bump_allocator::BumpAllocator;
 
+use crate::{
+    boot::{BootInfo, FreeMem},
+    print::ByteSize,
+};
+
 #[global_allocator]
 pub static GLOBAL_ALLOCATOR: GlobalAllocator = GlobalAllocator::new();
 
@@ -47,4 +52,21 @@ pub fn alloc_pages(num_pages: usize) -> Option<usize> {
         .lock()
         .allocate(num_pages * 4096, 4096)
         .map(|addr| addr.get())
+}
+
+pub fn init(bootinfo: &BootInfo) {
+    for entry in bootinfo.free_mems.iter() {
+        match *entry {
+            FreeMem { start, size } => {
+                println!(
+                    "free memory: 0x{:016x} - 0x{:016x} ({})",
+                    start,
+                    start + size,
+                    ByteSize::new(size)
+                );
+
+                GLOBAL_ALLOCATOR.add_region(start as *mut u8, size);
+            }
+        }
+    }
 }

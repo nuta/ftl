@@ -3,9 +3,9 @@ use core::{arch::asm, mem::offset_of, mem::size_of};
 use alloc::{boxed::Box, sync::Arc};
 
 use crate::{
-    allocator::alloc_pages,
     fiber::Fiber,
     lock::Mutex,
+    memory::alloc_pages,
     scheduler::{Scheduler, GLOBAL_SCHEDULER},
 };
 

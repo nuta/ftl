@@ -59,3 +59,6 @@ ftl.elf: $(sources) Makefile
 	$(PROGRESS) "CARGO" "boot/$(ARCH)"
 	RUSTFLAGS="$(RUSTFLAGS)" $(CARGO) build $(CARGOFLAGS) --manifest-path boot/$(ARCH)/Cargo.toml
 	cp target/$(ARCH)-$(MACHINE)/$(BUILD)/boot_$(ARCH) ftl.elf
+
+clippy:
+	RUSTFLAGS="$(RUSTFLAGS)" $(CARGO) clippy --fix --allow-dirty --allow-staged $(CARGOFLAGS) --manifest-path boot/$(ARCH)/Cargo.toml

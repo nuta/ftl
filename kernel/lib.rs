@@ -13,8 +13,9 @@ pub mod boot;
 pub mod channel;
 pub mod fiber;
 
-mod allocator;
+mod autopilot;
 mod backtrace;
 mod lock;
+mod memory;
 mod panic;
 mod scheduler;
