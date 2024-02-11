@@ -32,7 +32,7 @@ pub enum FiberState {
     Blocked,
 }
 
-pub(crate) struct Fiber {
+pub struct Fiber {
     id: FiberId,
     state: FiberState,
     ctx: arch::Context,

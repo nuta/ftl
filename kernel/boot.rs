@@ -3,6 +3,7 @@ use arrayvec::ArrayVec;
 use crate::{
     allocator::GLOBAL_ALLOCATOR,
     arch,
+    fiber::Fiber,
     print::ByteSize,
     scheduler::{Scheduler, GLOBAL_SCHEDULER},
 };
@@ -46,11 +47,6 @@ pub fn boot(bootinfo: BootInfo) -> ! {
     map.insert("hello", 1);
     map.insert("world", 2);
     println!("map = {:?}", map);
-
-    use crate::{
-        channel::{Channel, Message},
-        fiber::Fiber,
-    };
 
     for main in bootinfo.fiber_inits.iter() {
         Fiber::spawn(main);

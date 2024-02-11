@@ -1,16 +1,11 @@
 use alloc::{collections::VecDeque, sync::Arc};
 use ftl_types::error::FtlError;
+use ftl_types::Message;
 
 use crate::arch::{cpuvar_ref, yield_cpu};
 use crate::fiber::Fiber;
 use crate::lock::Mutex;
 use crate::scheduler::GLOBAL_SCHEDULER;
-
-#[derive(Debug)]
-pub enum Message {
-    Ping(usize),
-    Pong(usize),
-}
 
 #[derive(Debug)]
 pub struct SendError {
