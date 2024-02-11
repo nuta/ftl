@@ -10,3 +10,4 @@ path = "lib.rs"
 [dependencies]
 ftl_kernel = { path = "../kernel" }
 ftl_types = { path = "../libs/ftl_types" }
+serde_json = { version = "1.0", default-features = false, features = ["alloc"] }
