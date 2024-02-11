@@ -19,7 +19,7 @@ pub enum CallError {
     ReceiveError(FtlError),
 }
 
-pub(crate) struct RawChannel {
+struct RawChannel {
     peer: Option<Arc<Mutex<RawChannel>>>,
     rx_queue: VecDeque<Message>,
     capacity: usize,
@@ -93,8 +93,10 @@ pub struct Channel {
 
 impl Channel {
     pub fn new() -> Result<(Channel, Channel), FtlError> {
-        let (raw_a, raw_b) = RawChannel::new();
-        Ok((Channel { raw: raw_a }, Channel { raw: raw_b }))
+        let (raw1, raw2) = RawChannel::new();
+        let ch1 = Channel { raw: raw1 };
+        let ch2 = Channel { raw: raw2 };
+        Ok((ch1, ch2))
     }
 
     pub fn send(&mut self, message: Message) -> Result<(), SendError> {
