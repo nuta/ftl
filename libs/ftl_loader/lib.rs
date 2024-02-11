@@ -11,4 +11,4 @@ fn start_pong(environ_cstr: *const i8) {
 }
 
 
-pub const FIBER_INITS: &[fn(*const i8)] = &[start_ping, start_pong];
+pub const KERNEL_FIBERS: &[(&str, fn(*const i8))] = &[("ping", start_ping), ("pong", start_pong)];

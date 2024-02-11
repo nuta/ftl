@@ -1,6 +1,6 @@
 use alloc::{collections::BTreeMap, ffi::CString, string::ToString};
 use arrayvec::ArrayVec;
-use ftl_types::{environ::Environ, handle::HandleId, spec::FiberSpec};
+use ftl_types::{environ::Environ, handle::HandleId};
 
 use crate::{
     allocator::GLOBAL_ALLOCATOR,
@@ -23,7 +23,7 @@ pub struct FreeMem {
 #[derive(Debug)]
 pub struct BootInfo {
     pub free_mems: ArrayVec<FreeMem, 8>,
-    pub fiber_inits: &'static [(FiberSpec, fn(*const i8))],
+    pub kernel_fibers: &'static [(&'static str, fn(*const i8))],
 }
 
 pub fn boot(bootinfo: BootInfo) -> ! {
@@ -49,17 +49,17 @@ pub fn boot(bootinfo: BootInfo) -> ! {
     let (ping_ch, pong_ch) = Channel::new().unwrap();
     let mut ping_ch = Some(ping_ch);
     let mut pong_ch = Some(pong_ch);
-    for (spec, main) in bootinfo.fiber_inits.iter() {
+    for (fiber_name, main) in bootinfo.kernel_fibers.iter() {
         let handle = HandleId::new(1);
         let mut deps = BTreeMap::new();
-        let ch = if spec.name == "ping" {
+        let ch = if *fiber_name == "ping" {
             deps.insert("pong".to_string(), handle);
             ping_ch.take().unwrap()
-        } else if spec.name == "pong" {
+        } else if *fiber_name == "pong" {
             deps.insert("ping".to_string(), handle);
             pong_ch.take().unwrap()
         } else {
-            panic!("unknown fiber: {}", spec.name);
+            panic!("unknown fiber: {}", fiber_name);
         };
 
         let environ = Environ { deps };

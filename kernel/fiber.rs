@@ -65,7 +65,7 @@ impl Fiber {
         self.handles.insert(handle, object);
     }
 
-    pub fn spawn_in_kernel<F>(mut self, f: F) -> Arc<Mutex<Fiber>>
+    pub fn spawn_in_kernel<F>(self, f: F) -> Arc<Mutex<Fiber>>
     where
         F: FnOnce() + Send + Sync + 'static,
     {

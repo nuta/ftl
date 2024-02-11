@@ -2,7 +2,6 @@ use ftl_kernel::channel::CallError as KernelCallError;
 use ftl_kernel::channel::SendError as KernelSendError;
 use ftl_types::handle::HandleId;
 use ftl_types::{error::FtlError, Message};
-use serde::Deserialize;
 use serde::Deserializer;
 
 use crate::handle::Handle;

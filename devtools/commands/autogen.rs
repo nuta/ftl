@@ -123,11 +123,11 @@ impl<'a> LoaderCrateGenerator<'a> {
             lib_rs.push_str("\n");
         }
         lib_rs.push_str("\n");
-        lib_rs.push_str("pub const FIBER_INITS: &[fn(*const i8)] = &[");
+        lib_rs.push_str("pub const KERNEL_FIBERS: &[(&str, fn(*const i8))] = &[");
         lib_rs.push_str(
             self.fibers
                 .iter()
-                .map(|fiber| format!("start_{}", fiber.spec.name))
+                .map(|fiber| format!("(\"{name}\", start_{name})", name = fiber.spec.name))
                 .collect::<Vec<String>>()
                 .join(", ")
                 .as_str(),
