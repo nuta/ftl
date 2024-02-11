@@ -86,6 +86,7 @@ impl RawChannel {
     }
 }
 
+#[derive(Clone)]
 pub struct Channel {
     raw: Arc<Mutex<RawChannel>>,
 }

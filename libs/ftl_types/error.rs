@@ -5,4 +5,5 @@ pub enum FtlError {
     ClosedByPeer = -2,
     Empty = -3,
     Full = -4,
+    InvalidHandle = -5,
 }

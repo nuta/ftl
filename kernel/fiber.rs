@@ -4,8 +4,15 @@ use core::{
 };
 
 use alloc::{boxed::Box, sync::Arc};
+use ftl_types::{error::FtlError, handle::HandleId};
+use hashbrown::HashMap;
 
-use crate::{arch, lock::Mutex, scheduler::Scheduler};
+use crate::{
+    arch::{self, cpuvar_ref},
+    channel::Channel,
+    lock::Mutex,
+    scheduler::Scheduler,
+};
 
 use super::scheduler::GLOBAL_SCHEDULER;
 
@@ -26,6 +33,10 @@ impl fmt::Display for FiberId {
     }
 }
 
+pub enum Object {
+    Channel(Channel),
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FiberState {
     Runnable,
@@ -36,6 +47,7 @@ pub struct Fiber {
     id: FiberId,
     state: FiberState,
     ctx: arch::Context,
+    handles: HashMap<HandleId, Object>,
 }
 
 impl Fiber {
@@ -75,6 +87,7 @@ impl Fiber {
             id: FiberId::alloc(),
             state: FiberState::Blocked,
             ctx: arch::Context::new_idle(),
+            handles: HashMap::new(),
         }
     }
 
@@ -83,6 +96,19 @@ impl Fiber {
             id,
             state: FiberState::Blocked,
             ctx: arch::Context::new_kernel(pc, arg),
+            handles: HashMap::new(),
+        }
+    }
+
+    pub fn get_channel_by_handle(handle: HandleId) -> Result<Channel, FtlError> {
+        let current = cpuvar_ref().current.lock();
+        let object = current
+            .handles
+            .get(&handle)
+            .ok_or(FtlError::InvalidHandle)?;
+
+        match object {
+            Object::Channel(channel) => Ok(channel.clone()),
         }
     }
 

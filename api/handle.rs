@@ -6,5 +6,7 @@ pub struct Handle {
 }
 
 impl Handle {
-    //
+    pub fn id(&self) -> HandleId {
+        self.raw
+    }
 }

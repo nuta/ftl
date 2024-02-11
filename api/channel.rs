@@ -2,6 +2,8 @@ use ftl_kernel::channel::CallError as KernelCallError;
 use ftl_kernel::channel::SendError as KernelSendError;
 use ftl_types::{error::FtlError, Message};
 
+use crate::handle::Handle;
+
 #[derive(Debug)]
 pub struct SendError {
     pub error: FtlError,
@@ -20,6 +22,11 @@ pub struct Channel {
 }
 
 impl Channel {
+    pub fn from_handle(handle: Handle) -> Result<Channel, FtlError> {
+        let raw = ftl_kernel::fiber::Fiber::get_channel_by_handle(handle.id())?;
+        Ok(Channel { raw })
+    }
+
     pub fn send(&mut self, message: Message) -> Result<(), SendError> {
         match self.raw.send(message) {
             Ok(()) => Ok(()),
