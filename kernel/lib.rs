@@ -12,9 +12,9 @@ pub mod arch;
 pub mod boot;
 pub mod channel;
 pub mod fiber;
-pub mod scheduler;
 
 mod allocator;
 mod backtrace;
 mod lock;
 mod panic;
+mod scheduler;
