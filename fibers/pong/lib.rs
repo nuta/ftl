@@ -10,6 +10,6 @@ pub fn main(mut env: Environ) {
     for i in 0.. {
         let msg = deps.ping.receive().unwrap();
         println!("filber2: received {:?}", msg);
-        deps.ping.send(Message::Pong(10000 + i)).unwrap();
+        deps.ping.send(Message::Pong(7000000 + i)).unwrap();
     }
 }
