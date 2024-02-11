@@ -20,6 +20,7 @@ pub enum CallError {
 
 // FIXME: hard-coded for kernel fibers
 pub struct Channel {
+    handle: Handle,
     raw: ftl_kernel::channel::Channel,
 }
 
@@ -28,7 +29,11 @@ impl Channel {
         let raw =
             ftl_kernel::fiber::Fiber::get_channel_by_handle(handle.id()).expect("invalid handle");
 
-        Channel { raw }
+        Channel { handle, raw }
+    }
+
+    pub fn handle_id(&self) -> HandleId {
+        self.handle.id()
     }
 
     pub fn send(&mut self, message: Message) -> Result<(), SendError> {

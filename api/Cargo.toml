@@ -8,6 +8,7 @@ edition.workspace = true
 path = "lib.rs"
 
 [dependencies]
+hashbrown = "0.14.3"
 ftl_kernel = { path = "../kernel" }
 ftl_types = { path = "../libs/ftl_types" }
 serde = { version = "1.0", default-features = false, features = [

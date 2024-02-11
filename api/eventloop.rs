@@ -1,5 +1,6 @@
 use alloc::collections::BTreeMap;
 use ftl_types::{error::FtlError, handle::HandleId};
+use hashbrown::HashMap;
 
 use crate::channel::Channel;
 
@@ -17,17 +18,25 @@ pub enum Event<'a> {
 }
 
 pub struct Eventloop<State> {
-    objects: BTreeMap<HandleId, Object<State>>,
+    objects: HashMap<HandleId, Object<State>>,
 }
 
 impl<State> Eventloop<State> {
     pub fn new() -> Self {
         Self {
-            objects: BTreeMap::new(),
+            objects: HashMap::new(),
         }
     }
 
-    pub fn add_channel(&mut self, ch: Channel) -> Result<(), FtlError> {
+    pub fn add_channel(&mut self, ch: Channel, state: State) -> Result<(), FtlError> {
+        self.objects.insert(
+            ch.handle_id(),
+            Object {
+                kind: ObjectKind::Channel,
+                state,
+            },
+        );
+
         todo!()
     }
 
