@@ -53,26 +53,25 @@ pub fn boot(bootinfo: BootInfo) -> ! {
     };
 
     for main in bootinfo.fiber_inits.iter() {
-        Fiber::spawn(main);
+        // Fiber::spawn(main);
     }
 
-    let (mut ch1_tx, mut ch1_rx) = Channel::new().unwrap();
-    let (mut ch2_tx, mut ch2_rx) = Channel::new().unwrap();
-    // Fiber::spawn(move || {
-    //     for i in 0.. {
-    //         ch1_tx.send(Message::Ping(i)).unwrap();
-    //         let msg = ch2_rx.receive().unwrap();
-    //         println!("filber1: received {:?}", msg);
-    //     }
-    // });
+    let (mut ch1, mut ch2) = Channel::new().unwrap();
+    Fiber::spawn(move || {
+        for i in 0.. {
+            ch1.send(Message::Ping(i)).unwrap();
+            let msg = ch1.receive().unwrap();
+            println!("filber1: received {:?}", msg);
+        }
+    });
 
-    // Fiber::spawn(move || {
-    //     for i in 0.. {
-    //         let msg = ch1_rx.receive().unwrap();
-    //         println!("filber2: received {:?}", msg);
-    //         ch2_tx.send(Message::Pong(i + 100000000)).unwrap();
-    //     }
-    // });
+    Fiber::spawn(move || {
+        for i in 0.. {
+            let msg = ch2.receive().unwrap();
+            println!("filber2: received {:?}", msg);
+            ch2.send(Message::Pong(i + 100000000)).unwrap();
+        }
+    });
 
     // Fiber::spawn(move || {
     //     println!("fiber A: hello");
