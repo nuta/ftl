@@ -53,8 +53,8 @@ gdb:
 	RUST_GDB=riscv64-elf-gdb $(RUST_GDB) -q
 
 ftl.elf: $(sources) Makefile
-	$(PROGRESS) "DEVTOOLS" "generate-loader-crate"
-	cargo run --quiet --release --bin ftl generate-loader-crate --outdir libs/ftl_autogen ping pong
+	$(PROGRESS) "DEVTOOLS" "autogen"
+	cargo run --quiet --release --bin ftl autogen --outdir libs/ftl_autogen fibers/ping fibers/pong
 	$(PROGRESS) "CARGO" "boot/$(ARCH)"
 	RUSTFLAGS="$(RUSTFLAGS)" $(CARGO) build $(CARGOFLAGS) --manifest-path boot/$(ARCH)/Cargo.toml
 	cp target/$(ARCH)-$(MACHINE)/$(BUILD)/boot_$(ARCH) ftl.elf

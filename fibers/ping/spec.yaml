@@ -1,5 +1,5 @@
 kind: fiber/v0
 spec:
   name: ping
-  depends:
+  deps:
     - pong

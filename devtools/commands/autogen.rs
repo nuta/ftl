@@ -4,53 +4,58 @@ use std::{
 };
 
 use anyhow::{bail, Context};
-use ftl_types::spec::FiberSpec;
+use ftl_types::spec::{FiberSpec, Spec, SpecKind};
 
 #[derive(clap::Args)]
 pub struct Args {
     #[arg(long, help = "The output directory")]
     outdir: PathBuf,
     #[arg(help = "The list of fiber names to include")]
-    fibers: Vec<String>,
+    fiber_dirs: Vec<PathBuf>,
 }
 
-struct Fiber<'a> {
-    spec: FiberSpec<'a>,
+struct Fiber {
+    spec: FiberSpec,
 }
 
 struct Generator<'a> {
     crate_dir: &'a Path,
-    fibers: &'a [Fiber<'a>],
+    fibers: &'a [Fiber],
 }
 
-impl Generator {
-    pub fn new(crate_dir: &Path, fibers: &'a [Fiber<'a>]) -> Generator<'a> {
+impl<'a> Generator<'a> {
+    pub fn new(crate_dir: &'a Path, fibers: &'a [Fiber]) -> Generator<'a> {
         Generator { crate_dir, fibers }
     }
 
     fn generate_fiber(&mut self, dir: &Path) -> anyhow::Result<()> {
-        fs::create_dir(&dir)?;
+        fs::create_dir(&dir)
+            .with_context(|| format!("failed to create fiber directory {}", dir.display()))?;
 
         let mut mod_rs = String::new();
-        mod_rs.push_str("struct Deps {\n");
+        mod_rs.push_str("pub struct Deps {\n");
         mod_rs.push_str("    // TODO: add dependencies\n");
         mod_rs.push_str("}\n");
+
+        fs::write(dir.join("mod.rs"), mod_rs)
+            .with_context(|| format!("failed to create {}", dir.display()))?;
 
         Ok(())
     }
 
     fn generate_fibers(&mut self) -> anyhow::Result<()> {
         let fibers_dir = self.crate_dir.join("fibers");
-        fs::create_dir_all(fibers_dir)?;
+        fs::create_dir_all(&fibers_dir)?;
 
         let mut mod_rs = String::new();
         for fiber in self.fibers {
-            let fiber_dir = fibers_dir.join(fiber);
-            mod_rs.push_str(&format!("pub mod {};\n", fiber));
+            let name = &fiber.spec.name;
+            let fiber_dir = fibers_dir.join(name);
+            mod_rs.push_str(&format!("pub mod {};\n", name));
             self.generate_fiber(&fiber_dir)?;
         }
 
-        fs::write(fibers_dir.join("mod.rs"), mod_rs)?;
+        fs::write(fibers_dir.join("mod.rs"), mod_rs).context("failed to create fibers/mod.rs")?;
         Ok(())
     }
 
@@ -64,9 +69,9 @@ impl Generator {
 
         lib_rs.push_str("pub const FIBER_INITS: &[fn()] = &[");
         lib_rs.push_str(
-            args.fibers
+            self.fibers
                 .iter()
-                .map(|fiber| format!("{fiber}::main"))
+                .map(|fiber| format!("{}::main", fiber.spec.name))
                 .collect::<Vec<String>>()
                 .join(", ")
                 .as_str(),
@@ -83,14 +88,14 @@ impl Generator {
         cargo_toml.push_str("path = \"lib.rs\"\n");
         cargo_toml.push_str("\n");
         cargo_toml.push_str("[dependencies]\n");
-        for fiber in &args.fibers {
-            cargo_toml.push_str(&format!(
-                "{fiber} = {{ path = \"../../fibers/{fiber}\" }}\n"
-            ));
+        for fiber in self.fibers {
+            let name = &fiber.spec.name;
+            cargo_toml.push_str(&format!("{name} = {{ path = \"../../fibers/{name}\" }}\n"));
         }
 
-        fs::write(self.crate_dir.path().join("lib.rs"), lib_rs)?;
-        fs::write(self.crate_dir.path().join("Cargo.toml"), cargo_toml)?;
+        fs::write(self.crate_dir.join("lib.rs"), lib_rs).context("failed to create lib.rs")?;
+        fs::write(self.crate_dir.join("Cargo.toml"), cargo_toml)
+            .context("failed to create Cargo.toml")?;
 
         Ok(())
     }
@@ -103,19 +108,49 @@ pub fn main(args: &Args) -> anyhow::Result<()> {
         }
     }
 
-    let dir = tempfile::TempDir::new()?;
-
-    let mut generator = Generator::new(&dir);
-    generator.generate();
-
-    if args.outdir.exists() {
-        fs::remove_dir_all(&args.outdir).with_context(|| {
+    let mut fibers: Vec<Fiber> = Vec::with_capacity(args.fiber_dirs.len());
+    for dir in &args.fiber_dirs {
+        let spec_file_path = dir.join("spec.yaml");
+        let spec_file = fs::File::open(&spec_file_path).with_context(|| {
             format!(
-                "failed to remove the existing crate at {}",
-                args.outdir.display()
+                "failed to open fiber spec file {}",
+                spec_file_path.display()
             )
         })?;
+
+        let spec: Spec = serde_yaml::from_reader(spec_file).with_context(|| {
+            format!(
+                "failed to parse fiber spec file {}",
+                spec_file_path.display()
+            )
+        })?;
+
+        let fiber_spec = match spec.spec {
+            SpecKind::Fiber(fiber_spec) => fiber_spec,
+            // _ => bail!("expected fiber spec, found {:?}", spec.spec),
+        };
+
+        if fibers.iter().any(|f| f.spec.name == fiber_spec.name) {
+            bail!(
+                "{}: duplicate fiber name: {}",
+                spec_file_path.display(),
+                fiber_spec.name
+            );
+        }
+
+        fibers.push(Fiber { spec: fiber_spec });
     }
+
+    let dir = tempfile::TempDir::new()?;
+    let generator = Generator::new(dir.path(), &fibers);
+    generator.generate()?;
+
+    let _ = fs::remove_dir_all(&args.outdir).with_context(|| {
+        format!(
+            "failed to remove the existing crate at {}",
+            args.outdir.display()
+        )
+    });
 
     fs::rename(dir.path(), &args.outdir).with_context(|| {
         format!(

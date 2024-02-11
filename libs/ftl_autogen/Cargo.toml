@@ -1,10 +1,11 @@
 [package]
 name = "ftl_autogen"
-version.workspace = true
-authors.workspace = true
-edition.workspace = true
+version = "0.0.0"
+edition = "2021"
 
 [lib]
 path = "lib.rs"
 
 [dependencies]
+ping = { path = "../../fibers/ping" }
+pong = { path = "../../fibers/pong" }

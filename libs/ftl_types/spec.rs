@@ -1,19 +1,21 @@
+use alloc::{string::String, vec::Vec};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, PartialEq, Eq, Clone, Deserialize, Serialize)]
-pub struct Spec<'a> {
-    #[serde(flatten, borrow)]
-    pub spec: SpecKind<'a>,
+pub struct Spec {
+    #[serde(flatten)]
+    pub spec: SpecKind,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Deserialize, Serialize)]
-#[serde(tag = "kind")]
-pub enum SpecKind<'a> {
-    Fiber(#[serde(borrow)] FiberSpec<'a>),
+#[serde(tag = "kind", content = "spec")]
+pub enum SpecKind {
+    #[serde(rename = "fiber/v0")]
+    Fiber(FiberSpec),
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Deserialize, Serialize)]
-pub struct FiberSpec<'a> {
-    pub name: &'a str,
-    pub deps: &'a [&'a str],
+pub struct FiberSpec {
+    pub name: String,
+    pub deps: Vec<String>,
 }
