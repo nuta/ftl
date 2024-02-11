@@ -1,11 +1,11 @@
-use alloc::{collections::BTreeMap, ffi::CString};
+use alloc::{collections::BTreeMap, ffi::CString, string::ToString};
 use arrayvec::ArrayVec;
-use ftl_types::environ::Environ;
-use hashbrown::HashMap;
+use ftl_types::{environ::Environ, handle::HandleId, spec::FiberSpec};
 
 use crate::{
     allocator::GLOBAL_ALLOCATOR,
     arch,
+    channel::Channel,
     fiber::Fiber,
     print::ByteSize,
     scheduler::{Scheduler, GLOBAL_SCHEDULER},
@@ -23,7 +23,7 @@ pub struct FreeMem {
 #[derive(Debug)]
 pub struct BootInfo {
     pub free_mems: ArrayVec<FreeMem, 8>,
-    pub fiber_inits: &'static [fn(*const i8)],
+    pub fiber_inits: &'static [(FiberSpec, fn(*const i8))],
 }
 
 pub fn boot(bootinfo: BootInfo) -> ! {
@@ -46,55 +46,32 @@ pub fn boot(bootinfo: BootInfo) -> ! {
 
     arch::init();
 
-    let mut map = alloc::collections::BTreeMap::new();
-    map.insert("hello", 1);
-    map.insert("world", 2);
-    println!("map = {:?}", map);
-
-    for main in bootinfo.fiber_inits.iter() {
-        let environ = Environ {
-            deps: BTreeMap::new(),
+    let (ping_ch, pong_ch) = Channel::new().unwrap();
+    let mut ping_ch = Some(ping_ch);
+    let mut pong_ch = Some(pong_ch);
+    for (spec, main) in bootinfo.fiber_inits.iter() {
+        let handle = HandleId::new(1);
+        let mut deps = BTreeMap::new();
+        let ch = if spec.name == "ping" {
+            deps.insert("pong".to_string(), handle);
+            ping_ch.take().unwrap()
+        } else if spec.name == "pong" {
+            deps.insert("ping".to_string(), handle);
+            pong_ch.take().unwrap()
+        } else {
+            panic!("unknown fiber: {}", spec.name);
         };
+
+        let environ = Environ { deps };
         let environ_json = serde_json::to_string(&environ).unwrap();
         let environ_cstr = CString::new(environ_json).unwrap();
 
-        Fiber::spawn(move || {
+        let mut fiber = Fiber::new();
+        fiber.insert_handle(handle, crate::fiber::Object::Channel(ch));
+        fiber.spawn_in_kernel(move || {
             main(environ_cstr.as_ptr());
         });
     }
-
-    // let (mut ch1, mut ch2) = Channel::new().unwrap();
-    // Fiber::spawn(move || {
-    //     for i in 0.. {
-    //         ch1.send(Message::Ping(i)).unwrap();
-    //         let msg = ch1.receive().unwrap();
-    //         println!("filber1: received {:?}", msg);
-    //     }
-    // });
-
-    // Fiber::spawn(move || {
-    //     for i in 0.. {
-    //         let msg = ch2.receive().unwrap();
-    //         println!("filber2: received {:?}", msg);
-    //         ch2.send(Message::Pong(i + 100000000)).unwrap();
-    //     }
-    // });
-
-    // Fiber::spawn(move || {
-    //     println!("fiber A: hello");
-    //     for i in 0.. {
-    //         crate::arch::yield_cpu();
-    //         println!("fiber A: {}", i);
-    //     }
-    // });
-
-    // Fiber::spawn(move || {
-    //     println!("fiber B: world");
-    //     for i in 0.. {
-    //         crate::arch::yield_cpu();
-    //         println!("fiber B: {}", i);
-    //     }
-    // });
 
     Scheduler::switch_to_next(GLOBAL_SCHEDULER.lock());
 

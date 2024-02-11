@@ -8,3 +8,4 @@ path = "lib.rs"
 
 [dependencies]
 ftl_api = { path = "../../api" }
+serde = { version = "1.0", default-features = false, features = ["derive", "alloc"] }

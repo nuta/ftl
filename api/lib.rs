@@ -8,3 +8,6 @@ pub mod environ;
 pub mod handle;
 pub mod print;
 pub mod syscall;
+
+// FIXME:
+pub use ftl_types::Message;

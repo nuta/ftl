@@ -193,7 +193,7 @@ pub struct Context {
 }
 
 impl Context {
-    pub fn new_idle() -> Self {
+    pub fn zeroed() -> Self {
         Self {
             ra: 0,
             sp: 0,

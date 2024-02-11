@@ -51,14 +51,28 @@ pub struct Fiber {
 }
 
 impl Fiber {
-    pub fn spawn<F>(f: F) -> Arc<Mutex<Fiber>>
+    pub fn new() -> Self {
+        Self {
+            id: FiberId::alloc(),
+            state: FiberState::Blocked,
+            ctx: arch::Context::zeroed(),
+            handles: HashMap::new(),
+        }
+    }
+
+    // FIXME: what if the handle already exists?
+    pub fn insert_handle(&mut self, handle: HandleId, object: Object) {
+        self.handles.insert(handle, object);
+    }
+
+    pub fn spawn_in_kernel<F>(mut self, f: F) -> Arc<Mutex<Fiber>>
     where
         F: FnOnce() + Send + Sync + 'static,
     {
-        Fiber::do_spawn(Box::new(f))
+        self.do_spawn(Box::new(f))
     }
 
-    fn do_spawn(f: Box<dyn FnOnce()>) -> Arc<Mutex<Fiber>> {
+    fn do_spawn(mut self, f: Box<dyn FnOnce()>) -> Arc<Mutex<Fiber>> {
         let id = FiberId::alloc();
 
         extern "C" fn native_entry(arg: *mut Box<dyn FnOnce()>) {
@@ -75,8 +89,9 @@ impl Fiber {
         let pc = native_entry as usize;
         let closure = Box::into_raw(Box::new(main));
         let arg = closure as usize;
-        let fiber = Fiber::new_kernel(id, pc, arg);
-        let fiber = Arc::new(Mutex::new(fiber));
+
+        self.ctx = arch::Context::new_kernel(pc, arg);
+        let fiber = Arc::new(Mutex::new(self));
 
         GLOBAL_SCHEDULER.lock().resume(fiber.clone());
         fiber
@@ -86,16 +101,7 @@ impl Fiber {
         Self {
             id: FiberId::alloc(),
             state: FiberState::Blocked,
-            ctx: arch::Context::new_idle(),
-            handles: HashMap::new(),
-        }
-    }
-
-    pub fn new_kernel(id: FiberId, pc: usize, arg: usize) -> Self {
-        Self {
-            id,
-            state: FiberState::Blocked,
-            ctx: arch::Context::new_kernel(pc, arg),
+            ctx: arch::Context::zeroed(),
             handles: HashMap::new(),
         }
     }

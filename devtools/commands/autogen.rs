@@ -39,6 +39,9 @@ impl<'a> AutogenCrateGenerator<'a> {
         mod_rs.push_str("#[derive(Deserialize)]\n");
         mod_rs.push_str("pub struct Deps {\n");
         for dep in &fiber.spec.deps {
+            mod_rs.push_str(
+                "#[serde(deserialize_with = \"ftl_api::channel::deserialize_from_handle_id\")]\n",
+            );
             mod_rs.push_str(&format!("    pub {}: ftl_api::channel::Channel,\n", dep));
         }
         mod_rs.push_str("}\n");

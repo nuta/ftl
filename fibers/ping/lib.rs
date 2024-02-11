@@ -1,14 +1,15 @@
 #![no_std]
 
-use ftl_api::{environ::Environ, println};
+use ftl_api::{environ::Environ, println, Message};
 use ftl_autogen::fibers::ping::Deps;
 
 pub fn main(mut env: Environ) {
-    let deps = env.parse_deps::<Deps>();
+    let mut deps = env.parse_deps::<Deps>().expect("failed to parse deps");
 
-    println!("fiber A: hello");
+    println!("fiber 1: hello");
     for i in 0.. {
-        ftl_api::syscall::yield_cpu();
-        println!("fiber A: {}", i);
+        deps.pong.send(Message::Ping(i)).unwrap();
+        let msg = deps.pong.receive().unwrap();
+        println!("filber1: received {:?}", msg);
     }
 }

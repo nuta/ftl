@@ -6,6 +6,11 @@ pub struct Handle {
 }
 
 impl Handle {
+    // TODO: make unsafe
+    pub fn new(raw: HandleId) -> Self {
+        Self { raw }
+    }
+
     pub fn id(&self) -> HandleId {
         self.raw
     }

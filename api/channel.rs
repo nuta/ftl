@@ -1,6 +1,9 @@
 use ftl_kernel::channel::CallError as KernelCallError;
 use ftl_kernel::channel::SendError as KernelSendError;
+use ftl_types::handle::HandleId;
 use ftl_types::{error::FtlError, Message};
+use serde::Deserialize;
+use serde::Deserializer;
 
 use crate::handle::Handle;
 
@@ -22,9 +25,11 @@ pub struct Channel {
 }
 
 impl Channel {
-    pub fn from_handle(handle: Handle) -> Result<Channel, FtlError> {
-        let raw = ftl_kernel::fiber::Fiber::get_channel_by_handle(handle.id())?;
-        Ok(Channel { raw })
+    pub fn from_handle(handle: Handle) -> Channel {
+        let raw =
+            ftl_kernel::fiber::Fiber::get_channel_by_handle(handle.id()).expect("invalid handle");
+
+        Channel { raw }
     }
 
     pub fn send(&mut self, message: Message) -> Result<(), SendError> {
@@ -47,4 +52,34 @@ impl Channel {
             Err(KernelCallError::ReceiveError(error)) => Err(CallError::ReceiveError(error)),
         }
     }
+}
+
+pub fn deserialize_from_handle_id<'de, D>(deserializer: D) -> Result<Channel, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    use serde::Deserialize;
+
+    // Parse as a JSON value.
+    let value = serde_json::Value::deserialize(deserializer)?;
+
+    // Check if the value is an integer.
+    let raw_handle_id: i64 = match value.as_i64() {
+        Some(handle_id) => handle_id,
+        None => {
+            return Err(serde::de::Error::custom("expected handle ID"));
+        }
+    };
+
+    // Try to convert it to an isize.
+    let handle_id: isize = match raw_handle_id.try_into() {
+        Ok(handle) => handle,
+        Err(_) => {
+            return Err(serde::de::Error::custom("invalid handle ID"));
+        }
+    };
+
+    let handle = Handle::new(HandleId::new(handle_id));
+    let ch = Channel::from_handle(handle);
+    Ok(ch)
 }
