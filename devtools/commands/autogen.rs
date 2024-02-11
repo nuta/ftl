@@ -28,13 +28,15 @@ impl<'a> Generator<'a> {
         Generator { crate_dir, fibers }
     }
 
-    fn generate_fiber(&mut self, dir: &Path) -> anyhow::Result<()> {
+    fn generate_fiber(&mut self, fiber: &Fiber, dir: &Path) -> anyhow::Result<()> {
         fs::create_dir(&dir)
             .with_context(|| format!("failed to create fiber directory {}", dir.display()))?;
 
         let mut mod_rs = String::new();
         mod_rs.push_str("pub struct Deps {\n");
-        mod_rs.push_str("    // TODO: add dependencies\n");
+        for dep in &fiber.spec.deps {
+            mod_rs.push_str(&format!("    pub {}: ftl_api::channel::Channel,\n", dep));
+        }
         mod_rs.push_str("}\n");
 
         fs::write(dir.join("mod.rs"), mod_rs)
@@ -52,7 +54,7 @@ impl<'a> Generator<'a> {
             let name = &fiber.spec.name;
             let fiber_dir = fibers_dir.join(name);
             mod_rs.push_str(&format!("pub mod {};\n", name));
-            self.generate_fiber(&fiber_dir)?;
+            self.generate_fiber(fiber, &fiber_dir)?;
         }
 
         fs::write(fibers_dir.join("mod.rs"), mod_rs).context("failed to create fibers/mod.rs")?;
@@ -88,6 +90,8 @@ impl<'a> Generator<'a> {
         cargo_toml.push_str("path = \"lib.rs\"\n");
         cargo_toml.push_str("\n");
         cargo_toml.push_str("[dependencies]\n");
+        cargo_toml.push_str("ftl_api = { path = \"../../api\" }\n");
+
         for fiber in self.fibers {
             let name = &fiber.spec.name;
             cargo_toml.push_str(&format!("{name} = {{ path = \"../../fibers/{name}\" }}\n"));

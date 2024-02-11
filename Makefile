@@ -39,8 +39,9 @@ QEMUFLAGS += -d cpu_reset,unimp,guest_errors,int -D qemu.log
 QEMUFLAGS += $(if $(GDB),-gdb tcp::7789 -S)
 
 sources += \
-    $(shell find boot/$(ARCH) kernel api libs fibers -name '*.rs') \
-    $(shell find boot/$(ARCH) kernel api libs fibers -name '*.S')
+    $(shell find boot/$(ARCH) kernel api libs fibers devtools -name '*.rs') \
+    $(shell find boot/$(ARCH) kernel api libs fibers devtools -name '*.yaml') \
+    $(shell find boot/$(ARCH) kernel api libs fibers devtools -name '*.S')
 
 .PHONY: run
 run: ftl.elf
