@@ -55,7 +55,7 @@ gdb:
 
 ftl.elf: $(sources) Makefile
 	$(PROGRESS) "DEVTOOLS" "autogen"
-	cargo run --quiet --release --bin ftl autogen --outdir libs/ftl_autogen fibers/ping fibers/pong
+	cargo run --quiet --release --bin ftl autogen --outdir libs fibers/ping fibers/pong
 	$(PROGRESS) "CARGO" "boot/$(ARCH)"
 	RUSTFLAGS="$(RUSTFLAGS)" $(CARGO) build $(CARGOFLAGS) --manifest-path boot/$(ARCH)/Cargo.toml
 	cp target/$(ARCH)-$(MACHINE)/$(BUILD)/boot_$(ARCH) ftl.elf

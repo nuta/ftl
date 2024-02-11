@@ -11,4 +11,4 @@ path = "main.rs"
 [dependencies]
 arrayvec = { version = "0.7.4", default-features = false }
 ftl_kernel = { path = "../../kernel" }
-ftl_autogen = { path = "../../libs/ftl_autogen" }
+ftl_loader = { path = "../../libs/ftl_loader" }

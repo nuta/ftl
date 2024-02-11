@@ -1,5 +1,5 @@
 [package]
-name = "ftl_autogen"
+name = "ftl_loader"
 version = "0.0.0"
 edition = "2021"
 
@@ -8,3 +8,5 @@ path = "lib.rs"
 
 [dependencies]
 ftl_api = { path = "../../api" }
+ping = { path = "../../fibers/ping" }
+pong = { path = "../../fibers/pong" }

@@ -1,4 +1,7 @@
+use alloc::{collections::BTreeMap, ffi::CString};
 use arrayvec::ArrayVec;
+use ftl_types::environ::Environ;
+use hashbrown::HashMap;
 
 use crate::{
     allocator::GLOBAL_ALLOCATOR,
@@ -20,7 +23,7 @@ pub struct FreeMem {
 #[derive(Debug)]
 pub struct BootInfo {
     pub free_mems: ArrayVec<FreeMem, 8>,
-    pub fiber_inits: &'static [fn()],
+    pub fiber_inits: &'static [fn(*const i8)],
 }
 
 pub fn boot(bootinfo: BootInfo) -> ! {
@@ -49,7 +52,15 @@ pub fn boot(bootinfo: BootInfo) -> ! {
     println!("map = {:?}", map);
 
     for main in bootinfo.fiber_inits.iter() {
-        Fiber::spawn(main);
+        let environ = Environ {
+            deps: BTreeMap::new(),
+        };
+        let environ_json = serde_json::to_string(&environ).unwrap();
+        let environ_cstr = CString::new(environ_json).unwrap();
+
+        Fiber::spawn(move || {
+            main(environ_cstr.as_ptr());
+        });
     }
 
     // let (mut ch1, mut ch2) = Channel::new().unwrap();
