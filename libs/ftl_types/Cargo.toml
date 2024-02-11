@@ -6,3 +6,10 @@ edition.workspace = true
 
 [lib]
 path = "lib.rs"
+
+[dependencies]
+serde = { version = "1.0", default-features = false, features = [
+    "derive",
+    "alloc",
+] }
+serde-json-core = "0.5.1"

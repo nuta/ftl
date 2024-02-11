@@ -2,6 +2,7 @@
 
 pub mod error;
 pub mod handle;
+pub mod spec;
 
 // FIXME: IDL
 #[derive(Debug)]

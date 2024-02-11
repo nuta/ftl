@@ -1,13 +1,13 @@
-mod generate_loader_crate;
+mod autogen;
 
 #[derive(clap::Subcommand)]
 pub enum Command {
-    GenerateLoaderCrate(generate_loader_crate::Args),
+    Autogen(autogen::Args),
 }
 
 pub fn run(command: &Command) -> anyhow::Result<()> {
     match command {
-        Command::GenerateLoaderCrate(args) => generate_loader_crate::main(&args)?,
+        Command::Autogen(args) => autogen::main(&args)?,
     }
 
     Ok(())

@@ -12,3 +12,5 @@ path = "main.rs"
 clap = { version = "4.5.0", features = ["derive"] }
 anyhow = "1.0"
 tempfile = "3.10.0"
+
+ftl_types = { path = "../libs/ftl_types" }

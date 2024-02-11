@@ -54,7 +54,7 @@ gdb:
 
 ftl.elf: $(sources) Makefile
 	$(PROGRESS) "DEVTOOLS" "generate-loader-crate"
-	cargo run --quiet --release --bin ftl generate-loader-crate --outdir libs/ftl_loader ping pong
+	cargo run --quiet --release --bin ftl generate-loader-crate --outdir libs/ftl_autogen ping pong
 	$(PROGRESS) "CARGO" "boot/$(ARCH)"
 	RUSTFLAGS="$(RUSTFLAGS)" $(CARGO) build $(CARGOFLAGS) --manifest-path boot/$(ARCH)/Cargo.toml
 	cp target/$(ARCH)-$(MACHINE)/$(BUILD)/boot_$(ARCH) ftl.elf
