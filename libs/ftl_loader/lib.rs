@@ -2,13 +2,9 @@
 
 #![no_std]
 
-fn start_ping(environ_cstr: *const i8) {
-    ::ftl_api::entrypoint::fiber_entrypoint(environ_cstr, ::ping::main);
-}
-
-fn start_pong(environ_cstr: *const i8) {
-    ::ftl_api::entrypoint::fiber_entrypoint(environ_cstr, ::pong::main);
+fn start_riscv_plic(environ_cstr: *const i8) {
+    ::ftl_api::entrypoint::fiber_entrypoint(environ_cstr, ::riscv_plic::main);
 }
 
 
-pub const KERNEL_FIBERS: &[(&str, fn(*const i8))] = &[("ping", start_ping), ("pong", start_pong)];
+pub const KERNEL_FIBERS: &[(&str, fn(*const i8))] = &[("riscv_plic", start_riscv_plic)];

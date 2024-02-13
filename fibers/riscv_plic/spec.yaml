@@ -1,0 +1,4 @@
+kind: fiber/v0
+spec:
+  name: riscv_plic
+  deps: []

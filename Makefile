@@ -3,6 +3,7 @@ MACHINE ?= qemu-virt
 RELEASE ?=            # "1" to build release version
 V       ?=            # "1" to enable verbose output
 GDB	    ?=            # "1" to enable GDB debugging
+INKERNEL_FIBERS ?= riscv_plic
 
 # The default build target.
 .PHONY: default
@@ -55,7 +56,7 @@ gdb:
 
 ftl.elf: $(sources) Makefile
 	$(PROGRESS) "DEVTOOLS" "autogen"
-	cargo run --quiet --release --bin ftl autogen --outdir libs fibers/ping fibers/pong
+	cargo run --quiet --release --bin ftl autogen --outdir libs $(foreach fiber,$(INKERNEL_FIBERS), fibers/$(fiber))
 	$(PROGRESS) "CARGO" "boot/$(ARCH)"
 	RUSTFLAGS="$(RUSTFLAGS)" $(CARGO) build $(CARGOFLAGS) --manifest-path boot/$(ARCH)/Cargo.toml
 	cp target/$(ARCH)-$(MACHINE)/$(BUILD)/boot_$(ARCH) ftl.elf

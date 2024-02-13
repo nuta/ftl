@@ -15,6 +15,7 @@ struct Object<State> {
 
 pub enum Event<'a> {
     ChannelReceived { channel: &'a mut Channel },
+    ChannelClosed { channel: &'a mut Channel },
 }
 
 pub struct Eventloop<State> {
@@ -29,13 +30,12 @@ impl<State> Eventloop<State> {
     }
 
     pub fn add_channel(&mut self, ch: Channel, state: State) -> Result<(), FtlError> {
-        self.objects.insert(
-            ch.handle_id(),
-            Object {
-                kind: ObjectKind::Channel,
-                state,
-            },
-        );
+        let object = Object {
+            kind: ObjectKind::Channel,
+            state,
+        };
+
+        self.objects.insert(ch.handle_id(), object);
 
         todo!()
     }
