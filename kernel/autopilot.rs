@@ -10,22 +10,26 @@ pub fn start(bootinfo: &BootInfo) {
     for (fiber_name, main) in bootinfo.kernel_fibers.iter() {
         let handle = HandleId::new(1);
         let mut deps = BTreeMap::new();
-        let ch = if *fiber_name == "ping" {
+
+        let mut fiber = Fiber::new();
+        if *fiber_name == "ping" {
             deps.insert("pong".to_string(), handle);
-            ping_ch.take().unwrap()
+            fiber.insert_handle(
+                handle,
+                crate::fiber::Object::Channel(ping_ch.take().unwrap()),
+            );
         } else if *fiber_name == "pong" {
             deps.insert("ping".to_string(), handle);
-            pong_ch.take().unwrap()
-        } else {
-            panic!("unknown fiber: {}", fiber_name);
-        };
+            fiber.insert_handle(
+                handle,
+                crate::fiber::Object::Channel(pong_ch.take().unwrap()),
+            );
+        }
 
         let environ = Environ { deps };
         let environ_json = serde_json::to_string(&environ).unwrap();
         let environ_cstr = CString::new(environ_json).unwrap();
 
-        let mut fiber = Fiber::new();
-        fiber.insert_handle(handle, crate::fiber::Object::Channel(ch));
         fiber.spawn_in_kernel(move || {
             main(environ_cstr.as_ptr());
         });
