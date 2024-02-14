@@ -18,6 +18,7 @@ pub struct FreeMem {
 pub struct BootInfo {
     pub free_mems: ArrayVec<FreeMem, 8>,
     pub kernel_fibers: &'static [(&'static str, fn(*const i8))],
+    pub dtb_addr: *const u8,
 }
 
 pub fn boot(bootinfo: BootInfo) -> ! {

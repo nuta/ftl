@@ -7,4 +7,4 @@ fn start_riscv_plic(environ_cstr: *const i8) {
 }
 
 
-pub const KERNEL_FIBERS: &[(&str, fn(*const i8))] = &[("riscv_plic", start_riscv_plic)];
+pub const KERNEL_FIBERS: &[(&str, fn(*const i8))] = &[(r#"{"name":"riscv_plic","deps":[],"device_tree":[{"compatible":"sifive,plic-1.0.0"}]}"#, start_riscv_plic)];

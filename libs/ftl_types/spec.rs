@@ -15,7 +15,13 @@ pub enum SpecKind {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Deserialize, Serialize)]
+pub struct DeviceTreeEntry {
+    pub compatible: String,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Deserialize, Serialize)]
 pub struct FiberSpec {
     pub name: String,
     pub deps: Vec<String>,
+    pub device_tree: Option<Vec<DeviceTreeEntry>>,
 }

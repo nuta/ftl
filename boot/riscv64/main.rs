@@ -16,7 +16,7 @@ extern "C" {
 }
 
 #[no_mangle]
-unsafe extern "C" fn riscv64_boot(_hartid: u64, _dtb_addr: u64) -> ! {
+unsafe extern "C" fn riscv64_boot(_hartid: u64, dtb_addr: u64) -> ! {
     let bss_start = &__bss as *const _ as usize;
     let bss_end = &__bss_end as *const _ as usize;
     let free_ram = &__free_ram as *const _ as usize;
@@ -34,5 +34,6 @@ unsafe extern "C" fn riscv64_boot(_hartid: u64, _dtb_addr: u64) -> ! {
     ftl_kernel::boot::boot(BootInfo {
         free_mems,
         kernel_fibers: ftl_loader::KERNEL_FIBERS,
+        dtb_addr: dtb_addr as *const u8,
     });
 }

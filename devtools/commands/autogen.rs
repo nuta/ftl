@@ -127,7 +127,13 @@ impl<'a> LoaderCrateGenerator<'a> {
         lib_rs.push_str(
             self.fibers
                 .iter()
-                .map(|fiber| format!("(\"{name}\", start_{name})", name = fiber.spec.name))
+                .map(|fiber| {
+                    format!(
+                        "(r#\"{spec}\"#, start_{name})",
+                        spec = serde_json::to_string(&fiber.spec).unwrap(),
+                        name = fiber.spec.name
+                    )
+                })
                 .collect::<Vec<String>>()
                 .join(", ")
                 .as_str(),

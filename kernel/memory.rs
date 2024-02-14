@@ -37,7 +37,7 @@ unsafe impl GlobalAlloc for GlobalAllocator {
             .map(|addr| addr.get() as *mut u8)
             .expect("failed to allocate memory");
 
-        println!("alloc: {:p} {:?}", ptr, layout);
+        // println!("alloc: {:p} {:?}", ptr, layout);
         ptr
     }
 
