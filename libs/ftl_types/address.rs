@@ -8,10 +8,7 @@ pub struct PAddr(NonZeroUsize);
 impl PAddr {
     pub fn new(addr: usize) -> Option<PAddr> {
         // We can't use `Option::map` here because it's not a const fn.
-        match NonZeroUsize::new(addr) {
-            Some(addr) => Some(PAddr::from_nonzero(addr)),
-            None => None,
-        }
+        NonZeroUsize::new(addr).map(PAddr::from_nonzero)
     }
 
     pub const fn from_nonzero(addr: NonZeroUsize) -> PAddr {

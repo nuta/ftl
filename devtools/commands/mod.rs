@@ -7,7 +7,7 @@ pub enum Command {
 
 pub fn run(command: &Command) -> anyhow::Result<()> {
     match command {
-        Command::Autogen(args) => autogen::main(&args)?,
+        Command::Autogen(args) => autogen::main(args)?,
     }
 
     Ok(())
