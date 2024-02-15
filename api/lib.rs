@@ -6,6 +6,7 @@ pub mod channel;
 pub mod entrypoint;
 pub mod environ;
 pub mod eventloop;
+pub mod folio;
 pub mod handle;
 pub mod print;
 pub mod syscall;

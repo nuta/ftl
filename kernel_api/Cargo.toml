@@ -1,0 +1,12 @@
+[package]
+name = "ftl_kernel_api"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+
+[lib]
+path = "lib.rs"
+
+[dependencies]
+ftl_kernel = { path = "../kernel" }
+ftl_types = { path = "../libs/ftl_types" }

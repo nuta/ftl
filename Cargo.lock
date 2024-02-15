@@ -252,6 +252,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "ftl_kernel_api"
+version = "0.0.0"
+dependencies = [
+ "ftl_kernel",
+ "ftl_types",
+]
+
+[[package]]
 name = "ftl_loader"
 version = "0.0.0"
 dependencies = [
