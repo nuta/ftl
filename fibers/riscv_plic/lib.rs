@@ -1,8 +1,7 @@
 #![no_std]
 
-use ftl_api::{environ::Environ, println, Message};
-use ftl_autogen::fibers::riscv_plic::Deps;
+use ftl_api::{environ::Environ, println};
 
-pub fn main(mut env: Environ) {
+pub fn main(env: Environ) {
     println!("plic: starting: {:?}", env.device());
 }

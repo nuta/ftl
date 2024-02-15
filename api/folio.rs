@@ -1,4 +1,7 @@
-use ftl_types::{address::PAddr, error::FtlError};
+use ftl_types::{
+    address::{PAddr, VAddr},
+    error::FtlError,
+};
 
 /// Memory pages.
 pub struct Folio {
