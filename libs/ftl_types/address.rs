@@ -6,18 +6,22 @@ use core::{fmt, num::NonZeroUsize, ptr};
 pub struct PAddr(NonZeroUsize);
 
 impl PAddr {
-    pub fn new(addr: usize) -> Option<PAddr> {
+    pub const fn new(addr: usize) -> Option<PAddr> {
         // We can't use `Option::map` here because it's not a const fn.
-        NonZeroUsize::new(addr).map(PAddr::from_nonzero)
-    }
-
-    pub const fn from_nonzero(addr: NonZeroUsize) -> PAddr {
-        PAddr(addr)
+        match NonZeroUsize::new(addr) {
+            Some(addr) => Some(PAddr(addr)),
+            None => None,
+        }
     }
 
     #[inline(always)]
     pub const fn as_usize(self) -> usize {
         self.0.get()
+    }
+
+    #[inline(always)]
+    pub const fn as_nonzero(self) -> NonZeroUsize {
+        self.0
     }
 }
 
@@ -45,6 +49,20 @@ impl VAddr {
         }
     }
 
+    pub const fn from_nonzero(addr: NonZeroUsize) -> VAddr {
+        VAddr(addr)
+    }
+
+    #[inline(always)]
+    pub const fn as_usize(self) -> usize {
+        self.0.get()
+    }
+
+    #[inline(always)]
+    pub const fn as_nonzero(self) -> NonZeroUsize {
+        self.0
+    }
+
     pub const fn as_ptr<T>(self) -> *const T {
         self.as_usize() as *const _
     }
@@ -52,10 +70,6 @@ impl VAddr {
     pub const fn as_mut_ptr<T>(self) -> *mut T {
         // TODO: arch-specific check
         self.as_usize() as *mut _
-    }
-
-    pub const fn as_usize(self) -> usize {
-        self.0.get()
     }
 
     /// # Safety

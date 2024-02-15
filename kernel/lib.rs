@@ -12,6 +12,7 @@ pub mod arch;
 pub mod boot;
 pub mod channel;
 pub mod fiber;
+pub mod folio;
 
 mod autopilot;
 mod backtrace;

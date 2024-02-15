@@ -1,4 +1,3 @@
-use core::fmt;
 use core::mem::size_of;
 use core::slice;
 

@@ -9,7 +9,14 @@ use crate::{
     scheduler::{Scheduler, GLOBAL_SCHEDULER},
 };
 
+use ftl_types::address::{PAddr, VAddr};
+
 mod sbi;
+
+pub fn paddr2vaddr(paddr: PAddr) -> Option<VAddr> {
+    // FIXME:
+    Some(VAddr::from_nonzero(paddr.as_nonzero()))
+}
 
 #[inline(always)]
 fn set_sscratch(value: usize) {
