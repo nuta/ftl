@@ -85,8 +85,8 @@ impl RawChannel {
 
         let mut peer = peer_lock.lock();
         peer.signals.add(signal);
-        if let Some(receiver) = peer.receiver.as_ref() {
-            GLOBAL_SCHEDULER.lock().resume(receiver.clone());
+        if let Some(receiver) = peer.receiver.take() {
+            GLOBAL_SCHEDULER.lock().resume(receiver);
         }
         Ok(())
     }

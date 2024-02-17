@@ -21,13 +21,15 @@ impl EventPoll {
         }
     }
 
-    pub fn add_event(&mut self, handle_id: HandleId, event: Event) {
-        let e = self
+    pub fn notify(&mut self, handle_id: HandleId, event: Event) {
+        *self
             .pending
             .entry(handle_id.as_isize())
-            .or_insert_with(|| Event::zeroed());
+            .or_insert_with(|| Event::zeroed()) |= event;
 
-        *e |= event;
+        if let Some(receiver) = self.receiver.take() {
+            GLOBAL_SCHEDULER.lock().resume(receiver);
+        }
     }
 
     pub fn poll(&mut self) -> Result<Option<(HandleId, Event)>, FtlError> {
