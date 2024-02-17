@@ -61,8 +61,11 @@ pub fn init_per_cpu<F: Fn(usize)>(f: F) {
     todo!()
 }
 
-pub fn listen_for_hardware_interrupts<F: Fn() + 'static>(f: F) {
-    todo!()
+static HW_IRQ_HANDLER: Mutex<Option<Box<dyn Fn() + Send + 'static>>> = Mutex::new(None);
+
+pub fn listen_for_hardware_interrupts<F: Fn() + Send + 'static>(f: F) {
+    debug_assert!(HW_IRQ_HANDLER.lock().is_none());
+    HW_IRQ_HANDLER.lock().replace(Box::new(f));
 }
 
 pub fn handle_irq(irq: usize) {
