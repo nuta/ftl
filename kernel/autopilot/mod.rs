@@ -1,7 +1,6 @@
 use alloc::{collections::BTreeMap, ffi::CString, string::ToString, vec::Vec};
 use ftl_types::{
     environ::Environ,
-    handle::HandleId,
     spec::{DeviceTreeEntry, FiberSpec},
 };
 
@@ -33,7 +32,6 @@ impl Autopilot {
             }
         };
 
-        let handle = HandleId::new(1);
         let deps = BTreeMap::new();
 
         let environ_device = device.map(|device| {

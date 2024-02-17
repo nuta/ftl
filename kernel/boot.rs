@@ -1,9 +1,6 @@
 use arrayvec::ArrayVec;
 
-use crate::{
-    arch, autopilot, memory,
-    scheduler::{Scheduler, GLOBAL_SCHEDULER},
-};
+use crate::{arch, autopilot, memory};
 
 /// A free region of memory available for software.
 #[derive(Debug)]
