@@ -71,10 +71,6 @@ pub fn listen_for_hardware_interrupts<F: Fn() + Send + 'static>(f: F) {
     HW_IRQ_HANDLER.lock().replace(Box::new(f));
 }
 
-pub fn handle_irq(irq: usize) {
-    todo!()
-}
-
 pub fn get_cpu_id() -> usize {
     unsafe { cpuvar_ref().hart_id }
 }

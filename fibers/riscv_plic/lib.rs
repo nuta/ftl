@@ -109,14 +109,14 @@ pub fn main(env: Environ) {
         let plic = plic.clone();
         ftl_kernel_api::listen_for_hardware_interrupts(move || {
             let hart = ftl_kernel_api::get_cpu_id();
-            let plic = plic.lock();
+            let mut plic = plic.lock();
             loop {
                 let irq = match plic.read_pending_irq(hart) {
                     Ok(Some(irq)) => irq,
                     Ok(None) => break,
                     Err(e) => {
                         println!("plic: error reading pending irq: {:?}", e);
-                        None
+                        break;
                     }
                 };
 
