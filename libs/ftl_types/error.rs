@@ -7,4 +7,5 @@ pub enum FtlError {
     Full = -4,
     InvalidHandle = -5,
     InvalidAddress = -6,
+    InUse = -7,
 }

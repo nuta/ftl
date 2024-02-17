@@ -8,7 +8,7 @@ impl HandleId {
         Self(id)
     }
 
-    pub fn id(&self) -> isize {
+    pub fn as_isize(&self) -> isize {
         self.0
     }
 }

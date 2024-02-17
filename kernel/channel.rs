@@ -4,7 +4,7 @@ use ftl_types::message::MessageOrSignal;
 use ftl_types::signal::{Signal, SignalSet};
 use ftl_types::Message;
 
-use crate::arch::{cpuvar_ref, yield_cpu};
+use crate::arch::{self, cpuvar_ref, yield_cpu};
 use crate::fiber::Fiber;
 use crate::lock::Mutex;
 use crate::scheduler::GLOBAL_SCHEDULER;
@@ -105,6 +105,8 @@ impl RawChannel {
             let current = cpuvar_ref().current.clone();
             GLOBAL_SCHEDULER.lock().block(&current);
             self.receiver = Some(current);
+            arch::yield_cpu();
+            self.receiver = None;
         }
     }
 }
