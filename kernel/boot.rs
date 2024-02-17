@@ -18,11 +18,11 @@ pub struct BootInfo {
     pub dtb_addr: *const u8,
 }
 
-pub fn boot(bootinfo: BootInfo) -> ! {
+pub fn boot(cpu_id: usize, bootinfo: BootInfo) -> ! {
     println!("\nFTL - Faster Than \"L\"\n");
 
     memory::init(&bootinfo);
-    arch::init();
+    arch::init(cpu_id);
 
     autopilot::start(&bootinfo);
 

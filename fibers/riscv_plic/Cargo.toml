@@ -9,4 +9,5 @@ path = "lib.rs"
 
 [dependencies]
 ftl_api = { path = "../../api" }
+ftl_kernel_api = { path = "../../kernel_api" }
 ftl_autogen = { path = "../../libs/ftl_autogen" }

@@ -44,6 +44,7 @@ static CLAIM_REGS: &[ReadWrite<u32>] = &[
     ReadWrite::<u32>::new(0x201004 + 0x2000 * 3),
 ];
 
+#[derive(Debug)]
 enum PlicError {
     IrqOutOfRange,
 }
@@ -102,4 +103,23 @@ pub fn main(env: Environ) {
     let base_paddr = PAddr::new(env.device().reg as usize).unwrap();
     let folio = Folio::map_paddr(base_paddr, 0x4000000).unwrap();
     let mut plic = Arc::new(SpinLock::new(Plic::new(folio)));
+
+    // Interrupt handler.
+    {
+        let plic = plic.clone();
+        ftl_kernel_api::listen_for_hardware_interrupts(move || {
+            let mut hart = ftl_kernel_api::get_cpu_id();
+            if let Some(irq) = plic.lock().read_pending_irq(hart).unwrap() {
+                ftl_kernel_api::handle_irq(irq as usize);
+            }
+        });
+    }
+
+    // Per-hart initialization.
+    {
+        let plic = plic.clone();
+        ftl_kernel_api::init_per_cpu(move |id| {
+            plic.lock().init_hart(id).unwrap();
+        });
+    }
 }

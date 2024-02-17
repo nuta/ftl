@@ -405,6 +405,7 @@ version = "0.0.0"
 dependencies = [
  "ftl_api",
  "ftl_autogen",
+ "ftl_kernel_api",
 ]
 
 [[package]]

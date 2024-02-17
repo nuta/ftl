@@ -3,6 +3,7 @@ use core::{arch::asm, mem::offset_of, mem::size_of};
 use alloc::{boxed::Box, sync::Arc};
 
 use crate::{
+    boot::BootInfo,
     fiber::Fiber,
     lock::Mutex,
     memory::alloc_pages,
@@ -36,15 +37,17 @@ fn get_sscratch() -> usize {
 
 #[repr(C)]
 pub struct CpuVar {
+    pub hart_id: usize,
     pub context: *mut Context,
     pub current: Arc<Mutex<Fiber>>,
     pub idle: Arc<Mutex<Fiber>>,
 }
 
-pub fn init() {
+pub fn init(cpu_id: usize) {
     let idle = Arc::new(Mutex::new(Fiber::new_idle()));
     let context = unsafe { idle.lock().context_mut_ptr() };
     let cpuvar = CpuVar {
+        hart_id: cpu_id,
         context: context,
         current: idle.clone(),
         idle: idle,
@@ -52,6 +55,22 @@ pub fn init() {
 
     let cpuvar_ptr = Box::leak(Box::new(cpuvar));
     set_sscratch(cpuvar_ptr as *mut CpuVar as usize);
+}
+
+pub fn init_per_cpu<F: Fn(usize)>(f: F) {
+    todo!()
+}
+
+pub fn listen_for_hardware_interrupts<F: Fn() + 'static>(f: F) {
+    todo!()
+}
+
+pub fn handle_irq(irq: usize) {
+    todo!()
+}
+
+pub fn get_cpu_id() -> usize {
+    unsafe { cpuvar_ref().hart_id }
 }
 
 pub fn cpuvar_ref() -> &'static CpuVar {
