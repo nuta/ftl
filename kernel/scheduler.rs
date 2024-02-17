@@ -1,15 +1,15 @@
 use alloc::collections::VecDeque;
 use alloc::sync::Arc;
+
 use spin::Lazy;
 use spin::MutexGuard;
 
+use super::fiber::FiberState;
 use crate::arch::cpuvar_mut;
 use crate::arch::cpuvar_ref;
 use crate::arch::{self};
 use crate::fiber::Fiber;
 use crate::lock::Mutex;
-
-use super::fiber::FiberState;
 
 pub(crate) static GLOBAL_SCHEDULER: Lazy<Mutex<Scheduler>> =
     Lazy::new(|| Mutex::new(Scheduler::new()));

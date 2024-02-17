@@ -1,18 +1,17 @@
+use alloc::boxed::Box;
+use alloc::sync::Arc;
 use core::arch::asm;
 use core::mem::offset_of;
 use core::mem::size_of;
 
-use alloc::boxed::Box;
-use alloc::sync::Arc;
+use ftl_types::address::PAddr;
+use ftl_types::address::VAddr;
 
 use crate::fiber::Fiber;
 use crate::lock::Mutex;
 use crate::memory::alloc_pages;
 use crate::scheduler::Scheduler;
 use crate::scheduler::GLOBAL_SCHEDULER;
-
-use ftl_types::address::PAddr;
-use ftl_types::address::VAddr;
 
 mod sbi;
 

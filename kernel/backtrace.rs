@@ -1,7 +1,8 @@
+use core::fmt;
+
 use arrayvec::ArrayVec;
 
 use crate::arch;
-use core::fmt;
 
 /// Prints a backtrace.
 pub fn backtrace() {

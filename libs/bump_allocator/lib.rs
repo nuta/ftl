@@ -85,8 +85,9 @@ impl BumpAllocator {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use core::num::NonZeroUsize;
+
+    use super::*;
 
     fn nonzero(value: usize) -> NonZeroUsize {
         NonZeroUsize::new(value).unwrap()

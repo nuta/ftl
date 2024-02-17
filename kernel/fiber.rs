@@ -1,20 +1,19 @@
+use alloc::boxed::Box;
+use alloc::sync::Arc;
 use core::fmt;
 use core::sync::atomic::AtomicUsize;
 use core::sync::atomic::Ordering;
 
-use alloc::boxed::Box;
-use alloc::sync::Arc;
 use ftl_types::error::FtlError;
 use ftl_types::handle::HandleId;
 use hashbrown::HashMap;
 
+use super::scheduler::GLOBAL_SCHEDULER;
 use crate::arch::cpuvar_ref;
 use crate::arch::{self};
 use crate::channel::Channel;
 use crate::lock::Mutex;
 use crate::scheduler::Scheduler;
-
-use super::scheduler::GLOBAL_SCHEDULER;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct FiberId(usize);

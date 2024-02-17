@@ -1,7 +1,7 @@
+use alloc::vec::Vec;
 use core::mem::size_of;
 use core::slice;
 
-use alloc::vec::Vec;
 use arrayvec::ArrayVec;
 use fdt_rs::base::*;
 use fdt_rs::prelude::*;
