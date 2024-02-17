@@ -39,6 +39,10 @@ impl Channel {
         self.handle.id()
     }
 
+    pub(crate) fn kernel_raw(&mut self) -> &mut ftl_kernel::channel::Channel {
+        &mut self.raw
+    }
+
     pub fn send(&mut self, message: Message) -> Result<(), SendError> {
         match self.raw.send(message) {
             Ok(()) => Ok(()),

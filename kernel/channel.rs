@@ -29,7 +29,7 @@ struct RawChannel {
     rx_queue: VecDeque<Message>,
     capacity: usize,
     receiver: Option<Arc<Mutex<Fiber>>>,
-    event_poll: Option<(HandleId, Arc<Mutex<EventPoll>>)>,
+    event_poll: Option<(HandleId, EventPoll)>,
     signals: SignalSet,
 }
 
@@ -79,7 +79,7 @@ impl RawChannel {
         peer.rx_queue.push_back(message);
 
         if let Some((handle_id, event_poll)) = peer.event_poll.as_ref() {
-            event_poll.lock().notify(*handle_id, Event::READABLE);
+            event_poll.notify(*handle_id, Event::READABLE);
         }
 
         if let Some(receiver) = peer.receiver.as_ref() {
@@ -98,7 +98,7 @@ impl RawChannel {
         peer.signals.add(signal);
 
         if let Some((handle_id, event_poll)) = peer.event_poll.as_ref() {
-            event_poll.lock().notify(*handle_id, Event::READABLE);
+            event_poll.notify(*handle_id, Event::READABLE);
         }
 
         if let Some(receiver) = peer.receiver.take() {
@@ -124,6 +124,15 @@ impl RawChannel {
             arch::yield_cpu();
             self.receiver = None;
         }
+    }
+
+    pub fn poll_in(&mut self, handle_id: HandleId, event_poll: &EventPoll) -> Result<(), FtlError> {
+        if self.event_poll.is_some() {
+            return Err(FtlError::AlreadyExists);
+        }
+
+        self.event_poll = Some((handle_id, event_poll.clone()));
+        Ok(())
     }
 }
 
@@ -179,5 +188,9 @@ impl Channel {
             drop(raw);
             todo!("wait for response");
         }
+    }
+
+    pub fn poll_in(&mut self, handle_id: HandleId, event_poll: &EventPoll) -> Result<(), FtlError> {
+        self.raw.lock().poll_in(handle_id, event_poll)
     }
 }

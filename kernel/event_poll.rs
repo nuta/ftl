@@ -3,17 +3,18 @@ use ftl_types::{error::FtlError, event_poll::Event, handle::HandleId};
 
 use crate::{
     arch::{self, cpuvar_ref},
+    channel::Channel,
     fiber::Fiber,
     lock::Mutex,
     scheduler::GLOBAL_SCHEDULER,
 };
 
-pub struct EventPoll {
+struct RawEventPoll {
     pending: BTreeMap<isize /* Handle ID, but Ord */, Event>,
     receiver: Option<Arc<Mutex<Fiber>>>,
 }
 
-impl EventPoll {
+impl RawEventPoll {
     pub fn new() -> Self {
         Self {
             pending: BTreeMap::new(),
@@ -48,5 +49,30 @@ impl EventPoll {
             arch::yield_cpu();
             self.receiver = None;
         }
+    }
+}
+
+#[derive(Clone)]
+pub struct EventPoll {
+    raw: Arc<Mutex<RawEventPoll>>,
+}
+
+impl EventPoll {
+    pub fn new() -> Self {
+        Self {
+            raw: Arc::new(Mutex::new(RawEventPoll::new())),
+        }
+    }
+
+    pub fn notify(&self, handle_id: HandleId, event: Event) {
+        self.raw.lock().notify(handle_id, event);
+    }
+
+    pub fn poll(&self) -> Result<(HandleId, Event), FtlError> {
+        self.raw.lock().poll()
+    }
+
+    pub fn add_channel(&self, ch: &mut Channel) -> Result<(), FtlError> {
+        todo!()
     }
 }

@@ -1,10 +1,10 @@
 use ftl_types::{error::FtlError, handle::HandleId};
 use hashbrown::HashMap;
 
-use crate::channel::Channel;
+use crate::{channel::Channel, event_poll::EventPoll};
 
 enum ObjectKind {
-    Channel,
+    Channel(Channel),
 }
 
 struct Object<State> {
@@ -18,25 +18,29 @@ pub enum Event<'a> {
 }
 
 pub struct Eventloop<State> {
+    poll: EventPoll,
     objects: HashMap<HandleId, Object<State>>,
 }
 
 impl<State> Eventloop<State> {
     pub fn new() -> Self {
         Self {
+            poll: EventPoll::new(),
             objects: HashMap::new(),
         }
     }
 
-    pub fn add_channel(&mut self, ch: Channel, state: State) -> Result<(), FtlError> {
+    pub fn add_channel(&mut self, mut ch: Channel, state: State) -> Result<(), FtlError> {
+        self.poll.add_channel(&mut ch)?;
+
+        let handle_id = ch.handle_id();
         let object = Object {
-            kind: ObjectKind::Channel,
+            kind: ObjectKind::Channel(ch),
             state,
         };
 
-        self.objects.insert(ch.handle_id(), object);
-
-        todo!()
+        self.objects.insert(handle_id, object);
+        Ok(())
     }
 
     pub fn run<F>(mut self, f: F)
