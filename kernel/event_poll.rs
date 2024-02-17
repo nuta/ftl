@@ -74,8 +74,4 @@ impl EventPoll {
     pub fn poll(&self) -> Result<(HandleId, Event), FtlError> {
         self.raw.lock().poll()
     }
-
-    pub fn add_channel(&self, ch: &mut Channel) -> Result<(), FtlError> {
-        todo!()
-    }
 }

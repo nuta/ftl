@@ -19,6 +19,14 @@ impl Event {
     pub fn is_empty(&self) -> bool {
         self.bits == 0
     }
+
+    pub fn is_readable(&self) -> bool {
+        self.bits & Self::READABLE.bits != 0
+    }
+
+    pub fn unset(&mut self, other: Event) {
+        self.bits &= !other.bits;
+    }
 }
 
 impl BitOr for Event {
