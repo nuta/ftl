@@ -2,6 +2,8 @@ use ftl_kernel::channel::CallError as KernelCallError;
 use ftl_kernel::channel::SendError as KernelSendError;
 use ftl_types::handle::HandleId;
 use ftl_types::message::MessageOrSignal;
+use ftl_types::signal::Signal;
+use ftl_types::signal::SignalSet;
 use ftl_types::{error::FtlError, Message};
 use serde::Deserializer;
 
@@ -42,6 +44,10 @@ impl Channel {
             Ok(()) => Ok(()),
             Err(KernelSendError { error, message }) => Err(SendError { error, message }),
         }
+    }
+
+    pub fn notify(&mut self, signal: Signal) -> Result<(), FtlError> {
+        self.raw.notify(signal)
     }
 
     pub fn receive(&mut self) -> Result<MessageOrSignal, FtlError> {

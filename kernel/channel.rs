@@ -1,7 +1,7 @@
 use alloc::{collections::VecDeque, sync::Arc};
 use ftl_types::error::FtlError;
 use ftl_types::message::MessageOrSignal;
-use ftl_types::signal::SignalSet;
+use ftl_types::signal::{Signal, SignalSet};
 use ftl_types::Message;
 
 use crate::arch::{cpuvar_ref, yield_cpu};
@@ -78,6 +78,19 @@ impl RawChannel {
         Ok(())
     }
 
+    pub fn notify(&mut self, signal: Signal) -> Result<(), FtlError> {
+        let Some(peer_lock) = self.peer.as_ref() else {
+            return Err(FtlError::ClosedByPeer);
+        };
+
+        let mut peer = peer_lock.lock();
+        peer.signals.add(signal);
+        if let Some(receiver) = peer.receiver.as_ref() {
+            GLOBAL_SCHEDULER.lock().resume(receiver.clone());
+        }
+        Ok(())
+    }
+
     pub fn receive(&mut self) -> Result<Option<MessageOrSignal>, FtlError> {
         loop {
             if !self.signals.is_empty() {
@@ -113,6 +126,10 @@ impl Channel {
         self.raw.lock().send(message)
     }
 
+    pub fn notify(&mut self, signal: Signal) -> Result<(), FtlError> {
+        self.raw.lock().notify(signal)
+    }
+
     pub fn receive(&mut self) -> Result<MessageOrSignal, FtlError> {
         loop {
             let result = {
@@ -125,7 +142,7 @@ impl Channel {
                     return Ok(message);
                 }
                 None => {
-                    println!(">>> yielding CPU...");
+                    println!(">>> receive: yielding CPU...");
                     yield_cpu();
                 }
             }
