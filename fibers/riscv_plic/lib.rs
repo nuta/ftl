@@ -1,13 +1,15 @@
 #![no_std]
 
 use ftl_api::{
+    channel::Channel,
     device::mmio::ReadWrite,
     environ::Environ,
     folio::Folio,
     println,
     sync::{Arc, SpinLock},
-    types::address::PAddr,
+    types::{address::PAddr, signal::Signal},
 };
+use hashbrown::HashMap;
 
 // TODO: Register definitions are incomplete. We need to save the memory fooprint
 //       we should instantiate the registers dynamically.
@@ -98,18 +100,46 @@ impl Plic {
     }
 }
 
+struct Listeners {
+    irqs: HashMap<usize, Option<Channel>>,
+}
+
+impl Listeners {
+    pub fn new() -> Listeners {
+        Listeners {
+            irqs: HashMap::new(),
+        }
+    }
+
+    pub fn notify_irq(&mut self, irq: usize) {
+        if let Some(channel) = self.irqs.get_mut(&irq) {
+            if let Some(channel) = channel {
+                channel.notify(Signal::Interrupt).unwrap();
+            }
+        }
+    }
+
+    pub fn add_listener(&mut self, irq: usize, channel: Channel) {
+        debug_assert!(!self.irqs.contains_key(&irq)); // TODO:
+        self.irqs.insert(irq, Some(channel));
+    }
+}
+
 pub fn main(env: Environ) {
     println!("plic: starting: {:?}", env.device());
     let base_paddr = PAddr::new(env.device().reg as usize).unwrap();
     let folio = Folio::map_paddr(base_paddr, 0x4000000).unwrap();
     let plic = Arc::new(SpinLock::new(Plic::new(folio)));
+    let listeners = Arc::new(SpinLock::new(Listeners::new()));
 
     // Interrupt handler.
     {
         let plic = plic.clone();
+        let listeners = listeners.clone();
         ftl_kernel_api::listen_for_hardware_interrupts(move || {
             let hart = ftl_kernel_api::get_cpu_id();
             let mut plic = plic.lock();
+            let mut listeners = listeners.lock();
             loop {
                 let irq = match plic.read_pending_irq(hart) {
                     Ok(Some(irq)) => irq,
@@ -120,8 +150,7 @@ pub fn main(env: Environ) {
                     }
                 };
 
-                // TODO: notify channel
-
+                listeners.notify_irq(irq as usize);
                 plic.ack_irq(irq).unwrap();
             }
         });

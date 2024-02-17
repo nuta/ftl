@@ -8,6 +8,8 @@ edition.workspace = true
 path = "lib.rs"
 
 [dependencies]
+hashbrown = "0.14.3"
+
 ftl_api = { path = "../../api" }
 ftl_kernel_api = { path = "../../kernel_api" }
 ftl_autogen = { path = "../../libs/ftl_autogen" }
