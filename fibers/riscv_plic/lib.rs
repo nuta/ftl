@@ -109,8 +109,20 @@ pub fn main(env: Environ) {
         let plic = plic.clone();
         ftl_kernel_api::listen_for_hardware_interrupts(move || {
             let hart = ftl_kernel_api::get_cpu_id();
-            if let Some(irq) = plic.lock().read_pending_irq(hart).unwrap() {
-                ftl_kernel_api::handle_irq(irq as usize);
+            let plic = plic.lock();
+            loop {
+                let irq = match plic.read_pending_irq(hart) {
+                    Ok(Some(irq)) => irq,
+                    Ok(None) => break,
+                    Err(e) => {
+                        println!("plic: error reading pending irq: {:?}", e);
+                        None
+                    }
+                };
+
+                // TODO: notify channel
+
+                plic.ack_irq(irq).unwrap();
             }
         });
     }
@@ -122,4 +134,6 @@ pub fn main(env: Environ) {
             plic.lock().init_hart(id).unwrap();
         });
     }
+
+    // TODO: EventPoll to handle enable_irq requests
 }
