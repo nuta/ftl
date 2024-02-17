@@ -1,28 +1,6 @@
 #![no_std]
 
-use ftl_api::{environ::Environ, folio::Folio, println};
-
-struct ReadWrite<T> {
-    offset: usize,
-    _pd: core::marker::PhantomData<T>,
-}
-
-impl ReadWrite<u32> {
-    pub const fn new(offset: usize) -> ReadWrite<u32> {
-        ReadWrite {
-            offset,
-            _pd: core::marker::PhantomData,
-        }
-    }
-
-    pub fn read(&self) -> u32 {
-        todo!()
-    }
-
-    pub fn write(&self, value: u32) {
-        todo!()
-    }
-}
+use ftl_api::{device::mmio::ReadWrite, environ::Environ, folio::Folio, println};
 
 // TODO: Register definitions are incomplete. We need to save the memory fooprint
 //       we should instantiate the registers dynamically.
@@ -72,25 +50,25 @@ impl Plic {
         Plic { mmio }
     }
 
-    pub fn enable_irq(&self, irq: usize) -> Result<(), PlicError> {
+    pub fn enable_irq(&mut self, irq: usize) -> Result<(), PlicError> {
         println!("plic: enabling irq {}", irq);
 
         let priority_reg = PRIORITY_REGS.get(irq).ok_or(PlicError::IrqOutOfRange)?;
-        priority_reg.write(1);
+        priority_reg.write(&mut self.mmio, 1);
 
         // Enable IRQ.
         let enable_reg = ENABLE_REGS.get(irq / 32).ok_or(PlicError::IrqOutOfRange)?;
-        let value = enable_reg.read();
-        enable_reg.write(value | (1 << (irq % 32)));
+        let value = enable_reg.read(&mut self.mmio);
+        enable_reg.write(&mut self.mmio, value | (1 << (irq % 32)));
 
         Ok(())
     }
 
-    pub fn read_pending_irq(&self, hart: usize) -> Result<Option<u32>, PlicError> {
+    pub fn read_pending_irq(&mut self, hart: usize) -> Result<Option<u32>, PlicError> {
         debug_assert!(hart < 64);
 
         let claim_reg = CLAIM_REGS.get(hart).ok_or(PlicError::IrqOutOfRange)?;
-        let irq = claim_reg.read();
+        let irq = claim_reg.read(&mut self.mmio);
         if irq == 0 {
             Ok(None)
         } else {
@@ -98,16 +76,16 @@ impl Plic {
         }
     }
 
-    pub fn ack_irq(&self, irq: u32) -> Result<(), PlicError> {
+    pub fn ack_irq(&mut self, irq: u32) -> Result<(), PlicError> {
         let claim_reg = CLAIM_REGS.get(0).ok_or(PlicError::IrqOutOfRange)?;
-        claim_reg.write(irq);
+        claim_reg.write(&mut self.mmio, irq);
         Ok(())
     }
 
-    pub fn init_hart(&self, hart: usize) -> Result<(), PlicError> {
+    pub fn init_hart(&mut self, hart: usize) -> Result<(), PlicError> {
         // Set priority threshold to 0 to accept all interrupts.
         let threshold_reg = THRESHOLD_REGS.get(hart).ok_or(PlicError::IrqOutOfRange)?;
-        threshold_reg.write(0);
+        threshold_reg.write(&mut self.mmio, 0);
         Ok(())
     }
 }

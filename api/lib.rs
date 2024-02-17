@@ -3,6 +3,7 @@
 extern crate alloc;
 
 pub mod channel;
+pub mod device;
 pub mod entrypoint;
 pub mod environ;
 pub mod eventloop;
