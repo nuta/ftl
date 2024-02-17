@@ -57,11 +57,9 @@ pub fn init(cpu_id: usize) {
     set_sscratch(cpuvar_ptr as *mut CpuVar as usize);
 }
 
-static INIT_PER_CPU: Mutex<Option<Box<dyn Fn(usize) + Send + 'static>>> = Mutex::new(None);
-
 pub fn init_per_cpu<F: Fn(usize) + Send + 'static>(f: F) {
-    debug_assert!(INIT_PER_CPU.lock().is_none());
-    INIT_PER_CPU.lock().replace(Box::new(f));
+    // FIXME: Implement non-BSP core initialization
+    f(cpuvar_ref().hart_id);
 }
 
 static HW_IRQ_HANDLER: Mutex<Option<Box<dyn Fn() + Send + 'static>>> = Mutex::new(None);
