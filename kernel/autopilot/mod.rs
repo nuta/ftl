@@ -95,9 +95,12 @@ impl Autopilot {
 
 pub fn start(bootinfo: &BootInfo) {
     let devices = device_tree::walk_device_nodes(bootinfo.dtb_addr);
-    println!("found {} devices in the device tree", devices.len());
+    println!("device tree: found {} devices", devices.len());
     for device in devices {
-        println!("{} (compatible \"{}\")", device.name, device.compatible);
+        println!(
+            "device tree: {} (compatible \"{}\")",
+            device.name, device.compatible
+        );
     }
 
     // let (ping_ch, pong_ch) = Channel::new().unwrap();
