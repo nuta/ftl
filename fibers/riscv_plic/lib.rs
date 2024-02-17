@@ -102,13 +102,13 @@ pub fn main(env: Environ) {
     println!("plic: starting: {:?}", env.device());
     let base_paddr = PAddr::new(env.device().reg as usize).unwrap();
     let folio = Folio::map_paddr(base_paddr, 0x4000000).unwrap();
-    let mut plic = Arc::new(SpinLock::new(Plic::new(folio)));
+    let plic = Arc::new(SpinLock::new(Plic::new(folio)));
 
     // Interrupt handler.
     {
         let plic = plic.clone();
         ftl_kernel_api::listen_for_hardware_interrupts(move || {
-            let mut hart = ftl_kernel_api::get_cpu_id();
+            let hart = ftl_kernel_api::get_cpu_id();
             if let Some(irq) = plic.lock().read_pending_irq(hart).unwrap() {
                 ftl_kernel_api::handle_irq(irq as usize);
             }
