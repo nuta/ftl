@@ -55,9 +55,9 @@ impl Scheduler {
 
     pub fn do_switch_to_next<'a>(mut guard: MutexGuard<'a, Self>) -> ! {
         {
-            let Some(next_lock) = guard.run_queue.pop_front() else {
-                todo!("no fibers to run")
-                // TODO: return idle thread
+            let next_lock = match guard.run_queue.pop_front() {
+                Some(fiber) => fiber,
+                None => cpuvar_ref().idle.clone(),
             };
 
             // TODO: make sure it's not the same fiber

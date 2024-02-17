@@ -43,10 +43,11 @@ pub struct CpuVar {
 
 pub fn init() {
     let idle = Arc::new(Mutex::new(Fiber::new_idle()));
+    let context = unsafe { idle.lock().context_mut_ptr() };
     let cpuvar = CpuVar {
-        context: core::ptr::null_mut(),
+        context: context,
         current: idle.clone(),
-        idle,
+        idle: idle,
     };
 
     let cpuvar_ptr = Box::leak(Box::new(cpuvar));

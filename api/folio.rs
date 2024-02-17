@@ -15,4 +15,8 @@ impl Folio {
             raw: ftl_kernel::folio::Folio::map_paddr(paddr, len)?,
         })
     }
+
+    pub fn vaddr(&self) -> VAddr {
+        self.raw.vaddr()
+    }
 }

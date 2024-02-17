@@ -1,4 +1,3 @@
-use alloc::collections::BTreeMap;
 use ftl_types::{error::FtlError, handle::HandleId};
 use hashbrown::HashMap;
 

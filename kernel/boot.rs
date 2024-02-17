@@ -26,11 +26,13 @@ pub fn boot(bootinfo: BootInfo) -> ! {
 
     memory::init(&bootinfo);
     arch::init();
+
     autopilot::start(&bootinfo);
 
-    Scheduler::switch_to_next(GLOBAL_SCHEDULER.lock());
+    arch::yield_cpu();
 
     loop {
+        println!("idle loop");
         arch::idle();
     }
 }

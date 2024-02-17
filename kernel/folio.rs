@@ -20,4 +20,8 @@ impl Folio {
             len,
         })
     }
+
+    pub fn vaddr(&self) -> VAddr {
+        self.vaddr
+    }
 }

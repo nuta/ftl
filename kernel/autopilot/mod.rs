@@ -34,7 +34,7 @@ impl Autopilot {
         };
 
         let handle = HandleId::new(1);
-        let mut deps = BTreeMap::new();
+        let deps = BTreeMap::new();
 
         let environ_device = device.map(|device| {
             let interrupts = match &device.interrupts {
@@ -56,7 +56,7 @@ impl Autopilot {
             }
         });
 
-        let mut fiber = Fiber::new();
+        let fiber = Fiber::new();
         let environ = Environ {
             deps,
             device: environ_device,
