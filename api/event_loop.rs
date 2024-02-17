@@ -18,7 +18,10 @@ struct Object<State> {
 }
 
 pub enum Event {
-    ChannelReceived { message: MessageOrSignal },
+    ChannelReceived {
+        channel: &mut Channel,
+        message: MessageOrSignal,
+    },
 }
 
 pub struct Eventloop<State> {
@@ -67,7 +70,10 @@ impl<State> Eventloop<State> {
 
                     // TODO: how should we handle receive errors?
                     let message = ch.receive().unwrap();
-                    Event::ChannelReceived { message }
+                    Event::ChannelReceived {
+                        channel: ch,
+                        message,
+                    }
                 } else {
                     todo!("consume_event: unhandled event: {:?}", raw_event);
                 }
