@@ -1,7 +1,13 @@
 #![no_std]
 
-use alloc::sync::Arc;
-use ftl_api::{device::mmio::ReadWrite, environ::Environ, folio::Folio, println, sync::SpinLock};
+use ftl_api::{
+    device::mmio::ReadWrite,
+    environ::Environ,
+    folio::Folio,
+    println,
+    sync::{Arc, SpinLock},
+    types::address::PAddr,
+};
 
 // TODO: Register definitions are incomplete. We need to save the memory fooprint
 //       we should instantiate the registers dynamically.
@@ -93,7 +99,7 @@ impl Plic {
 
 pub fn main(env: Environ) {
     println!("plic: starting: {:?}", env.device());
-    let base_paddr = PAddr::new(env.device().reg).unwrap();
+    let base_paddr = PAddr::new(env.device().reg as usize).unwrap();
     let folio = Folio::map_paddr(base_paddr, 0x4000000).unwrap();
     let mut plic = Arc::new(SpinLock::new(Plic::new(folio)));
 }

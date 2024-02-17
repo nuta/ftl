@@ -13,5 +13,9 @@ pub mod print;
 pub mod sync;
 pub mod syscall;
 
+pub mod types {
+    pub use ftl_types::*;
+}
+
 // FIXME:
 pub use ftl_types::Message;
