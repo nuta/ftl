@@ -17,9 +17,9 @@ struct Object<State> {
     state: State,
 }
 
-pub enum Event {
+pub enum Event<'a> {
     ChannelReceived {
-        channel: &mut Channel,
+        channel: &'a mut Channel,
         message: MessageOrSignal,
     },
 }
@@ -52,7 +52,7 @@ impl<State> Eventloop<State> {
         Ok(())
     }
 
-    pub fn next_event(&mut self) -> Result<(&mut State, Event), FtlError> {
+    pub fn next_event(&mut self) -> Result<(&mut State, Event<'_>), FtlError> {
         let (handle_id, mut raw_event) = match self.pending {
             Some((handle_id, raw_event)) => (handle_id, raw_event),
             None => self.event_poll.poll()?,
