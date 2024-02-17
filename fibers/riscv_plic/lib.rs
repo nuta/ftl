@@ -1,11 +1,13 @@
 #![no_std]
 
+use core::ops::ControlFlow;
+
 use ftl_api::channel::Channel;
 use ftl_api::device::mmio::ReadWrite;
 use ftl_api::environ::Environ;
-use ftl_api::event_loop::Event;
-use ftl_api::event_loop::Eventloop;
 use ftl_api::folio::Folio;
+use ftl_api::mainloop::Event;
+use ftl_api::mainloop::Mainloop;
 use ftl_api::println;
 use ftl_api::sync::Arc;
 use ftl_api::sync::SpinLock;
@@ -167,14 +169,11 @@ pub fn main(env: Environ) {
     }
 
     // TODO: EventPoll to handle enable_irq requests
-    let mut eventloop = Eventloop::new();
+    let mut eventloop = Mainloop::new();
     eventloop.add_channel(todo!(), ()).unwrap();
-    loop {
-        let (state, event) = eventloop.next_event().unwrap();
-        match event {
-            Event::ChannelReceived { channel, message } => {
-                todo!("plic: handle message: {:?}", message);
-            }
+    eventloop.run(|state, event| match event {
+        Event::ChannelReceived { channel, message } => {
+            todo!("plic: handle message: {:?}", message);
         }
-    }
+    });
 }

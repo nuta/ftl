@@ -28,17 +28,4 @@ impl SignalSet {
         self.signals = 0;
         SignalSet { signals: old }
     }
-
-    pub fn pop(&mut self) -> Option<Signal> {
-        if self.signals == 0 {
-            return None;
-        }
-
-        let signal = self.signals.trailing_zeros();
-        self.signals &= !(1 << signal);
-        match signal {
-            0 => Some(Signal::Interrupt),
-            _ => todo!(),
-        }
-    }
 }

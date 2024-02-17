@@ -1,3 +1,5 @@
+use core::ops::ControlFlow;
+
 use ftl_types::error::FtlError;
 use ftl_types::event_poll::Event as RawEvent;
 use ftl_types::handle::HandleId;
@@ -24,13 +26,13 @@ pub enum Event<'a> {
     },
 }
 
-pub struct Eventloop<State> {
+pub struct Mainloop<State> {
     event_poll: EventPoll,
     pending: Option<(HandleId, RawEvent)>,
     objects: HashMap<HandleId, Object<State>>,
 }
 
-impl<State> Eventloop<State> {
+impl<State> Mainloop<State> {
     pub fn new() -> Self {
         Self {
             event_poll: EventPoll::new(),
@@ -52,7 +54,7 @@ impl<State> Eventloop<State> {
         Ok(())
     }
 
-    pub fn next_event(&mut self) -> Result<(&mut State, Event<'_>), FtlError> {
+    fn next_event(&mut self) -> Result<(&mut State, Event<'_>), FtlError> {
         let (handle_id, mut raw_event) = match self.pending {
             Some((handle_id, raw_event)) => (handle_id, raw_event),
             None => self.event_poll.poll()?,
@@ -87,5 +89,19 @@ impl<State> Eventloop<State> {
         }
 
         Ok((&mut object.state, event))
+    }
+
+    pub fn run<F>(&mut self, mut f: F)
+    where
+        F: FnMut(&mut State, Event<'_>),
+    {
+        loop {
+            let (state, event) = match self.next_event() {
+                Ok((state, event)) => (state, event),
+                Err(err) => panic!("mainloop: failed to get next event: {:?}", err),
+            };
+
+            f(state, event);
+        }
     }
 }

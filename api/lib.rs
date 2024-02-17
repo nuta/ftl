@@ -2,16 +2,21 @@
 
 extern crate alloc;
 
-pub mod channel;
+// Hihg-level APIs.
 pub mod device;
-pub mod entrypoint;
-pub mod environ;
-pub mod event_loop;
-pub mod event_poll;
-pub mod folio;
-pub mod handle;
+pub mod mainloop;
 pub mod print;
 pub mod sync;
+
+// Kernel-provided primitives.
+pub mod channel;
+pub mod environ;
+pub mod event_poll;
+pub mod folio;
+
+// Low-level APIs.
+pub mod entrypoint;
+pub mod handle;
 pub mod syscall;
 
 pub mod types {
