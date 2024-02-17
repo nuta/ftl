@@ -3,6 +3,8 @@
 use ftl_api::channel::Channel;
 use ftl_api::device::mmio::ReadWrite;
 use ftl_api::environ::Environ;
+use ftl_api::event_loop::Event;
+use ftl_api::event_loop::Eventloop;
 use ftl_api::folio::Folio;
 use ftl_api::println;
 use ftl_api::sync::Arc;
@@ -136,7 +138,7 @@ pub fn main(env: Environ) {
     {
         let plic = plic.clone();
         let listeners = listeners.clone();
-        ftl_kernel_api::listen_for_hardware_interrupts(move || {
+        ftl_kernel_api::callback::listen_for_hardware_interrupts(move || {
             let hart = ftl_kernel_api::get_cpu_id();
             let mut plic = plic.lock();
             let mut listeners = listeners.lock();
@@ -159,10 +161,20 @@ pub fn main(env: Environ) {
     // Per-hart initialization.
     {
         let plic = plic.clone();
-        ftl_kernel_api::init_per_cpu(move |id| {
+        ftl_kernel_api::callback::init_per_cpu(move |id| {
             plic.lock().init_hart(id).unwrap();
         });
     }
 
     // TODO: EventPoll to handle enable_irq requests
+    let mut eventloop = Eventloop::new();
+    eventloop.add_channel(todo!(), ()).unwrap();
+    loop {
+        let (state, event) = eventloop.next_event().unwrap();
+        match event {
+            Event::ChannelReceived { channel, message } => {
+                todo!("plic: handle message: {:?}", message);
+            }
+        }
+    }
 }
