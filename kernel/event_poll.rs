@@ -32,10 +32,10 @@ impl EventPoll {
         }
     }
 
-    pub fn poll(&mut self) -> Result<Option<(HandleId, Event)>, FtlError> {
+    pub fn poll(&mut self) -> Result<(HandleId, Event), FtlError> {
         loop {
             if let Some((handle, event)) = self.pending.pop_first() {
-                return Ok(Some((HandleId::new(handle), event)));
+                return Ok((HandleId::new(handle), event));
             }
 
             if self.receiver.is_some() {
