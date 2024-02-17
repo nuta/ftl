@@ -1,11 +1,13 @@
-use alloc::{collections::VecDeque, sync::Arc};
-use spin::{Lazy, MutexGuard};
+use alloc::collections::VecDeque;
+use alloc::sync::Arc;
+use spin::Lazy;
+use spin::MutexGuard;
 
-use crate::{
-    arch::{self, cpuvar_mut, cpuvar_ref},
-    fiber::Fiber,
-    lock::Mutex,
-};
+use crate::arch::cpuvar_mut;
+use crate::arch::cpuvar_ref;
+use crate::arch::{self};
+use crate::fiber::Fiber;
+use crate::lock::Mutex;
 
 use super::fiber::FiberState;
 

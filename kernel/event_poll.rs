@@ -1,13 +1,15 @@
-use alloc::{collections::BTreeMap, sync::Arc};
-use ftl_types::{error::FtlError, event_poll::Event, handle::HandleId};
+use alloc::collections::BTreeMap;
+use alloc::sync::Arc;
+use ftl_types::error::FtlError;
+use ftl_types::event_poll::Event;
+use ftl_types::handle::HandleId;
 
-use crate::{
-    arch::{self, cpuvar_ref},
-    channel::Channel,
-    fiber::Fiber,
-    lock::Mutex,
-    scheduler::GLOBAL_SCHEDULER,
-};
+use crate::arch::cpuvar_ref;
+use crate::arch::{self};
+use crate::channel::Channel;
+use crate::fiber::Fiber;
+use crate::lock::Mutex;
+use crate::scheduler::GLOBAL_SCHEDULER;
 
 struct RawEventPoll {
     pending: BTreeMap<isize /* Handle ID, but Ord */, Event>,

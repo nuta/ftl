@@ -1,4 +1,6 @@
-use ftl_types::{error::FtlError, event_poll::Event, handle::HandleId};
+use ftl_types::error::FtlError;
+use ftl_types::event_poll::Event;
+use ftl_types::handle::HandleId;
 
 use crate::channel::Channel;
 

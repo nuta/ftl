@@ -1,5 +1,7 @@
-use alloc::{string::String, vec::Vec};
-use serde::{Deserialize, Serialize};
+use alloc::string::String;
+use alloc::vec::Vec;
+use serde::Deserialize;
+use serde::Serialize;
 
 #[derive(Debug, PartialEq, Eq, Clone, Deserialize, Serialize)]
 pub struct Spec {

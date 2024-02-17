@@ -1,10 +1,12 @@
-use std::{
-    fs,
-    path::{Path, PathBuf},
-};
+use std::fs;
+use std::path::Path;
+use std::path::PathBuf;
 
-use anyhow::{bail, Context};
-use ftl_types::spec::{FiberSpec, Spec, SpecKind};
+use anyhow::bail;
+use anyhow::Context;
+use ftl_types::spec::FiberSpec;
+use ftl_types::spec::Spec;
+use ftl_types::spec::SpecKind;
 
 #[derive(clap::Args)]
 pub struct Args {

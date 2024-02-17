@@ -1,14 +1,14 @@
 #![no_std]
 
-use ftl_api::{
-    channel::Channel,
-    device::mmio::ReadWrite,
-    environ::Environ,
-    folio::Folio,
-    println,
-    sync::{Arc, SpinLock},
-    types::{address::PAddr, signal::Signal},
-};
+use ftl_api::channel::Channel;
+use ftl_api::device::mmio::ReadWrite;
+use ftl_api::environ::Environ;
+use ftl_api::folio::Folio;
+use ftl_api::println;
+use ftl_api::sync::Arc;
+use ftl_api::sync::SpinLock;
+use ftl_api::types::address::PAddr;
+use ftl_api::types::signal::Signal;
 use hashbrown::HashMap;
 
 // TODO: Register definitions are incomplete. We need to save the memory fooprint

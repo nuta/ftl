@@ -1,12 +1,16 @@
-use alloc::{collections::VecDeque, sync::Arc};
+use alloc::collections::VecDeque;
+use alloc::sync::Arc;
 use ftl_types::error::FtlError;
 use ftl_types::event_poll::Event;
 use ftl_types::handle::HandleId;
 use ftl_types::message::MessageOrSignal;
-use ftl_types::signal::{Signal, SignalSet};
+use ftl_types::signal::Signal;
+use ftl_types::signal::SignalSet;
 use ftl_types::Message;
 
-use crate::arch::{self, cpuvar_ref, yield_cpu};
+use crate::arch::cpuvar_ref;
+use crate::arch::yield_cpu;
+use crate::arch::{self};
 use crate::event_poll::EventPoll;
 use crate::fiber::Fiber;
 use crate::lock::Mutex;

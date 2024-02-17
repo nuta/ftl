@@ -1,6 +1,8 @@
 use arrayvec::ArrayVec;
 
-use crate::{arch, autopilot, memory};
+use crate::arch;
+use crate::autopilot;
+use crate::memory;
 
 /// A free region of memory available for software.
 #[derive(Debug)]

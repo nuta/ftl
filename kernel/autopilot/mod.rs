@@ -1,10 +1,13 @@
-use alloc::{collections::BTreeMap, ffi::CString, string::ToString, vec::Vec};
-use ftl_types::{
-    environ::Environ,
-    spec::{DeviceTreeEntry, FiberSpec},
-};
+use alloc::collections::BTreeMap;
+use alloc::ffi::CString;
+use alloc::string::ToString;
+use alloc::vec::Vec;
+use ftl_types::environ::Environ;
+use ftl_types::spec::DeviceTreeEntry;
+use ftl_types::spec::FiberSpec;
 
-use crate::{boot::BootInfo, fiber::Fiber};
+use crate::boot::BootInfo;
+use crate::fiber::Fiber;
 
 mod device_tree;
 

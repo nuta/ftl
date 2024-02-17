@@ -1,9 +1,9 @@
-use core::{
-    panic::PanicInfo,
-    sync::atomic::{AtomicU8, Ordering},
-};
+use core::panic::PanicInfo;
+use core::sync::atomic::AtomicU8;
+use core::sync::atomic::Ordering;
 
-use crate::{arch::hang, backtrace::backtrace};
+use crate::arch::hang;
+use crate::backtrace::backtrace;
 
 static PANIC_COUNTER: AtomicU8 = AtomicU8::new(0);
 

@@ -1,7 +1,9 @@
-use ftl_types::{error::FtlError, handle::HandleId};
+use ftl_types::error::FtlError;
+use ftl_types::handle::HandleId;
 use hashbrown::HashMap;
 
-use crate::{channel::Channel, event_poll::EventPoll};
+use crate::channel::Channel;
+use crate::event_poll::EventPoll;
 
 enum ObjectKind {
     Channel(Channel),

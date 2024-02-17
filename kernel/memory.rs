@@ -1,11 +1,11 @@
-use core::alloc::{GlobalAlloc, Layout};
+use core::alloc::GlobalAlloc;
+use core::alloc::Layout;
 
 use bump_allocator::BumpAllocator;
 
-use crate::{
-    boot::{BootInfo, FreeMem},
-    print::ByteSize,
-};
+use crate::boot::BootInfo;
+use crate::boot::FreeMem;
+use crate::print::ByteSize;
 
 #[global_allocator]
 pub static GLOBAL_ALLOCATOR: GlobalAllocator = GlobalAllocator::new();

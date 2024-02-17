@@ -1,18 +1,18 @@
-use core::{
-    fmt,
-    sync::atomic::{AtomicUsize, Ordering},
-};
+use core::fmt;
+use core::sync::atomic::AtomicUsize;
+use core::sync::atomic::Ordering;
 
-use alloc::{boxed::Box, sync::Arc};
-use ftl_types::{error::FtlError, handle::HandleId};
+use alloc::boxed::Box;
+use alloc::sync::Arc;
+use ftl_types::error::FtlError;
+use ftl_types::handle::HandleId;
 use hashbrown::HashMap;
 
-use crate::{
-    arch::{self, cpuvar_ref},
-    channel::Channel,
-    lock::Mutex,
-    scheduler::Scheduler,
-};
+use crate::arch::cpuvar_ref;
+use crate::arch::{self};
+use crate::channel::Channel;
+use crate::lock::Mutex;
+use crate::scheduler::Scheduler;
 
 use super::scheduler::GLOBAL_SCHEDULER;
 

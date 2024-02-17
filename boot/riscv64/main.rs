@@ -4,7 +4,8 @@
 use core::arch::global_asm;
 
 use arrayvec::ArrayVec;
-use ftl_kernel::boot::{BootInfo, FreeMem};
+use ftl_kernel::boot::BootInfo;
+use ftl_kernel::boot::FreeMem;
 
 global_asm!(include_str!("boot.S"));
 

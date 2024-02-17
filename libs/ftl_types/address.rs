@@ -1,4 +1,6 @@
-use core::{fmt, num::NonZeroUsize, ptr};
+use core::fmt;
+use core::num::NonZeroUsize;
+use core::ptr;
 
 /// Represents a physical memory address.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]

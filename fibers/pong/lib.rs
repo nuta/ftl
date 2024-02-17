@@ -1,6 +1,8 @@
 #![no_std]
 
-use ftl_api::{environ::Environ, println, Message};
+use ftl_api::environ::Environ;
+use ftl_api::println;
+use ftl_api::Message;
 use ftl_autogen::fibers::pong::Deps;
 
 pub fn main(mut env: Environ) {

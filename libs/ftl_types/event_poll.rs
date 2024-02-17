@@ -1,4 +1,7 @@
-use core::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign};
+use core::ops::BitAnd;
+use core::ops::BitAndAssign;
+use core::ops::BitOr;
+use core::ops::BitOrAssign;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Event {
