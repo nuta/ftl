@@ -1,5 +1,6 @@
 use alloc::{collections::VecDeque, sync::Arc};
 use ftl_types::error::FtlError;
+use ftl_types::signal::SignalSet;
 use ftl_types::Message;
 
 use crate::arch::{cpuvar_ref, yield_cpu};
@@ -24,6 +25,7 @@ struct RawChannel {
     rx_queue: VecDeque<Message>,
     capacity: usize,
     receiver: Option<Arc<Mutex<Fiber>>>,
+    signals: SignalSet,
 }
 
 impl RawChannel {
@@ -33,6 +35,7 @@ impl RawChannel {
             rx_queue: VecDeque::new(),
             capacity: 16, // TODO:
             receiver: None,
+            signals: SignalSet::zeroed(),
         };
 
         let raw_b = RawChannel {
@@ -40,6 +43,7 @@ impl RawChannel {
             rx_queue: VecDeque::new(),
             capacity: 16, // TODO:
             receiver: None,
+            signals: SignalSet::zeroed(),
         };
 
         let a = Arc::new(Mutex::new(raw_a));

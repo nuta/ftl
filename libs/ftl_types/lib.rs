@@ -2,11 +2,12 @@
 
 extern crate alloc;
 
+pub mod address;
 pub mod environ;
 pub mod error;
 pub mod handle;
+pub mod signal;
 pub mod spec;
-pub mod address;
 
 // FIXME: IDL
 #[derive(Debug)]
