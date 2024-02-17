@@ -9,6 +9,7 @@ path = "lib.rs"
 
 [dependencies]
 hashbrown = "0.14.3"
+spin = "0.9.8"
 ftl_kernel = { path = "../kernel" }
 ftl_types = { path = "../libs/ftl_types" }
 serde = { version = "1.0", default-features = false, features = [

@@ -216,6 +216,7 @@ dependencies = [
  "hashbrown",
  "serde",
  "serde_json",
+ "spin",
 ]
 
 [[package]]

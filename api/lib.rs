@@ -10,6 +10,7 @@ pub mod eventloop;
 pub mod folio;
 pub mod handle;
 pub mod print;
+pub mod sync;
 pub mod syscall;
 
 // FIXME:
