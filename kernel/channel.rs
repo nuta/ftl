@@ -1,10 +1,13 @@
 use alloc::{collections::VecDeque, sync::Arc};
 use ftl_types::error::FtlError;
+use ftl_types::event_poll::Event;
+use ftl_types::handle::HandleId;
 use ftl_types::message::MessageOrSignal;
 use ftl_types::signal::{Signal, SignalSet};
 use ftl_types::Message;
 
 use crate::arch::{self, cpuvar_ref, yield_cpu};
+use crate::event_poll::EventPoll;
 use crate::fiber::Fiber;
 use crate::lock::Mutex;
 use crate::scheduler::GLOBAL_SCHEDULER;
@@ -26,6 +29,7 @@ struct RawChannel {
     rx_queue: VecDeque<Message>,
     capacity: usize,
     receiver: Option<Arc<Mutex<Fiber>>>,
+    event_poll: Option<(HandleId, Arc<Mutex<EventPoll>>)>,
     signals: SignalSet,
 }
 
@@ -36,6 +40,7 @@ impl RawChannel {
             rx_queue: VecDeque::new(),
             capacity: 16, // TODO:
             receiver: None,
+            event_poll: None,
             signals: SignalSet::zeroed(),
         };
 
@@ -44,6 +49,7 @@ impl RawChannel {
             rx_queue: VecDeque::new(),
             capacity: 16, // TODO:
             receiver: None,
+            event_poll: None,
             signals: SignalSet::zeroed(),
         };
 
@@ -71,6 +77,11 @@ impl RawChannel {
         }
 
         peer.rx_queue.push_back(message);
+
+        if let Some((handle_id, event_poll)) = peer.event_poll.as_ref() {
+            event_poll.lock().notify(*handle_id, Event::READABLE);
+        }
+
         if let Some(receiver) = peer.receiver.as_ref() {
             GLOBAL_SCHEDULER.lock().resume(receiver.clone());
         }
@@ -85,6 +96,11 @@ impl RawChannel {
 
         let mut peer = peer_lock.lock();
         peer.signals.add(signal);
+
+        if let Some((handle_id, event_poll)) = peer.event_poll.as_ref() {
+            event_poll.lock().notify(*handle_id, Event::READABLE);
+        }
+
         if let Some(receiver) = peer.receiver.take() {
             GLOBAL_SCHEDULER.lock().resume(receiver);
         }
