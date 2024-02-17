@@ -1,6 +1,6 @@
 use core::marker::PhantomData;
 
-use crate::folio::{self, Folio};
+use crate::folio::Folio;
 
 pub struct ReadWrite<T: Copy> {
     offset: usize,

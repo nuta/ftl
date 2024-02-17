@@ -1,8 +1,10 @@
 #[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Signal {
     Interrupt = 1 << 0,
 }
 
+#[derive(Debug)]
 pub struct SignalSet {
     pub signals: u32,
 }
@@ -18,6 +20,13 @@ impl SignalSet {
 
     pub fn add(&mut self, signal: Signal) {
         self.signals |= signal as u32;
+    }
+
+    /// Clears all signals and returns the old value.
+    pub fn clear(&mut self) -> SignalSet {
+        let old = self.signals;
+        self.signals = 0;
+        SignalSet { signals: old }
     }
 
     pub fn pop(&mut self) -> Option<Signal> {

@@ -1,6 +1,7 @@
 use ftl_kernel::channel::CallError as KernelCallError;
 use ftl_kernel::channel::SendError as KernelSendError;
 use ftl_types::handle::HandleId;
+use ftl_types::message::MessageOrSignal;
 use ftl_types::{error::FtlError, Message};
 use serde::Deserializer;
 
@@ -43,11 +44,11 @@ impl Channel {
         }
     }
 
-    pub fn receive(&mut self) -> Result<Message, FtlError> {
+    pub fn receive(&mut self) -> Result<MessageOrSignal, FtlError> {
         self.raw.receive()
     }
 
-    pub fn call(&mut self, message: Message) -> Result<Message, CallError> {
+    pub fn call(&mut self, message: Message) -> Result<MessageOrSignal, CallError> {
         match self.raw.call(message) {
             Ok(message) => Ok(message),
             Err(KernelCallError::SendError(KernelSendError { error, message })) => {

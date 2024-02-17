@@ -1,5 +1,6 @@
 use alloc::{collections::VecDeque, sync::Arc};
 use ftl_types::error::FtlError;
+use ftl_types::message::MessageOrSignal;
 use ftl_types::signal::SignalSet;
 use ftl_types::Message;
 
@@ -77,16 +78,21 @@ impl RawChannel {
         Ok(())
     }
 
-    pub fn receive(&mut self) -> Result<Option<Message>, FtlError> {
-        if let Some(message) = self.rx_queue.pop_front() {
-            return Ok(Some(message));
-        } else {
+    pub fn receive(&mut self) -> Result<Option<MessageOrSignal>, FtlError> {
+        loop {
+            if !self.signals.is_empty() {
+                let signals = self.signals.clear();
+                return Ok(Some(MessageOrSignal::Signal(signals)));
+            }
+
+            if let Some(message) = self.rx_queue.pop_front() {
+                return Ok(Some(MessageOrSignal::Message(message)));
+            }
+
             let current = cpuvar_ref().current.clone();
             GLOBAL_SCHEDULER.lock().block(&current);
             self.receiver = Some(current);
         }
-
-        Ok(None)
     }
 }
 
@@ -107,7 +113,7 @@ impl Channel {
         self.raw.lock().send(message)
     }
 
-    pub fn receive(&mut self) -> Result<Message, FtlError> {
+    pub fn receive(&mut self) -> Result<MessageOrSignal, FtlError> {
         loop {
             let result = {
                 let mut raw = self.raw.lock();
@@ -126,7 +132,7 @@ impl Channel {
         }
     }
 
-    pub fn call(&mut self, message: Message) -> Result<Message, CallError> {
+    pub fn call(&mut self, message: Message) -> Result<MessageOrSignal, CallError> {
         let mut raw = self.raw.lock();
         raw.send(message).map_err(CallError::SendError)?;
 
