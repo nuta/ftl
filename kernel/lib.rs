@@ -11,6 +11,7 @@ pub mod print;
 pub mod arch;
 pub mod boot;
 pub mod channel;
+pub mod event_poll;
 pub mod fiber;
 pub mod folio;
 
