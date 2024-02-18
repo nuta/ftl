@@ -49,6 +49,12 @@ run: ftl.elf
 	$(PROGRESS) "QEMU" "ftl.elf"
 	$(QEMU) $(QEMUFLAGS) -kernel ftl.elf
 
+.PHONY: doc
+doc:
+	$(PROGRESS) "CARGO" "doc"
+	$(CARGO) doc $(CARGOFLAGS) --manifest-path api/Cargo.toml
+	$(CARGO) doc $(CARGOFLAGS) --manifest-path kernel_api/Cargo.toml
+
 .PHONY: gdb
 gdb:
 	$(PROGRESS) "GDB" "ftl.elf"
