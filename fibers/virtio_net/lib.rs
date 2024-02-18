@@ -15,15 +15,27 @@ enum State {
     Client,
 }
 
-pub fn main(env: Environ) {
+struct Virtio {}
+
+impl Virtio {
+    pub fn new() -> Self {
+        todo!()
+    }
+
+    pub fn send(&self, pkt: &[u8]) {
+        todo!()
+    }
+}
+
+pub fn main(mut env: Environ) {
     let deps: Deps = env.parse_deps().expect("failed to parse deps");
-    let virtio = todo!();
+    let virtio = Virtio::new();
 
     let mut mainloop = Mainloop::new();
     mainloop
         .add_channel(deps.autopilot, State::Autopilot)
         .unwrap();
-    mainloop.run(|changes, state, event| {
+    mainloop.run(move |changes, state, event| {
         match (state, event) {
             (State::Autopilot, Event::Message(_, Message::NewClient { ch: handle })) => {
                 let ch = Channel::from_handle(Handle::new(handle));
