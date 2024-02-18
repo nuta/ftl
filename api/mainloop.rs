@@ -109,7 +109,7 @@ impl<State> Mainloop<State> {
     ///
     /// To allow running the callback function in multiple threads in the
     /// future!
-    pub fn run<F>(&mut self, mut f: F)
+    pub fn run<F>(&mut self, f: F)
     where
         F: Fn(&mut Changes<State>, &mut State, Event<'_>) + Send + 'static,
     {

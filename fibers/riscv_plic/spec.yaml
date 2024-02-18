@@ -1,6 +1,7 @@
 kind: fiber/v0
 spec:
   name: riscv_plic
-  deps: []
+  deps:
+    - autopilot
   device_tree:
     - compatible: "sifive,plic-1.0.0"

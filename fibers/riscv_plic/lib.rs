@@ -6,6 +6,7 @@ use ftl_api::collections::HashMap;
 use ftl_api::device::mmio::ReadWrite;
 use ftl_api::environ::Environ;
 use ftl_api::folio::Folio;
+use ftl_api::handle::Handle;
 use ftl_api::mainloop::Event;
 use ftl_api::mainloop::Mainloop;
 use ftl_api::prelude::*;
@@ -15,6 +16,7 @@ use ftl_api::types::address::PAddr;
 use ftl_api::types::message::Message;
 use ftl_api::types::message::MessageOrSignal;
 use ftl_api::types::signal::Signal;
+use ftl_autogen::fibers::riscv_plic::Deps;
 
 // TODO: Register definitions are incomplete. We need to save the memory fooprint
 //       we should instantiate the registers dynamically.
@@ -105,6 +107,12 @@ impl Plic {
     }
 }
 
+#[derive(Debug)]
+enum State {
+    Autopilot,
+    Client,
+}
+
 struct Listeners {
     irqs: HashMap<usize, Option<Sender>>,
 }
@@ -130,8 +138,9 @@ impl Listeners {
     }
 }
 
-pub fn main(env: Environ) {
+pub fn main(mut env: Environ) {
     println!("plic: starting: {:?}", env.device());
+    let deps: Deps = env.parse_deps().unwrap();
     let base_paddr = PAddr::new(env.device().reg as usize).unwrap();
     let folio = Folio::map_paddr(base_paddr, 0x4000000).unwrap();
     let plic = Arc::new(SpinLock::new(Plic::new(folio)));
@@ -171,15 +180,22 @@ pub fn main(env: Environ) {
 
     // TODO: EventPoll to handle enable_irq requests
     let mut eventloop = Mainloop::new();
-    eventloop.add_channel(todo!(), ()).unwrap();
-    eventloop.run(|_, state, event| match event {
+    eventloop
+        .add_channel(deps.autopilot, State::Autopilot)
+        .unwrap();
+
+    eventloop.run(move |changes, state, event| match event {
         Event::ChannelReceived { sender, message } => match message {
-            MessageOrSignal::Message(m) => match m {
-                Message::ListenIrq { irq } => {
+            MessageOrSignal::Message(m) => match (state, m) {
+                (State::Autopilot, Message::NewClient { ch: handle }) => {
+                    let ch = Channel::from_handle(Handle::new(handle));
+                    changes.add_channel(ch, State::Client);
+                }
+                (State::Client, Message::ListenIrq { irq }) => {
                     plic.lock().enable_irq(irq).unwrap();
                     listeners.lock().add_listener(irq, sender.clone());
                 }
-                _ => todo!("plic: handle message: {:?}", m),
+                (state, m) => todo!("plic: handle message: {:?}: {:?}", state, m),
             },
             MessageOrSignal::Signal(s) => {
                 todo!("plic: handle signal: {:?}", s);
