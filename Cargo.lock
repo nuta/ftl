@@ -406,7 +406,6 @@ dependencies = [
  "ftl_api",
  "ftl_autogen",
  "ftl_kernel_api",
- "hashbrown",
 ]
 
 [[package]]
