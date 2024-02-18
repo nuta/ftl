@@ -178,7 +178,8 @@ pub fn main(env: Environ) {
                     let mut plic = plic.lock();
                     plic.enable_irq(irq).unwrap();
 
-                    listeners.lock().add_listener(irq, state.channel.clone());
+                    todo!()
+                    // listeners.lock().add_listener(irq, state.channel.clone());
                 }
                 _ => todo!("plic: handle message: {:?}", m),
             },

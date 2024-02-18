@@ -154,15 +154,15 @@ impl Channel {
         Ok((ch1, ch2))
     }
 
-    pub fn send(&mut self, message: Message) -> Result<(), SendError> {
+    pub fn send(&self, message: Message) -> Result<(), SendError> {
         self.raw.lock().send(message)
     }
 
-    pub fn notify(&mut self, signal: Signal) -> Result<(), FtlError> {
+    pub fn notify(&self, signal: Signal) -> Result<(), FtlError> {
         self.raw.lock().notify(signal)
     }
 
-    pub fn receive(&mut self) -> Result<MessageOrSignal, FtlError> {
+    pub fn receive(&self) -> Result<MessageOrSignal, FtlError> {
         loop {
             let result = {
                 let mut raw = self.raw.lock();
@@ -181,7 +181,7 @@ impl Channel {
         }
     }
 
-    pub fn call(&mut self, message: Message) -> Result<MessageOrSignal, CallError> {
+    pub fn call(&self, message: Message) -> Result<MessageOrSignal, CallError> {
         let mut raw = self.raw.lock();
         raw.send(message).map_err(CallError::SendError)?;
 
@@ -195,7 +195,7 @@ impl Channel {
         }
     }
 
-    pub fn poll_in(&mut self, handle_id: HandleId, event_poll: &EventPoll) -> Result<(), FtlError> {
+    pub fn poll_in(&self, handle_id: HandleId, event_poll: &EventPoll) -> Result<(), FtlError> {
         self.raw.lock().poll_in(handle_id, event_poll)
     }
 }

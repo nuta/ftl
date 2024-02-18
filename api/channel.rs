@@ -8,6 +8,7 @@ use ftl_types::signal::Signal;
 use serde::Deserializer;
 
 use crate::handle::Handle;
+use crate::sync::Arc;
 
 #[derive(Debug)]
 pub struct SendError {
@@ -19,6 +20,32 @@ pub struct SendError {
 pub enum CallError {
     SendError(SendError),
     ReceiveError(FtlError),
+}
+
+#[derive(Clone)]
+pub struct Sender {
+    channel: Arc<Channel>,
+}
+
+impl Sender {
+    pub fn send(&self, message: Message) -> Result<(), SendError> {
+        self.channel.send(message)
+    }
+
+    pub fn notify(&self, signal: Signal) -> Result<(), FtlError> {
+        self.channel.notify(signal)
+    }
+}
+
+#[derive(Clone)]
+pub struct Receiver {
+    channel: Arc<Channel>,
+}
+
+impl Receiver {
+    pub fn receive(&self) -> Result<MessageOrSignal, FtlError> {
+        self.channel.receive()
+    }
 }
 
 // FIXME: hard-coded for kernel fibers
@@ -43,22 +70,22 @@ impl Channel {
         &mut self.raw
     }
 
-    pub fn send(&mut self, message: Message) -> Result<(), SendError> {
+    pub fn send(&self, message: Message) -> Result<(), SendError> {
         match self.raw.send(message) {
             Ok(()) => Ok(()),
             Err(KernelSendError { error, message }) => Err(SendError { error, message }),
         }
     }
 
-    pub fn notify(&mut self, signal: Signal) -> Result<(), FtlError> {
+    pub fn notify(&self, signal: Signal) -> Result<(), FtlError> {
         self.raw.notify(signal)
     }
 
-    pub fn receive(&mut self) -> Result<MessageOrSignal, FtlError> {
+    pub fn receive(&self) -> Result<MessageOrSignal, FtlError> {
         self.raw.receive()
     }
 
-    pub fn call(&mut self, message: Message) -> Result<MessageOrSignal, CallError> {
+    pub fn call(&self, message: Message) -> Result<MessageOrSignal, CallError> {
         match self.raw.call(message) {
             Ok(message) => Ok(message),
             Err(KernelCallError::SendError(KernelSendError { error, message })) => {
