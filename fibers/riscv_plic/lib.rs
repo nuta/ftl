@@ -1,6 +1,7 @@
 #![no_std]
 
 use ftl_api::channel::Channel;
+use ftl_api::channel::Sender;
 use ftl_api::collections::HashMap;
 use ftl_api::device::mmio::ReadWrite;
 use ftl_api::environ::Environ;
@@ -105,7 +106,7 @@ impl Plic {
 }
 
 struct Listeners {
-    irqs: HashMap<usize, Option<Channel>>,
+    irqs: HashMap<usize, Option<Sender>>,
 }
 
 impl Listeners {
@@ -117,15 +118,15 @@ impl Listeners {
 
     pub fn notify_irq(&mut self, irq: usize) {
         if let Some(channel) = self.irqs.get_mut(&irq) {
-            if let Some(channel) = channel {
-                channel.notify(Signal::Interrupt).unwrap();
+            if let Some(sender) = channel {
+                sender.notify(Signal::Interrupt).unwrap();
             }
         }
     }
 
-    pub fn add_listener(&mut self, irq: usize, channel: Channel) {
+    pub fn add_listener(&mut self, irq: usize, sender: Sender) {
         debug_assert!(!self.irqs.contains_key(&irq)); // TODO:
-        self.irqs.insert(irq, Some(channel));
+        self.irqs.insert(irq, Some(sender));
     }
 }
 
@@ -178,8 +179,7 @@ pub fn main(env: Environ) {
                     let mut plic = plic.lock();
                     plic.enable_irq(irq).unwrap();
 
-                    todo!()
-                    // listeners.lock().add_listener(irq, state.channel.clone());
+                    listeners.lock().add_listener(irq, sender.clone());
                 }
                 _ => todo!("plic: handle message: {:?}", m),
             },

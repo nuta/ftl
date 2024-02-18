@@ -1,4 +1,5 @@
 #![no_std]
+#![allow(unused)] // FIXME:
 
 use ftl_api::channel::Channel;
 use ftl_api::collections::HashMap;
