@@ -1,19 +1,40 @@
 #![no_std]
-#![allow(unused)] // FIXME:
 
+use ftl_api::channel::Channel;
 use ftl_api::environ::Environ;
+use ftl_api::handle::Handle;
 use ftl_api::mainloop::Event;
 use ftl_api::mainloop::Mainloop;
 use ftl_api::prelude::*;
+use ftl_api::types::message::Message;
+use ftl_autogen::fibers::riscv_plic::Deps;
+
+#[derive(Debug)]
+enum State {
+    Autopilot,
+    Client,
+}
 
 pub fn main(env: Environ) {
-    println!("virtio_net: starting: {:?}", env.device());
+    let deps: Deps = env.parse_deps().expect("failed to parse deps");
+    let virtio = todo!();
 
-    // TODO: EventPoll to handle enable_irq requests
-    let mut eventloop = Mainloop::new();
-    eventloop.add_channel(todo!(), ()).unwrap();
-    eventloop.run(|_, state, event| {
-        todo!();
-        todo!();
+    let mut mainloop = Mainloop::new();
+    mainloop
+        .add_channel(deps.autopilot, State::Autopilot)
+        .unwrap();
+    mainloop.run(|changes, state, event| {
+        match (state, event) {
+            (State::Autopilot, Event::Message(_, Message::NewClient { ch: handle })) => {
+                let ch = Channel::from_handle(Handle::new(handle));
+                changes.add_channel(ch, State::Client);
+            }
+            (State::Client, Event::Message(_, Message::NetworkTx(pkt))) => {
+                virtio.send(&pkt);
+            }
+            (state, event) => {
+                todo!();
+            }
+        }
     });
 }

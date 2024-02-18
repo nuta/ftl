@@ -3,5 +3,7 @@ spec:
   name: riscv_plic
   deps:
     - autopilot
+  provides:
+    - irq_controller
   device_tree:
     - compatible: "sifive,plic-1.0.0"

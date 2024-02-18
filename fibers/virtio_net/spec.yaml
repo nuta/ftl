@@ -1,6 +1,8 @@
 kind: fiber/v0
 spec:
   name: virtio_net
-  deps: []
+  deps:
+    - autopilot
+    - irq_controller
   device_tree:
     - compatible: "virtio,mmio"

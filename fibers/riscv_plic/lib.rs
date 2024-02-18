@@ -14,7 +14,6 @@ use ftl_api::sync::Arc;
 use ftl_api::sync::SpinLock;
 use ftl_api::types::address::PAddr;
 use ftl_api::types::message::Message;
-use ftl_api::types::message::MessageOrSignal;
 use ftl_api::types::signal::Signal;
 use ftl_autogen::fibers::riscv_plic::Deps;
 
@@ -186,26 +185,20 @@ pub fn main(mut env: Environ) {
 
     eventloop.run(move |changes, state, event| {
         match event {
-            Event::ChannelReceived { sender, message } => {
-                match message {
-                    MessageOrSignal::Message(m) => {
-                        match (state, m) {
-                            (State::Autopilot, Message::NewClient { ch: handle }) => {
-                                let ch = Channel::from_handle(Handle::new(handle));
-                                changes.add_channel(ch, State::Client);
-                            }
-                            (State::Client, Message::ListenIrq { irq }) => {
-                                plic.lock().enable_irq(irq).unwrap();
-                                listeners.lock().add_listener(irq, sender.clone());
-                            }
-                            (state, m) => todo!("plic: handle message: {:?}: {:?}", state, m),
-                        }
+            Event::Message(sender, message) => {
+                match (state, message) {
+                    (State::Autopilot, Message::NewClient { ch: handle }) => {
+                        let ch = Channel::from_handle(Handle::new(handle));
+                        changes.add_channel(ch, State::Client);
                     }
-                    MessageOrSignal::Signal(s) => {
-                        todo!("plic: handle signal: {:?}", s);
+                    (State::Client, Message::ListenIrq { irq }) => {
+                        plic.lock().enable_irq(irq).unwrap();
+                        listeners.lock().add_listener(irq, sender.clone());
                     }
+                    (state, m) => todo!("plic: handle message: {:?}: {:?}", state, m),
                 }
             }
+            _ => todo!(),
         }
     });
 }

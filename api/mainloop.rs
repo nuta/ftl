@@ -3,7 +3,9 @@ use alloc::vec::Vec;
 use ftl_types::error::FtlError;
 use ftl_types::event_poll::Event as RawEvent;
 use ftl_types::handle::HandleId;
+use ftl_types::message::Message;
 use ftl_types::message::MessageOrSignal;
+use ftl_types::signal::SignalSet;
 use hashbrown::HashMap;
 
 use crate::channel::Channel;
@@ -21,10 +23,8 @@ struct Entry<State> {
 }
 
 pub enum Event<'a> {
-    ChannelReceived {
-        sender: &'a mut Sender,
-        message: MessageOrSignal,
-    },
+    Message(&'a mut Sender, Message),
+    Signal(&'a mut Sender, SignalSet),
 }
 
 pub struct Mainloop<State> {
@@ -74,7 +74,10 @@ impl<State> Mainloop<State> {
 
                     // TODO: how should we handle receive errors?
                     let message = receiver.receive().unwrap();
-                    Event::ChannelReceived { sender, message }
+                    match message {
+                        MessageOrSignal::Message(message) => Event::Message(sender, message),
+                        MessageOrSignal::Signal(signal) => Event::Signal(sender, signal),
+                    }
                 } else {
                     todo!("consume_event: unhandled event: {:?}", raw_event);
                 }

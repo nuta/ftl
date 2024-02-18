@@ -11,6 +11,7 @@ pub enum MessageOrSignal {
 pub enum Message {
     Ping(usize),
     Pong(usize),
+    NetworkTx(alloc::vec::Vec<u8>),
     NewClient { ch: HandleId },
     ListenIrq { irq: usize },
 }
