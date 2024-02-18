@@ -36,8 +36,6 @@ impl Autopilot {
             }
         };
 
-        let deps = BTreeMap::new();
-
         let environ_device = device.map(|device| {
             let interrupts = match &device.interrupts {
                 Some(interrupts) => {
@@ -57,6 +55,13 @@ impl Autopilot {
                 interrupts,
             }
         });
+
+        let deps = BTreeMap::new();
+        for dep_name in spec.deps.iter() {
+            if dep_name == "autopilot" {
+                //
+            }
+        }
 
         println!("autopilot: starting {}", spec.name);
         let fiber = Fiber::new();

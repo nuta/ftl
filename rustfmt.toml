@@ -1,5 +1,7 @@
 edition = "2021"
 
+wrap_comments = true
+
 # This option causes lengthy import headers but is very useful for mitigating
 # merge conflicts.
 imports_granularity = "Item"
