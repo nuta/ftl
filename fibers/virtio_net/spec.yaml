@@ -1,0 +1,6 @@
+kind: fiber/v0
+spec:
+  name: virtio_net
+  deps: []
+  device_tree:
+    - compatible: "virtio,mmio"

@@ -3,7 +3,7 @@ MACHINE ?= qemu-virt
 RELEASE ?=            # "1" to build release version
 V       ?=            # "1" to enable verbose output
 GDB	    ?=            # "1" to enable GDB debugging
-INKERNEL_FIBERS ?= riscv_plic
+INKERNEL_FIBERS ?= riscv_plic virtio_net
 
 # The default build target.
 .PHONY: default

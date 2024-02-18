@@ -6,5 +6,9 @@ fn start_riscv_plic(environ_cstr: *const i8) {
     ::ftl_api::entrypoint::fiber_entrypoint(environ_cstr, ::riscv_plic::main);
 }
 
+fn start_virtio_net(environ_cstr: *const i8) {
+    ::ftl_api::entrypoint::fiber_entrypoint(environ_cstr, ::virtio_net::main);
+}
 
-pub const KERNEL_FIBERS: &[(&str, fn(*const i8))] = &[(r#"{"name":"riscv_plic","deps":[],"device_tree":[{"compatible":"sifive,plic-1.0.0"}]}"#, start_riscv_plic)];
+
+pub const KERNEL_FIBERS: &[(&str, fn(*const i8))] = &[(r#"{"name":"riscv_plic","deps":[],"device_tree":[{"compatible":"sifive,plic-1.0.0"}]}"#, start_riscv_plic), (r#"{"name":"virtio_net","deps":[],"device_tree":[{"compatible":"virtio,mmio"}]}"#, start_virtio_net)];

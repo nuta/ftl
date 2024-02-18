@@ -177,7 +177,8 @@ pub fn main(env: Environ) {
                 Message::ListenIrq { irq } => {
                     let mut plic = plic.lock();
                     plic.enable_irq(irq).unwrap();
-                    listeners.lock().add_listener(irq, channel);
+                    todo!()
+                    // listeners.lock().add_listener(irq, channel);
                 }
                 _ => todo!("plic: handle message: {:?}", m),
             },

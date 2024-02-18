@@ -58,6 +58,7 @@ impl Autopilot {
             }
         });
 
+        println!("autopilot: starting {}", spec.name);
         let fiber = Fiber::new();
         let environ = Environ {
             deps,
