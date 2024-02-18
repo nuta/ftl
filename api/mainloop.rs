@@ -1,21 +1,20 @@
-use core::ops::ControlFlow;
+use alloc::vec::Vec;
 
 use ftl_types::error::FtlError;
 use ftl_types::event_poll::Event as RawEvent;
 use ftl_types::handle::HandleId;
 use ftl_types::message::MessageOrSignal;
-use ftl_types::Message;
 use hashbrown::HashMap;
 
 use crate::channel::Channel;
 use crate::event_poll::EventPoll;
 
-enum ObjectKind {
+enum Object {
     Channel(Channel),
 }
 
-struct Object<State> {
-    kind: ObjectKind,
+struct Entry<State> {
+    object: Object,
     state: State,
 }
 
@@ -29,7 +28,7 @@ pub enum Event<'a> {
 pub struct Mainloop<State> {
     event_poll: EventPoll,
     pending: Option<(HandleId, RawEvent)>,
-    objects: HashMap<HandleId, Object<State>>,
+    objects: HashMap<HandleId, Entry<State>>,
 }
 
 impl<State> Mainloop<State> {
@@ -45,12 +44,12 @@ impl<State> Mainloop<State> {
         self.event_poll.add_channel(&mut ch)?;
 
         let handle_id = ch.handle_id();
-        let object = Object {
-            kind: ObjectKind::Channel(ch),
+        let entry = Entry {
+            object: Object::Channel(ch),
             state,
         };
 
-        self.objects.insert(handle_id, object);
+        self.objects.insert(handle_id, entry);
         Ok(())
     }
 
@@ -64,9 +63,9 @@ impl<State> Mainloop<State> {
             unreachable!("this should not happen");
         }
 
-        let object = self.objects.get_mut(&handle_id).unwrap();
-        let event = match &mut object.kind {
-            ObjectKind::Channel(ch) => {
+        let entry = self.objects.get_mut(&handle_id).unwrap();
+        let event = match &mut entry.object {
+            Object::Channel(ch) => {
                 if raw_event.is_readable() {
                     raw_event.unset(RawEvent::READABLE);
 
@@ -88,12 +87,12 @@ impl<State> Mainloop<State> {
             self.pending = Some((handle_id, raw_event));
         }
 
-        Ok((&mut object.state, event))
+        Ok((&mut entry.state, event))
     }
 
     pub fn run<F>(&mut self, mut f: F)
     where
-        F: FnMut(&mut State, Event<'_>),
+        F: FnMut(&mut Changes<State>, &mut State, Event<'_>),
     {
         loop {
             let (state, event) = match self.next_event() {
@@ -101,7 +100,50 @@ impl<State> Mainloop<State> {
                 Err(err) => panic!("mainloop: failed to get next event: {:?}", err),
             };
 
-            f(state, event);
+            let mut changes = Changes::new();
+            f(&mut changes, state, event);
+
+            for command in changes.commands {
+                match command {
+                    Command::AddChannel(ch, state) => {
+                        if let Err(err) = self.add_channel(ch, state) {
+                            panic!("mainloop: failed to add channel: {:?}", err);
+                        }
+                    }
+                    Command::RemoveChannel(handle_id) => {
+                        self.objects.remove(&handle_id);
+                    }
+                }
+            }
         }
+    }
+}
+
+enum Command<State> {
+    AddChannel(Channel, State),
+    RemoveChannel(HandleId),
+}
+
+/// Due to the borrow checker, we can't pass `&mut Mainloop` to the callback
+/// function, along with the `&mut State` which is a part of the `Mainloop`.
+///
+/// This object allows the callback to queue changes to the mainloop's state.
+pub struct Changes<State> {
+    commands: Vec<Command<State>>,
+}
+
+impl<State> Changes<State> {
+    pub fn new() -> Self {
+        Self {
+            commands: Vec::new(),
+        }
+    }
+
+    pub fn add_channel(&mut self, ch: Channel, state: State) {
+        self.commands.push(Command::AddChannel(ch, state));
+    }
+
+    pub fn remove_channel(&mut self, ch: &Channel) {
+        self.commands.push(Command::RemoveChannel(ch.handle_id()));
     }
 }
