@@ -4,10 +4,10 @@ use alloc::sync::Arc;
 use ftl_types::error::FtlError;
 use ftl_types::event_poll::Event;
 use ftl_types::handle::HandleId;
+use ftl_types::message::Message;
 use ftl_types::message::MessageOrSignal;
 use ftl_types::signal::Signal;
 use ftl_types::signal::SignalSet;
-use ftl_types::Message;
 
 use crate::arch::cpuvar_ref;
 use crate::arch::yield_cpu;

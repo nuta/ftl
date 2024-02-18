@@ -10,10 +10,3 @@ pub mod handle;
 pub mod message;
 pub mod signal;
 pub mod spec;
-
-// FIXME: IDL
-#[derive(Debug)]
-pub enum Message {
-    Ping(usize),
-    Pong(usize),
-}
