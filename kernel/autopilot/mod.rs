@@ -24,13 +24,15 @@ impl Autopilot {
 
     fn visit_fiber(&mut self, spec: &FiberSpec, main: fn(*const i8)) {
         let device = match &spec.device_tree {
-            Some(entries) => match self.find_device_for_fiber(entries) {
-                Some(device) => Some(device),
-                None => {
-                    println!("device not found for fiber {:?}", spec.name);
-                    return;
+            Some(entries) => {
+                match self.find_device_for_fiber(entries) {
+                    Some(device) => Some(device),
+                    None => {
+                        println!("device not found for fiber {:?}", spec.name);
+                        return;
+                    }
                 }
-            },
+            }
             None => {
                 todo!()
             }

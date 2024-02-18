@@ -18,8 +18,8 @@ use ftl_api::types::message::MessageOrSignal;
 use ftl_api::types::signal::Signal;
 use ftl_autogen::fibers::riscv_plic::Deps;
 
-// TODO: Register definitions are incomplete. We need to save the memory fooprint
-//       we should instantiate the registers dynamically.
+// TODO: Register definitions are incomplete. We need to save the memory
+// fooprint we should instantiate the registers dynamically.
 
 static PRIORITY_REGS: &[ReadWrite<u32>] = &[
     ReadWrite::<u32>::new(0x0000_0004 + 4 * 0),
@@ -184,22 +184,28 @@ pub fn main(mut env: Environ) {
         .add_channel(deps.autopilot, State::Autopilot)
         .unwrap();
 
-    eventloop.run(move |changes, state, event| match event {
-        Event::ChannelReceived { sender, message } => match message {
-            MessageOrSignal::Message(m) => match (state, m) {
-                (State::Autopilot, Message::NewClient { ch: handle }) => {
-                    let ch = Channel::from_handle(Handle::new(handle));
-                    changes.add_channel(ch, State::Client);
+    eventloop.run(move |changes, state, event| {
+        match event {
+            Event::ChannelReceived { sender, message } => {
+                match message {
+                    MessageOrSignal::Message(m) => {
+                        match (state, m) {
+                            (State::Autopilot, Message::NewClient { ch: handle }) => {
+                                let ch = Channel::from_handle(Handle::new(handle));
+                                changes.add_channel(ch, State::Client);
+                            }
+                            (State::Client, Message::ListenIrq { irq }) => {
+                                plic.lock().enable_irq(irq).unwrap();
+                                listeners.lock().add_listener(irq, sender.clone());
+                            }
+                            (state, m) => todo!("plic: handle message: {:?}: {:?}", state, m),
+                        }
+                    }
+                    MessageOrSignal::Signal(s) => {
+                        todo!("plic: handle signal: {:?}", s);
+                    }
                 }
-                (State::Client, Message::ListenIrq { irq }) => {
-                    plic.lock().enable_irq(irq).unwrap();
-                    listeners.lock().add_listener(irq, sender.clone());
-                }
-                (state, m) => todo!("plic: handle message: {:?}: {:?}", state, m),
-            },
-            MessageOrSignal::Signal(s) => {
-                todo!("plic: handle signal: {:?}", s);
             }
-        },
+        }
     });
 }

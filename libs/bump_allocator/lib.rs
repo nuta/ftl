@@ -1,8 +1,8 @@
 //! A bump memory allocator.
 //!
 //! Unlike typical allocators, this allocator does not support freeing memory.
-//! Instead, it only supports allocating memory. This makes it extremely fast and
-//! simple.
+//! Instead, it only supports allocating memory. This makes it extremely fast
+//! and simple.
 //!
 //! Typically, this allocator is used for allocating memory in initialization
 //! phase such that the allocated memory is never freed.

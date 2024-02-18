@@ -1,5 +1,6 @@
 edition = "2021"
 
+force_multiline_blocks = true
 wrap_comments = true
 
 # This option causes lengthy import headers but is very useful for mitigating
