@@ -3,8 +3,10 @@
 extern crate alloc;
 
 // Hihg-level APIs.
+pub mod collections;
 pub mod device;
 pub mod mainloop;
+pub mod prelude;
 pub mod print;
 pub mod sync;
 
