@@ -172,7 +172,7 @@ pub fn main(env: Environ) {
     let mut eventloop = Mainloop::new();
     eventloop.add_channel(todo!(), ()).unwrap();
     eventloop.run(|_, state, event| match event {
-        Event::ChannelReceived { channel, message } => match message {
+        Event::ChannelReceived { sender, message } => match message {
             MessageOrSignal::Message(m) => match m {
                 Message::ListenIrq { irq } => {
                     let mut plic = plic.lock();

@@ -7,10 +7,12 @@ use ftl_types::message::MessageOrSignal;
 use hashbrown::HashMap;
 
 use crate::channel::Channel;
+use crate::channel::Receiver;
+use crate::channel::Sender;
 use crate::event_poll::EventPoll;
 
 enum Object {
-    Channel(Channel),
+    Channel { sender: Sender, receiver: Receiver },
 }
 
 struct Entry<State> {
@@ -20,7 +22,7 @@ struct Entry<State> {
 
 pub enum Event<'a> {
     ChannelReceived {
-        channel: &'a mut Channel,
+        sender: &'a mut Sender,
         message: MessageOrSignal,
     },
 }
@@ -44,8 +46,9 @@ impl<State> Mainloop<State> {
         self.event_poll.add_channel(&mut ch)?;
 
         let handle_id = ch.handle_id();
+        let (sender, receiver) = ch.split();
         let entry = Entry {
-            object: Object::Channel(ch),
+            object: Object::Channel { sender, receiver },
             state,
         };
 
@@ -65,16 +68,13 @@ impl<State> Mainloop<State> {
 
         let entry = self.objects.get_mut(&handle_id).unwrap();
         let event = match &mut entry.object {
-            Object::Channel(ch) => {
+            Object::Channel { sender, receiver } => {
                 if raw_event.is_readable() {
                     raw_event.unset(RawEvent::READABLE);
 
                     // TODO: how should we handle receive errors?
-                    let message = ch.receive().unwrap();
-                    Event::ChannelReceived {
-                        channel: ch,
-                        message,
-                    }
+                    let message = receiver.receive().unwrap();
+                    Event::ChannelReceived { sender, message }
                 } else {
                     todo!("consume_event: unhandled event: {:?}", raw_event);
                 }

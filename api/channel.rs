@@ -37,7 +37,6 @@ impl Sender {
     }
 }
 
-#[derive(Clone)]
 pub struct Receiver {
     channel: Arc<Channel>,
 }
@@ -64,6 +63,16 @@ impl Channel {
 
     pub fn handle_id(&self) -> HandleId {
         self.handle.id()
+    }
+
+    pub fn split(self) -> (Sender, Receiver) {
+        let channel = Arc::new(self);
+        let sender = Sender {
+            channel: channel.clone(),
+        };
+        let receiver = Receiver { channel };
+
+        (sender, receiver)
     }
 
     pub(crate) fn kernel_raw(&mut self) -> &mut ftl_kernel::channel::Channel {
