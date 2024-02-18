@@ -71,7 +71,7 @@ pub fn listen_for_hardware_interrupts<F: Fn() + Send + 'static>(f: F) {
 }
 
 pub fn get_cpu_id() -> usize {
-    unsafe { cpuvar_ref().hart_id }
+    cpuvar_ref().hart_id
 }
 
 pub fn cpuvar_ref() -> &'static CpuVar {

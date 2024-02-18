@@ -5,9 +5,8 @@ use ftl_types::error::FtlError;
 use ftl_types::event_poll::Event;
 use ftl_types::handle::HandleId;
 
+use crate::arch;
 use crate::arch::cpuvar_ref;
-use crate::arch::{self};
-use crate::channel::Channel;
 use crate::fiber::Fiber;
 use crate::lock::Mutex;
 use crate::scheduler::GLOBAL_SCHEDULER;
