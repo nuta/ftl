@@ -4,5 +4,7 @@ spec:
   deps:
     - autopilot
     - irq_controller
+  provides:
+    - net_device
   device_tree:
     - compatible: "virtio,mmio"

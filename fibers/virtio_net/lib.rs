@@ -35,6 +35,7 @@ pub fn main(mut env: Environ) {
     mainloop
         .add_channel(deps.autopilot, State::Autopilot)
         .unwrap();
+
     mainloop.run(move |changes, state, event| {
         match (state, event) {
             (State::Autopilot, Event::Message(_, Message::NewClient { ch: handle })) => {
