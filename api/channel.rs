@@ -28,6 +28,10 @@ pub struct Sender {
 }
 
 impl Sender {
+    pub fn handle_id(&self) -> HandleId {
+        self.channel.handle_id()
+    }
+
     pub fn send(&self, message: Message) -> Result<(), SendError> {
         self.channel.send(message)
     }
@@ -42,6 +46,10 @@ pub struct Receiver {
 }
 
 impl Receiver {
+    pub fn handle_id(&self) -> HandleId {
+        self.channel.handle_id()
+    }
+
     pub fn receive(&self) -> Result<MessageOrSignal, FtlError> {
         self.channel.receive()
     }

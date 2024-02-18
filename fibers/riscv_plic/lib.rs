@@ -176,9 +176,7 @@ pub fn main(env: Environ) {
         Event::ChannelReceived { sender, message } => match message {
             MessageOrSignal::Message(m) => match m {
                 Message::ListenIrq { irq } => {
-                    let mut plic = plic.lock();
-                    plic.enable_irq(irq).unwrap();
-
+                    plic.lock().enable_irq(irq).unwrap();
                     listeners.lock().add_listener(irq, sender.clone());
                 }
                 _ => todo!("plic: handle message: {:?}", m),
