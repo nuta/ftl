@@ -90,32 +90,37 @@ impl<State> Mainloop<State> {
         Ok((&mut entry.state, event))
     }
 
+    fn apply_changes(&mut self, changes: &mut Changes<State>) {
+        for command in changes.commands.drain(..) {
+            match command {
+                Command::AddChannel(ch, state) => {
+                    if let Err(err) = self.add_channel(ch, state) {
+                        panic!("mainloop: failed to add channel: {:?}", err);
+                    }
+                }
+                Command::RemoveChannel(handle_id) => {
+                    self.objects.remove(&handle_id);
+                }
+            }
+        }
+    }
+
+    /// # Why `Send` is required?
+    ///
+    /// To allow running the callback function in multiple threads in the
+    /// future!
     pub fn run<F>(&mut self, mut f: F)
     where
-        F: FnMut(&mut Changes<State>, &mut State, Event<'_>),
+        F: Fn(&mut Changes<State>, &mut State, Event<'_>) + Send + 'static,
     {
         let mut changes = Changes::new();
         loop {
-            let (state, event) = match self.next_event() {
-                Ok((state, event)) => (state, event),
-                Err(err) => panic!("mainloop: failed to get next event: {:?}", err),
-            };
+            let (state, event) = self
+                .next_event()
+                .expect("mainloop: failed to get next event");
 
-            changes.clear();
             f(&mut changes, state, event);
-
-            for command in changes.commands.drain(..) {
-                match command {
-                    Command::AddChannel(ch, state) => {
-                        if let Err(err) = self.add_channel(ch, state) {
-                            panic!("mainloop: failed to add channel: {:?}", err);
-                        }
-                    }
-                    Command::RemoveChannel(handle_id) => {
-                        self.objects.remove(&handle_id);
-                    }
-                }
-            }
+            self.apply_changes(&mut changes);
         }
     }
 }
