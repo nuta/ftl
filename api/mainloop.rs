@@ -94,16 +94,17 @@ impl<State> Mainloop<State> {
     where
         F: FnMut(&mut Changes<State>, &mut State, Event<'_>),
     {
+        let mut changes = Changes::new();
         loop {
             let (state, event) = match self.next_event() {
                 Ok((state, event)) => (state, event),
                 Err(err) => panic!("mainloop: failed to get next event: {:?}", err),
             };
 
-            let mut changes = Changes::new();
+            changes.clear();
             f(&mut changes, state, event);
 
-            for command in changes.commands {
+            for command in changes.commands.drain(..) {
                 match command {
                     Command::AddChannel(ch, state) => {
                         if let Err(err) = self.add_channel(ch, state) {
@@ -137,6 +138,10 @@ impl<State> Changes<State> {
         Self {
             commands: Vec::new(),
         }
+    }
+
+    pub fn clear(&mut self) {
+        self.commands.clear();
     }
 
     pub fn add_channel(&mut self, ch: Channel, state: State) {
