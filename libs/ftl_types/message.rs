@@ -9,4 +9,5 @@ pub enum MessageOrSignal {
 pub enum Message {
     Ping(usize),
     Pong(usize),
+    ListenIrq { irq: usize },
 }

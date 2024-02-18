@@ -11,6 +11,8 @@ use ftl_api::prelude::*;
 use ftl_api::sync::Arc;
 use ftl_api::sync::SpinLock;
 use ftl_api::types::address::PAddr;
+use ftl_api::types::message::Message;
+use ftl_api::types::message::MessageOrSignal;
 use ftl_api::types::signal::Signal;
 
 // TODO: Register definitions are incomplete. We need to save the memory fooprint
@@ -170,8 +172,18 @@ pub fn main(env: Environ) {
     let mut eventloop = Mainloop::new();
     eventloop.add_channel(todo!(), ()).unwrap();
     eventloop.run(|_, state, event| match event {
-        Event::ChannelReceived { channel, message } => {
-            todo!("plic: handle message: {:?}", message);
-        }
+        Event::ChannelReceived { channel, message } => match message {
+            MessageOrSignal::Message(m) => match m {
+                Message::ListenIrq { irq } => {
+                    let mut plic = plic.lock();
+                    plic.enable_irq(irq).unwrap();
+                    listeners.lock().add_listener(irq, channel);
+                }
+                _ => todo!("plic: handle message: {:?}", m),
+            },
+            MessageOrSignal::Signal(s) => {
+                todo!("plic: handle signal: {:?}", s);
+            }
+        },
     });
 }
