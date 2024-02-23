@@ -38,7 +38,7 @@ impl RawEventPoll {
     pub fn poll(&mut self) -> Result<(HandleId, Event), FtlError> {
         loop {
             if let Some((handle, event)) = self.pending.pop_first() {
-                return Ok((HandleId::new(handle), event));
+                return Ok((HandleId::from_isize(handle), event));
             }
 
             if self.receiver.is_some() {

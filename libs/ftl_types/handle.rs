@@ -5,7 +5,7 @@ use serde::Serialize;
 pub struct HandleId(isize);
 
 impl HandleId {
-    pub fn new(id: isize) -> Self {
+    pub fn from_isize(id: isize) -> Self {
         Self(id)
     }
 

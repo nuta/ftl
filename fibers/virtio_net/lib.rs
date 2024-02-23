@@ -45,7 +45,7 @@ pub fn main(mut env: Environ) {
             (State::Client, Event::Message(_, Message::NetworkTx(pkt))) => {
                 virtio.send(&pkt);
             }
-            (state, event) => {
+            (_state, _event) => {
                 todo!();
             }
         }

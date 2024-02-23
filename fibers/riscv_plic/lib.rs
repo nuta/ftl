@@ -185,7 +185,7 @@ pub fn main(mut env: Environ) {
 
     eventloop.run(move |changes, state, event| {
         match (state, event) {
-            (State::Autopilot, Event::Message(sender, message)) => {
+            (State::Autopilot, Event::Message(_sender, message)) => {
                 match message {
                     Message::NewClient { ch: handle } => {
                         let ch = Channel::from_handle(Handle::new(handle));

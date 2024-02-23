@@ -138,7 +138,7 @@ where
         }
     };
 
-    let handle = Handle::new(HandleId::new(handle_id));
+    let handle = Handle::new(HandleId::from_isize(handle_id));
     let ch = Channel::from_handle(handle);
     Ok(ch)
 }
