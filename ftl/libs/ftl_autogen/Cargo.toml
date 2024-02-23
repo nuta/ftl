@@ -1,0 +1,11 @@
+[package]
+name = "ftl_autogen"
+version = "0.0.0"
+edition = "2021"
+
+[lib]
+path = "lib.rs"
+
+[dependencies]
+ftl_api = { path = "../../api" }
+serde = { version = "1.0", default-features = false, features = ["derive", "alloc"] }

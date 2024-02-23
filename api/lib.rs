@@ -2,13 +2,19 @@
 
 extern crate alloc;
 
-// Hihg-level APIs.
-pub mod collections;
-pub mod device;
-pub mod mainloop;
+// Commonly used FTL APIs.
 pub mod prelude;
+
+// Rust standard library like APIs.
+pub mod collections;
 pub mod print;
 pub mod sync;
+
+// Generic FTL APIs.
+pub mod mainloop;
+
+// Device driver API.
+pub mod device;
 
 // Kernel-provided primitives.
 pub mod channel;

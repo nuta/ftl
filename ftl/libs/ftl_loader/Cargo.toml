@@ -1,0 +1,12 @@
+[package]
+name = "ftl_loader"
+version = "0.0.0"
+edition = "2021"
+
+[lib]
+path = "lib.rs"
+
+[dependencies]
+ftl_api = { path = "../../api" }
+riscv_plic = { path = "../../fibers/riscv_plic" }
+virtio_net = { path = "../../fibers/virtio_net" }

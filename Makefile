@@ -49,6 +49,10 @@ run: ftl.elf
 	$(PROGRESS) "QEMU" "ftl.elf"
 	$(QEMU) $(QEMUFLAGS) -kernel ftl.elf
 
+.PHONY: clean
+clean:
+	rm -f build
+
 .PHONY: doc
 doc:
 	$(PROGRESS) "CARGO" "doc"
@@ -64,8 +68,8 @@ ftl.elf: $(sources) Makefile
 	$(PROGRESS) "DEVTOOLS" "autogen"
 	cargo run --quiet --release --bin ftl autogen --outdir libs $(foreach fiber,$(INKERNEL_FIBERS), fibers/$(fiber))
 	$(PROGRESS) "CARGO" "boot/$(ARCH)"
-	RUSTFLAGS="$(RUSTFLAGS)" $(CARGO) build $(CARGOFLAGS) --manifest-path boot/$(ARCH)/Cargo.toml
-	cp target/$(ARCH)-$(MACHINE)/$(BUILD)/boot_$(ARCH) ftl.elf
+	RUSTFLAGS="$(RUSTFLAGS)" CARGO_TARGET_DIR="build/cargo" $(CARGO) build $(CARGOFLAGS) --manifest-path boot/$(ARCH)/Cargo.toml
+	cp build/cargo/$(ARCH)-$(MACHINE)/$(BUILD)/boot_$(ARCH) $(@)
 
 clippy:
 	RUSTFLAGS="$(RUSTFLAGS)" $(CARGO) clippy --fix --allow-dirty --allow-staged $(CARGOFLAGS) --manifest-path boot/$(ARCH)/Cargo.toml
