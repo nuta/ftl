@@ -4,8 +4,8 @@ use serde::Deserialize;
 
 #[derive(Deserialize)]
 pub struct Deps {
-#[serde(deserialize_with = "ftl_api::channel::deserialize_from_handle_id")]
+    #[serde(deserialize_with = "ftl_api::channel::deserialize_from_handle_id")]
     pub autopilot: ftl_api::channel::Channel,
-#[serde(deserialize_with = "ftl_api::channel::deserialize_from_handle_id")]
+    #[serde(deserialize_with = "ftl_api::channel::deserialize_from_handle_id")]
     pub irq_controller: ftl_api::channel::Channel,
 }
