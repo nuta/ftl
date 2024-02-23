@@ -184,18 +184,23 @@ pub fn main(mut env: Environ) {
         .unwrap();
 
     eventloop.run(move |changes, state, event| {
-        match event {
-            Event::Message(sender, message) => {
-                match (state, message) {
-                    (State::Autopilot, Message::NewClient { ch: handle }) => {
+        match (state, event) {
+            (State::Autopilot, Event::Message(sender, message)) => {
+                match message {
+                    Message::NewClient { ch: handle } => {
                         let ch = Channel::from_handle(Handle::new(handle));
                         changes.add_channel(ch, State::Client);
                     }
-                    (State::Client, Message::ListenIrq { irq }) => {
+                    m => todo!("plic: unexpected message from autopilot: {:?}", m),
+                }
+            }
+            (State::Client, Event::Message(sender, message)) => {
+                match message {
+                    Message::ListenIrq { irq } => {
                         plic.lock().enable_irq(irq).unwrap();
                         listeners.lock().add_listener(irq, sender.clone());
                     }
-                    (state, m) => todo!("plic: handle message: {:?}: {:?}", state, m),
+                    m => todo!("plic: unexpected message from client: {:?}", m),
                 }
             }
             _ => todo!(),
