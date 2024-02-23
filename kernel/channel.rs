@@ -137,6 +137,12 @@ impl RawChannel {
         }
 
         self.event_poll = Some((handle_id, event_poll.clone()));
+
+        // Is there anything to read right now?
+        if !self.rx_queue.is_empty() {
+            event_poll.notify(handle_id, Event::READABLE);
+        }
+
         Ok(())
     }
 }

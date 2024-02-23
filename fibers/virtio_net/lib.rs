@@ -19,7 +19,7 @@ struct Virtio {}
 
 impl Virtio {
     pub fn new() -> Self {
-        todo!()
+        Virtio {}
     }
 
     pub fn send(&self, pkt: &[u8]) {

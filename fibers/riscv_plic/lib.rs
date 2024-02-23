@@ -188,6 +188,7 @@ pub fn main(mut env: Environ) {
             (State::Autopilot, Event::Message(_sender, message)) => {
                 match message {
                     Message::NewClient { ch: handle } => {
+                        println!("plic: new client: {:?}", handle);
                         let ch = Channel::from_handle(Handle::new(handle));
                         changes.add_channel(ch, State::Client);
                     }
