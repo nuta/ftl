@@ -9,8 +9,7 @@ use ftl_types::handle::HandleId;
 use hashbrown::HashMap;
 
 use super::scheduler::GLOBAL_SCHEDULER;
-use crate::arch::cpuvar_ref;
-use crate::arch::{self};
+use crate::arch;
 use crate::channel::Channel;
 use crate::lock::Mutex;
 use crate::scheduler::Scheduler;
@@ -106,7 +105,7 @@ impl Fiber {
     }
 
     pub fn get_channel_by_handle(handle: HandleId) -> Result<Channel, FtlError> {
-        let current = cpuvar_ref().current.lock();
+        let current = arch::cpuvar_ref().current.lock();
         let object = current
             .handles
             .get(&handle)
@@ -132,5 +131,32 @@ impl Fiber {
     pub fn set_state(&mut self, new_state: FiberState) {
         debug_assert!(self.state != new_state);
         self.state = new_state;
+    }
+}
+
+pub struct WaitQueue {
+    fiber: Option<Arc<Mutex<Fiber>>>,
+}
+
+impl WaitQueue {
+    pub fn new() -> Self {
+        Self { fiber: None }
+    }
+
+    pub fn wake(self) {
+        if let Some(fiber) = self.fiber {
+            GLOBAL_SCHEDULER.lock().resume(fiber);
+        }
+    }
+
+    pub fn sleep<'a, T>(&mut self) {
+        debug_assert!(self.fiber.is_none());
+
+        let current = arch::cpuvar_ref().current.clone();
+        GLOBAL_SCHEDULER.lock().block(&current);
+        self.fiber = Some(current);
+
+        // TODO: drop(guard);
+        arch::yield_cpu();
     }
 }

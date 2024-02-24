@@ -11,7 +11,6 @@ use ftl_types::signal::SignalSet;
 
 use crate::arch::cpuvar_ref;
 use crate::arch::yield_cpu;
-use crate::arch::{self};
 use crate::event_poll::EventPoll;
 use crate::fiber::Fiber;
 use crate::lock::Mutex;
