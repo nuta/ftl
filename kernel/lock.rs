@@ -12,6 +12,13 @@ impl<T> Mutex<T> {
     }
 
     pub fn lock(&self) -> MutexGuard<T> {
+        if self.inner.try_lock().is_none() {
+            panic!("Mutex::lock: {:x}: deadlock", self as *const _ as usize);
+        }
+
+        // println!("Mutex::lock: {:x}: locking", self as *const _ as usize);
+        // crate::backtrace::backtrace();
+
         self.inner.lock()
     }
 

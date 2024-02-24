@@ -9,6 +9,7 @@ pub enum MessageOrSignal {
 // TODO: IDL
 #[derive(Debug)]
 pub enum Message {
+    Ok,
     Ping(usize),
     Pong(usize),
     NetworkTx(alloc::vec::Vec<u8>),

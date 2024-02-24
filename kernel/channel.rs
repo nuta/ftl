@@ -112,23 +112,22 @@ impl RawChannel {
         Ok(())
     }
 
-    pub fn receive(&mut self) -> Result<Option<MessageOrSignal>, FtlError> {
-        loop {
-            if !self.signals.is_empty() {
-                let signals = self.signals.clear();
-                return Ok(Some(MessageOrSignal::Signal(signals)));
-            }
-
-            if let Some(message) = self.rx_queue.pop_front() {
-                return Ok(Some(MessageOrSignal::Message(message)));
-            }
-
-            let current = cpuvar_ref().current.clone();
-            GLOBAL_SCHEDULER.lock().block(&current);
-            self.receiver = Some(current);
-            arch::yield_cpu();
-            self.receiver = None;
+    pub fn receive(&mut self) -> Option<Result<MessageOrSignal, FtlError>> {
+        if !self.signals.is_empty() {
+            self.receiver = None; // TODO:
+            let signals = self.signals.clear();
+            return Some(Ok(MessageOrSignal::Signal(signals)));
         }
+
+        if let Some(message) = self.rx_queue.pop_front() {
+            self.receiver = None; // TODO:
+            return Some(Ok(MessageOrSignal::Message(message)));
+        }
+
+        let current = cpuvar_ref().current.clone();
+        GLOBAL_SCHEDULER.lock().block(&current);
+        self.receiver = Some(current);
+        None
     }
 
     pub fn poll_in(&mut self, handle_id: HandleId, event_poll: &EventPoll) -> Result<(), FtlError> {
@@ -172,12 +171,12 @@ impl Channel {
         loop {
             let result = {
                 let mut raw = self.raw.lock();
-                raw.receive()?
+                raw.receive()
             };
 
             match result {
-                Some(message) => {
-                    return Ok(message);
+                Some(ret) => {
+                    return ret;
                 }
                 None => {
                     println!(">>> receive: yielding CPU...");
@@ -192,12 +191,20 @@ impl Channel {
         raw.send(message).map_err(CallError::SendError)?;
 
         loop {
-            if let Some(message) = raw.receive().map_err(CallError::ReceiveError)? {
-                return Ok(message);
+            if let Some(ret) = raw.receive() {
+                match ret {
+                    Ok(ret) => {
+                        return Ok(ret);
+                    }
+                    Err(e) => {
+                        return Err(CallError::ReceiveError(e));
+                    }
+                }
             }
 
             drop(raw);
-            todo!("wait for response");
+            yield_cpu();
+            raw = self.raw.lock();
         }
     }
 

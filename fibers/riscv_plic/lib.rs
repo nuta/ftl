@@ -25,6 +25,11 @@ static PRIORITY_REGS: &[ReadWrite<u32>] = &[
     ReadWrite::<u32>::new(0x0000_0004 + 4 * 1),
     ReadWrite::<u32>::new(0x0000_0004 + 4 * 2),
     ReadWrite::<u32>::new(0x0000_0004 + 4 * 3),
+    ReadWrite::<u32>::new(0x0000_0004 + 4 * 4),
+    ReadWrite::<u32>::new(0x0000_0004 + 4 * 5),
+    ReadWrite::<u32>::new(0x0000_0004 + 4 * 6),
+    ReadWrite::<u32>::new(0x0000_0004 + 4 * 7),
+    ReadWrite::<u32>::new(0x0000_0004 + 4 * 8),
 ];
 
 static ENABLE_REGS: &[ReadWrite<u32>] = &[
@@ -36,6 +41,7 @@ static ENABLE_REGS: &[ReadWrite<u32>] = &[
     ReadWrite::<u32>::new(0x0000_2080 + 4 * 5),
     ReadWrite::<u32>::new(0x0000_2080 + 4 * 6),
     ReadWrite::<u32>::new(0x0000_2080 + 4 * 7),
+    ReadWrite::<u32>::new(0x0000_2080 + 4 * 8),
 ];
 
 static THRESHOLD_REGS: &[ReadWrite<u32>] = &[
@@ -138,7 +144,7 @@ impl Listeners {
 }
 
 pub fn main(mut env: Environ) {
-    println!("plic: starting: {:?}", env.device());
+    println!("plic: starting");
     let deps: Deps = env.parse_deps().unwrap();
     let base_paddr = PAddr::new(env.device().reg as usize).unwrap();
     let folio = Folio::map_paddr(base_paddr, 0x4000000).unwrap();
@@ -198,8 +204,11 @@ pub fn main(mut env: Environ) {
             (State::Client, Event::Message(sender, message)) => {
                 match message {
                     Message::ListenIrq { irq } => {
+                        println!("plic: listen irq: {:?}", irq);
                         plic.lock().enable_irq(irq).unwrap();
                         listeners.lock().add_listener(irq, sender.clone());
+
+                        sender.send(Message::Ok).unwrap();
                     }
                     m => todo!("plic: unexpected message from client: {:?}", m),
                 }

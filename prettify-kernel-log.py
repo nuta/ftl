@@ -6,13 +6,23 @@ import re
 
 BACKTRACE_REGEX = re.compile(r'{{{bt:(?P<index>\d+):0x(?P<addr>[0-9a-f]+)}}}')
 
+ADDR2LINE_CACHE = {}
+
+def addr2line(executable, addr):
+    if addr in ADDR2LINE_CACHE:
+        return ADDR2LINE_CACHE[addr]
+
+    cmd = 'llvm-addr2line -e {} {}'.format(executable, hex(addr))
+    stdout = subprocess.check_output(cmd, shell=True).decode('utf-8').strip()
+    ADDR2LINE_CACHE[addr] = stdout
+    return stdout
+
 def prettify_line(executable, line):
     m = BACKTRACE_REGEX.search(line)
     if m:
         index = int(m.group('index'))
         addr = int(m.group('addr'), 16)
-        cmd = 'llvm-addr2line -e {} {}'.format(executable, hex(addr))
-        stdout = subprocess.check_output(cmd, shell=True).decode('utf-8').strip()
+        stdout = addr2line(executable, addr)
         line = line.replace(m.group(0), f"{index}: {hex(addr)} {stdout}")
     print(line, end='')
 

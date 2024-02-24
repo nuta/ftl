@@ -35,22 +35,21 @@ impl RawEventPoll {
         }
     }
 
-    pub fn poll(&mut self) -> Result<(HandleId, Event), FtlError> {
-        loop {
-            if let Some((handle, event)) = self.pending.pop_first() {
-                return Ok((HandleId::from_isize(handle), event));
-            }
-
-            if self.receiver.is_some() {
-                return Err(FtlError::InUse);
-            }
-
-            let current = cpuvar_ref().current.clone();
-            GLOBAL_SCHEDULER.lock().block(&current);
-            self.receiver = Some(current);
-            arch::yield_cpu();
-            self.receiver = None;
+    pub fn poll(&mut self) -> Option<Result<(HandleId, Event), FtlError>> {
+        if let Some((handle, event)) = self.pending.pop_first() {
+            self.receiver = None; // TODO:
+            return Some(Ok((HandleId::from_isize(handle), event)));
         }
+
+        if self.receiver.is_some() {
+            self.receiver = None; // TODO:
+            return Some(Err(FtlError::InUse));
+        }
+
+        let current = cpuvar_ref().current.clone();
+        GLOBAL_SCHEDULER.lock().block(&current);
+        self.receiver = Some(current);
+        None
     }
 }
 
@@ -71,6 +70,12 @@ impl EventPoll {
     }
 
     pub fn poll(&self) -> Result<(HandleId, Event), FtlError> {
-        self.raw.lock().poll()
+        loop {
+            if let Some(ret) = self.raw.lock().poll() {
+                return ret;
+            }
+
+            arch::yield_cpu();
+        }
     }
 }

@@ -7,7 +7,7 @@ use ftl_api::mainloop::Event;
 use ftl_api::mainloop::Mainloop;
 use ftl_api::prelude::*;
 use ftl_api::types::message::Message;
-use ftl_autogen::fibers::riscv_plic::Deps;
+use ftl_autogen::fibers::virtio_net::Deps;
 
 #[derive(Debug)]
 enum State {
@@ -29,6 +29,23 @@ impl Virtio {
 
 pub fn main(mut env: Environ) {
     let deps: Deps = env.parse_deps().expect("failed to parse deps");
+
+    let irq = env
+        .device()
+        .interrupts
+        .as_ref()
+        .unwrap()
+        .get(0)
+        .copied()
+        .unwrap() as usize;
+
+    println!("virtio_net: listening for irq {}", irq);
+    let ret = deps
+        .irq_controller
+        .call(Message::ListenIrq { irq })
+        .unwrap();
+    println!("virtio_net: irq listener registered: {:?}", ret);
+
     let virtio = Virtio::new();
 
     let mut mainloop = Mainloop::new();
