@@ -56,8 +56,8 @@ struct VirtqUsed {
 }
 
 pub enum VirtqDescBuffer {
-    ReadOnlyFromDevice { addr: PAddr, len: usize },
-    WritableFromDevice { addr: PAddr, len: usize },
+    ReadOnlyFromDevice { paddr: PAddr, len: usize },
+    WritableFromDevice { paddr: PAddr, len: usize },
 }
 
 pub struct VirtqUsedChain {
@@ -184,8 +184,8 @@ impl VirtQueue {
         for (i, buffer) in chain.iter().enumerate() {
             let desc = self.desc_mut(desc_index);
             let (addr, len, flags) = match buffer {
-                VirtqDescBuffer::ReadOnlyFromDevice { addr, len } => (addr, *len, 0),
-                VirtqDescBuffer::WritableFromDevice { addr, len } => {
+                VirtqDescBuffer::ReadOnlyFromDevice { paddr: addr, len } => (addr, *len, 0),
+                VirtqDescBuffer::WritableFromDevice { paddr: addr, len } => {
                     (addr, *len, VIRTQ_DESC_F_WRITE)
                 }
             };
@@ -234,12 +234,12 @@ impl VirtQueue {
             let desc = self.desc_mut(next_desc_index);
             used_descs.push(if desc.is_writable() {
                 VirtqDescBuffer::WritableFromDevice {
-                    addr: PAddr::new(desc.addr as usize).unwrap(),
+                    paddr: PAddr::new(desc.addr as usize).unwrap(),
                     len: desc.len as usize,
                 }
             } else {
                 VirtqDescBuffer::ReadOnlyFromDevice {
-                    addr: PAddr::new(desc.addr as usize).unwrap(),
+                    paddr: PAddr::new(desc.addr as usize).unwrap(),
                     len: desc.len as usize,
                 }
             });

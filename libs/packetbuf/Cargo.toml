@@ -1,0 +1,13 @@
+[package]
+name = "packetbuf"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+
+[lib]
+path = "lib.rs"
+
+[dependencies]
+
+zerocopy = { version = "0.7.32", features = ["derive", "byteorder"] }
+num_enum = { version = "0.7.2", default-features = false }

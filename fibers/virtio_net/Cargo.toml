@@ -11,3 +11,4 @@ path = "lib.rs"
 ftl_api = { path = "../../api" }
 ftl_autogen = { path = "../../libs/ftl_autogen" }
 virtio = { path = "../../libs/virtio" }
+packetbuf = { path = "../../libs/packetbuf" }
