@@ -11,6 +11,10 @@ use ftl_api::types::address::PAddr;
 use ftl_api::types::message::Message;
 use ftl_autogen::fibers::virtio_net::Deps;
 
+const VIRTIO_NET_F_MAC: u64 = 1 << 5;
+const QUEUE_RX: u16 = 0;
+const QUEUE_TX: u16 = 1;
+
 #[derive(Debug)]
 enum State {
     Autopilot,
@@ -54,7 +58,8 @@ pub fn main(mut env: Environ) {
     let mmio = Folio::map_paddr(base_paddr, 0x1000).unwrap();
 
     let transport = virtio::transports::mmio::VirtioMmio::new(mmio);
-    let virtio = virtio::VirtioDevice::new(Box::new(transport));
+    let mut virtio = virtio::VirtioDevice::new(Box::new(transport));
+    virtio.initialize(VIRTIO_NET_F_MAC, 2);
     let virtio_net = VirtioNet::new(virtio);
 
     let mut mainloop = Mainloop::new();
