@@ -141,7 +141,7 @@ impl VirtQueue {
     ///
     /// Once you've enqueued all requests, you need to notify the device through
     /// the `notify` method.
-    pub fn enqueue(&mut self, transport: &mut dyn VirtioTransport, chain: &[VirtqDescBuffer]) {
+    pub fn enqueue(&mut self, chain: &[VirtqDescBuffer]) {
         debug_assert!(!chain.is_empty());
 
         // Try freeing used descriptors.

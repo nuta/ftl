@@ -5,6 +5,7 @@ use alloc::string::ToString;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 
+use ftl_types::environ;
 use ftl_types::environ::Environ;
 use ftl_types::handle::HandleId;
 use ftl_types::message::Message;
@@ -132,16 +133,33 @@ impl Actual {
         self.devices = devices;
     }
 
-    fn find_device_for_fiber(&self, patterns: &[DeviceTreeEntry]) -> Option<&device_tree::Device> {
+    fn find_devices_for_fiber(&self, patterns: &[DeviceTreeEntry]) -> Vec<environ::Device> {
+        let mut devices = Vec::new();
         for pattern in patterns {
             for device in self.devices.iter() {
                 if device.compatible == pattern.compatible {
-                    return Some(device);
+                    let interrupts = match &device.interrupts {
+                        Some(interrupts) => {
+                            let mut vec = Vec::new();
+                            for interrupt in interrupts {
+                                vec.push(*interrupt);
+                            }
+                            Some(vec)
+                        }
+                        None => None,
+                    };
+
+                    devices.push(ftl_types::environ::Device {
+                        name: device.name.to_string(),
+                        compatible: device.compatible.to_string(),
+                        reg: device.reg,
+                        interrupts,
+                    });
                 }
             }
         }
 
-        None
+        devices
     }
 
     pub fn apply_desired(&mut self, mut desired: Desired) {
@@ -157,33 +175,16 @@ impl Actual {
             resolved_deps,
         } in desired.fibers
         {
-            let mut device = None;
-            if let Some(entries) = spec.device_tree.as_ref() {
-                match self.find_device_for_fiber(entries) {
-                    Some(dev) => {
-                        let interrupts = match &dev.interrupts {
-                            Some(interrupts) => {
-                                let mut vec = Vec::new();
-                                for interrupt in interrupts {
-                                    vec.push(*interrupt);
-                                }
-                                Some(vec)
-                            }
-                            None => None,
-                        };
+            let mut devices = if let Some(entries) = spec.device_tree.as_ref() {
+                let devices = self.find_devices_for_fiber(entries);
+                if devices.is_empty() {
+                    panic!("no devices found for fiber {}", spec.name);
+                }
 
-                        device = Some(ftl_types::environ::Device {
-                            name: dev.name.to_string(),
-                            compatible: dev.compatible.to_string(),
-                            reg: dev.reg,
-                            interrupts,
-                        });
-                    }
-                    None => {
-                        panic!("device not found for fiber {:?}", spec.name);
-                    }
-                };
-            }
+                Some(devices)
+            } else {
+                None
+            };
 
             let mut next_handle_id = 1;
             let mut alloc_handle_id = || {
@@ -217,7 +218,7 @@ impl Actual {
                 }
             }
 
-            let environ = Environ { deps, device };
+            let environ = Environ { deps, devices };
             let environ_json = serde_json::to_string(&environ).unwrap();
             let environ_cstr = CString::new(environ_json).unwrap();
 

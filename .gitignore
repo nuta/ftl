@@ -7,4 +7,5 @@
 *.log
 *.elf
 *.map
+*.pcap
 .gdb_history

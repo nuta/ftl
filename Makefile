@@ -37,6 +37,9 @@ CARGOFLAGS += --target boot/$(ARCH)/$(ARCH)-$(MACHINE).json
 QEMUFLAGS += -machine virt -m 256 -bios default
 QEMUFLAGS += -nographic -serial mon:stdio --no-reboot
 QEMUFLAGS += -d cpu_reset,unimp,guest_errors,int -D qemu.log
+QEMUFLAGS += -netdev user,id=net0
+QEMUFLAGS += -device virtio-net-device,netdev=net0
+QEMUFLAGS += -object filter-dump,id=fiter0,netdev=net0,file=virtio-net.pcap
 QEMUFLAGS += $(if $(GDB),-gdb tcp::7789 -S)
 
 sources += \
