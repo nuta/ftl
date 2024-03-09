@@ -1,6 +1,8 @@
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
 
+use crate::collections::Vec;
+
 #[derive(Debug)]
 pub enum ParseDepsError {
     AlreadyTaken,
@@ -10,12 +12,12 @@ pub enum ParseDepsError {
 #[derive(Debug, Deserialize)]
 struct EnvironJson {
     pub deps: serde_json::Value,
-    device: ftl_types::environ::Device,
+    devices: Option<Vec<ftl_types::environ::Device>>,
 }
 
 pub struct Environ {
     deps: Option<serde_json::Value>,
-    device: ftl_types::environ::Device,
+    devices: Option<Vec<ftl_types::environ::Device>>,
 }
 
 impl Environ {
@@ -23,7 +25,7 @@ impl Environ {
         let json: EnvironJson = serde_json::from_str(s).expect("environ is not valid json");
         Self {
             deps: Some(json.deps),
-            device: json.device,
+            devices: json.devices,
         }
     }
 
@@ -33,7 +35,7 @@ impl Environ {
         Ok(deps)
     }
 
-    pub fn device(&self) -> &ftl_types::environ::Device {
-        &self.device
+    pub fn devices(&self) -> Option<&[ftl_types::environ::Device]> {
+        self.devices.as_ref().map(Vec::as_slice)
     }
 }

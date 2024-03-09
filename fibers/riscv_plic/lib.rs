@@ -146,7 +146,8 @@ impl Listeners {
 pub fn main(mut env: Environ) {
     println!("plic: starting");
     let deps: Deps = env.parse_deps().unwrap();
-    let base_paddr = PAddr::new(env.device().reg as usize).unwrap();
+    let device = env.devices().unwrap().get(0).unwrap();
+    let base_paddr = PAddr::new(device.reg as usize).unwrap();
     let folio = Folio::map_paddr(base_paddr, 0x4000000).unwrap();
     let plic = Arc::new(SpinLock::new(Plic::new(folio)));
     let listeners = Arc::new(SpinLock::new(Listeners::new()));
