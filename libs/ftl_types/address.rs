@@ -25,6 +25,11 @@ impl PAddr {
     pub const fn as_nonzero(self) -> NonZeroUsize {
         self.0
     }
+
+    #[must_use]
+    pub fn add(&self, offset: usize) -> PAddr {
+        PAddr::new(self.0.get() + offset).unwrap()
+    }
 }
 
 impl fmt::Display for PAddr {
@@ -84,6 +89,11 @@ impl VAddr {
     /// See <https://doc.rust-lang.org/std/ptr/fn.write_volatile.html>.
     pub unsafe fn write_volatile<T: Copy>(self, value: T) {
         ptr::write_volatile(self.as_mut_ptr(), value);
+    }
+
+    #[must_use]
+    pub fn add(&self, offset: usize) -> VAddr {
+        VAddr::from_nonzero(self.0.checked_add(offset).unwrap())
     }
 }
 

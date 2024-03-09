@@ -15,7 +15,17 @@ impl Folio {
         })
     }
 
+    pub fn alloc(len: usize) -> Result<Folio, FtlError> {
+        Ok(Folio {
+            raw: ftl_kernel::folio::Folio::alloc(len)?,
+        })
+    }
+
     pub fn vaddr(&self) -> VAddr {
         self.raw.vaddr()
+    }
+
+    pub fn paddr(&self) -> PAddr {
+        self.raw.paddr()
     }
 }

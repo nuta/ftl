@@ -1,5 +1,5 @@
 [package]
-name = "virtio_net"
+name = "virtio"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -9,5 +9,3 @@ path = "lib.rs"
 
 [dependencies]
 ftl_api = { path = "../../api" }
-ftl_autogen = { path = "../../libs/ftl_autogen" }
-virtio = { path = "../../libs/virtio" }
