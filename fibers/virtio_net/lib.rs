@@ -206,7 +206,6 @@ impl VirtioNet {
         self.do_transmit(buf.as_bytes());
     }
 
-    // FIXME: frame might be DMA-transferred to the device after this function returns.
     fn do_transmit(&mut self, frame: &[u8]) {
         let buffer_index = self.tx_buffers.pop_free().expect("no free tx buffers");
         let vaddr = self.tx_buffers.vaddr(buffer_index);
@@ -229,6 +228,9 @@ impl VirtioNet {
         header.checksum_offset = 0;
 
         // Copy the payload into the our buffer.
+        //
+        // Note: If you want to avoid copying, be sure `frame` won't be dropped until
+        //       the device finishes reading it.
         let payload_addr = unsafe { vaddr.as_mut_ptr::<u8>().add(header_len) };
         unsafe {
             payload_addr.copy_from_nonoverlapping(frame.as_ptr(), frame.len());
