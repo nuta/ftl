@@ -2,10 +2,12 @@
 
 use ftl_api::channel::Channel;
 use ftl_api::environ::Environ;
+use ftl_api::folio::Folio;
 use ftl_api::handle::Handle;
 use ftl_api::mainloop::Event;
 use ftl_api::mainloop::Mainloop;
 use ftl_api::prelude::*;
+use ftl_api::types::address::PAddr;
 use ftl_api::types::message::Message;
 use ftl_autogen::fibers::virtio_net::Deps;
 
@@ -15,11 +17,13 @@ enum State {
     Client,
 }
 
-struct Virtio {}
+struct VirtioNet {
+    virtio: virtio::VirtioDevice,
+}
 
-impl Virtio {
-    pub fn new() -> Self {
-        Virtio {}
+impl VirtioNet {
+    pub fn new(virtio: virtio::VirtioDevice) -> Self {
+        VirtioNet { virtio }
     }
 
     pub fn send(&self, pkt: &[u8]) {
@@ -46,7 +50,12 @@ pub fn main(mut env: Environ) {
         .unwrap();
     println!("virtio_net: irq listener registered: {:?}", ret);
 
-    let virtio = Virtio::new();
+    let base_paddr = PAddr::new(env.device().reg as usize).unwrap();
+    let mmio = Folio::map_paddr(base_paddr, 0x1000).unwrap();
+
+    let transport = virtio::transports::mmio::VirtioMmio::new(mmio);
+    let virtio = virtio::VirtioDevice::new(Box::new(transport));
+    let virtio_net = VirtioNet::new(virtio);
 
     let mut mainloop = Mainloop::new();
     mainloop
@@ -60,7 +69,7 @@ pub fn main(mut env: Environ) {
                 changes.add_channel(ch, State::Client);
             }
             (State::Client, Event::Message(_, Message::NetworkTx(pkt))) => {
-                virtio.send(&pkt);
+                virtio_net.send(&pkt);
             }
             (_state, _event) => {
                 todo!();

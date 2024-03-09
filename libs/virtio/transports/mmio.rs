@@ -11,10 +11,6 @@ use super::VirtioTransport;
 use crate::transports::IsrStatus;
 use crate::DeviceType;
 
-pub struct VirtioMmio {
-    mmio: Folio,
-}
-
 // "All register values are organized as Little Endian."
 // (4.2.2 MMIO Device Register Layout).
 static MAGIC_VALUE_REG: LittleEndianReadOnly<u32> = LittleEndianReadOnly::new(0x00);
@@ -38,6 +34,16 @@ static QUEUE_DRIVER_HIGH_REG: LittleEndianWriteOnly<u32> = LittleEndianWriteOnly
 static QUEUE_DEVICE_LOW_REG: LittleEndianWriteOnly<u32> = LittleEndianWriteOnly::new(0xa0);
 static QUEUE_DEVICE_HIGH_REG: LittleEndianWriteOnly<u32> = LittleEndianWriteOnly::new(0xa4);
 static CONFIG_REG_BASE: ReadWrite<u8> = ReadWrite::new(0x100);
+
+pub struct VirtioMmio {
+    mmio: Folio,
+}
+
+impl VirtioMmio {
+    pub fn new(mmio: Folio) -> VirtioMmio {
+        VirtioMmio { mmio }
+    }
+}
 
 impl VirtioTransport for VirtioMmio {
     fn probe(&mut self) -> Option<DeviceType> {
