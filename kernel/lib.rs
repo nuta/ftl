@@ -2,6 +2,7 @@
 #![feature(naked_functions)]
 #![feature(asm_const)]
 #![feature(offset_of)]
+#![feature(fn_align)]
 
 extern crate alloc;
 

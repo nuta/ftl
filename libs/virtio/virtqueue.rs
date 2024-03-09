@@ -102,8 +102,8 @@ impl VirtQueue {
             size_of::<u16>() * 3 + size_of::<VirtqUsedElem>() * (num_descs as usize);
         let virtq_size = used_ring_off + align_up(used_ring_size, PAGE_SIZE);
 
-        let folio = Folio::alloc(align_up(virtq_size, PAGE_SIZE) / PAGE_SIZE)
-            .expect("failed to allocate virtuqeue");
+        let folio =
+            Folio::alloc(align_up(virtq_size, PAGE_SIZE)).expect("failed to allocate virtuqeue");
 
         let virtqueue_vaddr = folio.vaddr();
         let virtqueue_paddr = folio.paddr();

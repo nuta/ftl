@@ -14,6 +14,7 @@ use crate::scheduler::Scheduler;
 use crate::scheduler::GLOBAL_SCHEDULER;
 
 mod sbi;
+mod trap;
 
 pub fn paddr2vaddr(paddr: PAddr) -> Option<VAddr> {
     // FIXME:
@@ -36,6 +37,26 @@ fn get_sscratch() -> usize {
     value
 }
 
+#[repr(usize)]
+pub enum TrapMode {
+    Direct = 0,
+}
+
+pub unsafe fn write_stvec(addr: usize, mode: TrapMode) {
+    assert!(addr & 0b11 == 0, "addr is not aligned");
+    asm!("csrw stvec, {}", in(reg) (addr | mode as usize));
+}
+
+pub unsafe fn read_sie() -> usize {
+    let value: usize;
+    asm!("csrr {}, sie", out(reg) value);
+    value
+}
+
+pub unsafe fn write_sie(value: usize) {
+    asm!("csrw sie, {}", in(reg) value);
+}
+
 #[repr(C)]
 pub struct CpuVar {
     pub hart_id: usize,
@@ -53,6 +74,15 @@ pub fn init(cpu_id: usize) {
         current: idle.clone(),
         idle: idle,
     };
+
+    unsafe {
+        // riscv::register::sie::set_sext();
+        write_sie(read_sie() | 1 << 1); // Enable software interrupts
+        write_stvec(
+            trap::switch_to_kernel as *const () as usize,
+            TrapMode::Direct,
+        );
+    }
 
     let cpuvar_ptr = Box::leak(Box::new(cpuvar));
     set_sscratch(cpuvar_ptr as *mut CpuVar as usize);

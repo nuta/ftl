@@ -25,7 +25,7 @@ SECTIONS {
     }
 
     . = ALIGN(4096);
-    . += 8 * 1024 * 1024; /* 8 MB */
+    . += 16 * 1024 * 1024; /* 16 MB */
     __boot_stack_top = .;
 
     __free_ram = .;

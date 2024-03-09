@@ -30,6 +30,8 @@ impl GlobalAllocator {
 
 unsafe impl GlobalAlloc for GlobalAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        debug_assert!(layout.size() > 0, "size must be greater than 0");
+
         let ptr = self
             .inner
             .lock()
@@ -47,6 +49,8 @@ unsafe impl GlobalAlloc for GlobalAllocator {
 }
 
 pub fn alloc_pages(num_pages: usize) -> Option<usize> {
+    debug_assert!(num_pages > 0, "num_pages must be greater than 0");
+
     GLOBAL_ALLOCATOR
         .inner
         .lock()
