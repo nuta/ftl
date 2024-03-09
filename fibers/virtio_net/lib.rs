@@ -313,13 +313,6 @@ pub fn main(mut env: Environ) {
         .add_channel(deps.autopilot, State::Autopilot)
         .unwrap();
 
-    let mut pktbuf = PacketBuf::new(512, 1024);
-    virtio_net.transmit(
-        MacAddr::new(0xff, 0xff, 0xff, 0xff, 0xff, 0xff),
-        EtherType::Arp,
-        pktbuf,
-    );
-
     mainloop.run(move |changes, state, event| {
         match (state, event) {
             (State::Autopilot, Event::Message(_, Message::NewClient { ch: handle })) => {
