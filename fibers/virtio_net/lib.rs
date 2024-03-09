@@ -305,13 +305,20 @@ impl VirtioNet {
 
 pub fn main(mut env: Environ) {
     let deps: Deps = env.parse_deps().expect("failed to parse deps");
-    let virtio_net =
+    let mut virtio_net =
         VirtioNet::initialize(&deps.irq_controller, env.devices().expect("no devices"));
 
     let mut mainloop = Mainloop::new();
     mainloop
         .add_channel(deps.autopilot, State::Autopilot)
         .unwrap();
+
+    let mut pktbuf = PacketBuf::new(512, 1024);
+    virtio_net.transmit(
+        MacAddr::new(0xff, 0xff, 0xff, 0xff, 0xff, 0xff),
+        EtherType::Arp,
+        pktbuf,
+    );
 
     mainloop.run(move |changes, state, event| {
         match (state, event) {
