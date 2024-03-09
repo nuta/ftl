@@ -30,5 +30,5 @@ impl fmt::Debug for Device {
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Environ {
     pub deps: BTreeMap<String, HandleId>,
-    pub device: Option<Device>,
+    pub devices: Option<Vec<Device>>,
 }
