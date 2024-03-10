@@ -1,0 +1,7 @@
+kind: fiber/v0
+spec:
+  name: arp
+  deps:
+    - autopilot
+    - net_device
+  provides: []

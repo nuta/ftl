@@ -75,6 +75,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "080e9890a082662b09c1ad45f567faeeb47f22b5fb23895fbe1e651e718e25ca"
 
 [[package]]
+name = "arp"
+version = "0.0.0"
+dependencies = [
+ "ftl_api",
+ "ftl_autogen",
+ "packetbuf",
+]
+
+[[package]]
 name = "arrayvec"
 version = "0.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -270,6 +279,7 @@ dependencies = [
 name = "ftl_loader"
 version = "0.0.0"
 dependencies = [
+ "arp",
  "ftl_api",
  "riscv_plic",
  "virtio_net",

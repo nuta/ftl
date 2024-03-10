@@ -10,5 +10,9 @@ fn start_virtio_net(environ_cstr: *const i8) {
     ::ftl_api::entrypoint::fiber_entrypoint(environ_cstr, ::virtio_net::main);
 }
 
+fn start_arp(environ_cstr: *const i8) {
+    ::ftl_api::entrypoint::fiber_entrypoint(environ_cstr, ::arp::main);
+}
 
-pub const KERNEL_FIBERS: &[(&str, fn(*const i8))] = &[(r#"{"name":"riscv_plic","deps":["autopilot"],"provides":["irq_controller"],"device_tree":[{"compatible":"sifive,plic-1.0.0"}]}"#, start_riscv_plic), (r#"{"name":"virtio_net","deps":["autopilot","irq_controller"],"provides":["net_device"],"device_tree":[{"compatible":"virtio,mmio"}]}"#, start_virtio_net)];
+
+pub const KERNEL_FIBERS: &[(&str, fn(*const i8))] = &[(r#"{"name":"riscv_plic","deps":["autopilot"],"provides":["irq_controller"],"device_tree":[{"compatible":"sifive,plic-1.0.0"}]}"#, start_riscv_plic), (r#"{"name":"virtio_net","deps":["autopilot","irq_controller"],"provides":["net_device"],"device_tree":[{"compatible":"virtio,mmio"}]}"#, start_virtio_net), (r#"{"name":"arp","deps":["autopilot","net_device"],"provides":[],"device_tree":null}"#, start_arp)];

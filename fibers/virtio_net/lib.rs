@@ -11,7 +11,7 @@ use ftl_api::handle::Handle;
 use ftl_api::mainloop::Event;
 use ftl_api::mainloop::Mainloop;
 use ftl_api::prelude::*;
-use ftl_api::print;
+use ftl_api::sync::SpinLock;
 use ftl_api::types::address::PAddr;
 use ftl_api::types::address::VAddr;
 use ftl_api::types::environ::Device;
@@ -159,7 +159,7 @@ impl VirtioNet {
     pub fn initialize(irq_controller: &Channel, devices: &[Device]) -> VirtioNet {
         let mut virtio_transport = new_virtio(irq_controller, devices);
         let mut virtqueues = virtio_transport.initialize(VIRTIO_NET_F_MAC, 2).unwrap();
-        let mut tx_virtq = virtqueues.get_mut(QUEUE_TX).unwrap().take().unwrap();
+        let tx_virtq = virtqueues.get_mut(QUEUE_TX).unwrap().take().unwrap();
         let mut rx_virtq = virtqueues.get_mut(QUEUE_RX).unwrap().take().unwrap();
 
         // Read the MAC address.
@@ -174,7 +174,7 @@ impl VirtioNet {
 
         let tx_ring_len = tx_virtq.num_descs() as usize;
         let rx_ring_len = rx_virtq.num_descs() as usize;
-        let mut tx_buffers = BufferPool::new(PACKET_LEN_MAX, tx_ring_len);
+        let tx_buffers = BufferPool::new(PACKET_LEN_MAX, tx_ring_len);
         let mut rx_buffers = BufferPool::new(PACKET_LEN_MAX, rx_ring_len);
 
         while let Some(index) = rx_buffers.pop_free() {
@@ -198,7 +198,12 @@ impl VirtioNet {
         self.mac
     }
 
-    pub fn transmit(&mut self, dst: MacAddr, ether_type: EtherType, mut buf: PacketBuf) {
+    pub fn transmit(
+        &mut self,
+        dst: MacAddr,
+        ether_type: u16, /* FIXME: EtherType */
+        mut buf: PacketBuf,
+    ) {
         let mut header = buf.prepend::<EthernetHeader>().unwrap();
         header.dst = dst.as_bytes();
         header.src = self.mac.as_bytes();
@@ -307,8 +312,10 @@ impl VirtioNet {
 
 pub fn main(mut env: Environ) {
     let deps: Deps = env.parse_deps().expect("failed to parse deps");
-    let mut virtio_net =
-        VirtioNet::initialize(&deps.irq_controller, env.devices().expect("no devices"));
+    let virtio_net = SpinLock::new(VirtioNet::initialize(
+        &deps.irq_controller,
+        env.devices().expect("no devices"),
+    ));
 
     let mut mainloop = Mainloop::new();
     mainloop
@@ -321,9 +328,28 @@ pub fn main(mut env: Environ) {
                 let ch = Channel::from_handle(Handle::new(handle));
                 changes.add_channel(ch, State::Client);
             }
-            (State::Client, Event::Message(_, Message::NetworkTx(pkt))) => {
-                // virtio_net.transmit(&pkt);
+            (
+                State::Client,
+                Event::Message(
+                    _,
+                    Message::NetworkTx {
+                        dst_mac,
+                        ether_type,
+                        payload,
+                        payload_len,
+                    },
+                ),
+            ) => {
+                virtio_net.lock().transmit(
+                    MacAddr::from_bytes(dst_mac),
+                    ether_type,
+                    PacketBuf::from_bytes(&payload[..payload_len]),
+                );
                 todo!();
+            }
+            (State::Client, Event::Message(ch, Message::GetMacAddr)) => {
+                let mac = virtio_net.lock().mac();
+                ch.send(Message::MacAddr(mac.as_bytes())).unwrap();
             }
             (_state, _event) => {
                 todo!();

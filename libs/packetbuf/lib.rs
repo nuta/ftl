@@ -2,10 +2,11 @@
 
 extern crate alloc;
 
-use core::{mem::size_of, slice};
+use core::mem::size_of;
+use core::slice;
 
-use ::zerocopy::{AsBytes, FromBytes};
-use alloc::boxed::Box;
+use ::zerocopy::AsBytes;
+use ::zerocopy::FromBytes;
 
 pub mod zerocopy;
 
@@ -60,9 +61,20 @@ impl PacketBuf {
         }
     }
 
+    pub fn from_bytes(buf: &[u8]) -> PacketBuf {
+        let pkt = PacketBuf::new(32, buf.len());
+        pkt.data.copy_from_slice(buf);
+        pkt
+    }
+
     #[inline(always)]
     pub fn as_bytes(&self) -> &[u8] {
         &self.data[self.header.head..self.header.tail]
+    }
+
+    #[inline(always)]
+    pub fn len(&self) -> usize {
+        self.header.tail - self.header.head
     }
 
     pub fn reserve_front(&mut self, len: usize) -> Option<&mut [u8]> {

@@ -12,7 +12,18 @@ pub enum Message {
     Ok,
     Ping(usize),
     Pong(usize),
-    NetworkTx(alloc::vec::Vec<u8>),
-    NewClient { ch: HandleId },
-    ListenIrq { irq: usize },
+    NetworkTx {
+        dst_mac: [u8; 6],
+        ether_type: u16,
+        payload: [u8; 512],
+        payload_len: usize,
+    },
+    NewClient {
+        ch: HandleId,
+    },
+    ListenIrq {
+        irq: usize,
+    },
+    GetMacAddr,
+    MacAddr([u8; 6]),
 }

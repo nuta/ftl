@@ -1,5 +1,6 @@
 #![no_std]
 
+#[macro_use]
 extern crate alloc;
 
 // Commonly used FTL APIs.
