@@ -175,6 +175,7 @@ pub fn main(mut env: Environ) {
         mac,
     };
 
+    println!("sending dummy packet");
     let src_ip = Ipv4Addr::new(10, 0, 2, 15);
     let dst_ip = Ipv4Addr::new(10, 0, 2, 2);
     let dst = MacAddr::new(0xff, 0xff, 0xff, 0xff, 0xff, 0xff);

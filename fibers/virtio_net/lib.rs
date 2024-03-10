@@ -345,7 +345,6 @@ pub fn main(mut env: Environ) {
                     ether_type,
                     PacketBuf::from_bytes(&payload[..payload_len]),
                 );
-                todo!();
             }
             (State::Client, Event::Message(ch, Message::GetMacAddr)) => {
                 let mac = virtio_net.lock().mac();
