@@ -21,6 +21,27 @@ pub fn paddr2vaddr(paddr: PAddr) -> Option<VAddr> {
     Some(VAddr::from_nonzero(paddr.as_nonzero()))
 }
 
+pub struct IntrStateGuard {
+    sstatus: usize,
+}
+impl IntrStateGuard {
+    pub fn save_and_disable_interrupts() -> Self {
+        let sstatus: usize;
+        unsafe {
+            asm!("csrrci {}, sstatus, 1 << 1", out(reg) sstatus);
+        }
+        IntrStateGuard { sstatus }
+    }
+}
+
+impl Drop for IntrStateGuard {
+    fn drop(&mut self) {
+        unsafe {
+            asm!("csrw sstatus, {}", in(reg) self.sstatus);
+        }
+    }
+}
+
 #[inline(always)]
 fn set_sscratch(value: usize) {
     unsafe {
