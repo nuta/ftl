@@ -63,7 +63,7 @@ impl PacketBuf {
 
     pub fn from_bytes(buf: &[u8]) -> PacketBuf {
         let pkt = PacketBuf::new(32, buf.len());
-        pkt.data.copy_from_slice(buf);
+        pkt.data[..buf.len()].copy_from_slice(buf);
         pkt
     }
 
