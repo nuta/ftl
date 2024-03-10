@@ -17,7 +17,7 @@ use ftl_api::types::address::VAddr;
 use ftl_api::types::environ::Device;
 use ftl_api::types::message::Message;
 use ftl_autogen::fibers::virtio_net::Deps;
-use packetbuf::zerocopy::EtherType;
+
 use packetbuf::zerocopy::EthernetHeader;
 use packetbuf::zerocopy::MacAddr;
 use packetbuf::PacketBuf;
@@ -354,7 +354,7 @@ pub fn main(mut env: Environ) {
                 let mac = virtio_net.lock().mac();
                 ch.send(Message::MacAddr(mac.as_bytes())).unwrap();
             }
-            (State::IrqController, Event::Signal(_, signal)) => {
+            (State::IrqController, Event::Signal(_, _signal)) => {
                 // TODO: Check if the signal is an IRQ.
                 virtio_net.lock().handle_interrupt();
             }

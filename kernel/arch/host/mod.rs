@@ -6,7 +6,7 @@ use ftl_types::address::VAddr;
 use crate::fiber::Fiber;
 use crate::lock::Mutex;
 
-pub fn paddr2vaddr(paddr: PAddr) -> Option<VAddr> {
+pub fn paddr2vaddr(_paddr: PAddr) -> Option<VAddr> {
     todo!()
 }
 
@@ -32,15 +32,15 @@ pub struct CpuVar {
     pub idle: Arc<Mutex<Fiber>>,
 }
 
-pub fn init(cpu_id: usize) {
+pub fn init(_cpu_id: usize) {
     todo!();
 }
 
-pub fn init_per_cpu<F: Fn(usize) + Send + 'static>(f: F) {
+pub fn init_per_cpu<F: Fn(usize) + Send + 'static>(_f: F) {
     todo!()
 }
 
-pub fn listen_for_hardware_interrupts<F: Fn() + Send + 'static>(f: F) {
+pub fn listen_for_hardware_interrupts<F: Fn() + Send + 'static>(_f: F) {
     todo!()
 }
 
@@ -72,7 +72,7 @@ impl Context {
         todo!()
     }
 
-    pub fn new_kernel(pc: usize, arg: usize) -> Self {
+    pub fn new_kernel(_pc: usize, _arg: usize) -> Self {
         todo!()
     }
 }
@@ -85,11 +85,11 @@ pub fn hang() -> ! {
     todo!()
 }
 
-pub fn console_write(bytes: &[u8]) {
+pub fn console_write(_bytes: &[u8]) {
     todo!()
 }
 
-pub fn backtrace<F>(mut callback: F)
+pub fn backtrace<F>(_callback: F)
 where
     F: FnMut(usize),
 {

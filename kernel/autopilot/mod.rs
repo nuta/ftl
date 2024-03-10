@@ -175,7 +175,7 @@ impl Actual {
             resolved_deps,
         } in desired.fibers
         {
-            let mut devices = if let Some(entries) = spec.device_tree.as_ref() {
+            let devices = if let Some(entries) = spec.device_tree.as_ref() {
                 let devices = self.find_devices_for_fiber(entries);
                 if devices.is_empty() {
                     panic!("no devices found for fiber {}", spec.name);

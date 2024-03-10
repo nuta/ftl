@@ -5,7 +5,7 @@ use ftl_api::device::mmio::ReadWrite;
 use ftl_api::folio::Folio;
 use ftl_api::println;
 use ftl_api::types::address::PAddr;
-use ftl_api::types::address::VAddr;
+
 
 use super::VirtioTransport;
 use crate::transports::IsrStatus;
