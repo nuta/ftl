@@ -1,5 +1,0 @@
-kind: fiber/v0
-spec:
-  name: pong
-  deps:
-    - ping
