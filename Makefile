@@ -45,6 +45,7 @@ QEMUFLAGS += $(if $(GDB),-gdb tcp::7789 -S)
 
 sources += \
     $(shell find boot/$(ARCH) kernel api libs fibers devtools -name '*.rs') \
+    $(shell find boot/$(ARCH) kernel api libs fibers devtools -name '*.toml') \
     $(shell find boot/$(ARCH) kernel api libs fibers devtools -name '*.yaml') \
     $(shell find boot/$(ARCH) kernel api libs fibers devtools -name '*.S')
 
