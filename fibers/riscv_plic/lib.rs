@@ -21,15 +21,15 @@ use ftl_autogen::fibers::riscv_plic::Deps;
 // fooprint we should instantiate the registers dynamically.
 
 static PRIORITY_REGS: &[ReadWrite<u32>] = &[
-    ReadWrite::<u32>::new(0x0000_0004 + 4 * 0),
-    ReadWrite::<u32>::new(0x0000_0004 + 4 * 1),
-    ReadWrite::<u32>::new(0x0000_0004 + 4 * 2),
-    ReadWrite::<u32>::new(0x0000_0004 + 4 * 3),
-    ReadWrite::<u32>::new(0x0000_0004 + 4 * 4),
-    ReadWrite::<u32>::new(0x0000_0004 + 4 * 5),
-    ReadWrite::<u32>::new(0x0000_0004 + 4 * 6),
-    ReadWrite::<u32>::new(0x0000_0004 + 4 * 7),
-    ReadWrite::<u32>::new(0x0000_0004 + 4 * 8),
+    ReadWrite::<u32>::new(0x0000_0000 + 4 * 0),
+    ReadWrite::<u32>::new(0x0000_0000 + 4 * 1),
+    ReadWrite::<u32>::new(0x0000_0000 + 4 * 2),
+    ReadWrite::<u32>::new(0x0000_0000 + 4 * 3),
+    ReadWrite::<u32>::new(0x0000_0000 + 4 * 4),
+    ReadWrite::<u32>::new(0x0000_0000 + 4 * 5),
+    ReadWrite::<u32>::new(0x0000_0000 + 4 * 6),
+    ReadWrite::<u32>::new(0x0000_0000 + 4 * 7),
+    ReadWrite::<u32>::new(0x0000_0000 + 4 * 8),
 ];
 
 static ENABLE_REGS: &[ReadWrite<u32>] = &[
@@ -132,6 +132,7 @@ impl Listeners {
     pub fn notify_irq(&mut self, irq: usize) {
         if let Some(channel) = self.irqs.get_mut(&irq) {
             if let Some(sender) = channel {
+                println!("delivering irq: {:?}", irq);
                 sender.notify(Signal::Interrupt).unwrap();
             }
         }
@@ -170,6 +171,7 @@ pub fn main(mut env: Environ) {
                     }
                 };
 
+                println!("notify_irq: {:?}", irq);
                 listeners.notify_irq(irq as usize);
                 plic.ack_irq(irq).unwrap();
             }

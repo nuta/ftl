@@ -57,6 +57,16 @@ pub unsafe fn write_sie(value: usize) {
     asm!("csrw sie, {}", in(reg) value);
 }
 
+pub unsafe fn read_sstatus() -> usize {
+    let value: usize;
+    asm!("csrr {}, sstatus", out(reg) value);
+    value
+}
+
+pub unsafe fn write_sstatus(value: usize) {
+    asm!("csrw sstatus, {}", in(reg) value);
+}
+
 #[repr(C)]
 pub struct CpuVar {
     pub hart_id: usize,
@@ -76,12 +86,13 @@ pub fn init(cpu_id: usize) {
     };
 
     unsafe {
-        // riscv::register::sie::set_sext();
-        write_sie(read_sie() | 1 << 1); // Enable software interrupts
         write_stvec(
             trap::switch_to_kernel as *const () as usize,
             TrapMode::Direct,
         );
+
+        // riscv::register::sie::set_sext();
+        write_sie(read_sie() | 1 << 9); // Supervisor External Interrupt Enable
     }
 
     let cpuvar_ptr = Box::leak(Box::new(cpuvar));
@@ -93,7 +104,7 @@ pub fn init_per_cpu<F: Fn(usize) + Send + 'static>(f: F) {
     f(cpuvar_ref().hart_id);
 }
 
-static HW_IRQ_HANDLER: Mutex<Option<Box<dyn Fn() + Send + 'static>>> = Mutex::new(None);
+pub static HW_IRQ_HANDLER: Mutex<Option<Box<dyn Fn() + Send + 'static>>> = Mutex::new(None);
 
 pub fn listen_for_hardware_interrupts<F: Fn() + Send + 'static>(f: F) {
     debug_assert!(HW_IRQ_HANDLER.lock().is_none());
@@ -295,6 +306,8 @@ impl Context {
 
 pub fn idle() {
     unsafe {
+        write_sstatus(read_sstatus() | 1 << 1);
+        println!("sstatus: {:#x}", read_sstatus());
         asm!("wfi");
     }
 }

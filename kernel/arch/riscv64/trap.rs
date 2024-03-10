@@ -73,5 +73,10 @@ extern "C" fn trap_handler() -> ! {
         scause_str, scause, sepc, stval
     );
 
-    panic!("trap_handler done");
+    if let Some(handler) = super::HW_IRQ_HANDLER.lock().as_ref() {
+        println!("trap_handler: calling HW_IRQ_HANDLER");
+        handler();
+    }
+
+    super::switch_to_next();
 }

@@ -35,6 +35,7 @@ const QUEUE_TX: usize = 1;
 enum State {
     Autopilot,
     Client,
+    IrqController,
 }
 
 pub fn new_virtio(irq_controller: &Channel, devices: &[Device]) -> Box<dyn VirtioTransport> {
@@ -321,6 +322,9 @@ pub fn main(mut env: Environ) {
     mainloop
         .add_channel(deps.autopilot, State::Autopilot)
         .unwrap();
+    mainloop
+        .add_channel(deps.irq_controller, State::IrqController)
+        .unwrap();
 
     mainloop.run(move |changes, state, event| {
         match (state, event) {
@@ -349,6 +353,10 @@ pub fn main(mut env: Environ) {
             (State::Client, Event::Message(ch, Message::GetMacAddr)) => {
                 let mac = virtio_net.lock().mac();
                 ch.send(Message::MacAddr(mac.as_bytes())).unwrap();
+            }
+            (State::IrqController, Event::Signal(_, signal)) => {
+                // TODO: Check if the signal is an IRQ.
+                virtio_net.lock().handle_interrupt();
             }
             (_state, _event) => {
                 todo!();
