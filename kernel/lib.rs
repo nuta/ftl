@@ -20,5 +20,7 @@ mod autopilot;
 mod backtrace;
 mod lock;
 mod memory;
-mod panic;
 mod scheduler;
+
+#[cfg(target_family = "ftl")]
+mod panic;
