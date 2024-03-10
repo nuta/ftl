@@ -1,14 +1,5 @@
 #![no_std]
 
-
-
-
-
-
-
-
-
-
 pub mod transports;
 pub mod virtqueue;
 

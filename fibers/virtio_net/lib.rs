@@ -17,7 +17,6 @@ use ftl_api::types::address::VAddr;
 use ftl_api::types::environ::Device;
 use ftl_api::types::message::Message;
 use ftl_autogen::fibers::virtio_net::Deps;
-
 use packetbuf::zerocopy::EthernetHeader;
 use packetbuf::zerocopy::MacAddr;
 use packetbuf::PacketBuf;

@@ -1,7 +1,10 @@
 use core::fmt;
 
 use num_enum::TryFromPrimitive;
-use zerocopy::{network_endian::U16, AsBytes, FromBytes, FromZeroes};
+use zerocopy::network_endian::U16;
+use zerocopy::AsBytes;
+use zerocopy::FromBytes;
+use zerocopy::FromZeroes;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct MacAddr([u8; 6]);

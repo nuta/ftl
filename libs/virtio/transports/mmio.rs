@@ -6,7 +6,6 @@ use ftl_api::folio::Folio;
 use ftl_api::println;
 use ftl_api::types::address::PAddr;
 
-
 use super::VirtioTransport;
 use crate::transports::IsrStatus;
 use crate::DeviceType;
