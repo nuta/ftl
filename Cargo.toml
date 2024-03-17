@@ -1,0 +1,14 @@
+[workspace]
+resolver = "2"
+members = ["kernel", "boot/*", "libs/*"]
+
+[workspace.package]
+version = "0.0.0"
+authors = ["Seiya Nuta <nuta@seiya.me>"]
+edition = "2021"
+
+[workspace.dependencies]
+arrayvec = { version = "0.7.4", default-features = false }
+spin = "0.9.8"
+ftl_kernel = { path = "./kernel" }
+ftl_bump_allocator = { path = "./libs/bump_allocator" }

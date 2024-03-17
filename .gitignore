@@ -1,0 +1,9 @@
+/target
+/build
+/.vscode/settings.json
+*.tmp
+*.log
+*.elf
+*.map
+*.pcap
+.gdb_history
