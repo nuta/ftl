@@ -54,18 +54,14 @@ unsafe impl GlobalAlloc for GlobalAllocator {
 /// After this function is called, the global allocator (e.g. `Box`, `Vec`, etc.)
 /// becomes available.
 pub fn init(bootinfo: &BootInfo) {
-    for entry in bootinfo.free_mems.iter() {
-        match *entry {
-            FreeMem { start, size } => {
-                println!(
-                    "free memory: 0x{:016x} - 0x{:016x} ({} MiB)",
-                    start,
-                    start + size,
-                    size / 1024 / 1024
-                );
+    for FreeMem { start, size } in bootinfo.free_mems.iter() {
+        println!(
+            "free memory: 0x{:016x} - 0x{:016x} ({} MiB)",
+            start,
+            start + size,
+            size / 1024 / 1024
+        );
 
-                GLOBAL_ALLOCATOR.add_region(start as *mut u8, size);
-            }
-        }
+        GLOBAL_ALLOCATOR.add_region(*start as *mut u8, *size);
     }
 }

@@ -30,7 +30,7 @@ macro_rules! println {
         );
     }};
     ($fmt:expr) => {{
-        crate::print!(
+        $crate::print!(
             concat!($fmt, "\n")
         );
     }};
