@@ -12,6 +12,7 @@ mod print;
 pub mod boot;
 
 mod arch;
+mod folio;
 mod handle;
 mod memory;
 mod spinlock;

@@ -9,6 +9,8 @@ edition = "2021"
 
 [workspace.dependencies]
 arrayvec = { version = "0.7.4", default-features = false }
+hashbrown = "0.14.3"
 spin = "0.9.8"
+ftl_types = { path = "./libs/ftl_types" }
 ftl_kernel = { path = "./kernel" }
 ftl_bump_allocator = { path = "./libs/bump_allocator" }
