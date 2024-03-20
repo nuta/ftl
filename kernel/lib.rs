@@ -7,12 +7,14 @@
 extern crate alloc;
 
 #[macro_use]
-pub mod print;
+mod print;
 
-pub mod arch;
 pub mod boot;
-pub mod memory;
-pub mod spinlock;
+
+mod arch;
+mod handle;
+mod memory;
+mod spinlock;
 
 #[cfg(target_family = "ftl")]
 mod panic;
