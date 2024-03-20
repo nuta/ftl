@@ -12,10 +12,15 @@ mod print;
 pub mod boot;
 
 mod arch;
+mod channel;
 mod folio;
 mod handle;
 mod memory;
+mod process;
+mod scheduler;
 mod spinlock;
+mod thread;
+mod vm;
 
 #[cfg(target_family = "ftl")]
 mod panic;

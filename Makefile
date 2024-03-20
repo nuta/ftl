@@ -37,10 +37,10 @@ QEMUFLAGS += -d cpu_reset,unimp,guest_errors,int -D qemu.log
 QEMUFLAGS += $(if $(GDB),-gdb tcp::7789 -S)
 
 sources += \
-    $(shell find boot/$(ARCH) kernel -name '*.rs') \
-    $(shell find boot/$(ARCH) kernel -name '*.toml') \
-    $(shell find boot/$(ARCH) kernel -name '*.yaml') \
-    $(shell find boot/$(ARCH) kernel -name '*.S')
+    $(shell find boot/$(ARCH) kernel libs -name '*.rs') \
+    $(shell find boot/$(ARCH) kernel libs -name '*.toml') \
+    $(shell find boot/$(ARCH) kernel libs -name '*.yaml') \
+    $(shell find boot/$(ARCH) kernel libs -name '*.S')
 
 .DEFAULT_GOAL := default
 default: ftl.elf

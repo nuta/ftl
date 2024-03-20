@@ -11,9 +11,13 @@ impl PAddr {
     pub const fn new(addr: usize) -> Option<PAddr> {
         // We can't use `Option::map` here because it's not a const fn.
         match NonZeroUsize::new(addr) {
-            Some(addr) => Some(PAddr(addr)),
+            Some(addr) => Some(PAddr::from_nonzero(addr)),
             None => None,
         }
+    }
+
+    pub const fn from_nonzero(addr: NonZeroUsize) -> PAddr {
+        PAddr(addr)
     }
 
     #[inline(always)]
@@ -48,6 +52,12 @@ impl fmt::Display for PAddr {
 }
 
 /// Represents a virtual memory address.
+///
+/// # Avoid using this type if possible!
+///
+/// This is a low-level type which can easily cause use-after-free bugs because
+/// it doesn't track the lifetime of the underlying memory. Instead, prefer
+/// [`alloc`] crate's types like [`alloc::boxed::Box`] or [`alloc::sync::Arc`].
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 #[repr(transparent)]
 pub struct VAddr(NonZeroUsize);
@@ -56,7 +66,7 @@ impl VAddr {
     pub const fn new(addr: usize) -> Option<VAddr> {
         // We can't use `Option::map` here because it's not a const fn.
         match NonZeroUsize::new(addr) {
-            Some(addr) => Some(VAddr(addr)),
+            Some(addr) => Some(VAddr::from_nonzero(addr)),
             None => None,
         }
     }

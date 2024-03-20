@@ -51,11 +51,16 @@ dependencies = [
  "arrayvec",
  "ftl_bump_allocator",
  "ftl_types",
+ "ftl_utils",
  "hashbrown",
 ]
 
 [[package]]
 name = "ftl_types"
+version = "0.0.0"
+
+[[package]]
+name = "ftl_utils"
 version = "0.0.0"
 
 [[package]]
