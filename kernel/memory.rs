@@ -10,6 +10,7 @@ use crate::spinlock::SpinLock;
 #[global_allocator]
 pub static GLOBAL_ALLOCATOR: GlobalAllocator = GlobalAllocator::new();
 
+/// The default in-kernel memory allocator.
 pub struct GlobalAllocator {
     inner: SpinLock<BumpAllocator>,
 }
@@ -48,6 +49,10 @@ unsafe impl GlobalAlloc for GlobalAllocator {
     }
 }
 
+/// Initializes the memory subsystem.
+///
+/// After this function is called, the global allocator (e.g. `Box`, `Vec`, etc.)
+/// becomes available.
 pub fn init(bootinfo: &BootInfo) {
     for entry in bootinfo.free_mems.iter() {
         match *entry {

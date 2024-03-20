@@ -4,8 +4,12 @@ use core::sync::atomic::Ordering;
 
 use crate::arch::hang;
 
+/// Panic counter. Every time the kernel panics, this counter is incremented.
+///
+/// TODO: Make this counter per-CPU.
 static PANIC_COUNTER: AtomicU8 = AtomicU8::new(0);
 
+/// Kernel panic handler.
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
     // In case it panics while handling a panic, this panic handler implements

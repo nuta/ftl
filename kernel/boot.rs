@@ -12,12 +12,14 @@ pub struct FreeMem {
     pub size: usize,
 }
 
+/// The boot information passed from the bootloader.
 #[derive(Debug)]
 pub struct BootInfo {
     pub free_mems: ArrayVec<FreeMem, 8>,
     pub dtb_addr: *const u8,
 }
 
+/// The entry point of the kernel.
 pub fn boot(cpu_id: usize, bootinfo: BootInfo) -> ! {
     println!("\nFTL - Faster Than \"L\"\n");
 

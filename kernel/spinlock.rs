@@ -4,6 +4,16 @@ use core::ops::DerefMut;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering;
 
+/// A simple spinlock.
+///
+/// # Interrupts must be disabled!
+///
+/// *Before* acquiring the lock, interrupts must be disabled. This is because
+/// the lock may be used in interrupt context, which easily leads to deadlocks.
+///
+/// Typically, in-kernel spinlock provides a way to disable and re-enable
+/// interrupts (e.g. Linux's `spin_lock_irqsave`), but our kernel assumes
+/// that kernel is not preemptive (i.e. interrupts are disabled).
 pub struct SpinLock<T: ?Sized> {
     lock: AtomicBool,
     value: UnsafeCell<T>,
