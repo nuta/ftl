@@ -35,8 +35,7 @@ impl Folio {
             return Err(FtlError::InvalidParams);
         }
 
-        // SAFETY: `layout.size()` is not zero.
-        let kvaddr = unsafe { GLOBAL_ALLOCATOR.alloc_as_kvaddr(layout)? };
+        let kvaddr = GLOBAL_ALLOCATOR.alloc_as_kvaddr(layout)?;
 
         Ok(Folio {
             paddr: kvaddr.paddr(),

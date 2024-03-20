@@ -44,6 +44,8 @@ impl GlobalAllocator {
 
     /// Allocates memory.
     pub fn alloc_as_kvaddr(&self, layout: Layout) -> Result<KVAddr, FtlError> {
+        debug_assert!(layout.size() > 0, "size must be greater than 0");
+
         self.inner
             .lock()
             .allocate(layout.size(), layout.align())
@@ -54,8 +56,6 @@ impl GlobalAllocator {
 
 unsafe impl GlobalAlloc for GlobalAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        debug_assert!(layout.size() > 0, "size must be greater than 0");
-
         self.alloc_as_kvaddr(layout)
             .expect("failed to allocate memory")
             .as_mut_ptr()

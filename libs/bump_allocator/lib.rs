@@ -53,6 +53,10 @@ impl BumpAllocator {
     /// Returns the beginning address of the allocated memory if successful.
     #[track_caller]
     pub fn allocate(&mut self, size: usize, align: usize) -> Option<NonZeroUsize> {
+        if size == 0 {
+            return None;
+        }
+
         let new_top = align_down(self.top.checked_sub(size)?, align);
         if new_top < self.bottom {
             return None;
@@ -91,6 +95,13 @@ mod tests {
 
     fn nonzero(value: usize) -> NonZeroUsize {
         NonZeroUsize::new(value).unwrap()
+    }
+
+    #[test]
+    fn test_zero_size() {
+        let mut allocator = BumpAllocator::new();
+        allocator.add_region(0x20000, 0x4000);
+        assert_eq!(allocator.allocate(0, 0x1000), None);
     }
 
     #[test]
