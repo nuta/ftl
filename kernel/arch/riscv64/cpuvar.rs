@@ -1,13 +1,14 @@
-use core::arch::asm;
+use core::{arch::asm};
 
-#[repr(C)]
+use super::thread::Context;
+
 pub struct CpuVar {
-    pub hartid: u8,
+    pub(super) context: Context,
 }
 
 impl CpuVar {
     pub const fn new() -> Self {
-        Self { hartid: 0 }
+        Self { context: Context::default() }
     }
 }
 

@@ -1,4 +1,9 @@
 #![no_std]
+#![feature(asm_const)]
+#![feature(effects)]
+#![feature(const_trait_impl)]
+#![feature(offset_of)]
+#![feature(naked_functions)]
 
 extern crate alloc;
 
@@ -12,3 +17,4 @@ mod arch;
 mod memory;
 mod panic;
 mod spinlock;
+mod thread;
