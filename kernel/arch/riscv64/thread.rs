@@ -38,36 +38,38 @@ pub extern "C" fn yield_cpu() {
     unsafe {
         asm!(
             r#"
-                sd ra, {ra_offset}(tp)
-                sd sp, {sp_offset}(tp)
-                sd fp, {fp_offset}(tp)
-                sd s1, {s1_offset}(tp)
-                sd s2, {s2_offset}(tp)
-                sd s3, {s3_offset}(tp)
-                sd s4, {s4_offset}(tp)
-                sd s5, {s5_offset}(tp)
-                sd s6, {s6_offset}(tp)
-                sd s7, {s7_offset}(tp)
-                sd s8, {s8_offset}(tp)
-                sd s9, {s9_offset}(tp)
-                sd s10, {s10_offset}(tp)
-                sd s11, {s11_offset}(tp)
+                ld a0, {context_offset}(tp)
+                sd ra, {ra_offset}(a0)
+                sd sp, {sp_offset}(a0)
+                sd fp, {fp_offset}(a0)
+                sd s1, {s1_offset}(a0)
+                sd s2, {s2_offset}(a0)
+                sd s3, {s3_offset}(a0)
+                sd s4, {s4_offset}(a0)
+                sd s5, {s5_offset}(a0)
+                sd s6, {s6_offset}(a0)
+                sd s7, {s7_offset}(a0)
+                sd s8, {s8_offset}(a0)
+                sd s9, {s9_offset}(a0)
+                sd s10, {s10_offset}(a0)
+                sd s11, {s11_offset}(a0)
                 j {switch_to_next}
             "#,
-            ra_offset = const offset_of!(CpuVar, context) + offset_of!(Context, ra),
-            sp_offset = const offset_of!(CpuVar, context) + offset_of!(Context, sp),
-            fp_offset = const offset_of!(CpuVar, context) + offset_of!(Context, fp),
-            s1_offset = const offset_of!(CpuVar, context) + offset_of!(Context, s1),
-            s2_offset = const offset_of!(CpuVar, context) + offset_of!(Context, s2),
-            s3_offset = const offset_of!(CpuVar, context) + offset_of!(Context, s3),
-            s4_offset = const offset_of!(CpuVar, context) + offset_of!(Context, s4),
-            s5_offset = const offset_of!(CpuVar, context) + offset_of!(Context, s5),
-            s6_offset = const offset_of!(CpuVar, context) + offset_of!(Context, s6),
-            s7_offset = const offset_of!(CpuVar, context) + offset_of!(Context, s7),
-            s8_offset = const offset_of!(CpuVar, context) + offset_of!(Context, s8),
-            s9_offset = const offset_of!(CpuVar, context) + offset_of!(Context, s9),
-            s10_offset = const offset_of!(CpuVar, context) + offset_of!(Context, s10),
-            s11_offset = const offset_of!(CpuVar, context) + offset_of!(Context, s11),
+            context_offset = const offset_of!(CpuVar, context),
+            ra_offset = const offset_of!(Context, ra),
+            sp_offset = const offset_of!(Context, sp),
+            fp_offset = const offset_of!(Context, fp),
+            s1_offset = const offset_of!(Context, s1),
+            s2_offset = const offset_of!(Context, s2),
+            s3_offset = const offset_of!(Context, s3),
+            s4_offset = const offset_of!(Context, s4),
+            s5_offset = const offset_of!(Context, s5),
+            s6_offset = const offset_of!(Context, s6),
+            s7_offset = const offset_of!(Context, s7),
+            s8_offset = const offset_of!(Context, s8),
+            s9_offset = const offset_of!(Context, s9),
+            s10_offset = const offset_of!(Context, s10),
+            s11_offset = const offset_of!(Context, s11),
             switch_to_next = sym switch_to_next,
             options(noreturn)
         )
@@ -79,36 +81,38 @@ fn restore_context() -> ! {
     unsafe {
         asm!(
             r#"
-                ld ra, {ra_offset}(tp)
-                ld sp, {sp_offset}(tp)
-                ld fp, {fp_offset}(tp)
-                ld s1, {s1_offset}(tp)
-                ld s2, {s2_offset}(tp)
-                ld s3, {s3_offset}(tp)
-                ld s4, {s4_offset}(tp)
-                ld s5, {s5_offset}(tp)
-                ld s6, {s6_offset}(tp)
-                ld s7, {s7_offset}(tp)
-                ld s8, {s8_offset}(tp)
-                ld s9, {s9_offset}(tp)
-                ld s10, {s10_offset}(tp)
-                ld s11, {s11_offset}(tp)
+                ld a0, {context_offset}(tp)
+                ld ra, {ra_offset}(a0)
+                ld sp, {sp_offset}(a0)
+                ld fp, {fp_offset}(a0)
+                ld s1, {s1_offset}(a0)
+                ld s2, {s2_offset}(a0)
+                ld s3, {s3_offset}(a0)
+                ld s4, {s4_offset}(a0)
+                ld s5, {s5_offset}(a0)
+                ld s6, {s6_offset}(a0)
+                ld s7, {s7_offset}(a0)
+                ld s8, {s8_offset}(a0)
+                ld s9, {s9_offset}(a0)
+                ld s10, {s10_offset}(a0)
+                ld s11, {s11_offset}(a0)
                 ret
             "#,
-            ra_offset = const offset_of!(CpuVar, context) + offset_of!(Context, ra),
-            sp_offset = const offset_of!(CpuVar, context) + offset_of!(Context, sp),
-            fp_offset = const offset_of!(CpuVar, context) + offset_of!(Context, fp),
-            s1_offset = const offset_of!(CpuVar, context) + offset_of!(Context, s1),
-            s2_offset = const offset_of!(CpuVar, context) + offset_of!(Context, s2),
-            s3_offset = const offset_of!(CpuVar, context) + offset_of!(Context, s3),
-            s4_offset = const offset_of!(CpuVar, context) + offset_of!(Context, s4),
-            s5_offset = const offset_of!(CpuVar, context) + offset_of!(Context, s5),
-            s6_offset = const offset_of!(CpuVar, context) + offset_of!(Context, s6),
-            s7_offset = const offset_of!(CpuVar, context) + offset_of!(Context, s7),
-            s8_offset = const offset_of!(CpuVar, context) + offset_of!(Context, s8),
-            s9_offset = const offset_of!(CpuVar, context) + offset_of!(Context, s9),
-            s10_offset = const offset_of!(CpuVar, context) + offset_of!(Context, s10),
-            s11_offset = const offset_of!(CpuVar, context) + offset_of!(Context, s11),
+            context_offset = const offset_of!(CpuVar, context),
+            ra_offset = const offset_of!(Context, ra),
+            sp_offset = const offset_of!(Context, sp),
+            fp_offset = const offset_of!(Context, fp),
+            s1_offset = const offset_of!(Context, s1),
+            s2_offset = const offset_of!(Context, s2),
+            s3_offset = const offset_of!(Context, s3),
+            s4_offset = const offset_of!(Context, s4),
+            s5_offset = const offset_of!(Context, s5),
+            s6_offset = const offset_of!(Context, s6),
+            s7_offset = const offset_of!(Context, s7),
+            s8_offset = const offset_of!(Context, s8),
+            s9_offset = const offset_of!(Context, s9),
+            s10_offset = const offset_of!(Context, s10),
+            s11_offset = const offset_of!(Context, s11),
             options(noreturn)
         )
     }
