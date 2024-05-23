@@ -75,8 +75,7 @@ pub extern "C" fn yield_cpu() {
 }
 
 /// Restores an in-kernel Fiber context from ssctrach.
-// #[naked]
-pub extern "C" fn restore_context() -> ! {
+fn restore_context() -> ! {
     unsafe {
         asm!(
             r#"
