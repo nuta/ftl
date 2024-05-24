@@ -5,9 +5,8 @@ use core::mem::size_of;
 
 use ftl_utils::byte_size::ByteSize;
 
-use crate::scheduler::GLOBAL_SCHEDULER;
-
 use super::cpuvar::CpuVar;
+use crate::scheduler::GLOBAL_SCHEDULER;
 
 const KERNEL_STACK_SIZE: ByteSize = ByteSize::from_kib(64);
 
@@ -169,6 +168,7 @@ impl Thread {
         //
         // TODO: Avoid initializing the stack with zeros.
         let stack = vec![0u128; KERNEL_STACK_SIZE.in_bytes() / size_of::<u128>()];
+        println!("pc: {:#x}, arg: {:#x}", pc, arg);
         Thread {
             context: Context {
                 ra: kernel_entry as usize,

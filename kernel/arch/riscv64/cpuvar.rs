@@ -1,10 +1,8 @@
+use alloc::sync::Arc;
 use core::arch::asm;
 
-use alloc::sync::Arc;
-
-use crate::thread::Thread;
-
 use super::thread::Context;
+use crate::thread::Thread;
 
 pub struct CpuVar {
     pub(super) context: *mut Context,

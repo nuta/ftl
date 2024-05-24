@@ -24,7 +24,7 @@ pub struct BootInfo {
     pub dtb_addr: *const u8,
 }
 
-
+#[no_mangle]
 fn thread_entry(i: usize) {
     let ch = char::from_u32(('A' as usize + i) as u32).unwrap();
     loop {
@@ -50,9 +50,8 @@ pub fn boot(cpu_id: CpuId, bootinfo: BootInfo) -> ! {
 
     oops!("backtrace test");
 
-
-    Thread::spawn_kernel(&(thread_entry as fn(usize)), 0);
-    Thread::spawn_kernel(&(thread_entry as fn(usize)), 1);
+    Thread::spawn_kernel(thread_entry, 0);
+    Thread::spawn_kernel(thread_entry, 1);
     arch::yield_cpu();
 
     println!("kernel is ready!");

@@ -9,8 +9,8 @@ pub use backtrace::backtrace;
 pub use cpuvar::cpuvar;
 pub use cpuvar::set_cpuvar;
 pub use cpuvar::CpuVar;
-pub use thread::Thread;
 pub use thread::yield_cpu;
+pub use thread::Thread;
 
 pub const NUM_CPUS_MAX: usize = 8;
 

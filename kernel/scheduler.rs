@@ -1,6 +1,9 @@
-use alloc::{collections::VecDeque, sync::Arc};
+use alloc::collections::VecDeque;
+use alloc::sync::Arc;
 
-use crate::{arch::{self, cpuvar}, spinlock::SpinLock, thread::Thread};
+use crate::arch::cpuvar;
+use crate::spinlock::SpinLock;
+use crate::thread::Thread;
 
 pub static GLOBAL_SCHEDULER: Scheduler = Scheduler::new();
 
@@ -20,12 +23,25 @@ impl Scheduler {
     }
 
     pub fn yield_cpu(&self) {
-        let next = self.runqueue.lock().pop_front().unwrap_or_else(|| {
-            cpuvar().idle_thread.clone()
-        });
+        let next = {
+            let cpuvar = cpuvar();
+            let mut current_thread = cpuvar.current_thread.borrow_mut();
+            let mut runqueue = self.runqueue.lock();
 
-        *cpuvar().current_thread.borrow_mut() = next.clone();
+            if current_thread.is_runnable() {
+                runqueue.push_back(current_thread.clone());
+            }
+
+            // Get the next thread to run. If the runqueue is empty, run the
+            // idle thread.
+            let next = runqueue
+                .pop_front()
+                .unwrap_or_else(|| cpuvar.idle_thread.clone());
+
+            *current_thread = next.clone();
+            next
+        };
+
         next.switch_to_this();
     }
 }
-

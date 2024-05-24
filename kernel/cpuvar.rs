@@ -1,7 +1,7 @@
+use alloc::sync::Arc;
 use core::cell::RefCell;
 use core::fmt;
 
-use alloc::sync::Arc;
 use arrayvec::ArrayVec;
 
 use crate::arch::set_cpuvar;

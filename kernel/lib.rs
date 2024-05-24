@@ -16,6 +16,6 @@ pub mod cpuvar;
 mod arch;
 mod memory;
 mod panic;
+mod scheduler;
 mod spinlock;
 mod thread;
-mod scheduler;
