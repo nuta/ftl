@@ -5,7 +5,6 @@ use crate::arch;
 use crate::cpuvar;
 use crate::cpuvar::CpuId;
 use crate::memory;
-use crate::scheduler::GLOBAL_SCHEDULER;
 use crate::thread::Thread;
 
 /// A free region of memory available for software.
@@ -25,10 +24,10 @@ pub struct BootInfo {
 }
 
 #[no_mangle]
-fn thread_entry(i: usize) {
-    let ch = char::from_u32(('A' as usize + i) as u32).unwrap();
-    loop {
-        println!("{}", ch);
+fn thread_entry(thread_id: usize) {
+    let ch = char::from_u32(('A' as usize + thread_id) as u32).unwrap();
+    for i in 0.. {
+        println!("{}: {}", ch, i);
         for _ in 0..0x100000 {}
         arch::yield_cpu();
     }

@@ -28,7 +28,7 @@ impl Scheduler {
             let mut current_thread = cpuvar.current_thread.borrow_mut();
             let mut runqueue = self.runqueue.lock();
 
-            if current_thread.is_runnable() {
+            if current_thread.is_runnable() && !current_thread.is_idle_thread() {
                 runqueue.push_back(current_thread.clone());
             }
 
