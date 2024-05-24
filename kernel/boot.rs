@@ -24,6 +24,16 @@ pub struct BootInfo {
     pub dtb_addr: *const u8,
 }
 
+
+fn thread_entry(i: usize) {
+    let ch = char::from_u32(('A' as usize + i) as u32).unwrap();
+    loop {
+        println!("{}", ch);
+        for _ in 0..0x100000 {}
+        arch::yield_cpu();
+    }
+}
+
 /// The entry point of the kernel.
 pub fn boot(cpu_id: CpuId, bootinfo: BootInfo) -> ! {
     println!("\nFTL - Faster Than \"L\"\n");
@@ -41,18 +51,9 @@ pub fn boot(cpu_id: CpuId, bootinfo: BootInfo) -> ! {
     oops!("backtrace test");
 
 
-    fn thread_entry(i: usize) {
-        let ch = char::from_u32(('a' as usize + i) as u32).unwrap();
-        loop {
-            println!("{}", ch);
-            for _ in 0..0x100000 {}
-            GLOBAL_SCHEDULER.yield_cpu();
-        }
-    }
-
     Thread::spawn_kernel(&(thread_entry as fn(usize)), 0);
     Thread::spawn_kernel(&(thread_entry as fn(usize)), 1);
-    GLOBAL_SCHEDULER.yield_cpu();
+    arch::yield_cpu();
 
     println!("kernel is ready!");
     arch::halt();

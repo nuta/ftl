@@ -5,6 +5,8 @@ use core::mem::size_of;
 
 use ftl_utils::byte_size::ByteSize;
 
+use crate::scheduler::GLOBAL_SCHEDULER;
+
 use super::cpuvar::CpuVar;
 
 const KERNEL_STACK_SIZE: ByteSize = ByteSize::from_kib(64);
@@ -25,9 +27,8 @@ extern "C" fn kernel_entry() -> ! {
     }
 }
 
-extern "C" fn switch_to_next() {
-    // Scheduler::switch_to_next(GLOBAL_SCHEDULER.lock());
-    todo!()
+fn switch_to_next() {
+    GLOBAL_SCHEDULER.yield_cpu();
 }
 
 /// # Why `#[naked]`?
@@ -146,6 +147,8 @@ pub struct Context {
     s11: usize,
 }
 
+// TODO: static assert to ensure usize == u64
+
 pub struct Thread {
     pub(super) context: Context,
 }
@@ -166,13 +169,10 @@ impl Thread {
         //
         // TODO: Avoid initializing the stack with zeros.
         let stack = vec![0u128; KERNEL_STACK_SIZE.in_bytes() / size_of::<u128>()];
-        let sp_bottom = stack.as_ptr() as usize;
-        let sp = sp_bottom + stack_size;
-
         Thread {
             context: Context {
                 ra: kernel_entry as usize,
-                sp,
+                sp: (stack.as_ptr() as usize) + stack_size,
                 // Zeroing fp is important so that backtrace stops at kernel_entry.
                 fp: 0,
                 s1: pc,
