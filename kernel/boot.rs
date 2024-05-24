@@ -5,6 +5,9 @@ use crate::arch;
 use crate::cpuvar;
 use crate::cpuvar::CpuId;
 use crate::memory;
+use crate::scheduler::GLOBAL_SCHEDULER;
+use crate::thread;
+use crate::thread::Thread;
 
 /// A free region of memory available for software.
 #[derive(Debug)]
@@ -37,6 +40,21 @@ pub fn boot(cpu_id: CpuId, bootinfo: BootInfo) -> ! {
     println!("cpuvar test: CPU {}", arch::cpuvar().cpu_id);
 
     oops!("backtrace test");
+
+
+    let mut threads = alloc::vec::Vec::new();
+    fn thread_entry(i: usize) {
+        let ch = char::from_u32(('a' as usize + i) as u32).unwrap();
+        loop {
+            println!("{}", ch);
+            for _ in 0..0x100000 {}
+            GLOBAL_SCHEDULER.yield_cpu();
+        }
+    }
+
+    threads.push(Thread::new_kernel(&(thread_entry as fn(usize)), 0));
+    threads.push(Thread::new_kernel(&(thread_entry as fn(usize)), 1));
+    GLOBAL_SCHEDULER.yield_cpu();
 
     println!("kernel is ready!");
     arch::halt();

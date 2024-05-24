@@ -1,4 +1,8 @@
-use core::{arch::asm, ptr::{self, NonNull}};
+use core::arch::asm;
+
+use alloc::sync::Arc;
+
+use crate::thread::Thread;
 
 use super::thread::Context;
 
@@ -7,8 +11,10 @@ pub struct CpuVar {
 }
 
 impl CpuVar {
-    pub const fn new() -> Self {
-        Self { context: ptr::null_mut() }
+    pub const fn new(idle_thread: &Arc<Thread>) -> Self {
+        Self {
+            context: &idle_thread.arch().context as *const _ as *mut _,
+        }
     }
 }
 

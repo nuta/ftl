@@ -18,3 +18,4 @@ mod memory;
 mod panic;
 mod spinlock;
 mod thread;
+mod scheduler;

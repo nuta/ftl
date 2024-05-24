@@ -1,10 +1,11 @@
-use core::{arch::asm, mem::size_of};
+use alloc::vec;
+use core::arch::asm;
 use core::mem::offset_of;
+use core::mem::size_of;
+
+use ftl_utils::byte_size::ByteSize;
 
 use super::cpuvar::CpuVar;
-
-use alloc::vec;
-use ftl_utils::byte_size::ByteSize;
 
 const KERNEL_STACK_SIZE: ByteSize = ByteSize::from_kib(64);
 
@@ -141,8 +142,18 @@ pub struct Context {
     s11: usize,
 }
 
-impl Context {
-    pub fn new_kernel(pc: usize, arg: usize) -> Self {
+pub struct Thread {
+    pub(super) context: Context,
+}
+
+impl Thread {
+    pub fn new_idle() -> Thread {
+        Thread {
+            context: Default::default(),
+        }
+    }
+
+    pub fn new_kernel(pc: usize, arg: usize) -> Thread {
         let stack_size = 64 * 1024;
         // Use Vec<u128> to ensure 16-byte alignment as specified in the RISC-V calling convention:
         //
@@ -153,16 +164,17 @@ impl Context {
         let stack = vec![0u128; KERNEL_STACK_SIZE.in_bytes() / size_of::<u128>()];
         let sp_bottom = stack.as_ptr() as usize;
         let sp = sp_bottom + stack_size;
-        Self {
-            ra: kernel_entry as usize,
-            sp,
-            // Zeroing fp is important so that backtrace stops at kernel_entry.
-            fp: 0,
-            s1: pc,
-            s2: arg,
-            ..Default::default()
+
+        Thread {
+            context: Context {
+                ra: kernel_entry as usize,
+                sp,
+                // Zeroing fp is important so that backtrace stops at kernel_entry.
+                fp: 0,
+                s1: pc,
+                s2: arg,
+                ..Default::default()
+            },
         }
     }
 }
-
-pub struct Thread {}
