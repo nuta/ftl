@@ -78,11 +78,14 @@ pub extern "C" fn yield_cpu() {
 }
 
 /// Resumes a thread.
-fn restore_context() -> ! {
+fn restore_context(next: *mut Context) -> ! {
     unsafe {
         asm!(
             r#"
-                ld a0, {context_offset}(tp)
+                // Update CpuVar.arch.context
+                mv a0, {next_context}
+                sd a0, {context_offset}(tp)
+
                 ld ra, {ra_offset}(a0)
                 ld sp, {sp_offset}(a0)
                 ld fp, {fp_offset}(a0)
@@ -99,6 +102,7 @@ fn restore_context() -> ! {
                 ld s11, {s11_offset}(a0)
                 ret
             "#,
+            next_context = in (reg) next as usize,
             context_offset = const offset_of!(CpuVar, context),
             ra_offset = const offset_of!(Context, ra),
             sp_offset = const offset_of!(Context, sp),
@@ -176,5 +180,9 @@ impl Thread {
                 ..Default::default()
             },
         }
+    }
+
+    pub fn switch_to_this(&self) -> ! {
+        restore_context(&self.context as *const _ as *mut _);
     }
 }

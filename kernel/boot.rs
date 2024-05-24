@@ -6,7 +6,6 @@ use crate::cpuvar;
 use crate::cpuvar::CpuId;
 use crate::memory;
 use crate::scheduler::GLOBAL_SCHEDULER;
-use crate::thread;
 use crate::thread::Thread;
 
 /// A free region of memory available for software.
@@ -42,7 +41,6 @@ pub fn boot(cpu_id: CpuId, bootinfo: BootInfo) -> ! {
     oops!("backtrace test");
 
 
-    let mut threads = alloc::vec::Vec::new();
     fn thread_entry(i: usize) {
         let ch = char::from_u32(('a' as usize + i) as u32).unwrap();
         loop {
@@ -52,8 +50,8 @@ pub fn boot(cpu_id: CpuId, bootinfo: BootInfo) -> ! {
         }
     }
 
-    threads.push(Thread::new_kernel(&(thread_entry as fn(usize)), 0));
-    threads.push(Thread::new_kernel(&(thread_entry as fn(usize)), 1));
+    Thread::spawn_kernel(&(thread_entry as fn(usize)), 0);
+    Thread::spawn_kernel(&(thread_entry as fn(usize)), 1);
     GLOBAL_SCHEDULER.yield_cpu();
 
     println!("kernel is ready!");

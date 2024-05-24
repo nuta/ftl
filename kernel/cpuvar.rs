@@ -1,3 +1,4 @@
+use core::cell::RefCell;
 use core::fmt;
 
 use alloc::sync::Arc;
@@ -37,6 +38,7 @@ impl fmt::Display for CpuId {
 pub struct CpuVar {
     pub arch: arch::CpuVar,
     pub cpu_id: CpuId,
+    pub current_thread: RefCell<Arc<Thread>>,
     pub idle_thread: Arc<Thread>,
 }
 
@@ -56,6 +58,7 @@ pub fn percpu_init(cpu_id: CpuId) {
         cpuvars.push(CpuVar {
             arch: arch::CpuVar::new(&idle_thread),
             cpu_id,
+            current_thread: RefCell::new(idle_thread.clone()),
             idle_thread,
         });
     }
