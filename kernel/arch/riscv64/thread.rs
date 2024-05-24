@@ -76,7 +76,7 @@ pub extern "C" fn yield_cpu() {
     }
 }
 
-/// Restores an in-kernel Fiber context from ssctrach.
+/// Resumes a thread.
 fn restore_context() -> ! {
     unsafe {
         asm!(

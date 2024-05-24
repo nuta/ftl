@@ -1,14 +1,14 @@
-use core::{arch::asm};
+use core::{arch::asm, ptr::{self, NonNull}};
 
 use super::thread::Context;
 
 pub struct CpuVar {
-    pub(super) context: Context,
+    pub(super) context: *mut Context,
 }
 
 impl CpuVar {
     pub const fn new() -> Self {
-        Self { context: Context::default() }
+        Self { context: ptr::null_mut() }
     }
 }
 
@@ -21,7 +21,7 @@ pub fn cpuvar() -> &'static crate::cpuvar::CpuVar {
     unsafe { &*cpuvar }
 }
 
-pub fn set_cpuvar(cpuvar: *const crate::cpuvar::CpuVar) {
+pub fn set_cpuvar(cpuvar: *mut crate::cpuvar::CpuVar) {
     // Store the address of the current CPU's `CpuVar` to `tp`.
     unsafe {
         asm!("mv tp, {}", in(reg) cpuvar);

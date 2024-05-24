@@ -37,6 +37,10 @@ pub struct CpuVar {
     pub cpu_id: CpuId,
 }
 
+// SAFETY: `CpuVar` is a per-CPU storage. Will never be shared between CPUs
+//         and thus won't be accessed at once.
+unsafe impl Sync for CpuVar {}
+
 static CPUVARS: SpinLock<ArrayVec<CpuVar, { arch::NUM_CPUS_MAX }>> =
     SpinLock::new(ArrayVec::new_const());
 
@@ -45,11 +49,11 @@ pub fn percpu_init(cpu_id: CpuId) {
     // Initialize CpuVar slots until the CPU.
     let mut cpuvars = CPUVARS.lock();
     for _ in 0..=cpu_id.as_usize() {
-        cpuvars.push(CpuVar {
+        cpuvars.push(CpuVar{
             arch: arch::CpuVar::new(),
             cpu_id,
         });
     }
 
-    set_cpuvar(&cpuvars[cpu_id.as_usize()] as *const CpuVar);
+    set_cpuvar(&mut cpuvars[cpu_id.as_usize()] as *mut CpuVar);
 }
