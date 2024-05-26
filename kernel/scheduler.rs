@@ -44,6 +44,6 @@ impl Scheduler {
             next
         };
 
-        next.restore_context();
+        next.resume();
     }
 }

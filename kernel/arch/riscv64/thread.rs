@@ -78,7 +78,7 @@ pub extern "C" fn yield_cpu() {
 }
 
 /// Resumes a thread.
-fn restore_context(next: *mut Context) -> ! {
+fn resume(next: *mut Context) -> ! {
     unsafe {
         asm!(
             r#"
@@ -182,7 +182,7 @@ impl Thread {
         }
     }
 
-    pub fn restore_context(&self) -> ! {
-        restore_context(&self.context as *const _ as *mut _);
+    pub fn resume(&self) -> ! {
+        resume(&self.context as *const _ as *mut _);
     }
 }

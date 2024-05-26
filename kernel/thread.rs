@@ -64,7 +64,7 @@ impl Thread {
         &self.arch
     }
 
-    pub fn restore_context(&self) -> ! {
-        self.arch.restore_context();
+    pub fn resume(&self) -> ! {
+        self.arch.resume();
     }
 }
