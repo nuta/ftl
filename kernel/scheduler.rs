@@ -28,6 +28,8 @@ impl Scheduler {
             let mut current_thread = cpuvar.current_thread.borrow_mut();
             let mut runqueue = self.runqueue.lock();
 
+            // Preemptive scheduling: push the current thread back to the
+            // runqueue if it's still runnable.
             if current_thread.is_runnable() && !current_thread.is_idle_thread() {
                 runqueue.push_back(current_thread.clone());
             }
@@ -42,6 +44,6 @@ impl Scheduler {
             next
         };
 
-        next.switch_to_this();
+        next.restore_context();
     }
 }

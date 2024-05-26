@@ -182,7 +182,7 @@ impl Thread {
         }
     }
 
-    pub fn switch_to_this(&self) -> ! {
+    pub fn restore_context(&self) -> ! {
         restore_context(&self.context as *const _ as *mut _);
     }
 }

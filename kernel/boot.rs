@@ -51,6 +51,8 @@ pub fn boot(cpu_id: CpuId, bootinfo: BootInfo) -> ! {
 
     Thread::spawn_kernel(thread_entry, 0);
     Thread::spawn_kernel(thread_entry, 1);
+    Thread::spawn_kernel(thread_entry, 2);
+    Thread::spawn_kernel(thread_entry, 3);
     arch::yield_cpu();
 
     println!("kernel is ready!");

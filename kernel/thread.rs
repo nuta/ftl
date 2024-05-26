@@ -64,7 +64,7 @@ impl Thread {
         &self.arch
     }
 
-    pub fn switch_to_this(&self) -> ! {
-        self.arch.switch_to_this();
+    pub fn restore_context(&self) -> ! {
+        self.arch.restore_context();
     }
 }
