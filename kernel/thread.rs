@@ -1,21 +1,33 @@
 use alloc::sync::Arc;
-use core::sync::atomic::AtomicUsize;
+use core::num::NonZeroIsize;
+use core::sync::atomic::AtomicIsize;
 use core::sync::atomic::Ordering;
 
 use crate::arch::{self};
 use crate::scheduler::GLOBAL_SCHEDULER;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct ThreadId(usize);
+pub struct ThreadId(NonZeroIsize);
 
 impl ThreadId {
     pub fn new_idle() -> ThreadId {
-        ThreadId(0)
+        // SAFETY: -1 is a valid non-zero isize.
+        let value = unsafe { NonZeroIsize::new_unchecked(-1) };
+        ThreadId(value)
     }
 
     pub fn alloc() -> ThreadId {
-        static NEXT_ID: AtomicUsize = AtomicUsize::new(1);
-        ThreadId(NEXT_ID.fetch_add(1, Ordering::Relaxed))
+        static NEXT_ID: AtomicIsize = AtomicIsize::new(1);
+
+        let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
+        // SAFETY: fetch_add may wrap around, but it should be fine unless you
+        //         run the system for soooooo long years.
+        let value = unsafe { NonZeroIsize::new_unchecked(id) };
+        ThreadId(value)
+    }
+
+    pub fn as_isize(&self) -> isize {
+        self.0.get()
     }
 }
 
@@ -53,7 +65,7 @@ impl Thread {
     }
 
     pub fn is_idle_thread(&self) -> bool {
-        self.id.0 == 0
+        self.id.as_isize() == -1
     }
 
     pub fn is_runnable(&self) -> bool {
