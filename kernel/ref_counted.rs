@@ -12,30 +12,29 @@ use core::sync::atomic;
 use core::sync::atomic::AtomicUsize;
 use core::sync::atomic::Ordering;
 
-/// The reference-counted object.
-///
-/// # Why not `Rc` or `Arc`?
-///
-/// Rust's standard library provides `Rc` and `Arc` for reference counting.
-/// However, they are not suitable for our use case because:
-///
-/// - We'll never need weak references. Instead, the userland will delete each
-///   object explicitly through a system call (lmk if you find a counter-example!).
 struct RefCounted<T> {
     counter: AtomicUsize,
     inner: T,
 }
 
-/// A reference-counted mutably-borrowable reference.
+/// A reference-counted object.
 ///
-/// This is similar to `Arc<Mutex<T>>`: allows multiple references to the
-/// inner value by reference couting, and allows mutable access to the inner
-/// value by big kernel lock + runtime borrow checking.
+/// # Why not `Arc`?
+///
+/// Rust's standard library provides `Arc` for reference counting. However, we
+/// generally prefer rolling our own pritimives in kernel to use what we really
+/// need.
+///
+/// In reference counting, we have some properties:
+///
+/// - We'll never need weak references. Instead, the userland will delete each
+///   object explicitly through a system call (lmk if you find a counter-example!).
 pub struct SharedRef<T> {
     ptr: NonNull<RefCounted<T>>,
 }
 
 impl<T> SharedRef<T> {
+    /// Creates a new reference-counted object.
     pub fn new(inner: T) -> Self {
         let ptr = Box::leak(Box::new(RefCounted {
             counter: AtomicUsize::new(1),
@@ -48,23 +47,25 @@ impl<T> SharedRef<T> {
         }
     }
 
+    /// Returns a reference to the inner object.
     fn as_ref(&self) -> &RefCounted<T> {
-        // SAFETY: We always keep the reference to the object.
+        // SAFETY: The object will be kept alive as long as `self` is alive.
+        //         The compiler will guarantee `&RefCounted<T>` can't outlive
+        //         `self`.
         unsafe { self.ptr.as_ref() }
     }
 
-    fn dec_ref(&self) -> bool {
+    /// Decrements the reference counter and returns the previous value.
+    fn dec_ref(&self) -> usize {
         let counter = self.as_ref().counter.fetch_sub(1, Ordering::Release);
-
         atomic::fence(Ordering::Acquire);
-
-        counter == 1
+        counter
     }
 }
 
 impl<T> Drop for SharedRef<T> {
     fn drop(&mut self) {
-        if self.dec_ref() {
+        if self.dec_ref() == 1 {
             // The reference counter reached zero. Free the memory.
             //
             mem::drop(
@@ -92,5 +93,5 @@ impl<T> Deref for SharedRef<T> {
     }
 }
 
-unsafe impl<T> Sync for SharedRef<T> {}
-unsafe impl<T> Send for SharedRef<T> {}
+unsafe impl<T: Sync> Sync for SharedRef<T> {}
+unsafe impl<T: Send> Send for SharedRef<T> {}
