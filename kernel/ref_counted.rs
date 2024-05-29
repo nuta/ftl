@@ -63,7 +63,7 @@ impl<T: ?Sized> SharedRef<T> {
 impl SharedRef<dyn Any + Sync + Send> {
     pub fn downcast<T>(self) -> Result<SharedRef<T>, Self>
     where
-        T: Any,
+        T: Any + Sync + Send,
     {
         if <dyn Any>::is::<T>(&self) {
             Ok(SharedRef {

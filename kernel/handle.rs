@@ -45,7 +45,7 @@ impl<T: Handleable> Handle<T> {
     }
 }
 
-impl Handle<dyn Any + Send + Sync> {
+impl Handle<dyn Any + Sync + Send> {
     pub fn downcast<T: Handleable>(self) -> Result<Handle<T>, Self> {
         match self.object.downcast::<T>() {
             Ok(downcasted) => {
