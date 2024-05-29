@@ -24,7 +24,7 @@ struct RefCounted<T> {
 /// In reference counting, we have some properties:
 ///
 /// - We'll never need weak references. Instead, the userland will delete each
-///   object explicitly through a system call (lmk if you find a counter-example!).
+///   object explicitly through a system call (LMK if you know counter-examples).
 ///
 /// # Atomic Operations on counters
 ///
