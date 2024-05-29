@@ -33,7 +33,7 @@ pub trait Handleable: Any + Sync + Send {}
 /// references to the underlying object. [`Ordering`] parameters are chosen
 /// to be as relaxed as possible in the fast path, inspired by Rust's `Arc`
 /// implementation.
-pub struct Handle<T: Handleable + ?Sized> {
+pub struct Handle<T: Any + Send + Sync + ?Sized> {
     object: SharedRef<T>,
     rights: HandleRights,
 }
@@ -45,19 +45,21 @@ impl<T: Handleable> Handle<T> {
     }
 }
 
-impl Handle<dyn Handleable> {
+impl Handle<dyn Any + Send + Sync> {
     pub fn downcast<T: Handleable>(self) -> Result<Handle<T>, Self> {
-        if let Some(downcasted) = self.object.downcast() {
-            let new_object = Handle {
-                object: downcasted,
-                rights: self.rights,
-            };
-
-            mem::forget(self);
-
-            Ok(new_object)
-        } else {
-            Err(self)
+        match self.object.downcast::<T>() {
+            Ok(downcasted) => {
+                Ok(Handle {
+                    object: downcasted,
+                    rights: self.rights,
+                })
+            }
+            Err(original) => {
+                Err(Handle {
+                    object: original,
+                    rights: self.rights,
+                })
+            }
         }
     }
 }
