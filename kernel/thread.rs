@@ -1,4 +1,3 @@
-use alloc::sync::Arc;
 use core::num::NonZeroIsize;
 use core::sync::atomic::AtomicIsize;
 use core::sync::atomic::Ordering;

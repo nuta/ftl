@@ -1,4 +1,4 @@
-use alloc::sync::Arc;
+
 use core::arch::asm;
 
 use super::thread::Context;
