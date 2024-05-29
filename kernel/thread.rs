@@ -4,6 +4,7 @@ use core::sync::atomic::AtomicIsize;
 use core::sync::atomic::Ordering;
 
 use crate::arch::{self};
+use crate::ref_counted::SharedRef;
 use crate::scheduler::GLOBAL_SCHEDULER;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -31,6 +32,7 @@ impl ThreadId {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum State {
     Runnable,
 }
@@ -42,16 +44,16 @@ pub struct Thread {
 }
 
 impl Thread {
-    pub fn new_idle() -> Thread {
-        Thread {
+    pub fn new_idle() -> SharedRef<Thread> {
+        SharedRef::new(Thread {
             id: ThreadId::new_idle(),
             state: State::Runnable,
             arch: arch::Thread::new_idle(),
-        }
+        })
     }
 
     pub fn spawn_kernel(pc: fn(usize), arg: usize) {
-        let thread = Arc::new(Thread {
+        let thread = SharedRef::new(Thread {
             id: ThreadId::alloc(),
             state: State::Runnable,
             arch: arch::Thread::new_kernel(pc as usize, arg),

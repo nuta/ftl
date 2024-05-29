@@ -1,14 +1,14 @@
 use alloc::collections::VecDeque;
-use alloc::sync::Arc;
 
 use crate::arch::cpuvar;
+use crate::ref_counted::SharedRef;
 use crate::spinlock::SpinLock;
 use crate::thread::Thread;
 
 pub static GLOBAL_SCHEDULER: Scheduler = Scheduler::new();
 
 pub struct Scheduler {
-    runqueue: SpinLock<VecDeque<Arc<Thread>>>,
+    runqueue: SpinLock<VecDeque<SharedRef<Thread>>>,
 }
 
 impl Scheduler {
@@ -18,7 +18,7 @@ impl Scheduler {
         }
     }
 
-    pub fn push(&self, new_thread: Arc<Thread>) {
+    pub fn push(&self, new_thread: SharedRef<Thread>) {
         self.runqueue.lock().push_back(new_thread);
     }
 

@@ -2,6 +2,7 @@ use alloc::sync::Arc;
 use core::arch::asm;
 
 use super::thread::Context;
+use crate::ref_counted::SharedRef;
 use crate::thread::Thread;
 
 pub struct CpuVar {
@@ -9,7 +10,7 @@ pub struct CpuVar {
 }
 
 impl CpuVar {
-    pub const fn new(idle_thread: &Arc<Thread>) -> Self {
+    pub const fn new(idle_thread: &SharedRef<Thread>) -> Self {
         Self {
             context: &idle_thread.arch().context as *const _ as *mut _,
         }
