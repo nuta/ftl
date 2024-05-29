@@ -14,6 +14,7 @@ pub mod boot;
 pub mod cpuvar;
 
 mod arch;
+mod handle;
 mod memory;
 mod panic;
 mod ref_counted;

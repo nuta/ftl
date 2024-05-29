@@ -11,3 +11,4 @@ path = "lib.rs"
 arrayvec = { workspace = true }
 ftl_utils = { workspace = true }
 ftl_bump_allocator = { workspace = true }
+hashbrown = { workspace = true }

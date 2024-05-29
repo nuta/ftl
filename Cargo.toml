@@ -9,6 +9,7 @@ edition = "2021"
 
 [workspace.dependencies]
 arrayvec = { version = "0.7.4", default-features = false }
+hashbrown = "0.14.5"
 
 ftl_kernel = { path = "kernel" }
 ftl_utils = { path = "libs/rust/ftl_utils" }

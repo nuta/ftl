@@ -1,6 +1,7 @@
 //! Reference counting.
 
 use alloc::boxed::Box;
+use core::any::Any;
 use core::mem;
 use core::ops::Deref;
 use core::ptr::NonNull;
@@ -8,7 +9,7 @@ use core::sync::atomic;
 use core::sync::atomic::AtomicUsize;
 use core::sync::atomic::Ordering;
 
-struct RefCounted<T> {
+struct RefCounted<T: ?Sized> {
     counter: AtomicUsize,
     inner: T,
 }
@@ -24,13 +25,13 @@ struct RefCounted<T> {
 /// In reference counting, we have some properties:
 ///
 /// - We'll never need weak references. Instead, the userland will delete each
-///   object explicitly through a system call (LMK if you know counter-examples).
+///   object explicitly through a system call (LMK if you noticed counter-examples!).
 ///
 /// # Atomic Operations on counters
 ///
 /// [`Ordering`] parameters are chosen to be as relaxed as possible in the fast
 /// path, inspired by Rust's `Arc` implementation.
-pub struct SharedRef<T> {
+pub struct SharedRef<T: ?Sized> {
     ptr: NonNull<RefCounted<T>>,
 }
 
@@ -47,7 +48,9 @@ impl<T> SharedRef<T> {
             ptr: unsafe { NonNull::new_unchecked(ptr) },
         }
     }
+}
 
+impl<T: ?Sized> SharedRef<T> {
     /// Returns a reference to the inner object.
     fn inner(&self) -> &RefCounted<T> {
         // SAFETY: The object will be kept alive as long as `self` is alive.
@@ -57,7 +60,22 @@ impl<T> SharedRef<T> {
     }
 }
 
-impl<T> Drop for SharedRef<T> {
+impl SharedRef<dyn Any + Sync + Send> {
+    pub fn downcast<T>(self) -> Result<SharedRef<T>, Self>
+    where
+        T: Any,
+    {
+        if <dyn Any>::is::<T>(&self) {
+            Ok(SharedRef {
+                ptr: self.ptr.cast(),
+            })
+        } else {
+            Err(self)
+        }
+    }
+}
+
+impl<T: ?Sized> Drop for SharedRef<T> {
     fn drop(&mut self) {
         // Release the reference count.
         if self.inner().counter.fetch_sub(1, Ordering::Release) == 1 {
