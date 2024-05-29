@@ -1,8 +1,4 @@
 //! Reference counting.
-//!
-//! # Relationships
-//!
-//! - `SharedRef<T>`: A reference-counted reference(s). Akin to `Arc<T>` in standard library.
 
 use alloc::boxed::Box;
 use core::mem;
@@ -29,6 +25,11 @@ struct RefCounted<T> {
 ///
 /// - We'll never need weak references. Instead, the userland will delete each
 ///   object explicitly through a system call (lmk if you find a counter-example!).
+///
+/// # Atomic Operations on counters
+///
+/// [`Ordering`] parameters are chosen to be as relaxed as possible in the fast
+/// path, inspired by Rust's `Arc` implementation.
 pub struct SharedRef<T> {
     ptr: NonNull<RefCounted<T>>,
 }
@@ -48,38 +49,46 @@ impl<T> SharedRef<T> {
     }
 
     /// Returns a reference to the inner object.
-    fn as_ref(&self) -> &RefCounted<T> {
+    fn inner(&self) -> &RefCounted<T> {
         // SAFETY: The object will be kept alive as long as `self` is alive.
         //         The compiler will guarantee `&RefCounted<T>` can't outlive
         //         `self`.
         unsafe { self.ptr.as_ref() }
     }
-
-    /// Decrements the reference counter and returns the previous value.
-    fn dec_ref(&self) -> usize {
-        let counter = self.as_ref().counter.fetch_sub(1, Ordering::Release);
-        atomic::fence(Ordering::Acquire);
-        counter
-    }
 }
 
 impl<T> Drop for SharedRef<T> {
     fn drop(&mut self) {
-        if self.dec_ref() == 1 {
+        // Release the reference count.
+        if self.inner().counter.fetch_sub(1, Ordering::Release) == 1 {
             // The reference counter reached zero. Free the memory.
+
+            // "Prevent reordering of use of the data and deletion of the data",
+            // as the standard library's `Arc` does [1].
             //
-            mem::drop(
-                // SAFETY: This reference was the last one, so we can safely
-                //         free the memory.
-                unsafe { Box::from_raw(self.ptr.as_ptr()) },
-            );
+            // [1]: https://github.com/rust-lang/rust/blob/da159eb331b27df528185c616b394bb0e1d2a4bd/library/alloc/src/sync.rs#L2469-L2497
+            atomic::fence(Ordering::Acquire);
+
+            // SAFETY: This reference was the last one, so we can safely
+            //         free the memory.
+            mem::drop(unsafe { Box::from_raw(self.ptr.as_ptr()) });
         }
     }
 }
 
 impl<T> Clone for SharedRef<T> {
     fn clone(&self) -> Self {
-        self.as_ref().counter.fetch_add(1, Ordering::Relaxed);
+        // Increment the reference count.
+        //
+        // Theoretically, the counter can overflow, but it's not a problem
+        // in practice because having 2^B references (where B is 32 or 64
+        // depending on the CPU) means you have at least 2^B * size_of(NonNull)
+        // bytes of space. Who would have that much memory to store references
+        // to only single object?
+        //
+        // If you don't agree with this, please open a PR with a nice
+        // explanation. It must be fun to read :)
+        self.inner().counter.fetch_add(1, Ordering::Relaxed);
 
         Self { ptr: self.ptr }
     }
@@ -89,7 +98,7 @@ impl<T> Deref for SharedRef<T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
-        &self.as_ref().inner
+        &self.inner().inner
     }
 }
 
