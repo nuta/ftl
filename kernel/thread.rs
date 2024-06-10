@@ -11,7 +11,7 @@ pub struct ThreadId(NonZeroIsize);
 
 impl ThreadId {
     pub fn new_idle() -> ThreadId {
-        // SAFETY: -1 is a valid non-zero isize.
+        // SAFETY: -1 is a valid NonZeroIsize value.
         let value = unsafe { NonZeroIsize::new_unchecked(-1) };
         ThreadId(value)
     }

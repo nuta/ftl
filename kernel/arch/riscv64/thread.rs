@@ -1,4 +1,5 @@
 use alloc::vec;
+use alloc::vec::Vec;
 use core::arch::asm;
 use core::mem::offset_of;
 use core::mem::size_of;
@@ -150,29 +151,36 @@ pub struct Context {
 
 pub struct Thread {
     pub(super) context: Context,
+    /// The ownership of the stack area. To be freeed when the thread is destroyed.
+    #[allow(dead_code)]
+    stack: Option<Vec<u128>>,
 }
 
 impl Thread {
     pub fn new_idle() -> Thread {
         Thread {
+            stack: None,
             context: Default::default(),
         }
     }
 
     pub fn new_kernel(pc: usize, arg: usize) -> Thread {
         let stack_size = 64 * 1024;
+
         // Use Vec<u128> to ensure 16-byte alignment as specified in the RISC-V calling convention:
         //
         // > In the standard RISC-V calling convention, the stack grows downward and the stack pointer is
         // > always kept 16-byte aligned.
         //
         // TODO: Avoid initializing the stack with zeros.
-        let stack = vec![0u128; KERNEL_STACK_SIZE.in_bytes() / size_of::<u128>()];
-        println!("pc: {:#x}, arg: {:#x}", pc, arg);
+        let stack: Vec<u128> = vec![0; KERNEL_STACK_SIZE.in_bytes() / size_of::<u128>()];
+
+        let sp = (stack.as_ptr() as usize) + stack_size;
         Thread {
+            stack: Some(stack),
             context: Context {
                 ra: kernel_entry as usize,
-                sp: (stack.as_ptr() as usize) + stack_size,
+                sp,
                 // Zeroing fp is important so that backtrace stops at kernel_entry.
                 fp: 0,
                 s1: pc,
