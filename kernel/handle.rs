@@ -61,7 +61,7 @@ impl AnyHandle {
     }
 
     pub fn downcast<T: Handleable>(&self) -> Option<&Handle<T>> {
-         self.0.as_any().downcast_ref::<Handle<T>>()
+        self.0.as_any().downcast_ref::<Handle<T>>()
     }
 }
 
