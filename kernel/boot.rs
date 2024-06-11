@@ -5,6 +5,7 @@ use crate::arch;
 use crate::cpuvar;
 use crate::cpuvar::CpuId;
 use crate::memory;
+use crate::process::Process;
 use crate::thread::Thread;
 
 /// A free region of memory available for software.
@@ -53,6 +54,9 @@ pub fn boot(cpu_id: CpuId, bootinfo: BootInfo) -> ! {
     Thread::spawn_kernel(thread_entry, 1);
     Thread::spawn_kernel(thread_entry, 2);
     Thread::spawn_kernel(thread_entry, 3);
+
+    let proc = Process::create();
+
     arch::yield_cpu();
 
     println!("kernel is ready!");

@@ -2,6 +2,8 @@ use core::any::Any;
 use core::num::NonZeroIsize;
 use core::ops::Deref;
 
+use ftl_types::error::FtlError;
+use ftl_utils::downcast::Downcastable;
 use hashbrown::HashMap;
 
 use crate::ref_counted::SharedRef;
@@ -18,7 +20,7 @@ impl HandleId {
 
 /// Allowed operations on a handle.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
-pub struct HandleRights(u8);
+pub struct HandleRights(pub u8);
 
 /// A trait for kernel objects that can be referred to by a handle ([`Handle`]).
 pub trait Handleable: Any + Sync + Send {}
@@ -37,32 +39,6 @@ pub struct Handle<T: Any + Send + Sync + ?Sized> {
     rights: HandleRights,
 }
 
-impl<T: Handleable> Handle<T> {
-    /// Creates a new `Handle` to the given value.
-    pub fn new(object: SharedRef<T>, rights: HandleRights) -> Handle<T> {
-        Self { object, rights }
-    }
-}
-
-impl Handle<dyn Any + Sync + Send> {
-    pub fn downcast<T: Handleable>(self) -> Result<Handle<T>, Self> {
-        match self.object.downcast::<T>() {
-            Ok(downcasted) => {
-                Ok(Handle {
-                    object: downcasted,
-                    rights: self.rights,
-                })
-            }
-            Err(original) => {
-                Err(Handle {
-                    object: original,
-                    rights: self.rights,
-                })
-            }
-        }
-    }
-}
-
 impl<T: Handleable> Deref for Handle<T> {
     type Target = T;
 
@@ -74,6 +50,52 @@ impl<T: Handleable> Deref for Handle<T> {
 unsafe impl<T: Handleable + ?Sized> Sync for Handle<T> {}
 unsafe impl<T: Handleable + ?Sized> Send for Handle<T> {}
 
+pub struct AnyHandle(Handle<dyn Handleable>);
+
+impl AnyHandle {
+    pub fn new<T: Handleable>(object: SharedRef<T>, rights: HandleRights) -> AnyHandle {
+        AnyHandle(Handle {
+            object: object as SharedRef<dyn Handleable>,
+            rights: rights,
+        })
+    }
+
+    pub fn downcast<T: Handleable>(&self) -> Option<&Handle<T>> {
+         self.0.as_any().downcast_ref::<Handle<T>>()
+    }
+}
+
+/// The number of maximum handles per process.
+///
+/// The current 64K limit has no particular reason, but it should be low
+/// enough to prevent an overflow in `next_id + 1` in `HandleTable::add`.
+const NUM_HANDLES_MAX: isize = 64 * 1024;
+
 pub struct HandleTable {
-    handles: HashMap<HandleId, Handle<dyn Handleable>>,
+    next_id: isize,
+    handles: HashMap<HandleId, AnyHandle>,
+}
+
+impl HandleTable {
+    pub fn new() -> HandleTable {
+        HandleTable {
+            next_id: 1,
+            handles: HashMap::new(),
+        }
+    }
+
+    pub fn add(&mut self, handle: AnyHandle) -> Result<HandleId, FtlError> {
+        if self.next_id >= NUM_HANDLES_MAX {
+            return Err(FtlError::TooManyHandles);
+        }
+
+        // SAFETY: The condition above ensures it doesn't overflow and
+        //         never reaches zero.
+        let raw_id = unsafe { NonZeroIsize::new_unchecked(self.next_id) };
+        let id = HandleId::from_nonzero(raw_id);
+
+        self.next_id = self.next_id + 1;
+        self.handles.insert(id, handle);
+        Ok(id)
+    }
 }

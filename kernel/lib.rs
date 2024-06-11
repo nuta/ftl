@@ -4,6 +4,8 @@
 #![feature(const_trait_impl)]
 #![feature(offset_of)]
 #![feature(naked_functions)]
+#![feature(unsize)]
+#![feature(coerce_unsized)]
 
 extern crate alloc;
 
@@ -17,6 +19,7 @@ mod arch;
 mod handle;
 mod memory;
 mod panic;
+mod process;
 mod ref_counted;
 mod scheduler;
 mod spinlock;
