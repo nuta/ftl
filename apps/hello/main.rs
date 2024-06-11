@@ -4,4 +4,6 @@
 extern crate ftl_api;
 
 #[no_mangle]
-pub fn main() {}
+pub fn main() {
+    loop {}
+}
