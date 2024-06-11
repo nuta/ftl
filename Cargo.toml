@@ -16,3 +16,4 @@ ftl_types = { path = "libs/rust/ftl_types" }
 ftl_api = { path = "libs/rust/ftl_api" }
 ftl_utils = { path = "libs/rust/ftl_utils" }
 ftl_bump_allocator = { path = "libs/rust/bump_allocator" }
+ftl_elf = { path = "libs/rust/elf" }

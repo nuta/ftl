@@ -57,6 +57,10 @@ pub fn boot(cpu_id: CpuId, bootinfo: BootInfo) -> ! {
 
     let proc = Process::create();
 
+    let hello_elf = include_bytes!("../build/apps/hello.elf");
+    let elf = ftl_elf::Elf::parse(hello_elf).unwrap();
+    println!("ELF: {:?}", elf);
+
     arch::yield_cpu();
 
     println!("kernel is ready!");
