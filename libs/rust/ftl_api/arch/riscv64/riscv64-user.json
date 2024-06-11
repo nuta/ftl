@@ -13,6 +13,7 @@
     "linker": "rust-lld",
     "pre-link-args": {
         "ld.lld": [
+            "--pie",
             "--script=libs/rust/ftl_api/arch/riscv64/riscv64-user.ld"
         ]
     },
@@ -20,6 +21,7 @@
     "llvm-target": "riscv64",
     "max-atomic-width": 64,
     "panic-strategy": "abort",
+    "static-position-independent-executables": true,
     "relocation-model": "pie",
     "supported-sanitizers": [
         "kernel-address"
