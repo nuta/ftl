@@ -25,7 +25,6 @@ PROGRESS ?= printf "  \\033[1;96m%8s\\033[0m  \\033[1;m%s\\033[0m\\n"
 
 RUSTFLAGS += -Z macro-backtrace
 CARGOFLAGS += -Z build-std=core,alloc -Z build-std-features=compiler-builtins-mem
-CARGOFLAGS += --target boot/$(ARCH)/$(ARCH)-$(MACHINE).json
 
 QEMUFLAGS += -machine virt -m 256 -bios default
 QEMUFLAGS += -nographic -serial mon:stdio --no-reboot
@@ -34,7 +33,7 @@ QEMUFLAGS += $(if $(GDB),-gdb tcp::7789 -S)
 
 sources += \
 	$(shell find \
-		boot/$(ARCH) kernel libs \
+		boot/$(ARCH) kernel libs apps \
 		-name '*.rs' -o -name '*.json' -o -name '*.ld' -o -name '*.toml' -o -name '*.S' \
 	)
 
@@ -62,7 +61,17 @@ fmt:
 fix:
 	cargo clippy --fix --allow-dirty --allow-staged $(CARGOFLAGS)
 
-ftl.elf: $(sources) Makefile
+ftl.elf: $(sources) Makefile build/apps/hello.elf
 	$(PROGRESS) "CARGO" "boot/$(ARCH)"
-	RUSTFLAGS="$(RUSTFLAGS)" CARGO_TARGET_DIR="build/cargo" $(CARGO) build $(CARGOFLAGS) --manifest-path boot/$(ARCH)/Cargo.toml
+	RUSTFLAGS="$(RUSTFLAGS)" CARGO_TARGET_DIR="build/cargo" $(CARGO) build $(CARGOFLAGS) \
+		--target boot/$(ARCH)/$(ARCH)-$(MACHINE).json \
+		--manifest-path boot/$(ARCH)/Cargo.toml
 	cp build/cargo/$(ARCH)-$(MACHINE)/$(BUILD)/boot_$(ARCH) $(@)
+
+build/apps/hello.elf: $(sources) Makefile
+	$(PROGRESS) "CARGO" "apps/hello"
+	RUSTFLAGS="$(RUSTFLAGS)" CARGO_TARGET_DIR="build/cargo" $(CARGO) build $(CARGOFLAGS) \
+		--target libs/rust/ftl_api/arch/$(ARCH)/riscv64-user.json \
+		--manifest-path apps/hello/Cargo.toml
+	mkdir -p $(@D)
+	cp build/cargo/$(ARCH)-user/$(BUILD)/hello $(@)

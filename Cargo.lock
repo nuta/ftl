@@ -42,6 +42,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
+name = "ftl_api"
+version = "0.0.0"
+
+[[package]]
 name = "ftl_bump_allocator"
 version = "0.0.0"
 
@@ -78,7 +82,7 @@ dependencies = [
 name = "hello"
 version = "0.0.0"
 dependencies = [
- "ftl_types",
+ "ftl_api",
 ]
 
 [[package]]

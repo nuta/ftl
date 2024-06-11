@@ -1,12 +1,10 @@
 [package]
-name = "hello"
+name = "ftl_api"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
 
-[[bin]]
-name = "hello"
-path = "main.rs"
+[lib]
+path = "lib.rs"
 
 [dependencies]
-ftl_api = { workspace = true }
