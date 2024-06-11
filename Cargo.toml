@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["kernel", "boot/*", "libs/rust/*"]
+members = ["kernel", "boot/*", "libs/rust/*", "apps/*"]
 
 [workspace.package]
 version = "0.0.0"

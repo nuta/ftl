@@ -34,9 +34,15 @@ pub trait Handleable: Any + Sync + Send {}
 /// references to the underlying object. [`Ordering`] parameters are chosen
 /// to be as relaxed as possible in the fast path, inspired by Rust's `Arc`
 /// implementation.
-pub struct Handle<T: Any + Send + Sync + ?Sized> {
+pub struct Handle<T: Handleable + ?Sized> {
     object: SharedRef<T>,
     rights: HandleRights,
+}
+
+impl<T: Handleable> Handle<T> {
+    pub fn rights(&self) -> HandleRights {
+        self.rights
+    }
 }
 
 impl<T: Handleable> Deref for Handle<T> {

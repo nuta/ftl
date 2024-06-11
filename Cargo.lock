@@ -75,6 +75,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "hello"
+version = "0.0.0"
+dependencies = [
+ "ftl_types",
+]
+
+[[package]]
 name = "once_cell"
 version = "1.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
