@@ -3,6 +3,7 @@ use core::mem::size_of;
 use arrayvec::ArrayVec;
 use ftl_elf::Rela;
 use ftl_elf::ShType;
+use ftl_types::vsyscall::VsyscallPage;
 use ftl_utils::alignment::is_aligned;
 use ftl_utils::byte_size::ByteSize;
 
@@ -130,12 +131,19 @@ pub fn boot(cpu_id: CpuId, bootinfo: BootInfo) -> ! {
 
     println!("program_space: {:016x}", program_space.as_ptr() as usize);
     println!("entry_addr:    {:016x}", entry_addr);
-    let entry: unsafe extern "C" fn() = unsafe { core::mem::transmute(entry_addr) };
+    let entry: unsafe extern "C" fn(*const VsyscallPage) = unsafe { core::mem::transmute(entry_addr) };
     println!("entry:         {:016x}", entry as usize);
     unsafe {
+        let vsyscall = VsyscallPage {
+            entry: |a, b, c, d, e, f| {
+                println!("vsyscall: a={}, b={} ('{}'), c={}, d={}, e={}, f={}", a, b, b as u8 as char, c, d, e, f);
+                Ok(0)
+            },
+        };
+
         println!("calling entry...");
         // core::arch::asm!("123: j 123b");
-        entry();
+        entry(&vsyscall);
         println!("called from entry");
     }
 
