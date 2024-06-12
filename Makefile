@@ -70,8 +70,10 @@ ftl.elf: $(sources) Makefile build/apps/hello.elf
 
 build/apps/hello.elf: $(sources) Makefile
 	$(PROGRESS) "CARGO" "apps/hello"
-	RUSTFLAGS="$(RUSTFLAGS)" CARGO_TARGET_DIR="build/cargo" $(CARGO) build $(CARGOFLAGS) \
+	mkdir -p $(@D)
+	RUSTFLAGS="$(RUSTFLAGS) -C link-args=-Map=build/apps/hello.map" \
+	CARGO_TARGET_DIR="build/cargo" \
+		$(CARGO) build $(CARGOFLAGS) \
 		--target libs/rust/ftl_api/arch/$(ARCH)/riscv64-user.json \
 		--manifest-path apps/hello/Cargo.toml
-	mkdir -p $(@D)
 	cp build/cargo/$(ARCH)-user/$(BUILD)/hello $(@)

@@ -2,6 +2,8 @@
 #![no_main]
 
 use core::arch::global_asm;
+use core::sync::atomic::AtomicBool;
+use core::sync::atomic::Ordering;
 
 use arrayvec::ArrayVec;
 use ftl_kernel::boot::BootInfo;

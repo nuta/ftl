@@ -69,6 +69,28 @@ impl Phdr {
     }
 }
 
+pub struct Shdr64 {
+    pub sh_name: u32,
+    pub sh_type: u32,
+    pub sh_flags: u64,
+    pub sh_addr: Addr,
+    pub sh_offset: Off,
+    pub sh_size: u64,
+    pub sh_link: u32,
+    pub sh_info: u32,
+    pub sh_addralign: u64,
+    pub sh_entsize: u64,
+}
+
+pub struct Rela64 {
+    pub r_offset: Addr,
+    pub r_info: u64,
+    pub r_addend: i64,
+}
+
+#[cfg(target_pointer_width = "64")]
+pub type Rela = Rela64;
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum ParseError {
     BufferTooShort,

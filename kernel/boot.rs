@@ -61,22 +61,29 @@ pub fn boot(cpu_id: CpuId, bootinfo: BootInfo) -> ! {
     let elf = ftl_elf::Elf::parse(hello_elf).unwrap();
     println!("ELF: {:?}", elf);
     let mut program_space = alloc::vec![0u8; 1024 * 1024];
-    let entry_addr = program_space.as_ptr() as usize + ( elf.ehdr.e_entry as usize);
+    let entry_addr = program_space.as_ptr() as usize + (elf.ehdr.e_entry as usize);
     for phdr in elf.phdrs {
         if phdr.p_type == ftl_elf::PhdrType::Load {
             let mem_offset = phdr.p_vaddr as usize;
             let file_offset = phdr.p_offset as usize;
             let file_copy_len = phdr.p_filesz as usize;
-            program_space[mem_offset..mem_offset + file_copy_len].copy_from_slice(&hello_elf[file_offset..file_offset + file_copy_len]);
+            program_space[mem_offset..mem_offset + file_copy_len]
+                .copy_from_slice(&hello_elf[file_offset..file_offset + file_copy_len]);
             let zeroed_len = phdr.p_memsz as usize - phdr.p_filesz as usize;
-            program_space[mem_offset + file_copy_len..mem_offset + file_copy_len + zeroed_len].fill(0);
+            program_space[mem_offset + file_copy_len..mem_offset + file_copy_len + zeroed_len]
+                .fill(0);
         }
     }
     println!("program_space: {:016x}", program_space.as_ptr() as usize);
     println!("entry_addr:    {:016x}", entry_addr);
-    let entry: *const fn() = unsafe { core::mem::transmute(entry_addr) };
+    let entry: unsafe extern "C" fn() = unsafe { core::mem::transmute(entry_addr) };
     println!("entry:         {:016x}", entry as usize);
-    unsafe { (*entry)() };
+    unsafe {
+        println!("calling entry...");
+        // core::arch::asm!("123: j 123b");
+        entry();
+        println!("called from entry");
+    }
 
     arch::yield_cpu();
 

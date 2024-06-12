@@ -1,4 +1,5 @@
 .section .text
+.align 4
 .global start
 start:
     mv ra, zero
