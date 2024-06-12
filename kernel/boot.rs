@@ -1,4 +1,5 @@
 use arrayvec::ArrayVec;
+use ftl_elf::ShType;
 use ftl_utils::byte_size::ByteSize;
 
 use crate::arch;
@@ -74,6 +75,31 @@ pub fn boot(cpu_id: CpuId, bootinfo: BootInfo) -> ! {
                 .fill(0);
         }
     }
+
+    fn get_cstr(buffer: &[u8], offset: usize) -> Option<&str> {
+        let mut len = 0;
+        while let Some(&ch) = buffer.get(offset + len) {
+            if ch == 0 {
+                return core::str::from_utf8(&buffer[offset..offset + len]).ok();
+            }
+            len += 1;
+        }
+        None
+    }
+
+    let shstrtab_section = elf.shdrs.get(elf.ehdr.e_shstrndx as usize).expect("missing shstrtab");
+    let shstrtab = unsafe {
+        core::slice::from_raw_parts(
+            hello_elf.as_ptr().add(shstrtab_section.sh_offset as usize),
+            shstrtab_section.sh_size as usize
+        )
+        };
+    println!("shstrtab: len={}", shstrtab.len());
+    for shdr in elf.shdrs {
+        let name = get_cstr(shstrtab, shdr.sh_name as usize);
+        println!("shdr: name={:?}, type={:?}, addr={:x}, size={:x}", name, shdr.sh_type, shdr.sh_addr, shdr.sh_size);
+    }
+
     println!("program_space: {:016x}", program_space.as_ptr() as usize);
     println!("entry_addr:    {:016x}", entry_addr);
     let entry: unsafe extern "C" fn() = unsafe { core::mem::transmute(entry_addr) };

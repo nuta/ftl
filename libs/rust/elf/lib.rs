@@ -69,6 +69,18 @@ impl Phdr {
     }
 }
 
+#[derive(Debug)]
+#[non_exhaustive]
+pub enum ShType {
+    Null = 0,
+    ProgBits = 1,
+    SymTab = 2,
+    StrTab = 3,
+    Rela = 4,
+}
+
+#[derive(Debug)]
+#[repr(C)]
 pub struct Shdr64 {
     pub sh_name: u32,
     pub sh_type: u32,
@@ -82,6 +94,11 @@ pub struct Shdr64 {
     pub sh_entsize: u64,
 }
 
+#[cfg(target_pointer_width = "64")]
+pub type Shdr = Shdr64;
+
+#[derive(Debug)]
+#[repr(C)]
 pub struct Rela64 {
     pub r_offset: Addr,
     pub r_info: u64,
@@ -101,6 +118,7 @@ pub enum ParseError {
 pub struct Elf<'a> {
     pub ehdr: &'a Ehdr,
     pub phdrs: &'a [Phdr],
+    pub shdrs: &'a [Shdr],
 }
 
 impl<'a> Elf<'a> {
@@ -126,6 +144,13 @@ impl<'a> Elf<'a> {
             )
         };
 
-        Ok(Elf { ehdr, phdrs })
+        let shdrs = unsafe {
+            core::slice::from_raw_parts(
+                buf.as_ptr().add(ehdr.e_shoff as usize) as *const Shdr,
+                ehdr.e_shnum as usize,
+            )
+        };
+
+        Ok(Elf { ehdr, phdrs, shdrs })
     }
 }
