@@ -1,5 +1,9 @@
+use core::mem::size_of;
+
 use arrayvec::ArrayVec;
+use ftl_elf::Rela;
 use ftl_elf::ShType;
+use ftl_utils::alignment::is_aligned;
 use ftl_utils::byte_size::ByteSize;
 
 use crate::arch;
@@ -62,7 +66,8 @@ pub fn boot(cpu_id: CpuId, bootinfo: BootInfo) -> ! {
     let elf = ftl_elf::Elf::parse(hello_elf).unwrap();
     println!("ELF: {:?}", elf);
     let mut program_space = alloc::vec![0u8; 1024 * 1024];
-    let entry_addr = program_space.as_ptr() as usize + (elf.ehdr.e_entry as usize);
+    let base_addr = program_space.as_ptr() as usize;
+    let entry_addr = base_addr + (elf.ehdr.e_entry as usize);
     for phdr in elf.phdrs {
         if phdr.p_type == ftl_elf::PhdrType::Load {
             let mem_offset = phdr.p_vaddr as usize;
@@ -95,19 +100,42 @@ pub fn boot(cpu_id: CpuId, bootinfo: BootInfo) -> ! {
         )
         };
     println!("shstrtab: len={}", shstrtab.len());
+
+    let mut rela_dyn = None;
     for shdr in elf.shdrs {
-        let name = get_cstr(shstrtab, shdr.sh_name as usize);
-        println!("shdr: name={:?}, type={:?}, addr={:x}, size={:x}", name, shdr.sh_type, shdr.sh_addr, shdr.sh_size);
+        if let Some(name) = get_cstr(shstrtab, shdr.sh_name as usize) {
+            println!("shdr: name={}, type={:?}, addr={:x}, size={:x}", name, shdr.sh_type, shdr.sh_addr, shdr.sh_size);
+            if name == ".rela.dyn" {
+                rela_dyn = Some(shdr);
+            }
+        }
+    }
+
+    let rela_dyn = rela_dyn.unwrap();
+    let rela_entries = unsafe {
+        assert!(rela_dyn.sh_size as usize % size_of::<Rela>() == 0, "misaligned .rela_dyn size");
+        core::slice::from_raw_parts(
+            hello_elf.as_ptr().add(rela_dyn.sh_offset as usize) as *const Rela,
+            (rela_dyn.sh_size as usize) / size_of::<Rela>()
+        )
+    };
+
+    for rela in rela_entries {
+        unsafe {
+            let ptr = (base_addr + rela.r_offset as usize) as *mut i64;
+            println!("rela: offset={:08x}, addend={:x}: ptr={:08p}", rela.r_offset, rela.r_addend, ptr);
+            *ptr += (base_addr as i64) + rela.r_addend;
+        };
     }
 
     println!("program_space: {:016x}", program_space.as_ptr() as usize);
     println!("entry_addr:    {:016x}", entry_addr);
-    let entry: unsafe extern "C" fn() = unsafe { core::mem::transmute(entry_addr) };
+    let entry: unsafe extern "C" fn(isize) = unsafe { core::mem::transmute(entry_addr) };
     println!("entry:         {:016x}", entry as usize);
     unsafe {
         println!("calling entry...");
         // core::arch::asm!("123: j 123b");
-        entry();
+        entry(arch::console_write as isize);
         println!("called from entry");
     }
 
