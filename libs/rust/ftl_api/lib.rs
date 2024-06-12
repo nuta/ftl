@@ -3,3 +3,5 @@
 
 pub mod arch;
 pub mod panic;
+
+pub use ftl_types as types;

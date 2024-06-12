@@ -130,12 +130,12 @@ pub fn boot(cpu_id: CpuId, bootinfo: BootInfo) -> ! {
 
     println!("program_space: {:016x}", program_space.as_ptr() as usize);
     println!("entry_addr:    {:016x}", entry_addr);
-    let entry: unsafe extern "C" fn(isize) = unsafe { core::mem::transmute(entry_addr) };
+    let entry: unsafe extern "C" fn() = unsafe { core::mem::transmute(entry_addr) };
     println!("entry:         {:016x}", entry as usize);
     unsafe {
         println!("calling entry...");
         // core::arch::asm!("123: j 123b");
-        entry(arch::console_write as isize);
+        entry();
         println!("called from entry");
     }
 
