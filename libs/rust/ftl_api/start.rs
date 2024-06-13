@@ -1,6 +1,7 @@
 use ftl_types::syscall::VsyscallPage;
 
-use crate::{allocator, syscall::set_vsyscall};
+use crate::allocator;
+use crate::syscall::set_vsyscall;
 
 extern "Rust" {
     fn main();

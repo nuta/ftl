@@ -1,14 +1,29 @@
+use alloc::string::String;
 use spin::Mutex;
 
 use crate::syscall;
 
-pub static GLOBAL_PRINTER: Mutex<Printer> = Mutex::new(Printer {});
+const MAX_BUFFER_SIZE: usize = 1024;
 
-pub struct Printer {}
+pub static GLOBAL_PRINTER: Mutex<Printer> = Mutex::new(Printer {
+    buffer: String::new(),
+});
+
+pub struct Printer {
+    buffer: String,
+}
 
 impl core::fmt::Write for Printer {
     fn write_str(&mut self, s: &str) -> core::fmt::Result {
-        let _ = syscall::print(s.as_bytes());
+        for c in s.chars() {
+            if c == '\n' || self.buffer.len() >= MAX_BUFFER_SIZE {
+                let _ = syscall::print(self.buffer.as_bytes());
+                self.buffer.clear();
+            } else {
+                self.buffer.push(c);
+            }
+        }
+
         Ok(())
     }
 }

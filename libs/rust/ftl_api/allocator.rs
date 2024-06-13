@@ -12,8 +12,10 @@ pub fn init() {
     }
 
     unsafe {
-    let heap_start = addr_of!(__heap) as usize;
-    let heap_end = addr_of!(__heap_end) as usize;
-        GLOBAL_ALLOCATOR.lock().init(heap_start as *mut u8, heap_end - heap_start);
+        let heap_start = addr_of!(__heap) as usize;
+        let heap_end = addr_of!(__heap_end) as usize;
+        GLOBAL_ALLOCATOR
+            .lock()
+            .init(heap_start as *mut u8, heap_end - heap_start);
     }
 }
