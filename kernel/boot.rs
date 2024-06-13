@@ -58,8 +58,6 @@ pub fn boot(cpu_id: CpuId, bootinfo: BootInfo) -> ! {
     Thread::spawn_kernel(thread_entry, 2);
     Thread::spawn_kernel(thread_entry, 3);
 
-    let proc = Process::create();
-
     unsafe {
         let vsyscall = VsyscallPage {
             entry: |a, b, c, d, e, f| {
