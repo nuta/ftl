@@ -111,7 +111,7 @@ impl<'a> KernelAppLoader<'a> {
     }
 
     fn relocate_rela_dyn(&mut self) {
-        let rela_dyn = self.get_shdr_by_name(".rela_dyn").unwrap();
+        let rela_dyn = self.get_shdr_by_name(".rela.dyn").unwrap();
         let rela_entries = unsafe {
             assert!(
                 rela_dyn.sh_size as usize % size_of::<Rela>() == 0,
@@ -126,10 +126,6 @@ impl<'a> KernelAppLoader<'a> {
         for rela in rela_entries {
             unsafe {
                 let ptr = (self.base_addr() + rela.r_offset as usize) as *mut i64;
-                println!(
-                    "rela: offset={:08x}, addend={:x}: ptr={:08p}",
-                    rela.r_offset, rela.r_addend, ptr
-                );
                 *ptr += (self.base_addr() as i64) + rela.r_addend;
             };
         }

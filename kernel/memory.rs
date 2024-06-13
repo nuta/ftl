@@ -61,8 +61,11 @@ unsafe impl GlobalAlloc for GlobalAllocator {
     }
 }
 
-fn alloc_layout_for_pages(pages: usize) -> Result<Layout, LayoutError> {
-    Layout::from_size_align(pages * PAGE_SIZE, PAGE_SIZE)
+fn alloc_layout_for_pages(len: usize) -> Result<Layout, LayoutError> {
+    debug_assert!(is_aligned(len, PAGE_SIZE));
+    debug_assert!(len > 0);
+
+    Layout::from_size_align(len, PAGE_SIZE)
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -78,9 +81,6 @@ pub struct AllocatedPages {
 impl AllocatedPages {
     /// Allocate memory pages always accessible from the kernel's address space.
     pub fn alloc(len: usize) -> Result<AllocatedPages, AllocPagesError> {
-        debug_assert!(is_aligned(len, PAGE_SIZE));
-        debug_assert!(len > 0);
-
         let layout = alloc_layout_for_pages(len).map_err(AllocPagesError::InvalidLayout)?;
 
         // SAFETY: `len` is not zero as checked above. I hope that's also true in
