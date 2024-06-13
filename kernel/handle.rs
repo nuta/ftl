@@ -90,6 +90,7 @@ impl HandleTable {
         }
     }
 
+    /// Add a handle to the table.
     pub fn add(&mut self, handle: AnyHandle) -> Result<HandleId, FtlError> {
         if self.next_id >= NUM_HANDLES_MAX {
             return Err(FtlError::TooManyHandles);
@@ -103,5 +104,15 @@ impl HandleTable {
         self.next_id = self.next_id + 1;
         self.handles.insert(id, handle);
         Ok(id)
+    }
+
+    /// Get a handle by ID, as a concrete type `T`.
+    pub fn get<T>(&self, id: HandleId) -> Result<&Handle<T>, FtlError>
+    where
+        T: Handleable,
+    {
+        let any_handle = self.handles.get(&id).ok_or(FtlError::HandleNotFound)?;
+        let handle = any_handle.downcast().ok_or(FtlError::UnexpectedHandleType)?;
+        Ok(handle)
     }
 }

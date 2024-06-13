@@ -8,7 +8,7 @@ use crate::cpuvar;
 use crate::cpuvar::CpuId;
 use crate::kernel_app::KernelAppLoader;
 use crate::memory;
-use crate::process::Process;
+use crate::syscall::VSYSCALL_PAGE;
 use crate::thread::Thread;
 
 /// A free region of memory available for software.
@@ -58,35 +58,10 @@ pub fn boot(cpu_id: CpuId, bootinfo: BootInfo) -> ! {
     Thread::spawn_kernel(thread_entry, 2);
     Thread::spawn_kernel(thread_entry, 3);
 
-    unsafe {
-        let vsyscall = VsyscallPage {
-            entry: |a, b, c, d, e, f| {
-                match a {
-                    _ if a == SyscallNumber::Print as isize => {
-                        let s = core::str::from_utf8(core::slice::from_raw_parts(
-                            b as *const u8,
-                            c as usize,
-                        ))
-                        .unwrap()
-                        .trim_end();
-                        println!("[print] {}", s);
-                    }
-                    _ => {
-                        println!(
-                            "unknown syscall: a={}, b={} ('{}'), c={}, d={}, e={}, f={}",
-                            a, b, b as u8 as char, c, d, e, f
-                        );
-                    }
-                }
-                Ok(0)
-            },
-        };
-
         let hello_elf = include_bytes!("../build/apps/hello.elf");
         KernelAppLoader::new(hello_elf)
             .expect("failed to load hello.elf")
-            .load(&vsyscall);
-    }
+            .load(&VSYSCALL_PAGE);
 
     println!("yielding CPU...");
     arch::yield_cpu();
