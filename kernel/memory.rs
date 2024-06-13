@@ -46,7 +46,6 @@ impl GlobalAllocator {
 
 unsafe impl GlobalAlloc for GlobalAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        println!("alloc: {:x?}", layout);
         let addr = self
             .inner
             .lock()
