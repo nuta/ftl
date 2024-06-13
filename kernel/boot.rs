@@ -3,7 +3,8 @@ use core::mem::size_of;
 use arrayvec::ArrayVec;
 use ftl_elf::Rela;
 use ftl_elf::ShType;
-use ftl_types::vsyscall::VsyscallPage;
+use ftl_types::syscall::SyscallNumber;
+use ftl_types::syscall::VsyscallPage;
 use ftl_utils::alignment::is_aligned;
 use ftl_utils::byte_size::ByteSize;
 
@@ -136,7 +137,15 @@ pub fn boot(cpu_id: CpuId, bootinfo: BootInfo) -> ! {
     unsafe {
         let vsyscall = VsyscallPage {
             entry: |a, b, c, d, e, f| {
-                println!("vsyscall: a={}, b={} ('{}'), c={}, d={}, e={}, f={}", a, b, b as u8 as char, c, d, e, f);
+                match a {
+                    _ if a == SyscallNumber::Print as isize => {
+                        let s = core::str::from_utf8(core::slice::from_raw_parts(b as *const u8, c as usize)).unwrap().trim_end();
+                        println!("[print] {}", s);
+                    }
+                    _ => {
+                        println!("unknown syscall: a={}, b={} ('{}'), c={}, d={}, e={}, f={}", a, b, b as u8 as char, c, d, e, f);
+                    }
+                }
                 Ok(0)
             },
         };

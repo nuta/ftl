@@ -1,4 +1,4 @@
 #![no_std]
 
 pub mod error;
-pub mod vsyscall;
+pub mod syscall;

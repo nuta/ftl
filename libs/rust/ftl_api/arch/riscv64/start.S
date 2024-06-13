@@ -1,3 +1,4 @@
+// a0: vsyscall_page
 .section .text
 .align 4
 .global start
@@ -5,9 +6,9 @@ start:
     mv ra, zero
     mv fp, zero
     la sp, __stack_top
-    call main
+    call start_ftl_api
 
-    // Unreachable here.
+    // Reachable if main returns.
     unimp
 
 .section .bss  // .bss, not .data to avoid having zeroes in the ELF file
