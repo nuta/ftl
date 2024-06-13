@@ -17,7 +17,7 @@ pub mod cpuvar;
 
 mod arch;
 mod handle;
-mod loader;
+mod kernel_app;
 mod memory;
 mod panic;
 mod process;

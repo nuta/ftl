@@ -78,6 +78,10 @@ pub struct AllocatedPages {
     len: usize,
 }
 
+// FIXME:
+unsafe impl Sync for AllocatedPages {}
+unsafe impl Send for AllocatedPages {}
+
 impl AllocatedPages {
     /// Allocate memory pages always accessible from the kernel's address space.
     pub fn alloc(len: usize) -> Result<AllocatedPages, AllocPagesError> {

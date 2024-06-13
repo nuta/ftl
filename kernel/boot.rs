@@ -11,7 +11,7 @@ use ftl_utils::byte_size::ByteSize;
 use crate::arch;
 use crate::cpuvar;
 use crate::cpuvar::CpuId;
-use crate::loader::KernelAppLoader;
+use crate::kernel_app::KernelAppLoader;
 use crate::memory;
 use crate::process::Process;
 use crate::thread::Thread;
@@ -65,11 +65,6 @@ pub fn boot(cpu_id: CpuId, bootinfo: BootInfo) -> ! {
 
     let proc = Process::create();
 
-    let hello_elf = include_bytes!("../build/apps/hello.elf");
-    let entry = KernelAppLoader::new(hello_elf)
-        .expect("failed to load hello.elf")
-        .load()
-        .expect("failed to load segments");
     unsafe {
         let vsyscall = VsyscallPage {
             entry: |a, b, c, d, e, f| {
@@ -94,12 +89,13 @@ pub fn boot(cpu_id: CpuId, bootinfo: BootInfo) -> ! {
             },
         };
 
-        println!("calling entry...");
-        // core::arch::asm!("123: j 123b");
-        entry(&vsyscall);
-        println!("called from entry");
+        let hello_elf = include_bytes!("../build/apps/hello.elf");
+        let entry = KernelAppLoader::new(hello_elf)
+            .expect("failed to load hello.elf")
+            .load(&vsyscall);
     }
 
+    println!("yielding CPU...");
     arch::yield_cpu();
 
     println!("kernel is ready!");

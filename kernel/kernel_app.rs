@@ -10,9 +10,15 @@ use ftl_types::syscall::VsyscallPage;
 use ftl_utils::alignment::align_up;
 
 use crate::arch::PAGE_SIZE;
+use crate::handle::AnyHandle;
+use crate::handle::HandleRights;
+use crate::handle::Handleable;
 use crate::memory::AllocPagesError;
 use crate::memory::AllocatedPages;
 use crate::memory::GLOBAL_ALLOCATOR;
+use crate::process::Process;
+use crate::ref_counted::SharedRef;
+use crate::thread::Thread;
 
 #[derive(Debug)]
 pub enum Error {
@@ -20,6 +26,12 @@ pub enum Error {
     NoPhdrs,
     AllocPages(AllocPagesError),
 }
+
+pub struct KernelAppMemory {
+    pages: AllocatedPages,
+}
+
+impl Handleable for KernelAppMemory {}
 
 pub struct KernelAppLoader<'a> {
     elf_file: &'a [u8],
@@ -131,10 +143,21 @@ impl<'a> KernelAppLoader<'a> {
         }
     }
 
-    pub fn load(mut self) -> Result<unsafe extern "C" fn(*const VsyscallPage), Error> {
+    pub fn load(mut self, vsyscall_page: *const VsyscallPage) {
         self.load_segments();
         self.relocate_rela_dyn();
 
-        Ok(unsafe { core::mem::transmute(self.entry_addr()) })
+        let entry = unsafe { core::mem::transmute(self.entry_addr()) };
+        let thread = Thread::spawn_kernel(entry, vsyscall_page as usize);
+        let mut proc = Process::create();
+
+        let kernel_app_memory = SharedRef::new(KernelAppMemory {
+            pages: self.memory,
+        });
+
+        proc.add_handle(AnyHandle::new(kernel_app_memory, HandleRights(0)));
+        proc.add_handle(AnyHandle::new(thread, HandleRights(0)));
+
+        let proc = SharedRef::new(proc);
     }
 }

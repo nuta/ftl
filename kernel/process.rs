@@ -10,10 +10,10 @@ pub struct Process {
 }
 
 impl Process {
-    pub fn create() -> SharedRef<Process> {
-        SharedRef::new(Process {
+    pub fn create() -> Process {
+        Process {
             handles: HandleTable::new(),
-        })
+        }
     }
 
     pub fn add_handle(&mut self, handle: AnyHandle) -> Result<HandleId, FtlError> {
