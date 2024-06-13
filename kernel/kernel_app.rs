@@ -151,9 +151,7 @@ impl<'a> KernelAppLoader<'a> {
         let thread = Thread::spawn_kernel(entry, vsyscall_page as usize);
         let mut proc = Process::create();
 
-        let kernel_app_memory = SharedRef::new(KernelAppMemory {
-            pages: self.memory,
-        });
+        let kernel_app_memory = SharedRef::new(KernelAppMemory { pages: self.memory });
 
         proc.add_handle(AnyHandle::new(kernel_app_memory, HandleRights(0)));
         proc.add_handle(AnyHandle::new(thread, HandleRights(0)));
