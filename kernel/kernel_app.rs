@@ -150,8 +150,10 @@ impl<'a> KernelAppLoader<'a> {
 
         let kernel_app_memory = SharedRef::new(KernelAppMemory { pages: self.memory });
 
-        proc.add_handle(AnyHandle::new(kernel_app_memory, HandleRights(0))).unwrap();
-        proc.add_handle(AnyHandle::new(thread, HandleRights(0))).unwrap();
+        proc.add_handle(AnyHandle::new(kernel_app_memory, HandleRights(0)))
+            .unwrap();
+        proc.add_handle(AnyHandle::new(thread, HandleRights(0)))
+            .unwrap();
 
         let _proc = SharedRef::new(proc);
     }

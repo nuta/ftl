@@ -112,7 +112,9 @@ impl HandleTable {
         T: Handleable,
     {
         let any_handle = self.handles.get(&id).ok_or(FtlError::HandleNotFound)?;
-        let handle = any_handle.downcast().ok_or(FtlError::UnexpectedHandleType)?;
+        let handle = any_handle
+            .downcast()
+            .ok_or(FtlError::UnexpectedHandleType)?;
         Ok(handle)
     }
 }

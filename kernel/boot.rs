@@ -58,10 +58,10 @@ pub fn boot(cpu_id: CpuId, bootinfo: BootInfo) -> ! {
     Thread::spawn_kernel(thread_entry, 2);
     Thread::spawn_kernel(thread_entry, 3);
 
-        let hello_elf = include_bytes!("../build/apps/hello.elf");
-        KernelAppLoader::new(hello_elf)
-            .expect("failed to load hello.elf")
-            .load(&VSYSCALL_PAGE);
+    let hello_elf = include_bytes!("../build/apps/hello.elf");
+    KernelAppLoader::new(hello_elf)
+        .expect("failed to load hello.elf")
+        .load(&VSYSCALL_PAGE);
 
     println!("yielding CPU...");
     arch::yield_cpu();
