@@ -28,6 +28,12 @@ SECTIONS {
     .bss : ALIGN(16) {
         __bss = .;
         *(.bss .bss.* .sbss .sbss.*);
+
+        // TODO: Remove this and allocate from syscall dynamically.
+        __heap = .;
+        . += 256 * 1024;
+        __heap_end = .;
+
         __bss_end = .;
     }
 }
