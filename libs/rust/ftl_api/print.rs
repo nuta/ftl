@@ -2,11 +2,9 @@ use spin::Mutex;
 
 use crate::syscall;
 
-pub static GLOBAL_PRINTER: Mutex<Printer> = Mutex::new(Printer {
-});
+pub static GLOBAL_PRINTER: Mutex<Printer> = Mutex::new(Printer {});
 
-pub struct Printer {
-}
+pub struct Printer {}
 
 impl core::fmt::Write for Printer {
     fn write_str(&mut self, s: &str) -> core::fmt::Result {

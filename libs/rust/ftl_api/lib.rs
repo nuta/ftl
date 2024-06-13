@@ -5,8 +5,8 @@ mod start;
 
 pub mod arch;
 pub mod panic;
-pub mod syscall;
-pub mod print;
 pub mod prelude;
+pub mod print;
+pub mod syscall;
 
 pub use ftl_types as types;
