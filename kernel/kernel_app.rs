@@ -1,6 +1,3 @@
-use alloc::vec::Vec;
-use core::alloc::GlobalAlloc;
-use core::alloc::Layout;
 use core::mem::size_of;
 
 use ftl_elf::Elf;
@@ -15,7 +12,6 @@ use crate::handle::HandleRights;
 use crate::handle::Handleable;
 use crate::memory::AllocPagesError;
 use crate::memory::AllocatedPages;
-use crate::memory::GLOBAL_ALLOCATOR;
 use crate::process::Process;
 use crate::ref_counted::SharedRef;
 use crate::thread::Thread;
@@ -28,6 +24,7 @@ pub enum Error {
 }
 
 pub struct KernelAppMemory {
+    #[allow(dead_code)]
     pages: AllocatedPages,
 }
 
@@ -153,9 +150,9 @@ impl<'a> KernelAppLoader<'a> {
 
         let kernel_app_memory = SharedRef::new(KernelAppMemory { pages: self.memory });
 
-        proc.add_handle(AnyHandle::new(kernel_app_memory, HandleRights(0)));
-        proc.add_handle(AnyHandle::new(thread, HandleRights(0)));
+        proc.add_handle(AnyHandle::new(kernel_app_memory, HandleRights(0))).unwrap();
+        proc.add_handle(AnyHandle::new(thread, HandleRights(0))).unwrap();
 
-        let proc = SharedRef::new(proc);
+        let _proc = SharedRef::new(proc);
     }
 }

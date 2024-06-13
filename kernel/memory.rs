@@ -101,10 +101,6 @@ impl AllocatedPages {
         self.base.as_ptr()
     }
 
-    pub fn len(&self) -> usize {
-        self.len
-    }
-
     pub fn as_slice_mut(&mut self) -> &mut [u8] {
         unsafe { core::slice::from_raw_parts_mut(self.as_ptr(), self.len) }
     }

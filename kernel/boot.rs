@@ -1,11 +1,6 @@
-use core::mem::size_of;
-
 use arrayvec::ArrayVec;
-use ftl_elf::Rela;
-use ftl_elf::ShType;
 use ftl_types::syscall::SyscallNumber;
 use ftl_types::syscall::VsyscallPage;
-use ftl_utils::alignment::is_aligned;
 use ftl_utils::byte_size::ByteSize;
 
 use crate::arch;
@@ -90,7 +85,7 @@ pub fn boot(cpu_id: CpuId, bootinfo: BootInfo) -> ! {
         };
 
         let hello_elf = include_bytes!("../build/apps/hello.elf");
-        let entry = KernelAppLoader::new(hello_elf)
+        KernelAppLoader::new(hello_elf)
             .expect("failed to load hello.elf")
             .load(&vsyscall);
     }
