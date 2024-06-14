@@ -2,6 +2,7 @@ ARCH    ?= riscv64
 MACHINE ?= qemu-virt
 RELEASE ?=            # "1" to build release version
 V       ?=            # "1" to enable verbose output
+STARTUP ?= apps/hello
 
 # Disable builtin implicit rules and variables.
 MAKEFLAGS += --no-builtin-rules --no-builtin-variables
@@ -61,19 +62,22 @@ fmt:
 fix:
 	cargo clippy --fix --allow-dirty --allow-staged $(CARGOFLAGS)
 
-ftl.elf: $(sources) Makefile build/apps/hello.elf
+ftl.elf: $(sources) Makefile build/startup.elf
 	$(PROGRESS) "CARGO" "boot/$(ARCH)"
 	RUSTFLAGS="$(RUSTFLAGS)" CARGO_TARGET_DIR="build/cargo" $(CARGO) build $(CARGOFLAGS) \
 		--target boot/$(ARCH)/$(ARCH)-$(MACHINE).json \
 		--manifest-path boot/$(ARCH)/Cargo.toml
 	cp build/cargo/$(ARCH)-$(MACHINE)/$(BUILD)/boot_$(ARCH) $(@)
 
-build/apps/hello.elf: $(sources) Makefile
-	$(PROGRESS) "CARGO" "apps/hello"
+build/%.elf: $(sources) Makefile
+	$(PROGRESS) "CARGO" "$(@)"
 	mkdir -p $(@D)
-	RUSTFLAGS="$(RUSTFLAGS) -C link-args=-Map=build/apps/hello.map" \
+	RUSTFLAGS="$(RUSTFLAGS) -C link-args=-Map=$(@:.elf=.map)" \
 	CARGO_TARGET_DIR="build/cargo" \
 		$(CARGO) build $(CARGOFLAGS) \
 		--target libs/rust/ftl_api/arch/$(ARCH)/riscv64-user.json \
-		--manifest-path apps/hello/Cargo.toml
+		--manifest-path $(patsubst build/%.elf,%,$(@))/Cargo.toml
 	cp build/cargo/$(ARCH)-user/$(BUILD)/hello $(@)
+
+build/startup.elf: build/$(STARTUP).elf
+	cp $< $@

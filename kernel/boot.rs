@@ -56,8 +56,8 @@ pub fn boot(cpu_id: CpuId, bootinfo: BootInfo) -> ! {
     Thread::spawn_kernel(thread_entry, 2);
     Thread::spawn_kernel(thread_entry, 3);
 
-    let hello_elf = include_bytes!("../build/apps/hello.elf");
-    KernelAppLoader::new(hello_elf)
+    let startup_elf = include_bytes!("../build/startup.elf");
+    KernelAppLoader::new(startup_elf)
         .expect("failed to load hello.elf")
         .load(&VSYSCALL_PAGE);
 
