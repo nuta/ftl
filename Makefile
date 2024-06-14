@@ -69,6 +69,9 @@ ftl.elf: $(sources) Makefile build/startup.elf
 		--manifest-path boot/$(ARCH)/Cargo.toml
 	cp build/cargo/$(ARCH)-$(MACHINE)/$(BUILD)/boot_$(ARCH) $(@)
 
+build/startup.elf: build/$(STARTUP).elf
+	cp $< $@
+
 build/%.elf: $(sources) Makefile
 	$(PROGRESS) "CARGO" "$(@)"
 	mkdir -p $(@D)
@@ -78,6 +81,3 @@ build/%.elf: $(sources) Makefile
 		--target libs/rust/ftl_api/arch/$(ARCH)/riscv64-user.json \
 		--manifest-path $(patsubst build/%.elf,%,$(@))/Cargo.toml
 	cp build/cargo/$(ARCH)-user/$(BUILD)/hello $(@)
-
-build/startup.elf: build/$(STARTUP).elf
-	cp $< $@

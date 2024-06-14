@@ -7,7 +7,6 @@ use crate::cpuvar::CpuId;
 use crate::kernel_app::KernelAppLoader;
 use crate::memory;
 use crate::syscall::VSYSCALL_PAGE;
-use crate::thread::Thread;
 
 /// A free region of memory available for software.
 #[derive(Debug)]
@@ -25,15 +24,7 @@ pub struct BootInfo {
     pub dtb_addr: *const u8,
 }
 
-#[no_mangle]
-fn thread_entry(thread_id: usize) {
-    let ch = char::from_u32(('A' as usize + thread_id) as u32).unwrap();
-    for i in 0.. {
-        println!("{}: {}", ch, i);
-        for _ in 0..0x100000 {}
-        arch::yield_cpu();
-    }
-}
+const STARTUP_ELF: &[u8] = include_bytes!("../build/startup.elf");
 
 /// The entry point of the kernel.
 pub fn boot(cpu_id: CpuId, bootinfo: BootInfo) -> ! {
@@ -42,23 +33,8 @@ pub fn boot(cpu_id: CpuId, bootinfo: BootInfo) -> ! {
     memory::init(&bootinfo);
     cpuvar::percpu_init(cpu_id);
 
-    let mut v = alloc::vec::Vec::new();
-    v.push(alloc::string::String::from("Hello, "));
-    v.push(alloc::string::String::from("world!"));
-    println!("alloc test: {:?}", v);
-
-    println!("cpuvar test: CPU {}", arch::cpuvar().cpu_id);
-
-    oops!("backtrace test");
-
-    Thread::spawn_kernel(thread_entry, 0);
-    Thread::spawn_kernel(thread_entry, 1);
-    Thread::spawn_kernel(thread_entry, 2);
-    Thread::spawn_kernel(thread_entry, 3);
-
-    let startup_elf = include_bytes!("../build/startup.elf");
-    KernelAppLoader::new(startup_elf)
-        .expect("failed to load hello.elf")
+    KernelAppLoader::new(STARTUP_ELF)
+        .expect("failed to load startup.elf")
         .load(&VSYSCALL_PAGE);
 
     println!("yielding CPU...");
