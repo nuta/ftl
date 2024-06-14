@@ -126,6 +126,7 @@ impl<'a> KernelAppLoader<'a> {
                 rela_dyn.sh_size as usize % size_of::<Rela>() == 0,
                 "misaligned .rela_dyn size"
             );
+
             core::slice::from_raw_parts(
                 self.elf_file.as_ptr().add(rela_dyn.sh_offset as usize) as *const Rela,
                 (rela_dyn.sh_size as usize) / size_of::<Rela>(),
