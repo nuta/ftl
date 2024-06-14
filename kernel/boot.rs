@@ -37,7 +37,6 @@ pub fn boot(cpu_id: CpuId, bootinfo: BootInfo) -> ! {
         .expect("failed to load startup.elf")
         .load(&VSYSCALL_PAGE);
 
-    println!("yielding CPU...");
     arch::yield_cpu();
 
     println!("kernel is ready!");
