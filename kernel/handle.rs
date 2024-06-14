@@ -3,24 +3,11 @@ use core::num::NonZeroIsize;
 use core::ops::Deref;
 
 use ftl_types::error::FtlError;
+use ftl_types::handle::{HandleId, HandleRights};
 use ftl_utils::downcast::Downcastable;
 use hashbrown::HashMap;
 
 use crate::ref_counted::SharedRef;
-
-/// A handle ID.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct HandleId(NonZeroIsize);
-
-impl HandleId {
-    pub const fn from_nonzero(id: NonZeroIsize) -> HandleId {
-        Self(id)
-    }
-}
-
-/// Allowed operations on a handle.
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-pub struct HandleRights(pub u8);
 
 /// A trait for kernel objects that can be referred to by a handle ([`Handle`]).
 pub trait Handleable: Any + Sync + Send {}

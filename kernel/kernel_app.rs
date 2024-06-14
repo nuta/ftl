@@ -4,11 +4,11 @@ use ftl_elf::Elf;
 use ftl_elf::PhdrType;
 use ftl_elf::Rela;
 use ftl_types::syscall::VsyscallPage;
+use ftl_types::handle::HandleRights;
 use ftl_utils::alignment::align_up;
 
 use crate::arch::PAGE_SIZE;
 use crate::handle::AnyHandle;
-use crate::handle::HandleRights;
 use crate::handle::Handleable;
 use crate::memory::AllocPagesError;
 use crate::memory::AllocatedPages;
@@ -150,9 +150,9 @@ impl<'a> KernelAppLoader<'a> {
 
         let kernel_app_memory = SharedRef::new(KernelAppMemory { pages: self.memory });
 
-        proc.add_handle(AnyHandle::new(kernel_app_memory, HandleRights(0)))
+        proc.add_handle(AnyHandle::new(kernel_app_memory, HandleRights::NONE))
             .unwrap();
-        proc.add_handle(AnyHandle::new(thread, HandleRights(0)))
+        proc.add_handle(AnyHandle::new(thread, HandleRights::NONE))
             .unwrap();
 
         let _proc = SharedRef::new(proc);

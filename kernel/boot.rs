@@ -1,6 +1,4 @@
 use arrayvec::ArrayVec;
-use ftl_types::syscall::SyscallNumber;
-use ftl_types::syscall::VsyscallPage;
 use ftl_utils::byte_size::ByteSize;
 
 use crate::arch;

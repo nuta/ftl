@@ -1,7 +1,7 @@
 use ftl_types::error::FtlError;
 
 use crate::handle::AnyHandle;
-use crate::handle::HandleId;
+use ftl_types::handle::HandleId;
 use crate::handle::HandleTable;
 
 pub struct Process {
