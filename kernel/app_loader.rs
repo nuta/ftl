@@ -20,7 +20,7 @@ pub enum Error {
     NoPhdrs,
     AllocPages(AllocPagesError),
     NotPIE,
-    #[cfg(target_arch = "riscv")]
+    #[cfg(target_arch = "riscv64")]
     NoRelaDyn,
 }
 
@@ -95,7 +95,7 @@ impl<'a> AppLoader<'a> {
         }
     }
 
-    #[cfg(target_arch = "riscv")]
+    #[cfg(target_arch = "riscv64")]
     fn get_shdr_by_name(&self, name: &str) -> Option<&ftl_elf::Shdr> {
         fn get_cstr(buffer: &[u8], offset: usize) -> Option<&str> {
             let mut len = 0;
@@ -127,7 +127,7 @@ impl<'a> AppLoader<'a> {
         })
     }
 
-    #[cfg(target_arch = "riscv")]
+    #[cfg(target_arch = "riscv64")]
     fn relocate_riscv(&mut self) -> Result<(), Error> {
         use core::mem::size_of;
         use ftl_elf::Rela;
@@ -165,7 +165,7 @@ impl<'a> AppLoader<'a> {
     pub fn load(mut self, vsyscall_page: *const VsyscallPage) -> Result<Process, Error> {
         self.load_segments();
 
-        #[cfg(target_arch = "riscv")]
+        #[cfg(target_arch = "riscv64")]
         self.relocate_riscv()?;
 
         let entry = unsafe { core::mem::transmute(self.entry_addr()) };
