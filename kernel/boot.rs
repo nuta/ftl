@@ -4,7 +4,7 @@ use ftl_utils::byte_size::ByteSize;
 use crate::arch;
 use crate::cpuvar;
 use crate::cpuvar::CpuId;
-use crate::kernel_app::KernelAppLoader;
+use crate::app_loader::AppLoader;
 use crate::memory;
 use crate::syscall::VSYSCALL_PAGE;
 
@@ -33,9 +33,10 @@ pub fn boot(cpu_id: CpuId, bootinfo: BootInfo) -> ! {
     memory::init(&bootinfo);
     cpuvar::percpu_init(cpu_id);
 
-    KernelAppLoader::new(STARTUP_ELF)
-        .expect("failed to load startup.elf")
-        .load(&VSYSCALL_PAGE);
+    AppLoader::parse(STARTUP_ELF)
+        .expect("startup.elf is invalid")
+        .load(&VSYSCALL_PAGE)
+        .expect("failed to load startup.elf");
 
     arch::yield_cpu();
 

@@ -1,8 +1,6 @@
-use core::mem::size_of;
-
 use ftl_elf::Elf;
 use ftl_elf::PhdrType;
-use ftl_elf::Rela;
+use ftl_elf::ET_DYN;
 use ftl_types::syscall::VsyscallPage;
 use ftl_types::handle::HandleRights;
 use ftl_utils::alignment::align_up;
@@ -21,6 +19,9 @@ pub enum Error {
     ParseElf(ftl_elf::ParseError),
     NoPhdrs,
     AllocPages(AllocPagesError),
+    NotPIE,
+    #[cfg(target_arch = "riscv")]
+    NoRelaDyn,
 }
 
 pub struct KernelAppMemory {
@@ -30,15 +31,21 @@ pub struct KernelAppMemory {
 
 impl Handleable for KernelAppMemory {}
 
-pub struct KernelAppLoader<'a> {
+pub struct AppLoader<'a> {
     elf_file: &'a [u8],
     elf: Elf<'a>,
     memory: AllocatedPages,
 }
 
-impl<'a> KernelAppLoader<'a> {
-    pub fn new(elf_file: &[u8]) -> Result<KernelAppLoader, Error> {
+impl<'a> AppLoader<'a> {
+    pub fn parse(elf_file: &[u8]) -> Result<AppLoader, Error> {
         let elf = Elf::parse(elf_file).map_err(Error::ParseElf)?;
+
+        // TODO: Check DF_1_PIE flag to make sure it's a PIE, not a shared
+        //       library.
+        if elf.ehdr.e_type != ET_DYN {
+            return Err(Error::NotPIE);
+        }
 
         let lowest_addr = elf
             .phdrs
@@ -57,7 +64,7 @@ impl<'a> KernelAppLoader<'a> {
 
         let elf_len = align_up(highest_addr - lowest_addr, PAGE_SIZE);
         let memory = AllocatedPages::alloc(elf_len).map_err(Error::AllocPages)?;
-        Ok(KernelAppLoader {
+        Ok(AppLoader {
             elf_file,
             elf,
             memory,
@@ -88,6 +95,7 @@ impl<'a> KernelAppLoader<'a> {
         }
     }
 
+    #[cfg(target_arch = "riscv")]
     fn get_shdr_by_name(&self, name: &str) -> Option<&ftl_elf::Shdr> {
         fn get_cstr(buffer: &[u8], offset: usize) -> Option<&str> {
             let mut len = 0;
@@ -119,8 +127,12 @@ impl<'a> KernelAppLoader<'a> {
         })
     }
 
-    fn relocate_rela_dyn(&mut self) {
-        let rela_dyn = self.get_shdr_by_name(".rela.dyn").unwrap();
+    #[cfg(target_arch = "riscv")]
+    fn relocate_riscv(&mut self) -> Result<(), Error> {
+        use core::mem::size_of;
+        use ftl_elf::Rela;
+
+        let rela_dyn = self.get_shdr_by_name(".rela.dyn").ok_or(Error::NoRelaDyn)?;
         let rela_entries = unsafe {
             assert!(
                 rela_dyn.sh_size as usize % size_of::<Rela>() == 0,
@@ -145,13 +157,16 @@ impl<'a> KernelAppLoader<'a> {
                 }
                 _ => panic!("unsupported relocation type: {}", rela.r_info),
             }
-
         }
+
+        Ok(())
     }
 
-    pub fn load(mut self, vsyscall_page: *const VsyscallPage) {
+    pub fn load(mut self, vsyscall_page: *const VsyscallPage) -> Result<Process, Error> {
         self.load_segments();
-        self.relocate_rela_dyn();
+
+        #[cfg(target_arch = "riscv")]
+        self.relocate_riscv()?;
 
         let entry = unsafe { core::mem::transmute(self.entry_addr()) };
         let thread = Thread::spawn_kernel(entry, vsyscall_page as usize);
@@ -164,6 +179,6 @@ impl<'a> KernelAppLoader<'a> {
         proc.add_handle(AnyHandle::new(thread, HandleRights::NONE))
             .unwrap();
 
-        let _proc = SharedRef::new(proc);
+        Ok(proc)
     }
 }

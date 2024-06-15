@@ -33,6 +33,9 @@ pub struct Ehdr {
     pub e_shstrndx: u16,
 }
 
+pub const ET_EXEC: u16 = 2;
+pub const ET_DYN: u16 = 3;
+
 #[repr(u32)]
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
