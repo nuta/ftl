@@ -1,5 +1,7 @@
 #![no_std]
 
+pub mod riscv;
+
 use core::mem::size_of;
 
 #[cfg(target_pointer_width = "64")]

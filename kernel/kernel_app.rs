@@ -134,10 +134,18 @@ impl<'a> KernelAppLoader<'a> {
         };
 
         for rela in rela_entries {
-            unsafe {
-                let ptr = (self.base_addr() + rela.r_offset as usize) as *mut i64;
-                *ptr += (self.base_addr() as i64) + rela.r_addend;
-            };
+            use ftl_elf::riscv::R_RISCV_RELATIVE;
+
+            match rela.r_info {
+                R_RISCV_RELATIVE => {
+                    unsafe {
+                        let ptr = (self.base_addr() + rela.r_offset as usize) as *mut i64;
+                        *ptr += (self.base_addr() as i64) + rela.r_addend;
+                    }
+                }
+                _ => panic!("unsupported relocation type: {}", rela.r_info),
+            }
+
         }
     }
 
