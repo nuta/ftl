@@ -4,7 +4,7 @@ use ftl_inlinedvec::InlinedVec;
 use ftl_types::error::FtlError;
 use ftl_types::handle::HandleId;
 
-use crate::handle::OwnedHandle;
+use crate::handle::{AsRawHandle, OwnedHandle};
 use crate::syscall;
 
 pub struct MessageHeader(usize);
@@ -54,5 +54,11 @@ impl Channel {
                 Err(SendError { error, handles })
             }
         }
+    }
+}
+
+impl AsRawHandle for Channel {
+    fn as_raw_handle(&self) -> HandleId {
+        self.handle.id()
     }
 }

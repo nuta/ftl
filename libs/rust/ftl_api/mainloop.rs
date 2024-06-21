@@ -3,8 +3,10 @@ use ftl_types::handle::HandleId;
 use hashbrown::HashMap;
 
 use crate::channel::Channel;
+use crate::handle::AsRawHandle;
 use crate::poll::Poll;
 use crate::poll::{self};
+use crate::println;
 
 pub enum Message {
     Foo,
@@ -21,6 +23,7 @@ pub enum Object {
 }
 
 pub enum Event<'a, State> {
+    PollError(Error),
     Message(&'a mut State, &'a mut Channel, Message),
 }
 
@@ -37,16 +40,17 @@ impl<State> Mainloop<State> {
         }
     }
 
-    pub fn add(&mut self, id: HandleId, state: State) -> Result<(), Error> {
+    pub fn add_channel(&mut self, ch: Channel, state: State) -> Result<(), Error> {
+        let id = ch.as_raw_handle();
         self.poll.add(id).map_err(Error::Poll)?;
-        self.states.insert(id, todo!());
+        self.states.insert(id, (Object::Channel(ch), state));
         Ok(())
     }
 
-    pub fn next(&mut self) -> Result<Option<Event<State>>, Error> {
-        let (poll_ev, id) = self.poll.wait().map_err(Error::Poll)?;
+    pub fn next(&mut self) -> Option<Event<State>> {
+        let (poll_ev, id) = self.poll.wait().map_err(Error::Poll).ok()?;
         let Some((object, state)) = self.states.get_mut(&id) else {
-            return Err(Error::UntrackedHandle(id));
+            return Some(Event::PollError(Error::UntrackedHandle(id)));
         };
 
         let ev = match object {
@@ -57,7 +61,7 @@ impl<State> Mainloop<State> {
             }
         };
 
-        Ok(Some(ev))
+        Some(ev)
     }
 }
 
@@ -65,11 +69,15 @@ fn main() {
     struct St {
         foo: isize,
     }
+
     let mut mainloop = Mainloop::<St>::new();
-    while let Some(ev) = mainloop.next().unwrap() {
+    while let Some(ev) = mainloop.next() {
         match ev {
             Event::Message(st, ch, m) => {
                 // TODO:
+            }
+            Event::PollError(err) => {
+                println!("Error: {:?}", err);
             }
         }
     }

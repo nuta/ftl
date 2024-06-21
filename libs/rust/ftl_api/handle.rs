@@ -32,3 +32,7 @@ impl Drop for OwnedHandle {
         }
     }
 }
+
+pub trait AsRawHandle {
+    fn as_raw_handle(&self) -> HandleId;
+}
