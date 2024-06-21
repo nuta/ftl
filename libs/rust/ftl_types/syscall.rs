@@ -11,6 +11,7 @@ pub enum SyscallNumber {
     HandleClose = 6,
     PollCreate = 7,
     PollWait = 8,
+    PollAdd = 9,
 }
 
 pub struct VsyscallPage {

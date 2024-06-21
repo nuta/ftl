@@ -16,7 +16,7 @@ impl HandleId {
         Self(id)
     }
 
-    pub const fn into_raw(self) -> isize {
+    pub const fn as_isize(self) -> isize {
         self.0.get()
     }
 }

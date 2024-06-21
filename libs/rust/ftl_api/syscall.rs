@@ -1,5 +1,3 @@
-use core::num::NonZeroIsize;
-
 use ftl_types::error::FtlError;
 use ftl_types::handle::HandleId;
 use ftl_types::syscall::SyscallNumber;
@@ -74,7 +72,7 @@ pub fn syscall6(
 }
 
 pub fn handle_close(handle: HandleId) -> Result<(), FtlError> {
-    syscall1(SyscallNumber::HandleClose, handle.into_raw())?;
+    syscall1(SyscallNumber::HandleClose, handle.as_isize())?;
     Ok(())
 }
 
@@ -100,7 +98,7 @@ pub fn channel_send(
 ) -> Result<(), FtlError> {
     syscall6(
         SyscallNumber::ChannelSend,
-        handle.into_raw(),
+        handle.as_isize(),
         header as isize,
         buf.as_ptr() as isize,
         buf.len() as isize,
@@ -115,8 +113,13 @@ pub fn poll_create() -> Result<HandleId, FtlError> {
     Ok(HandleId::from_raw(handle).ok_or(FtlError::InvalidSyscallReturnValue)?)
 }
 
+pub fn poll_add(poll: HandleId, handle: HandleId) -> Result<(), FtlError> {
+    syscall2(SyscallNumber::PollAdd, poll.as_isize(), handle.as_isize())?;
+    Ok(())
+}
+
 pub fn poll_wait(handle: HandleId) -> Result<isize, FtlError> {
-    syscall1(SyscallNumber::PollWait, handle.into_raw())
+    syscall1(SyscallNumber::PollWait, handle.as_isize())
 }
 
 pub(crate) fn set_vsyscall(vsyscall: &'static VsyscallPage) {

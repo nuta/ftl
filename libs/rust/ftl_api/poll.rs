@@ -15,6 +15,11 @@ impl Poll {
         Ok(Poll(OwnedHandle::from_raw(handle)))
     }
 
+    pub fn add(&self, handle: &OwnedHandle) -> Result<(), FtlError> {
+        syscall::poll_add(self.0.id(), handle.id())?;
+        Ok(())
+    }
+
     pub fn wait(&self) -> Result<Event, FtlError> {
         let raw = syscall::poll_wait(self.0.id())?;
         todo!()
