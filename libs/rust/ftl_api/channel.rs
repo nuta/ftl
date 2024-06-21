@@ -21,8 +21,12 @@ pub struct Channel {
 impl Channel {
     pub fn create() -> Result<(Channel, Channel), FtlError> {
         let (handle0, handle1) = syscall::channel_create()?;
-        let ch0 = Channel { handle: OwnedHandle::from_raw(handle0) };
-        let ch1 = Channel { handle: OwnedHandle::from_raw(handle1) };
+        let ch0 = Channel {
+            handle: OwnedHandle::from_raw(handle0),
+        };
+        let ch1 = Channel {
+            handle: OwnedHandle::from_raw(handle1),
+        };
         Ok((ch0, ch1))
     }
 
@@ -34,7 +38,8 @@ impl Channel {
     ) -> Result<(), SendError> {
         // SAFETY: `OwnedHandle` is `repr(transparent)` of `HandleId`. That is,
         //         they have the same memory layout.
-        let handle_ids = unsafe { mem::transmute::<&[OwnedHandle], &[HandleId]>(handles.as_slice()) };
+        let handle_ids =
+            unsafe { mem::transmute::<&[OwnedHandle], &[HandleId]>(handles.as_slice()) };
         match syscall::channel_send(self.handle.id(), header.0, buf, handle_ids) {
             Ok(()) => {
                 // We've successfully transferred the handles. Prevent them

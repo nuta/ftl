@@ -1,6 +1,7 @@
-use ftl_types::{error::FtlError, handle::HandleId};
+use ftl_types::error::FtlError;
 
-use crate::{handle::OwnedHandle, syscall};
+use crate::handle::OwnedHandle;
+use crate::syscall;
 
 pub enum Event {
     // ChannelNewMessage(HandleId),

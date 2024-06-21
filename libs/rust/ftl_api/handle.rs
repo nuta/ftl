@@ -2,7 +2,6 @@ use ftl_types::handle::HandleId;
 
 use crate::syscall;
 
-
 /// An owned handle, which will be closed when dropped.
 ///
 /// # Invariant: `OwnedHandle` can be transmuted to `HandleId`

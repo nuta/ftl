@@ -1,5 +1,5 @@
-use crate::TooManyItemsError;
 use crate::InlinedVec;
+use crate::TooManyItemsError;
 
 /// An inlined string. Unline `String`, this type is allocated on the stack
 /// or inlined in a struct instead of the heap.
