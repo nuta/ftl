@@ -1,6 +1,4 @@
-use core::str::FromStr;
-
-use crate::ExceedsCapacityError;
+use crate::TooManyItemsError;
 use crate::InlinedVec;
 
 /// An inlined string. Unline `String`, this type is allocated on the stack
@@ -26,7 +24,7 @@ impl<const CAP: usize> InlinedString<CAP> {
 }
 
 impl<const CAP: usize> TryFrom<&str> for InlinedString<CAP> {
-    type Error = ExceedsCapacityError;
+    type Error = TooManyItemsError;
 
     fn try_from(s: &str) -> Result<Self, Self::Error> {
         let mut string = Self::new();

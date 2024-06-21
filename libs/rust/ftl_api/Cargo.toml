@@ -13,3 +13,4 @@ spin = { workspace = true }
 linked_list_allocator = { workspace = true }
 
 ftl_api_macros = { workspace = true }
+ftl_inlinedvec ={ workspace = true }

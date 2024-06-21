@@ -1,5 +1,6 @@
 use core::mem;
 
+use ftl_inlinedvec::InlinedVec;
 use ftl_types::error::FtlError;
 use ftl_types::handle::HandleId;
 
@@ -20,13 +21,17 @@ pub struct OwnedHandle(HandleId);
 
 impl Drop for OwnedHandle {
     fn drop(&mut self) {
-        syscall::handle_close(self.0);
+        if let Err(err) = syscall::handle_close(self.0) {
+            // TODO: Closing a handle may fail, but `Drop::drop` doesn't allow
+            //       returning an error. We should log this error here to notice
+            //       the potential bugs.
+        }
     }
 }
 
 pub struct SendError {
     pub error: FtlError,
-    // handles: ArrayVec<OwnedHandle>,
+    pub handles: InlinedVec<OwnedHandle, 4>,
 }
 
 pub struct Channel {
@@ -45,20 +50,23 @@ impl Channel {
         &self,
         header: MessageHeader,
         buf: &[u8],
-        handles: &[OwnedHandle],
+        handles: InlinedVec<OwnedHandle, 4>,
     ) -> Result<(), SendError> {
         // SAFETY: `OwnedHandle` is `repr(transparent)` of `HandleId`. That is,
         //         they have the same memory layout.
-        let handle_ids = unsafe { mem::transmute::<&[OwnedHandle], &[HandleId]>(handles) };
+        let handle_ids = unsafe { mem::transmute::<&[OwnedHandle], &[HandleId]>(handles.as_slice()) };
         match syscall::channel_send(self.handle, header.0, buf, handle_ids) {
             Ok(()) => {
+                // We've successfully transferred the handles. Prevent them
+                // from being closed.
                 mem::forget(handles);
+
                 Ok(())
             }
             Err(error) => {
                 // Failed to send message. Since it's guaranteed that we still
-                // own handles,
-                Err(SendError { error })
+                // own handles, return them back to the caller.
+                Err(SendError { error, handles })
             }
         }
     }
