@@ -110,6 +110,15 @@ pub fn channel_send(
     Ok(())
 }
 
+pub fn poll_create() -> Result<HandleId, FtlError> {
+    let handle = syscall0(SyscallNumber::PollCreate)?;
+    Ok(HandleId::from_raw(handle).ok_or(FtlError::InvalidSyscallReturnValue)?)
+}
+
+pub fn poll_wait(handle: HandleId) -> Result<isize, FtlError> {
+    syscall1(SyscallNumber::PollWait, handle.into_raw())
+}
+
 pub(crate) fn set_vsyscall(vsyscall: &'static VsyscallPage) {
     *VSYSCALL_PAGE.lock() = Some(vsyscall);
 }

@@ -9,6 +9,8 @@ pub enum SyscallNumber {
     ChannelRecv = 4,
     ChannelCall = 5,
     HandleClose = 6,
+    PollCreate = 7,
+    PollWait = 8,
 }
 
 pub struct VsyscallPage {
