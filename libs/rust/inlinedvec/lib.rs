@@ -1,9 +1,9 @@
 #![no_std]
 
-mod inlinedstring;
-mod inlinedvec;
+mod inlined_string;
+mod inlined_vec;
 
-pub use inlinedstring::InlinedString;
-pub use inlinedvec::CapacityError;
-pub use inlinedvec::InlinedVec;
-pub use inlinedvec::TooManyItemsError;
+pub use inlined_string::InlinedString;
+pub use inlined_vec::CapacityError;
+pub use inlined_vec::InlinedVec;
+pub use inlined_vec::TooManyItemsError;
