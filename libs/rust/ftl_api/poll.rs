@@ -1,10 +1,11 @@
 use ftl_types::error::FtlError;
+use ftl_types::handle::HandleId;
 
 use crate::handle::OwnedHandle;
 use crate::syscall;
 
 pub enum Event {
-    // ChannelNewMessage(HandleId),
+    ChannelNewMessage,
 }
 
 pub struct Poll(OwnedHandle);
@@ -15,12 +16,12 @@ impl Poll {
         Ok(Poll(OwnedHandle::from_raw(handle)))
     }
 
-    pub fn add(&self, handle: &OwnedHandle) -> Result<(), FtlError> {
-        syscall::poll_add(self.0.id(), handle.id())?;
+    pub fn add(&self, handle: HandleId) -> Result<(), FtlError> {
+        syscall::poll_add(self.0.id(), handle)?;
         Ok(())
     }
 
-    pub fn wait(&self) -> Result<Event, FtlError> {
+    pub fn wait(&self) -> Result<(Event, HandleId), FtlError> {
         let raw = syscall::poll_wait(self.0.id())?;
         todo!()
     }
