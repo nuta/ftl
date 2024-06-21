@@ -54,6 +54,7 @@ dependencies = [
  "ftl_api_macros",
  "ftl_inlinedvec",
  "ftl_types",
+ "hashbrown",
  "linked_list_allocator",
  "spin",
 ]
