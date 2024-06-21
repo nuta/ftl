@@ -76,8 +76,10 @@ fn main() {
             Event::Message(st, ch, m) => {
                 match m {
                     Message::Foo => {
+                        println!("ch handle ID: {:?}", ch.handle_id());
                         st.foo += 1;
                         println!("Foo: {}", st.foo);
+                        println!("ch handle ID: {:?}", ch.handle_id());
                     }
                 }
             }
