@@ -23,6 +23,10 @@ impl<T, const CAP: usize> InlinedVec<T, CAP> {
         self.0.len()
     }
 
+    pub fn pop(&mut self) -> Option<T> {
+        self.0.pop()
+    }
+
     pub fn try_push(&mut self, value: T) -> Result<(), CapacityError<T>> {
         self.0
             .try_push(value)
