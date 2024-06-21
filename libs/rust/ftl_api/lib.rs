@@ -1,5 +1,5 @@
 #![no_std]
-#![feature(start)]
+#![feature(lang_items)]
 
 extern crate alloc;
 

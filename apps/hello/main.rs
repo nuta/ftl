@@ -1,5 +1,4 @@
 #![no_std]
-#![no_main]
 
 use ftl_api::prelude::*;
 

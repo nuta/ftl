@@ -39,7 +39,6 @@ pub fn main(_args: TokenStream, item: TokenStream) -> TokenStream {
     }
 
     let output: proc_macro2::TokenStream = quote! {
-        #[no_mangle]
         #func
     };
 
