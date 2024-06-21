@@ -4,7 +4,8 @@ use ftl_inlinedvec::InlinedVec;
 use ftl_types::error::FtlError;
 use ftl_types::handle::HandleId;
 
-use crate::handle::{Handleable, OwnedHandle};
+use crate::handle::Handleable;
+use crate::handle::OwnedHandle;
 use crate::syscall;
 
 pub struct MessageHeader(usize);

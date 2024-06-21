@@ -74,7 +74,6 @@ fn main() {
     while let Some(ev) = mainloop.next() {
         match ev {
             Event::Message(st, ch, m) => {
-                // TODO:
             }
             Event::PollError(err) => {
                 println!("Error: {:?}", err);
