@@ -5,8 +5,19 @@ use core::num::NonZeroIsize;
 pub struct HandleId(NonZeroIsize);
 
 impl HandleId {
+    pub const fn from_raw(id: isize) -> Option<HandleId> {
+        match NonZeroIsize::new(id) {
+            Some(id) => Some(Self(id)),
+            None => None,
+        }
+    }
+
     pub const fn from_nonzero(id: NonZeroIsize) -> HandleId {
         Self(id)
+    }
+
+    pub const fn into_raw(self) -> isize {
+        self.0.get()
     }
 }
 

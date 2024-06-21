@@ -4,6 +4,11 @@ use crate::error::FtlError;
 #[repr(isize)]
 pub enum SyscallNumber {
     Print = 1,
+    ChannelCreate = 2,
+    ChannelSend = 3,
+    ChannelRecv = 4,
+    ChannelCall = 5,
+    HandleClose = 6,
 }
 
 pub struct VsyscallPage {

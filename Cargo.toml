@@ -12,6 +12,7 @@ arrayvec = { version = "0.7.4", default-features = false }
 hashbrown = "0.14.5"
 spin = "0.9.8"
 linked_list_allocator = "0.10.5"
+tinyvec = "1.6.0"
 
 quote = "1.0.36"
 syn = "2.0.66"
