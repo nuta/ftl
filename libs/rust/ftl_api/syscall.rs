@@ -112,21 +112,6 @@ pub fn channel_send(
     Ok(())
 }
 
-pub fn poll_create() -> Result<HandleId, FtlError> {
-    let ret = syscall0(SyscallNumber::PollCreate)?;
-    let handle = retval_to_handle(ret)?;
-    Ok(handle)
-}
-
-pub fn poll_add(poll: HandleId, handle: HandleId) -> Result<(), FtlError> {
-    syscall2(SyscallNumber::PollAdd, poll.as_isize(), handle.as_isize())?;
-    Ok(())
-}
-
-pub fn poll_wait(handle: HandleId) -> Result<isize, FtlError> {
-    syscall1(SyscallNumber::PollWait, handle.as_isize())
-}
-
 pub(crate) fn set_vsyscall(vsyscall: &'static VsyscallPage) {
     *VSYSCALL_PAGE.lock() = Some(vsyscall);
 }
