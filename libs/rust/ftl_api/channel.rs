@@ -1,6 +1,7 @@
 use core::mem;
 
-use ftl_types::{error::FtlError, handle::HandleId};
+use ftl_types::error::FtlError;
+use ftl_types::handle::HandleId;
 
 use crate::syscall;
 
@@ -40,7 +41,12 @@ impl Channel {
         Ok((ch0, ch1))
     }
 
-    pub fn send(&self, header: MessageHeader, buf: &[u8], handles: &[OwnedHandle]) -> Result<(), SendError> {
+    pub fn send(
+        &self,
+        header: MessageHeader,
+        buf: &[u8],
+        handles: &[OwnedHandle],
+    ) -> Result<(), SendError> {
         // SAFETY: `OwnedHandle` is `repr(transparent)` of `HandleId`. That is,
         //         they have the same memory layout.
         let handle_ids = unsafe { mem::transmute::<&[OwnedHandle], &[HandleId]>(handles) };

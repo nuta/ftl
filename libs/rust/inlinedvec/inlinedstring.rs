@@ -1,6 +1,7 @@
 use core::str::FromStr;
 
-use crate::{ExceedsCapacityError, InlinedVec};
+use crate::ExceedsCapacityError;
+use crate::InlinedVec;
 
 /// An inlined string. Unline `String`, this type is allocated on the stack
 /// or inlined in a struct instead of the heap.
@@ -28,9 +29,8 @@ impl<const CAP: usize> TryFrom<&str> for InlinedString<CAP> {
     type Error = ExceedsCapacityError;
 
     fn try_from(s: &str) -> Result<Self, Self::Error> {
-            let mut string = Self::new();
-            string.0.try_extend_from_slice(s.as_bytes())?;
-            Ok(string)
-
+        let mut string = Self::new();
+        string.0.try_extend_from_slice(s.as_bytes())?;
+        Ok(string)
     }
 }
