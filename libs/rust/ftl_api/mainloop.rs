@@ -3,7 +3,7 @@ use ftl_types::handle::HandleId;
 use hashbrown::HashMap;
 
 use crate::channel::Channel;
-use crate::handle::AsRawHandle;
+use crate::handle::Handleable;
 use crate::poll::Poll;
 use crate::poll::{self};
 use crate::println;
@@ -41,7 +41,7 @@ impl<State> Mainloop<State> {
     }
 
     pub fn add_channel(&mut self, ch: Channel, state: State) -> Result<(), Error> {
-        let id = ch.as_raw_handle();
+        let id = ch.handle_id();
         self.poll.add(id).map_err(Error::Poll)?;
         self.states.insert(id, (Object::Channel(ch), state));
         Ok(())
