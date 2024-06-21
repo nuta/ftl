@@ -15,6 +15,14 @@ impl<T, const CAP: usize> InlinedVec<T, CAP> {
         Self(arrayvec::ArrayVec::new())
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
     pub fn try_push(&mut self, value: T) -> Result<(), CapacityError<T>> {
         self.0
             .try_push(value)
@@ -28,10 +36,6 @@ impl<T, const CAP: usize> InlinedVec<T, CAP> {
         self.0
             .try_extend_from_slice(other)
             .map_err(|_| TooManyItemsError)
-    }
-
-    pub fn len(&self) -> usize {
-        self.0.len()
     }
 
     pub fn as_slice(&self) -> &[T] {
