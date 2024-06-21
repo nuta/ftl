@@ -41,6 +41,7 @@ impl Channel {
         //         they have the same memory layout.
         let handle_ids =
             unsafe { mem::transmute::<&[OwnedHandle], &[HandleId]>(handles.as_slice()) };
+
         match syscall::channel_send(self.handle.id(), header.0, buf, handle_ids) {
             Ok(()) => {
                 // We've successfully transferred the handles. Prevent them
