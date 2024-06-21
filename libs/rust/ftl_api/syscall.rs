@@ -71,6 +71,12 @@ pub fn syscall6(
     syscall(n, a0, a1, a2, a3, a4, a5)
 }
 
+fn retval_to_handle(retval: isize) -> Result<HandleId, FtlError> {
+    let handle_id: i32 = (retval & HANDLE_ID_MASK).try_into().map_err(|_| FtlError::InvalidSyscallReturnValue)?;
+    let handle = HandleId::from_raw(handle_id).ok_or(FtlError::InvalidSyscallReturnValue)?;
+    Ok(handle)
+}
+
 pub fn handle_close(handle: HandleId) -> Result<(), FtlError> {
     syscall1(SyscallNumber::HandleClose, handle.as_isize())?;
     Ok(())
@@ -83,10 +89,8 @@ pub fn print(s: &[u8]) -> Result<(), FtlError> {
 
 pub fn channel_create() -> Result<(HandleId, HandleId), FtlError> {
     let ret = syscall0(SyscallNumber::ChannelCreate)?;
-    let handle0 =
-        HandleId::from_raw(ret & HANDLE_ID_MASK).ok_or(FtlError::InvalidSyscallReturnValue)?;
-    let handle1 =
-        HandleId::from_raw(ret >> HANDLE_ID_BITS).ok_or(FtlError::InvalidSyscallReturnValue)?;
+    let handle0 = retval_to_handle(ret)?;
+    let handle1 = retval_to_handle(ret >> HANDLE_ID_BITS)?;
     Ok((handle0, handle1))
 }
 
@@ -109,8 +113,9 @@ pub fn channel_send(
 }
 
 pub fn poll_create() -> Result<HandleId, FtlError> {
-    let handle = syscall0(SyscallNumber::PollCreate)?;
-    Ok(HandleId::from_raw(handle).ok_or(FtlError::InvalidSyscallReturnValue)?)
+    let ret = syscall0(SyscallNumber::PollCreate)?;
+    let handle = retval_to_handle(ret)?;
+    Ok(handle)
 }
 
 pub fn poll_add(poll: HandleId, handle: HandleId) -> Result<(), FtlError> {

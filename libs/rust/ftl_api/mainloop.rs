@@ -8,6 +8,13 @@ use crate::poll::Poll;
 use crate::poll::{self};
 use crate::println;
 
+pub struct HandleIdOrZero(isize);
+
+pub struct MessageBuffer {
+    pub handles: [HandleIdOrZero; 4],
+    pub buf: [u8; 4096],
+}
+
 pub enum Message {
     Foo,
 }

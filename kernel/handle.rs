@@ -1,5 +1,5 @@
 use core::any::Any;
-use core::num::NonZeroIsize;
+use core::num::NonZeroI32;
 use core::ops::Deref;
 
 use ftl_types::error::FtlError;
@@ -63,10 +63,12 @@ impl AnyHandle {
 ///
 /// The current 64K limit has no particular reason, but it should be low
 /// enough to prevent an overflow in `next_id + 1` in `HandleTable::add`.
-const NUM_HANDLES_MAX: isize = 64 * 1024;
+///
+/// The hard limit is `2^HANDLE_ID_BITS - 1`.
+const NUM_HANDLES_MAX: i32 = 64 * 1024;
 
 pub struct HandleTable {
-    next_id: isize,
+    next_id: i32,
     handles: HashMap<HandleId, AnyHandle>,
 }
 
@@ -86,7 +88,7 @@ impl HandleTable {
 
         // SAFETY: The condition above ensures it doesn't overflow and
         //         never reaches zero.
-        let raw_id = unsafe { NonZeroIsize::new_unchecked(self.next_id) };
+        let raw_id = unsafe { NonZeroI32::new_unchecked(self.next_id) };
         let id = HandleId::from_nonzero(raw_id);
 
         self.next_id = self.next_id + 1;
