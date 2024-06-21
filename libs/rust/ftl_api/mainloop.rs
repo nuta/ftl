@@ -73,7 +73,14 @@ fn main() {
     let mut mainloop = Mainloop::<St>::new();
     while let Some(ev) = mainloop.next() {
         match ev {
-            Event::Message(st, ch, m) => {}
+            Event::Message(st, ch, m) => {
+                match m {
+                    Message::Foo => {
+                        st.foo += 1;
+                        println!("Foo: {}", st.foo);
+                    }
+                }
+            }
             Event::PollError(err) => {
                 println!("Error: {:?}", err);
             }
