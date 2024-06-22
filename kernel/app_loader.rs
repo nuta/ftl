@@ -165,15 +165,15 @@ impl<'a> AppLoader<'a> {
         mut self,
         vsyscall_page: *const VsyscallPage,
         first_handle: AnyHandle,
-    ) -> Result<Process, Error> {
+    ) -> Result<SharedRef<Process>, Error> {
         self.load_segments();
 
         #[cfg(target_arch = "riscv64")]
         self.relocate_riscv()?;
 
         let entry = unsafe { core::mem::transmute(self.entry_addr()) };
-        let thread = Thread::spawn_kernel(entry, vsyscall_page as usize);
-        let proc = Process::create();
+        let proc = SharedRef::new(Process::create());
+        let thread = Thread::spawn_kernel(proc.clone(), entry, vsyscall_page as usize);
 
         let kernel_app_memory = SharedRef::new(KernelAppMemory { pages: self.memory });
 

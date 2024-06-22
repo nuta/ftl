@@ -89,7 +89,10 @@ impl HandleTable {
 
         let id = HandleId::from_raw(self.next_id);
         self.next_id = self.next_id + 1;
+        println!("inserting...: {:?}", id);
         self.handles.insert(id, handle);
+        println!("inserted: {:?}", id);
+        println!("HandleTable::get: {:?}, self={:p}, len={}", id, self, self.handles.len());
         Ok(id)
     }
 
@@ -98,7 +101,7 @@ impl HandleTable {
     where
         T: Handleable,
     {
-        println!("HandleTable::get");
+        println!("HandleTable::get: {:?}, self={:p}, len={}", id, self, self.handles.len());
         let any_handle = self.handles.get(&id).ok_or(FtlError::HandleNotFound)?;
         println!("HandleTable::get downcast");
         let handle = any_handle

@@ -64,14 +64,14 @@ impl Thread {
         })
     }
 
-    pub fn spawn_kernel(pc: fn(usize), arg: usize) -> SharedRef<Thread> {
+    pub fn spawn_kernel(process: SharedRef<Process>, pc: fn(usize), arg: usize) -> SharedRef<Thread> {
         let thread = SharedRef::new(Thread {
             id: ThreadId::alloc(),
             mutable: SpinLock::new(Mutable {
                 state: State::Runnable,
             }),
             arch: arch::Thread::new_kernel(pc as usize, arg),
-            process: kernel_process().clone(),
+            process,
         });
 
         GLOBAL_SCHEDULER.push(thread.clone());
