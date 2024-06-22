@@ -16,7 +16,6 @@ pub const VSYSCALL_PAGE: VsyscallPage = VsyscallPage {
 };
 
 fn channel_send(handle: HandleId, msginfo: MessageInfo, data: &[u8]) -> Result<(), FtlError> {
-    println!("getting channel");
     let ch: Handle<Channel> = {
         current_thread()
             .process()
@@ -27,7 +26,6 @@ fn channel_send(handle: HandleId, msginfo: MessageInfo, data: &[u8]) -> Result<(
             .clone()
     };
 
-    println!("got");
     ch.send(msginfo, data)
 }
 
