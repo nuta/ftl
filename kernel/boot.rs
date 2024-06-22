@@ -8,6 +8,7 @@ use crate::channel::Channel;
 use crate::cpuvar;
 use crate::cpuvar::CpuId;
 use crate::handle::AnyHandle;
+use crate::handle::Handle;
 use crate::memory;
 use crate::process;
 use crate::syscall::VSYSCALL_PAGE;
@@ -44,16 +45,16 @@ pub fn boot(cpu_id: CpuId, bootinfo: BootInfo) -> ! {
     //     .expect("failed to load startup.elf");
 
     let (ch0, ch1) = Channel::new().expect("failed to create channel");
-    let ch0_handle = AnyHandle::new(ch0, HandleRights::NONE);
-    let ch1_handle = AnyHandle::new(ch1, HandleRights::NONE);
+    let ch0_handle = Handle::new(ch0, HandleRights::NONE);
+    let ch1_handle = Handle::new(ch1, HandleRights::NONE);
 
     AppLoader::parse(include_bytes!("../build/apps/ping.elf"))
         .expect("ping.elf is invalid")
-        .load(&VSYSCALL_PAGE, ch0_handle)
+        .load(&VSYSCALL_PAGE, ch0_handle.into())
         .expect("failed to load ping.elf");
     AppLoader::parse(include_bytes!("../build/apps/pong.elf"))
         .expect("pong.elf is invalid")
-        .load(&VSYSCALL_PAGE, ch1_handle)
+        .load(&VSYSCALL_PAGE, ch1_handle.into())
         .expect("failed to load pong.elf");
 
     arch::yield_cpu();

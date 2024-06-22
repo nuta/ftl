@@ -7,6 +7,7 @@ use ftl_utils::alignment::align_up;
 
 use crate::arch::PAGE_SIZE;
 use crate::handle::AnyHandle;
+use crate::handle::Handle;
 use crate::handle::Handleable;
 use crate::handle::HandleableType;
 use crate::memory::AllocPagesError;
@@ -187,10 +188,10 @@ impl<'a> AppLoader<'a> {
             let id = handles.add(first_handle).unwrap();
 
             handles
-                .add(AnyHandle::new(kernel_app_memory, HandleRights::NONE))
+                .add(Handle::new(kernel_app_memory, HandleRights::NONE))
                 .unwrap();
             handles
-                .add(AnyHandle::new(thread, HandleRights::NONE))
+                .add(Handle::new(thread, HandleRights::NONE))
                 .unwrap();
         }
 

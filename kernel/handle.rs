@@ -7,7 +7,10 @@ use ftl_types::handle::HandleRights;
 use ftl_utils::downcast::Downcastable;
 use hashbrown::HashMap;
 
+use crate::app_loader::KernelAppMemory;
+use crate::channel::Channel;
 use crate::ref_counted::SharedRef;
+use crate::thread::Thread;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum HandleableType {
@@ -17,7 +20,7 @@ pub enum HandleableType {
 }
 
 /// A trait for kernel objects that can be referred to by a handle ([`Handle`]).
-pub trait Handleable: Any + Sync + Send + Downcastable {
+pub trait Handleable: Any + Sync + Send {
     fn handle_type(&self) -> HandleableType;
 }
 
@@ -29,8 +32,8 @@ pub struct Handle<T: Handleable + ?Sized> {
 }
 
 impl<T: Handleable> Handle<T> {
-    pub fn rights(&self) -> HandleRights {
-        self.rights
+    pub const fn new(object: SharedRef<T>, rights: HandleRights) -> Handle<T> {
+        Handle { object, rights }
     }
 }
 
@@ -51,32 +54,38 @@ impl<T: Handleable> Deref for Handle<T> {
     }
 }
 
-pub struct AnyHandle {
-    object: SharedRef<dyn Handleable>,
-    rights: HandleRights,
+pub enum AnyHandle {
+    Channel(Handle<Channel>),
+    Thread(Handle<Thread>),
+    KernelAppMemory(Handle<KernelAppMemory>),
 }
 
 impl AnyHandle {
-    pub fn new<T: Handleable>(object: SharedRef<T>, rights: HandleRights) -> AnyHandle {
-        println!("upcasting to {:?}", object.as_any().type_id());
-        AnyHandle {
-            object: object as SharedRef<dyn Handleable>,
-            rights: rights,
+    pub fn as_channel(&self) -> Result<&Handle<Channel>, FtlError> {
+        match self {
+            AnyHandle::Channel(ref channel) => Ok(channel),
+            _ => Err(FtlError::UnexpectedHandleType)
         }
-    }
-
-    pub fn downcast<T: Handleable>(&self) -> Option<Handle<T>> {
-        let sref: &SharedRef<T> = self.object.as_any().downcast_ref::<SharedRef<T>>()?;
-        Some(Handle {
-            object: sref.clone(),
-            rights: self.rights,
-        })
     }
 }
 
-// TODO:
-unsafe impl Sync for SharedRef<dyn Handleable> {}
-unsafe impl Send for SharedRef<dyn Handleable> {}
+impl Into<AnyHandle> for Handle<Channel> {
+    fn into(self) -> AnyHandle {
+        AnyHandle::Channel(self)
+    }
+}
+
+impl Into<AnyHandle> for Handle<Thread> {
+    fn into(self) -> AnyHandle {
+        AnyHandle::Thread(self)
+    }
+}
+
+impl Into<AnyHandle> for Handle<KernelAppMemory> {
+    fn into(self) -> AnyHandle {
+        AnyHandle::KernelAppMemory(self)
+    }
+}
 
 /// The number of maximum handles per process.
 ///
@@ -100,51 +109,23 @@ impl HandleTable {
     }
 
     /// Add a handle to the table.
-    pub fn add(&mut self, handle: AnyHandle) -> Result<HandleId, FtlError> {
+    pub fn add<H: Into<AnyHandle>>(&mut self, handle: H) -> Result<HandleId, FtlError> {
         if self.next_id >= NUM_HANDLES_MAX {
             return Err(FtlError::TooManyHandles);
         }
 
         let id = HandleId::from_raw(self.next_id);
         self.next_id = self.next_id + 1;
-        println!("inserting...: {:?}", id);
-        self.handles.insert(id, handle);
-        println!("inserted: {:?}", id);
-        println!(
-            "HandleTable::get: {:?}, self={:p}, len={}",
-            id,
-            self,
-            self.handles.len()
-        );
+        self.handles.insert(id, handle.into());
         Ok(id)
     }
 
     /// Get a handle by ID, as a concrete type `T`.
-    pub fn get_owned<T>(&self, id: HandleId) -> Result<Handle<T>, FtlError>
+    pub fn get_owned<T>(&self, id: HandleId) -> Result<&AnyHandle, FtlError>
     where
         T: Handleable,
     {
-        println!(
-            "HandleTable::get: {:?}, self={:p}, len={}",
-            id,
-            self,
-            self.handles.len()
-        );
-        let any_handle = self.handles.get(&id).ok_or(FtlError::HandleNotFound)?;
-        // println!("HandleTable::get downcast: {:?}", any_handle.type_id());
-        // println!("type_id: Handle<Channel>    = {:?}", TypeId::of::<Handle<Channel>>());
-        // println!("type_id: Handle<Thread>     = {:?}", TypeId::of::<Handle<Thread>>());
-        // println!("type_id: Handle<KMemory>    = {:?}", TypeId::of::<Handle<KernelAppMemory>>());
-        // println!("type_id: SharedRef<Channel> = {:?}", TypeId::of::<SharedRef<Channel>>());
-        // println!("type_id: SharedRef<Thread>  = {:?}", TypeId::of::<SharedRef<Thread>>());
-        // println!("type_id: SharedRef<KMemory> = {:?}", TypeId::of::<SharedRef<KernelAppMemory>>());
-        // println!("type_id: <Channel>          = {:?}", TypeId::of::<Channel>());
-        // println!("type_id: <Thread>           = {:?}", TypeId::of::<Thread>());
-        // println!("type_id: <KMemory>          = {:?}", TypeId::of::<KernelAppMemory>());
-        let handle: Handle<T> = any_handle
-            .downcast()
-            .ok_or(FtlError::UnexpectedHandleType)?;
-        println!("HandleTable::get downcast Ok");
+        let handle = self.handles.get(&id).ok_or(FtlError::HandleNotFound)?;
         Ok(handle)
     }
 }

@@ -53,6 +53,10 @@ impl<T> SharedRef<T> {
 }
 
 impl<T: ?Sized> SharedRef<T> {
+    pub fn as_ref(&self) -> &T {
+        unsafe { &self.ptr.as_ref().value }
+    }
+
     /// Returns a reference to the inner object.
     fn inner(&self) -> &RefCounted<T> {
         // SAFETY: The object will be kept alive as long as `self` is alive.

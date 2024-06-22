@@ -16,12 +16,15 @@ pub const VSYSCALL_PAGE: VsyscallPage = VsyscallPage {
 };
 
 fn channel_send(handle: HandleId, msginfo: MessageInfo, data: &[u8]) -> Result<(), FtlError> {
+    println!("getting channel");
     let ch: Handle<Channel> = {
         current_thread()
             .process()
             .handles()
             .lock()
             .get_owned::<Channel>(handle)?
+            .as_channel()?
+            .clone()
     };
 
     println!("got");
@@ -35,6 +38,8 @@ fn channel_recv(handle: HandleId, data: &mut [u8]) -> Result<MessageInfo, FtlErr
             .handles()
             .lock()
             .get_owned::<Channel>(handle)?
+            .as_channel()?
+            .clone()
     };
 
     ch.recv()
@@ -66,7 +71,12 @@ pub fn syscall_entry(
             let data_addr = (a2 as usize) + offset_of!(MessageBuffer, data);
             let buf =
                 unsafe { core::slice::from_raw_parts(data_addr as *const u8, msginfo.data_len()) };
-            channel_send(handle, msginfo, buf)?;
+            let err = channel_send(handle, msginfo, buf);
+            if let Err(e) = err {
+                println!("channel_send failed: {:?}", e);
+                return Err(e);
+            }
+
             Ok(0)
         }
         _ if n == SyscallNumber::ChannelRecv as isize => {
