@@ -32,14 +32,14 @@ impl Channel {
             mutable: SpinLock::new(Mutable {
                 peer: None,
                 queue: VecDeque::new(),
-            })
+            }),
         };
         let ch1 = Channel {
             event_point: PollPoint::new(),
             mutable: SpinLock::new(Mutable {
                 peer: None,
                 queue: VecDeque::new(),
-            })
+            }),
         };
 
         todo!()
