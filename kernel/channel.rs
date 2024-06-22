@@ -1,9 +1,12 @@
 use alloc::collections::VecDeque;
 use alloc::vec::Vec;
+
 use ftl_types::error::FtlError;
 use ftl_types::message::MessageInfo;
 
 use crate::handle::Handleable;
+use crate::poll::PollPoint;
+use crate::poll::Readiness;
 use crate::ref_counted::SharedRef;
 use crate::spinlock::SpinLock;
 
@@ -15,6 +18,7 @@ pub struct MessageEntry {
 pub struct Channel {
     peer: SharedRef<Channel>,
     queue: SpinLock<VecDeque<MessageEntry>>,
+    event_point: PollPoint,
 }
 
 impl Channel {
@@ -31,6 +35,16 @@ impl Channel {
         peer_queue.push_back(entry);
 
         Ok(())
+    }
+
+    pub fn recv(&self) -> Result<MessageInfo, FtlError> {
+        self.event_point.may_block(&self.queue, |queue| {
+            if let Some(entry) = queue.pop_front() {
+                return Readiness::Ready(Ok(entry.msginfo));
+            }
+
+            Readiness::Sleep
+        })
     }
 }
 
