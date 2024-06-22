@@ -4,6 +4,7 @@ use core::sync::atomic::Ordering;
 
 use crate::arch::{self};
 use crate::handle::Handleable;
+use crate::handle::HandleableType;
 use crate::process::kernel_process;
 use crate::process::Process;
 use crate::ref_counted::SharedRef;
@@ -122,4 +123,8 @@ impl Thread {
     }
 }
 
-impl Handleable for Thread {}
+impl Handleable for Thread {
+    fn handle_type(&self) -> HandleableType {
+        HandleableType::Thread
+    }
+}

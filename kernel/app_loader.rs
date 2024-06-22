@@ -8,6 +8,7 @@ use ftl_utils::alignment::align_up;
 use crate::arch::PAGE_SIZE;
 use crate::handle::AnyHandle;
 use crate::handle::Handleable;
+use crate::handle::HandleableType;
 use crate::memory::AllocPagesError;
 use crate::memory::AllocatedPages;
 use crate::process::Process;
@@ -29,7 +30,11 @@ pub struct KernelAppMemory {
     pages: AllocatedPages,
 }
 
-impl Handleable for KernelAppMemory {}
+impl Handleable for KernelAppMemory {
+    fn handle_type(&self) -> HandleableType {
+        HandleableType::KernelAppMemory
+    }
+}
 
 pub struct AppLoader<'a> {
     elf_file: &'a [u8],
@@ -180,7 +185,7 @@ impl<'a> AppLoader<'a> {
         {
             let mut handles = proc.handles().lock();
             let id = handles.add(first_handle).unwrap();
-            println!("added handle id {:?}", id);
+
             handles
                 .add(AnyHandle::new(kernel_app_memory, HandleRights::NONE))
                 .unwrap();

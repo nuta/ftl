@@ -9,8 +9,17 @@ use hashbrown::HashMap;
 
 use crate::ref_counted::SharedRef;
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum HandleableType {
+    Channel,
+    Thread,
+    KernelAppMemory,
+}
+
 /// A trait for kernel objects that can be referred to by a handle ([`Handle`]).
-pub trait Handleable: Any + Sync + Send {}
+pub trait Handleable: Any + Sync + Send {
+    fn handle_type(&self) -> HandleableType;
+}
 
 /// Handle, a reference-counted pointer to a kernel object with allowed
 /// operations on it, aka *"capability"*.
