@@ -20,8 +20,9 @@ pub fn main() {
         let ret_msginfo = ch.recv(&mut message).expect("failed to recv");
         println!("[pong] received message: {:x?}", ret_msginfo);
 
-        println!("[pong] replying message");
-        let msginfo = MessageInfo::from_raw(i << 24);
+        println!("[pong] replying message 2");
+        let msginfo = MessageInfo::from_raw(i << 20);
+        println!("sending ....: {:?}", msginfo);
         ch.send(msginfo, &message).expect("failed to send");
     }
 }

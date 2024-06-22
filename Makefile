@@ -3,7 +3,7 @@ MACHINE ?= qemu-virt
 RELEASE ?=            # "1" to build release version
 V       ?=            # "1" to enable verbose output
 STARTUP ?= apps/hello
-APPS    ?= apps/ping # apps/pong
+APPS    ?= apps/ping apps/pong
 
 # Disable builtin implicit rules and variables.
 MAKEFLAGS += --no-builtin-rules --no-builtin-variables

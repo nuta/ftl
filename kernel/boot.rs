@@ -29,7 +29,7 @@ pub struct BootInfo {
     pub dtb_addr: *const u8,
 }
 
-const STARTUP_ELF: &[u8] = include_bytes!("../build/startup.elf");
+// const STARTUP_ELF: &[u8] = include_bytes!("../build/startup.elf");
 
 /// The entry point of the kernel.
 pub fn boot(cpu_id: CpuId, bootinfo: BootInfo) -> ! {
