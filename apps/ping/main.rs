@@ -5,7 +5,7 @@ use ftl_api::{channel::Channel, handle::OwnedHandle, prelude::*, types::{handle:
 
 #[ftl_api::main]
 pub fn main() {
-    println!("starting ping");
+    println!("[ping] starting ping");
     let handle_id = HandleId::from_raw(1);
     let handle = OwnedHandle::from_raw(handle_id);
     let ch = Channel::from_handle(handle);
@@ -16,12 +16,12 @@ pub fn main() {
     };
 
     loop {
-        println!("sending message");
+        println!("[ping] sending message");
         let msginfo = MessageInfo::from_raw(0);
         ch.send(msginfo, &message).expect("failed to send");
 
-        println!("receiving message");
+        println!("[ping] receiving message");
         let ret_msginfo = ch.recv(&mut message).expect("failed to recv");
-        println!("received message: {:?}", ret_msginfo);
+        println!("[ping] received message: {:?}", ret_msginfo);
     }
 }
