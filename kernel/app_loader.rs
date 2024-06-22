@@ -179,7 +179,8 @@ impl<'a> AppLoader<'a> {
 
         {
             let mut handles = proc.handles().lock();
-            handles.add(first_handle).unwrap();
+            let id = handles.add(first_handle).unwrap();
+            println!("added handle id {:?}", id);
             handles
                 .add(AnyHandle::new(kernel_app_memory, HandleRights::NONE))
                 .unwrap();
