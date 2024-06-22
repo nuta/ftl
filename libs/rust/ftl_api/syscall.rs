@@ -1,5 +1,6 @@
 use ftl_types::error::FtlError;
 use ftl_types::handle::HandleId;
+use ftl_types::message::MessageInfo;
 use ftl_types::syscall::SyscallNumber;
 use ftl_types::syscall::VsyscallPage;
 use spin::Mutex;
@@ -96,18 +97,14 @@ pub fn channel_create() -> Result<(HandleId, HandleId), FtlError> {
 
 pub fn channel_send(
     handle: HandleId,
-    header: usize,
-    buf: &[u8],
-    handles: &[HandleId],
+    msginfo: MessageInfo,
+    buf: *const u8,
 ) -> Result<(), FtlError> {
-    syscall6(
+    syscall3(
         SyscallNumber::ChannelSend,
         handle.as_isize(),
-        header as isize,
-        buf.as_ptr() as isize,
-        buf.len() as isize,
-        handles.as_ptr() as isize,
-        handles.len() as isize,
+        msginfo.raw(),
+        buf as isize,
     )?;
     Ok(())
 }

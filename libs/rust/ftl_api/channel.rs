@@ -1,19 +1,11 @@
-use core::mem;
-
-use ftl_inlinedvec::InlinedVec;
 use ftl_types::error::FtlError;
 use ftl_types::handle::HandleId;
+use ftl_types::message::MessageBuffer;
+use ftl_types::message::MessageInfo;
 
 use crate::handle::Handleable;
 use crate::handle::OwnedHandle;
 use crate::syscall;
-
-pub struct MessageHeader(usize);
-
-pub struct SendError {
-    pub error: FtlError,
-    pub handles: InlinedVec<OwnedHandle, 4>,
-}
 
 pub struct Channel {
     handle: OwnedHandle,
@@ -33,29 +25,11 @@ impl Channel {
 
     pub fn send(
         &self,
-        header: MessageHeader,
-        buf: &[u8],
-        handles: InlinedVec<OwnedHandle, 4>,
-    ) -> Result<(), SendError> {
-        // SAFETY: `OwnedHandle` is `repr(transparent)` of `HandleId`. That is,
-        //         they have the same memory layout.
-        let handle_ids =
-            unsafe { mem::transmute::<&[OwnedHandle], &[HandleId]>(handles.as_slice()) };
-
-        match syscall::channel_send(self.handle.id(), header.0, buf, handle_ids) {
-            Ok(()) => {
-                // We've successfully transferred the handles. Prevent them
-                // from being closed.
-                mem::forget(handles);
-
-                Ok(())
-            }
-            Err(error) => {
-                // Failed to send message. Since it's guaranteed that we still
-                // own handles, return them back to the caller.
-                Err(SendError { error, handles })
-            }
-        }
+        msginfo: MessageInfo,
+        message: &MessageBuffer,
+    ) -> Result<(), FtlError> {
+        syscall::channel_send(self.handle.id(), msginfo, message as *const _ as *const u8)?;
+        Ok(())
     }
 }
 
