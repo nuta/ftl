@@ -53,6 +53,7 @@ impl PollPoint {
                     current_thread.set_blocked();
 
                     // Release the lock.
+                    drop(current_thread);
                     drop(guard);
                     drop(pollers);
 

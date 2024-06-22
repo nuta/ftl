@@ -15,13 +15,13 @@ pub fn main() {
         data: [0; 4096 - 4 * core::mem::size_of::<HandleId>()],
     };
 
-    loop {
+    for i in 0.. {
         println!("[pong] receiving message");
         let ret_msginfo = ch.recv(&mut message).expect("failed to recv");
-        println!("[pong] received message: {:?}", ret_msginfo);
+        println!("[pong] received message: {:x?}", ret_msginfo);
 
         println!("[pong] replying message");
-        let msginfo = MessageInfo::from_raw(0);
+        let msginfo = MessageInfo::from_raw(i << 24);
         ch.send(msginfo, &message).expect("failed to send");
     }
 }
