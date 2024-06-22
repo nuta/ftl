@@ -11,7 +11,7 @@ struct Poller {
     thread: SharedRef<Thread>,
 }
 
-pub enum Readiness<T> {
+pub enum PollResult<T> {
     Ready(T),
     Sleep,
 }
@@ -27,18 +27,18 @@ impl PollPoint {
         }
     }
 
-    pub fn may_block<'a, F, T, U>(&self, lock: &'a SpinLock<T>, is_ready: F) -> U
+    pub fn poll_loop<'a, F, T, U>(&self, lock: &'a SpinLock<T>, is_ready: F) -> U
     where
-        F: Fn(&mut SpinLockGuard<'a, T>) -> Readiness<U>,
+        F: Fn(&mut SpinLockGuard<'a, T>) -> PollResult<U>,
     {
         loop {
             let mut pollers = self.pollers.lock();
             let mut guard = lock.lock();
             match is_ready(&mut guard) {
-                Readiness::Ready(ret) => {
+                PollResult::Ready(ret) => {
                     return ret;
                 }
-                Readiness::Sleep => {
+                PollResult::Sleep => {
                     pollers.push(Poller {
                         thread: current_thread().clone(),
                     });
