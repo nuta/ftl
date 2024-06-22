@@ -161,7 +161,11 @@ impl<'a> AppLoader<'a> {
         Ok(())
     }
 
-    pub fn load(mut self, vsyscall_page: *const VsyscallPage, first_handle: AnyHandle) -> Result<Process, Error> {
+    pub fn load(
+        mut self,
+        vsyscall_page: *const VsyscallPage,
+        first_handle: AnyHandle,
+    ) -> Result<Process, Error> {
         self.load_segments();
 
         #[cfg(target_arch = "riscv64")]
@@ -175,9 +179,7 @@ impl<'a> AppLoader<'a> {
 
         {
             let mut handles = proc.handles().lock();
-            handles
-                .add(first_handle)
-                .unwrap();
+            handles.add(first_handle).unwrap();
             handles
                 .add(AnyHandle::new(kernel_app_memory, HandleRights::NONE))
                 .unwrap();

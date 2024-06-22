@@ -15,16 +15,26 @@ pub const VSYSCALL_PAGE: VsyscallPage = VsyscallPage {
 };
 
 fn channel_send(handle: HandleId, msginfo: MessageInfo, data: &[u8]) -> Result<(), FtlError> {
-    let thread = current_thread();
-    let handles = thread.process().handles().lock();
-    let ch = handles.get::<Channel>(handle)?;
+    let ch = {
+        current_thread()
+            .process()
+            .handles()
+            .lock()
+            .get_owned::<Channel>(handle)?
+    };
+
     ch.send(msginfo, data)
 }
 
 fn channel_recv(handle: HandleId, data: &mut [u8]) -> Result<MessageInfo, FtlError> {
-    let thread = current_thread();
-    let handles = thread.process().handles().lock();
-    let ch = handles.get::<Channel>(handle)?;
+    let ch = {
+        current_thread()
+            .process()
+            .handles()
+            .lock()
+            .get_owned::<Channel>(handle)?
+    };
+
     ch.recv()
 }
 
@@ -59,8 +69,9 @@ pub fn syscall_entry(
         _ if n == SyscallNumber::ChannelRecv as isize => {
             let handle = HandleId::from_raw(a0 as i32 /* FIXME: */);
             let data_addr = (a2 as usize) + offset_of!(MessageBuffer, data);
-            let buf =
-                unsafe { core::slice::from_raw_parts_mut(data_addr as *mut u8, 0 /* FIXME: */) };
+            let buf = unsafe {
+                core::slice::from_raw_parts_mut(data_addr as *mut u8, 0 /* FIXME: */)
+            };
 
             let msginfo = channel_recv(handle, buf)?;
             Ok(msginfo.as_raw())

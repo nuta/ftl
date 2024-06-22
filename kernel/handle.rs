@@ -1,5 +1,4 @@
 use core::any::Any;
-use core::num::NonZeroI32;
 use core::ops::Deref;
 
 use ftl_types::error::FtlError;
@@ -15,13 +14,6 @@ pub trait Handleable: Any + Sync + Send {}
 
 /// Handle, a reference-counted pointer to a kernel object with allowed
 /// operations on it, aka *"capability"*.
-///
-/// # Reference Counting
-///
-/// This type uses some atomic operations to keep track of the number of
-/// references to the underlying object. [`Ordering`] parameters are chosen
-/// to be as relaxed as possible in the fast path, inspired by Rust's `Arc`
-/// implementation.
 pub struct Handle<T: Handleable + ?Sized> {
     object: SharedRef<T>,
     rights: HandleRights,
@@ -30,6 +22,15 @@ pub struct Handle<T: Handleable + ?Sized> {
 impl<T: Handleable> Handle<T> {
     pub fn rights(&self) -> HandleRights {
         self.rights
+    }
+}
+
+impl<T: Handleable> Clone for Handle<T> {
+    fn clone(&self) -> Handle<T> {
+        Handle {
+            object: self.object.clone(),
+            rights: self.rights,
+        }
     }
 }
 
@@ -102,5 +103,13 @@ impl HandleTable {
             .downcast()
             .ok_or(FtlError::UnexpectedHandleType)?;
         Ok(handle)
+    }
+
+    pub fn get_owned<T>(&self, id: HandleId) -> Result<Handle<T>, FtlError>
+    where
+        T: Handleable,
+    {
+        let handle: &Handle<T> = self.get(id)?;
+        Ok(handle.clone())
     }
 }
