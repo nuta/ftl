@@ -43,6 +43,10 @@ impl Channel {
             }),
         });
 
+        // TODO: Can we avoid this mutate-after-construct?
+        ch0.mutable.lock().peer = Some(ch1.clone());
+        ch1.mutable.lock().peer = Some(ch0.clone());
+
         Ok((ch0, ch1))
     }
 
