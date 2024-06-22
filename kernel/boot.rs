@@ -3,12 +3,13 @@ use ftl_types::handle::HandleRights;
 use ftl_utils::byte_size::ByteSize;
 
 use crate::app_loader::AppLoader;
-use crate::{arch, process};
+use crate::arch;
 use crate::channel::Channel;
 use crate::cpuvar;
 use crate::cpuvar::CpuId;
 use crate::handle::AnyHandle;
 use crate::memory;
+use crate::process;
 use crate::syscall::VSYSCALL_PAGE;
 
 /// A free region of memory available for software.
