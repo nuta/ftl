@@ -45,7 +45,6 @@ impl Channel {
         Ok((ch0, ch1))
     }
 
-    // TODO: user pointers
     pub fn send(&self, msginfo: MessageInfo, data: &[u8]) -> Result<(), FtlError> {
         let data = data.to_vec();
         let entry = MessageEntry { msginfo, data };
