@@ -3,7 +3,7 @@ use ftl_types::handle::HandleRights;
 use ftl_utils::byte_size::ByteSize;
 
 use crate::app_loader::AppLoader;
-use crate::arch;
+use crate::{arch, process};
 use crate::channel::Channel;
 use crate::cpuvar;
 use crate::cpuvar::CpuId;
@@ -34,6 +34,7 @@ pub fn boot(cpu_id: CpuId, bootinfo: BootInfo) -> ! {
     println!("\nFTL - Faster Than \"L\"\n");
 
     memory::init(&bootinfo);
+    process::init();
     cpuvar::percpu_init(cpu_id);
 
     // AppLoader::parse(STARTUP_ELF)

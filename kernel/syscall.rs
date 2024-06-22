@@ -9,25 +9,28 @@ use ftl_types::syscall::VsyscallPage;
 
 use crate::channel::Channel;
 use crate::cpuvar::current_thread;
+use crate::handle::Handle;
 
 pub const VSYSCALL_PAGE: VsyscallPage = VsyscallPage {
     entry: syscall_entry,
 };
 
 fn channel_send(handle: HandleId, msginfo: MessageInfo, data: &[u8]) -> Result<(), FtlError> {
-    let ch = {
-        current_thread()
-            .process()
-            .handles()
-            .lock()
-            .get_owned::<Channel>(handle)?
+    let ch: Handle<Channel> = {
+        let thread = current_thread();
+        println!("locking");
+        let handles = thread.process().handles().lock();
+        println!("locked");
+
+        handles.get_owned::<Channel>(handle)?
     };
 
+    println!("got");
     ch.send(msginfo, data)
 }
 
 fn channel_recv(handle: HandleId, data: &mut [u8]) -> Result<MessageInfo, FtlError> {
-    let ch = {
+    let ch: Handle<Channel> = {
         current_thread()
             .process()
             .handles()
@@ -58,6 +61,7 @@ pub fn syscall_entry(
             todo!()
         }
         _ if n == SyscallNumber::ChannelSend as isize => {
+            println!("channel_send");
             let handle = HandleId::from_raw(a0 as i32 /* FIXME: */);
             let msginfo = MessageInfo::from_raw(a1);
             let data_addr = (a2 as usize) + offset_of!(MessageBuffer, data);

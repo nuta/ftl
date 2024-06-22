@@ -98,10 +98,13 @@ impl HandleTable {
     where
         T: Handleable,
     {
+        println!("HandleTable::get");
         let any_handle = self.handles.get(&id).ok_or(FtlError::HandleNotFound)?;
+        println!("HandleTable::get downcast");
         let handle = any_handle
             .downcast()
             .ok_or(FtlError::UnexpectedHandleType)?;
+        println!("HandleTable::get downcast Ok");
         Ok(handle)
     }
 

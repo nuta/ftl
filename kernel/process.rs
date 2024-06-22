@@ -19,7 +19,7 @@ impl Process {
 }
 
 static KERNEL_PROCESS: spin::Lazy<SharedRef<Process>> = spin::Lazy::new(|| {
-    let mut proc = Process::create();
+    let proc = Process::create();
     SharedRef::new(proc)
 });
 

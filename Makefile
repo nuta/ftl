@@ -3,7 +3,7 @@ MACHINE ?= qemu-virt
 RELEASE ?=            # "1" to build release version
 V       ?=            # "1" to enable verbose output
 STARTUP ?= apps/hello
-APPS    ?= apps/ping apps/pong
+APPS    ?= apps/ping # apps/pong
 
 # Disable builtin implicit rules and variables.
 MAKEFLAGS += --no-builtin-rules --no-builtin-variables
@@ -64,7 +64,7 @@ fmt:
 fix:
 	cargo clippy --fix --allow-dirty --allow-staged $(CARGOFLAGS)
 
-ftl.elf: $(sources) Makefile build/startup.elf $(app_elfs)
+ftl.elf: $(sources) Makefile $(app_elfs)
 	$(PROGRESS) "CARGO" "boot/$(ARCH)"
 	RUSTFLAGS="$(RUSTFLAGS)" CARGO_TARGET_DIR="build/cargo" $(CARGO) build $(CARGOFLAGS) \
 		--target boot/$(ARCH)/$(ARCH)-$(MACHINE).json \
@@ -74,7 +74,7 @@ ftl.elf: $(sources) Makefile build/startup.elf $(app_elfs)
 build/startup.elf: build/$(STARTUP).elf
 	cp $< $@
 
-build/%.elf: $(sources) Makefile
+build/%.elf: $(sources)
 	$(PROGRESS) "CARGO" "$(@)"
 	mkdir -p $(@D)
 	RUSTFLAGS="$(RUSTFLAGS) -C link-args=-Map=$(@:.elf=.map)" \
