@@ -33,6 +33,7 @@ impl Channel {
 
         let mut peer_queue = self.peer.queue.lock();
         peer_queue.push_back(entry);
+        self.peer.event_point.wake();
 
         Ok(())
     }
