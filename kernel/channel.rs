@@ -27,22 +27,22 @@ pub struct Channel {
 
 impl Channel {
     pub fn new() -> Result<(SharedRef<Channel>, SharedRef<Channel>), FtlError> {
-        let ch0 = Channel {
+        let ch0 = SharedRef::new(Channel {
             event_point: PollPoint::new(),
             mutable: SpinLock::new(Mutable {
                 peer: None,
                 queue: VecDeque::new(),
             }),
-        };
-        let ch1 = Channel {
+        });
+        let ch1 = SharedRef::new(Channel {
             event_point: PollPoint::new(),
             mutable: SpinLock::new(Mutable {
                 peer: None,
                 queue: VecDeque::new(),
             }),
-        };
+        });
 
-        todo!()
+        Ok((ch0, ch1))
     }
 
     // TODO: user pointers
