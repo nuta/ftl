@@ -29,7 +29,7 @@ impl PollPoint {
 
     pub fn wake(&self) {
         for poller in self.pollers.lock().drain(..) {
-            poller.thread.resume();
+            poller.thread.set_runnable();
         }
     }
 
@@ -45,9 +45,12 @@ impl PollPoint {
                     return ret;
                 }
                 PollResult::Sleep => {
+                    let current_thread = current_thread();
                     pollers.push(Poller {
-                        thread: current_thread().clone(),
+                        thread: current_thread.clone(),
                     });
+
+                    current_thread.set_blocked();
 
                     // Release the lock.
                     drop(guard);

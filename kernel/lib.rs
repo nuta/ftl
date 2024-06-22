@@ -6,6 +6,7 @@
 #![feature(naked_functions)]
 #![feature(unsize)]
 #![feature(coerce_unsized)]
+#![feature(arbitrary_self_types)]
 
 extern crate alloc;
 

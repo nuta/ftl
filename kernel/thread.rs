@@ -8,6 +8,7 @@ use crate::process::kernel_process;
 use crate::process::Process;
 use crate::ref_counted::SharedRef;
 use crate::scheduler::GLOBAL_SCHEDULER;
+use crate::spinlock::SpinLock;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ThreadId(NonZeroIsize);
@@ -37,11 +38,16 @@ impl ThreadId {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum State {
     Runnable,
+    Blocked,
+}
+
+struct Mutable {
+    state: State,
 }
 
 pub struct Thread {
     id: ThreadId,
-    state: State,
+    mutable: SpinLock<Mutable>,
     arch: arch::Thread,
     process: SharedRef<Process>,
 }
@@ -50,7 +56,9 @@ impl Thread {
     pub fn new_idle() -> SharedRef<Thread> {
         SharedRef::new(Thread {
             id: ThreadId::new_idle(),
-            state: State::Runnable,
+            mutable: SpinLock::new(Mutable {
+                state: State::Runnable,
+            }),
             arch: arch::Thread::new_idle(),
             process: kernel_process().clone(),
         })
@@ -59,7 +67,9 @@ impl Thread {
     pub fn spawn_kernel(pc: fn(usize), arg: usize) -> SharedRef<Thread> {
         let thread = SharedRef::new(Thread {
             id: ThreadId::alloc(),
-            state: State::Runnable,
+            mutable: SpinLock::new(Mutable {
+                state: State::Runnable,
+            }),
             arch: arch::Thread::new_kernel(pc as usize, arg),
             process: kernel_process().clone(),
         });
@@ -77,7 +87,7 @@ impl Thread {
     }
 
     pub fn is_runnable(&self) -> bool {
-        matches!(self.state, State::Runnable)
+        matches!(self.mutable.lock().state, State::Runnable)
     }
 
     pub fn process(&self) -> &SharedRef<Process> {
@@ -90,6 +100,21 @@ impl Thread {
 
     pub fn resume(&self) -> ! {
         self.arch.resume();
+    }
+
+    pub fn set_blocked(self: &SharedRef<Thread>) {
+        let mut mutable = self.mutable.lock();
+        debug_assert!(matches!(mutable.state, State::Runnable));
+
+        mutable.state = State::Blocked;
+    }
+
+    pub fn set_runnable(self: &SharedRef<Thread>) {
+        let mut mutable = self.mutable.lock();
+        debug_assert!(matches!(mutable.state, State::Blocked));
+
+        mutable.state = State::Runnable;
+        GLOBAL_SCHEDULER.push(self.clone());
     }
 }
 
