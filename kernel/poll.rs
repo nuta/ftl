@@ -21,6 +21,10 @@ pub struct PollPoint {
 }
 
 impl PollPoint {
+    pub const fn new() -> PollPoint {
+        PollPoint { pollers: SpinLock::new(Vec::new()) }
+    }
+
     pub fn wake(&self) {
         for poller in self.pollers.lock().drain(..) {
             poller.thread.resume();
