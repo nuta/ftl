@@ -73,7 +73,9 @@ pub fn syscall6(
 }
 
 fn retval_to_handle(retval: isize) -> Result<HandleId, FtlError> {
-    let handle_id: i32 = (retval & HANDLE_ID_MASK).try_into().map_err(|_| FtlError::InvalidSyscallReturnValue)?;
+    let handle_id: i32 = (retval & HANDLE_ID_MASK)
+        .try_into()
+        .map_err(|_| FtlError::InvalidSyscallReturnValue)?;
     let handle = HandleId::from_raw(handle_id).ok_or(FtlError::InvalidSyscallReturnValue)?;
     Ok(handle)
 }

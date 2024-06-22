@@ -4,6 +4,8 @@ use core::sync::atomic::Ordering;
 
 use crate::arch::{self};
 use crate::handle::Handleable;
+use crate::process::kernel_process;
+use crate::process::Process;
 use crate::ref_counted::SharedRef;
 use crate::scheduler::GLOBAL_SCHEDULER;
 
@@ -41,22 +43,16 @@ pub struct Thread {
     id: ThreadId,
     state: State,
     arch: arch::Thread,
+    process: SharedRef<Process>,
 }
 
 impl Thread {
-    pub fn test() -> Thread {
-        Thread {
-            id: ThreadId::new_idle(),
-            state: State::Runnable,
-            arch: arch::Thread::new_idle(),
-        }
-    }
-
     pub fn new_idle() -> SharedRef<Thread> {
         SharedRef::new(Thread {
             id: ThreadId::new_idle(),
             state: State::Runnable,
             arch: arch::Thread::new_idle(),
+            process: kernel_process().clone(),
         })
     }
 
@@ -65,6 +61,7 @@ impl Thread {
             id: ThreadId::alloc(),
             state: State::Runnable,
             arch: arch::Thread::new_kernel(pc as usize, arg),
+            process: kernel_process().clone(),
         });
 
         GLOBAL_SCHEDULER.push(thread.clone());
@@ -81,6 +78,10 @@ impl Thread {
 
     pub fn is_runnable(&self) -> bool {
         matches!(self.state, State::Runnable)
+    }
+
+    pub fn process(&self) -> &SharedRef<Process> {
+        &self.process
     }
 
     pub const fn arch(&self) -> &arch::Thread {

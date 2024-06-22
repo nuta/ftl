@@ -23,11 +23,7 @@ impl Channel {
         Ok((ch0, ch1))
     }
 
-    pub fn send(
-        &self,
-        msginfo: MessageInfo,
-        message: &MessageBuffer,
-    ) -> Result<(), FtlError> {
+    pub fn send(&self, msginfo: MessageInfo, message: &MessageBuffer) -> Result<(), FtlError> {
         syscall::channel_send(self.handle.id(), msginfo, message as *const _ as *const u8)?;
         Ok(())
     }

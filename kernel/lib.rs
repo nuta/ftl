@@ -17,12 +17,12 @@ pub mod cpuvar;
 
 mod app_loader;
 mod arch;
+mod channel;
 mod handle;
 mod memory;
 mod panic;
 mod process;
 mod ref_counted;
-mod channel;
 mod scheduler;
 mod spinlock;
 mod syscall;

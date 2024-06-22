@@ -1,9 +1,10 @@
-use ftl_types::{error::FtlError, message::MessageInfo};
+use ftl_types::error::FtlError;
+use ftl_types::message::MessageInfo;
 
+use crate::handle::Handleable;
 use crate::ref_counted::SharedRef;
 
-pub struct Channel {
-}
+pub struct Channel {}
 
 impl Channel {
     pub fn new() -> Result<(SharedRef<Channel>, SharedRef<Channel>), FtlError> {
@@ -14,3 +15,5 @@ impl Channel {
         todo!()
     }
 }
+
+impl Handleable for Channel {}

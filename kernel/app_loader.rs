@@ -169,14 +169,19 @@ impl<'a> AppLoader<'a> {
 
         let entry = unsafe { core::mem::transmute(self.entry_addr()) };
         let thread = Thread::spawn_kernel(entry, vsyscall_page as usize);
-        let mut proc = Process::create();
+        let proc = Process::create();
 
         let kernel_app_memory = SharedRef::new(KernelAppMemory { pages: self.memory });
 
-        proc.add_handle(AnyHandle::new(kernel_app_memory, HandleRights::NONE))
-            .unwrap();
-        proc.add_handle(AnyHandle::new(thread, HandleRights::NONE))
-            .unwrap();
+        {
+            let mut handles = proc.handles().lock();
+            handles
+                .add(AnyHandle::new(kernel_app_memory, HandleRights::NONE))
+                .unwrap();
+            handles
+                .add(AnyHandle::new(thread, HandleRights::NONE))
+                .unwrap();
+        }
 
         Ok(proc)
     }

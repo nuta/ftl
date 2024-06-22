@@ -7,8 +7,16 @@ use crate::handle::HandleId;
 pub struct MessageInfo(isize);
 
 impl MessageInfo {
-    pub fn raw(&self) -> isize {
+    pub const fn from_raw(raw: isize) -> Self {
+        Self(raw)
+    }
+
+    pub const fn raw(self) -> isize {
         self.0
+    }
+
+    pub const fn data_len(self) -> usize {
+        (self.0 & 0xffff) as usize
     }
 }
 
