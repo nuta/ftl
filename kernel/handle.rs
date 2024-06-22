@@ -86,11 +86,7 @@ impl HandleTable {
             return Err(FtlError::TooManyHandles);
         }
 
-        // SAFETY: The condition above ensures it doesn't overflow and
-        //         never reaches zero.
-        let raw_id = unsafe { NonZeroI32::new_unchecked(self.next_id) };
-        let id = HandleId::from_nonzero(raw_id);
-
+        let id = HandleId::from_raw(self.next_id);
         self.next_id = self.next_id + 1;
         self.handles.insert(id, handle);
         Ok(id)

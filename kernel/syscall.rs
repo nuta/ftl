@@ -41,7 +41,7 @@ pub fn syscall_entry(
             todo!()
         }
         _ if n == SyscallNumber::ChannelSend as isize => {
-            let handle = HandleId::from_raw(a0 as i32 /* FIXME: */).unwrap();
+            let handle = HandleId::from_raw(a0 as i32 /* FIXME: */);
             let msginfo = MessageInfo::from_raw(a1);
             let data_addr = (a2 as usize) + offset_of!(MessageBuffer, data);
             let buf =

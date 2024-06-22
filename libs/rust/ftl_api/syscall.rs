@@ -73,11 +73,11 @@ pub fn syscall6(
 }
 
 fn retval_to_handle(retval: isize) -> Result<HandleId, FtlError> {
-    let handle_id: i32 = (retval & HANDLE_ID_MASK)
+    let id: i32 = (retval & HANDLE_ID_MASK)
         .try_into()
         .map_err(|_| FtlError::InvalidSyscallReturnValue)?;
-    let handle = HandleId::from_raw(handle_id).ok_or(FtlError::InvalidSyscallReturnValue)?;
-    Ok(handle)
+
+    Ok(HandleId::from_raw(id))
 }
 
 pub fn handle_close(handle: HandleId) -> Result<(), FtlError> {
@@ -109,6 +109,11 @@ pub fn channel_send(
         buf as isize,
     )?;
     Ok(())
+}
+
+pub fn channel_recv(handle: HandleId, buf: *mut u8) -> Result<MessageInfo, FtlError> {
+    let ret = syscall2(SyscallNumber::ChannelRecv, handle.as_isize(), buf as isize)?;
+    Ok(MessageInfo::from_raw(ret))
 }
 
 pub(crate) fn set_vsyscall(vsyscall: &'static VsyscallPage) {

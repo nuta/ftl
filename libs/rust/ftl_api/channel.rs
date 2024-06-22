@@ -12,6 +12,10 @@ pub struct Channel {
 }
 
 impl Channel {
+    pub fn from_handle(handle: OwnedHandle) -> Channel {
+        Channel { handle }
+    }
+
     pub fn create() -> Result<(Channel, Channel), FtlError> {
         let (handle0, handle1) = syscall::channel_create()?;
         let ch0 = Channel {
@@ -23,9 +27,12 @@ impl Channel {
         Ok((ch0, ch1))
     }
 
-    pub fn send(&self, msginfo: MessageInfo, message: &MessageBuffer) -> Result<(), FtlError> {
-        syscall::channel_send(self.handle.id(), msginfo, message as *const _ as *const u8)?;
-        Ok(())
+    pub fn send(&self, msginfo: MessageInfo, msg: &MessageBuffer) -> Result<(), FtlError> {
+        syscall::channel_send(self.handle.id(), msginfo, msg as *const _ as *const u8)
+    }
+
+    pub fn recv(&self, msg: &mut MessageBuffer) -> Result<MessageInfo, FtlError> {
+        syscall::channel_recv(self.handle.id(), msg as *mut _ as *mut u8)
     }
 }
 
