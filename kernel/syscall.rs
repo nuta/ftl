@@ -17,12 +17,11 @@ pub const VSYSCALL_PAGE: VsyscallPage = VsyscallPage {
 
 fn channel_send(handle: HandleId, msginfo: MessageInfo, data: &[u8]) -> Result<(), FtlError> {
     let ch: Handle<Channel> = {
-        let thread = current_thread();
-        println!("locking");
-        let handles = thread.process().handles().lock();
-        println!("locked");
-
-        handles.get_owned::<Channel>(handle)?
+        current_thread()
+            .process()
+            .handles()
+            .lock()
+            .get_owned::<Channel>(handle)?
     };
 
     println!("got");
