@@ -4,10 +4,8 @@ use alloc::boxed::Box;
 use core::any::Any;
 use core::marker::Unsize;
 use core::mem;
-use core::mem::MaybeUninit;
 use core::ops::CoerceUnsized;
 use core::ops::Deref;
-use core::ops::DerefMut;
 use core::ptr::NonNull;
 use core::sync::atomic;
 use core::sync::atomic::AtomicUsize;
@@ -16,91 +14,6 @@ use core::sync::atomic::Ordering;
 struct RefCounted<T: ?Sized> {
     counter: AtomicUsize,
     value: T,
-}
-
-/// Frees the memory of a reference-counted object.
-///
-/// # Safety
-///
-/// The caller must ensure that the pointer is valid and it won't be used
-/// anymore after calling this function, that is, ensure no double-free
-/// or use-after-free.
-unsafe fn free_ref_counted<T: ?Sized>(ptr: &NonNull<RefCounted<T>>) {
-    let boxed = unsafe { Box::from_raw(ptr.as_ptr()) };
-    mem::drop(boxed);
-}
-
-pub struct UniqueRef<T: ?Sized> {
-    ptr: NonNull<RefCounted<T>>,
-}
-
-impl<T> UniqueRef<T> {
-    /// Creates a new reference-counted object.
-    pub fn new(value: T) -> Self {
-        let ptr = Box::leak(Box::new(RefCounted {
-            counter: AtomicUsize::new(1),
-            value,
-        }));
-
-        Self {
-            // SAFETY: Box always returns a valid non-null pointer.
-            ptr: unsafe { NonNull::new_unchecked(ptr) },
-        }
-    }
-
-        /// Returns a reference to the inner object.
-        fn inner(&self) -> &RefCounted<T> {
-            // SAFETY: The object will be kept alive as long as `self` is alive.
-            //         The compiler will guarantee `&RefCounted<T>` can't outlive
-            //         `self`.
-            unsafe { self.ptr.as_ref() }
-        }
-
-    /// Returns a mutable reference to the inner object.
-    fn inner_mut(&mut self) -> &mut RefCounted<T> {
-        // SAFETY: The object will be kept alive as long as `self` is alive.
-        //         The compiler will guarantee `&RefCounted<T>` can't outlive
-        //         `self`.
-        unsafe { self.ptr.as_mut() }
-    }
-}
-
-impl<T: ?Sized> Drop for UniqueRef<T> {
-    fn drop(&mut self) {
-        // SAFETY: This object represents a unique reference to the
-        //         RefCounted object. No other references exist.
-        unsafe {
-            free_ref_counted(&self.ptr);
-        }
-    }
-}
-
-
-impl<T> Deref for UniqueRef<T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner().value
-    }
-}
-
-impl<T> DerefMut for UniqueRef<T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.inner_mut().value
-    }
-}
-
-
-impl<T> Into<SharedRef<T>> for UniqueRef<T> {
-    fn into(self) -> SharedRef<T> {
-        let sref = SharedRef { ptr: self.ptr };
-
-        // The ownership has been moved into sref. Avoid freeing the
-        // RefCounted object.
-        mem::forget(self);
-
-        sref
-    }
 }
 
 /// A reference-counted object.
@@ -127,11 +40,15 @@ pub struct SharedRef<T: ?Sized> {
 impl<T> SharedRef<T> {
     /// Creates a new reference-counted object.
     pub fn new(value: T) -> Self {
-        UniqueRef::new(value).into()
-    }
+        let ptr = Box::leak(Box::new(RefCounted {
+            counter: AtomicUsize::new(1),
+            value,
+        }));
 
-    pub fn new_uninit() -> SharedRefUninit<T> {
-
+        Self {
+            // SAFETY: Box always returns a valid non-null pointer.
+            ptr: unsafe { NonNull::new_unchecked(ptr) },
+        }
     }
 }
 
@@ -174,9 +91,7 @@ impl<T: ?Sized> Drop for SharedRef<T> {
 
             // SAFETY: This reference was the last one, so we can safely
             //         free the memory.
-            unsafe {
-                free_ref_counted(&self.ptr);
-            }
+            mem::drop(unsafe { Box::from_raw(self.ptr.as_ptr()) });
         }
     }
 }
