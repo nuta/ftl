@@ -11,7 +11,7 @@ impl MessageInfo {
         Self(raw)
     }
 
-    pub const fn raw(self) -> isize {
+    pub const fn as_raw(self) -> isize {
         self.0
     }
 

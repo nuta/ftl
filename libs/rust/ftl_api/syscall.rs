@@ -105,7 +105,7 @@ pub fn channel_send(
     syscall3(
         SyscallNumber::ChannelSend,
         handle.as_isize(),
-        msginfo.raw(),
+        msginfo.as_raw(),
         buf as isize,
     )?;
     Ok(())
