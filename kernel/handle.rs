@@ -51,9 +51,6 @@ impl<T: Handleable> Deref for Handle<T> {
     }
 }
 
-unsafe impl<T: Handleable + ?Sized> Sync for Handle<T> {}
-unsafe impl<T: Handleable + ?Sized> Send for Handle<T> {}
-
 pub struct AnyHandle {
     object: SharedRef<dyn Handleable>,
     rights: HandleRights,
@@ -68,17 +65,18 @@ impl AnyHandle {
         }
     }
 
-    pub fn downcast<T: Handleable>(self) -> Option<Handle<T>> {
-        let sref = self.object.as_any().downcast_ref::<SharedRef<T>>()?;
+    pub fn downcast<T: Handleable>(&self) -> Option<Handle<T>> {
+        let sref: &SharedRef<T> = self.object.as_any().downcast_ref::<SharedRef<T>>()?;
         Some(Handle {
-            object: sref,
+            object: sref.clone(),
             rights: self.rights,
         })
     }
 }
 
-unsafe impl Sync for AnyHandle {}
-unsafe impl Send for AnyHandle {}
+// TODO:
+unsafe impl Sync for SharedRef<dyn Handleable> {}
+unsafe impl Send for SharedRef<dyn Handleable> {}
 
 /// The number of maximum handles per process.
 ///
@@ -144,7 +142,6 @@ impl HandleTable {
         // println!("type_id: <Thread>           = {:?}", TypeId::of::<Thread>());
         // println!("type_id: <KMemory>          = {:?}", TypeId::of::<KernelAppMemory>());
         let handle: Handle<T> = any_handle
-            .clone()
             .downcast()
             .ok_or(FtlError::UnexpectedHandleType)?;
         println!("HandleTable::get downcast Ok");
