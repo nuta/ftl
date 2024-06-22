@@ -24,6 +24,7 @@ impl Channel {
         let ch1 = Channel {
             handle: OwnedHandle::from_raw(handle1),
         };
+
         Ok((ch0, ch1))
     }
 

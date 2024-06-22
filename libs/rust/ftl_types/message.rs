@@ -2,7 +2,7 @@ use core::mem::size_of;
 
 use crate::handle::HandleId;
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 #[repr(transparent)]
 pub struct MessageInfo(isize);
 
