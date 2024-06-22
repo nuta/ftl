@@ -51,8 +51,8 @@ pub fn syscall_entry(
         }
         _ => {
             println!(
-                "unknown syscall: n={}, a0={}, a1={}, a2={}, a3={}, a4={}",
-                n, a0, a1, a2, a3, a4
+                "unknown syscall: n={}, a0={}, a1={}, a2={}, a3={}, a4={}, a5={}",
+                n, a0, a1, a2, a3, a4, a5
             );
 
             Err(FtlError::UnknownSyscall)
