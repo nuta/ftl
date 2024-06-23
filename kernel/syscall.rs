@@ -67,7 +67,7 @@ pub fn syscall_entry(
             todo!()
         }
         _ if n == SyscallNumber::ChannelSend as isize => {
-            let handle = HandleId::from_raw(a0 as i32 /* FIXME: */);
+            let handle = HandleId::from_raw_isize_truncated(a0);
             let msginfo = MessageInfo::from_raw(a1);
             let msg = unsafe { &*((a2 as usize) as *const MessageBuffer) };
             let err = channel_send(handle, msginfo, msg);
@@ -79,7 +79,7 @@ pub fn syscall_entry(
             Ok(0)
         }
         _ if n == SyscallNumber::ChannelRecv as isize => {
-            let handle = HandleId::from_raw(a0 as i32 /* FIXME: */);
+            let handle = HandleId::from_raw_isize_truncated(a0);
             let msg = unsafe { &mut *((a1 as usize) as *mut MessageBuffer) };
             let msginfo = channel_recv(handle, msg)?;
             Ok(msginfo.as_raw())
