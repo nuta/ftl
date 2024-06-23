@@ -15,7 +15,6 @@ use ftl_utils::static_assert;
 use spin::Mutex;
 
 use crate::handle::OwnedHandle;
-use crate::print::GLOBAL_PRINTER;
 
 pub struct BufferGuard<T: MessageType> {
     buffer: NonNull<MessageBuffer>,
@@ -54,7 +53,7 @@ pub struct MessageBufferPool {
 }
 
 impl MessageBufferPool {
-    pub const fn new() -> MessageBufferPool {
+    const fn new() -> MessageBufferPool {
         MessageBufferPool {
             free_buffers: Vec::new(),
         }
