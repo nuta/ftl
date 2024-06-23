@@ -2,7 +2,7 @@ use alloc::boxed::Box;
 use core::mem::offset_of;
 use core::mem::size_of;
 use core::mem::MaybeUninit;
-use core::mem::{self};
+use core::mem;
 use core::slice;
 
 use ftl_types::message::MessageBuffer;
