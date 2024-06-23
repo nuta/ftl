@@ -1,5 +1,3 @@
-use core::mem::offset_of;
-
 use ftl_types::error::FtlError;
 use ftl_types::handle::HandleId;
 use ftl_types::message::MessageBuffer;

@@ -7,7 +7,6 @@ use crate::arch;
 use crate::channel::Channel;
 use crate::cpuvar;
 use crate::cpuvar::CpuId;
-use crate::handle::AnyHandle;
 use crate::handle::Handle;
 use crate::memory;
 use crate::process;
