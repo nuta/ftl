@@ -30,6 +30,10 @@ impl OwnedMessageBuffer {
         }
     }
 
+    pub fn use_for_recv(&mut self) -> &mut MaybeUninit<MessageBuffer> {
+        &mut self.buffer
+    }
+
     pub fn use_for_send<T: MessageType>(&mut self, msg: T) -> &MessageBuffer {
         let dst = self.buffer.as_mut_ptr() as *mut T;
         let src = &msg as *const T;
