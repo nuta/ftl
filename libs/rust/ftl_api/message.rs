@@ -1,5 +1,6 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
+use spin::Mutex;
 use core::marker::PhantomData;
 use core::mem;
 use core::mem::offset_of;
@@ -16,15 +17,16 @@ use ftl_types::message::MESSAGE_DATA_MAX_LEN;
 
 use crate::handle::OwnedHandle;
 
-pub struct BufferGuard<'a, T: MessageType> {
-    buffer: &'a MessageBuffer,
+pub struct BufferGuard<T: MessageType> {
+    pool: &'static Mutex<MessageBufferPool>,
+    buffer: Box<MessageBuffer>,
     _phantom: PhantomData<T>,
 }
 
-static GLOBAL_BUFFER_POOL: MessageBufferPool = MessageBufferPool::new();
+static GLOBAL_BUFFER_POOL: Mutex<MessageBufferPool> = Mutex::new(MessageBufferPool::new());
 
 pub struct MessageBufferPool {
-    buffer: Vec<MaybeUninit<MessageBuffer>>,
+    buffer: Vec<Box<MaybeUninit<MessageBuffer>>>,
 }
 
 impl MessageBufferPool {
@@ -32,7 +34,7 @@ impl MessageBufferPool {
         MessageBufferPool { buffer: Vec::new() }
     }
 
-    pub fn use_for_send<T: MessageType>(&mut self, msg: T) -> BufferGuard<'_, T> {
+    pub fn use_for_send<T: MessageType>(&mut self, msg: T) -> BufferGuard<T> {
         let dst = self.buffer.as_mut_ptr() as *mut T;
         let src = &msg as *const T;
 
