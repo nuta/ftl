@@ -10,6 +10,7 @@ pub mod allocator;
 pub mod arch;
 pub mod channel;
 pub mod handle;
+pub mod message;
 pub mod panic;
 pub mod prelude;
 pub mod print;

@@ -68,9 +68,7 @@ pub fn syscall_entry(
             println!("[print] {}", s);
             Ok(0)
         }
-        _ if n == SyscallNumber::ChannelCreate as isize => {
-            channel_create()
-        }
+        _ if n == SyscallNumber::ChannelCreate as isize => channel_create(),
         _ if n == SyscallNumber::ChannelSend as isize => {
             let handle = HandleId::from_raw_isize_truncated(a0);
             let msginfo = MessageInfo::from_raw(a1);
