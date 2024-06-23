@@ -7,6 +7,7 @@ use core::mem::MaybeUninit;
 use core::ptr;
 use core::ptr::NonNull;
 
+use ftl_inlinedvec::InlinedVec;
 use ftl_types::error::FtlError;
 use ftl_types::handle::HandleId;
 use ftl_types::message::MessageBuffer;
@@ -16,16 +17,17 @@ use spin::Mutex;
 
 use crate::handle::OwnedHandle;
 
-pub struct BufferGuard<T: MessageType> {
-    buffer: NonNull<MessageBuffer>,
+pub struct BufferGuard<'a, T: MessageType> {
+    pool: &'a mut MessageBufferPool,
+    buffer: Box<MaybeUninit<MessageBuffer>>,
     _phantom: PhantomData<T>,
 }
 
-impl<T: MessageType> BufferGuard<T> {
+impl<'a, T: MessageType> BufferGuard<'a, T> {
     pub fn buffer(&self) -> &MessageBuffer {
         // SAFETY: We know that the buffer is initialized because it was
         // initialized by use_for_send.
-        unsafe { self.buffer.as_ref() }
+        unsafe { self.buffer.assume_init_ref() }
     }
 
     pub fn msginfo(&self) -> MessageInfo {
@@ -33,7 +35,7 @@ impl<T: MessageType> BufferGuard<T> {
     }
 }
 
-impl<T: MessageType> Drop for BufferGuard<T> {
+impl<'a, T: MessageType> Drop for BufferGuard<'a, T> {
     fn drop(&mut self) {
         static_assert!(size_of::<MessageBuffer>() == size_of::<MaybeUninit<MessageBuffer>>());
 
@@ -42,25 +44,28 @@ impl<T: MessageType> Drop for BufferGuard<T> {
         let boxed =
             unsafe { Box::from_raw(self.buffer.as_ptr() as *mut MaybeUninit<MessageBuffer>) };
 
-        MESSAGE_BUFFER_POOL.lock().free_buffers.push(boxed);
+        // Try queueing the buffer for reuse. If it's full, we just free the buffer.
+        self.pool.free_buffer = Some(boxed);
     }
 }
 
-static MESSAGE_BUFFER_POOL: Mutex<MessageBufferPool> = Mutex::new(MessageBufferPool::new());
-
 pub struct MessageBufferPool {
-    free_buffers: Vec<Box<MaybeUninit<MessageBuffer>>>,
+    free_buffer: Option<Box<MaybeUninit<MessageBuffer>>>,
 }
 
 impl MessageBufferPool {
     const fn new() -> MessageBufferPool {
-        MessageBufferPool {
-            free_buffers: Vec::new(),
-        }
+        MessageBufferPool { free_buffer: None }
     }
 
+    #[inline(always)]
     pub fn use_for_send<T: MessageType>(&mut self, msg: T) -> BufferGuard<T> {
-        let dst = self.free_buffers.as_mut_ptr() as *mut T;
+        let mut buffer = self
+            .free_buffer
+            .take()
+            .unwrap_or_else(|| Box::new(MaybeUninit::uninit()));
+
+        let dst = buffer.as_mut_ptr() as *mut T;
         let src = &msg as *const T;
 
         // Use ptr::copy_nonoverlapping to avoid calling destructors (i.e. avoid
@@ -97,16 +102,9 @@ impl MessageBufferPool {
         // Don't call destructors on handles transferred to this buffer.
         mem::forget(msg);
 
-        let buffer = self
-            .free_buffers
-            .pop()
-            .unwrap_or_else(|| Box::new(MaybeUninit::uninit()));
-
-        // TODO: describe safety
-        let buffer_ptr = unsafe { NonNull::new_unchecked(Box::leak(buffer).as_mut_ptr()) };
-
         BufferGuard {
-            buffer: buffer_ptr,
+            pool: self,
+            buffer,
             _phantom: PhantomData,
         }
     }
@@ -130,16 +128,26 @@ impl MessageType for FsOpenMessage {
 }
 
 impl crate::channel::Channel {
-    fn typed_send<T: MessageType>(&self, msg: T) -> Result<(), FtlError> {
-        let guard = MESSAGE_BUFFER_POOL.lock().use_for_send(msg);
+    fn typed_send<T: MessageType>(
+        &self,
+        pool: &mut MessageBufferPool,
+        msg: T,
+    ) -> Result<(), FtlError> {
+        let guard = pool.use_for_send(msg);
         self.send(guard.msginfo(), guard.buffer())
     }
 }
 
 #[no_mangle]
-pub fn message_buffer_test(ch: crate::channel::Channel) -> Result<(), ftl_types::error::FtlError> {
-    ch.typed_send(FsOpenMessage {
-        handle: OwnedHandle::from_raw(HandleId::from_raw(1)),
-        path: 0x1234abcd,
-    })
+pub fn message_buffer_test(
+    ch: crate::channel::Channel,
+    pool: &mut MessageBufferPool,
+) -> Result<(), ftl_types::error::FtlError> {
+    ch.typed_send(
+        pool,
+        FsOpenMessage {
+            handle: OwnedHandle::from_raw(HandleId::from_raw(1)),
+            path: 0x1234abcd,
+        },
+    )
 }
