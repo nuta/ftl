@@ -1,20 +1,25 @@
 use alloc::boxed::Box;
+use alloc::vec::Vec;
 use core::marker::PhantomData;
 use core::mem;
+use core::mem::size_of;
 use core::mem::MaybeUninit;
 use core::ptr;
 use core::ptr::NonNull;
 
+use ftl_inlinedvec::InlinedVec;
 use ftl_types::error::FtlError;
 use ftl_types::handle::HandleId;
 use ftl_types::message::MessageBuffer;
 use ftl_types::message::MessageInfo;
+use ftl_utils::static_assert;
+use spin::Mutex;
 
 use crate::handle::OwnedHandle;
 
 pub struct BufferGuard<'a, T: MessageType> {
     pool: &'a mut MessageBufferPool,
-    buffer: NonNull<MaybeUninit<MessageBuffer>>,
+    buffer: Box<MaybeUninit<MessageBuffer>>,
     _phantom: PhantomData<T>,
 }
 
@@ -22,7 +27,7 @@ impl<'a, T: MessageType> BufferGuard<'a, T> {
     pub fn buffer(&self) -> &MessageBuffer {
         // SAFETY: We know that the buffer is initialized because it was
         // initialized by use_for_send.
-        unsafe { self.buffer.as_ref().assume_init_ref() }
+        unsafe { self.buffer.assume_init_ref() }
     }
 
     pub fn msginfo(&self) -> MessageInfo {
@@ -32,7 +37,12 @@ impl<'a, T: MessageType> BufferGuard<'a, T> {
 
 impl<'a, T: MessageType> Drop for BufferGuard<'a, T> {
     fn drop(&mut self) {
-        let boxed = unsafe { Box::from_raw(self.buffer.as_ptr()) };
+        static_assert!(size_of::<MessageBuffer>() == size_of::<MaybeUninit<MessageBuffer>>());
+
+        // SAFETY: We *assume* MaybeUninit<MessageBuffer> and MessageBuffer have
+        //         the same size and layout.
+        let boxed =
+            unsafe { Box::from_raw(self.buffer.as_ptr() as *mut MaybeUninit<MessageBuffer>) };
 
         // Try queueing the buffer for reuse. If it's full, we just free the buffer.
         self.pool.free_buffer = Some(boxed);
@@ -94,7 +104,7 @@ impl MessageBufferPool {
 
         BufferGuard {
             pool: self,
-            buffer: unsafe { NonNull::new_unchecked(Box::into_raw(buffer)) },
+            buffer,
             _phantom: PhantomData,
         }
     }
