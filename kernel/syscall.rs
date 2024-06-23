@@ -15,6 +15,13 @@ pub const VSYSCALL_PAGE: VsyscallPage = VsyscallPage {
     entry: syscall_entry,
 };
 
+fn channel_create() -> Result<isize, FtlError> {
+    todo!();
+
+    // TODO:
+    // assert_eq!(handle0 + 1, handle1);
+}
+
 fn channel_send(
     handle: HandleId,
     msginfo: MessageInfo,
@@ -64,7 +71,7 @@ pub fn syscall_entry(
             Ok(0)
         }
         _ if n == SyscallNumber::ChannelCreate as isize => {
-            todo!()
+            channel_create()
         }
         _ if n == SyscallNumber::ChannelSend as isize => {
             let handle = HandleId::from_raw_isize_truncated(a0);

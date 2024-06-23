@@ -5,9 +5,6 @@ use ftl_types::syscall::SyscallNumber;
 use ftl_types::syscall::VsyscallPage;
 use spin::Mutex;
 
-const HANDLE_ID_BITS: usize = 20;
-const HANDLE_ID_MASK: isize = (1 << HANDLE_ID_BITS) - 1;
-
 static VSYSCALL_PAGE: Mutex<Option<&'static VsyscallPage>> = Mutex::new(None);
 
 pub fn syscall(
@@ -72,14 +69,6 @@ pub fn syscall6(
     syscall(n, a0, a1, a2, a3, a4, a5)
 }
 
-fn retval_to_handle(retval: isize) -> Result<HandleId, FtlError> {
-    let id: i32 = (retval & HANDLE_ID_MASK)
-        .try_into()
-        .map_err(|_| FtlError::InvalidSyscallReturnValue)?;
-
-    Ok(HandleId::from_raw(id))
-}
-
 pub fn handle_close(handle: HandleId) -> Result<(), FtlError> {
     syscall1(SyscallNumber::HandleClose, handle.as_isize())?;
     Ok(())
@@ -92,8 +81,8 @@ pub fn print(s: &[u8]) -> Result<(), FtlError> {
 
 pub fn channel_create() -> Result<(HandleId, HandleId), FtlError> {
     let ret = syscall0(SyscallNumber::ChannelCreate)?;
-    let handle0 = retval_to_handle(ret)?;
-    let handle1 = retval_to_handle(ret >> HANDLE_ID_BITS)?;
+    let handle0 = HandleId::from_raw_isize_truncated(ret);
+    let handle1 = HandleId::from_raw_isize_truncated(ret + 1);
     Ok((handle0, handle1))
 }
 
