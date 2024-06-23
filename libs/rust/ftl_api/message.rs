@@ -1,4 +1,5 @@
 use alloc::boxed::Box;
+use ftl_types::handle::HandleId;
 use core::mem::offset_of;
 use core::mem::size_of;
 use core::mem::MaybeUninit;
@@ -29,12 +30,11 @@ impl OwnedMessageBuffer {
     }
 
     pub fn use_for_send<T: MessageType>(&mut self, msg: T) -> &MessageBuffer {
-        let buffer_base = self.buffer.as_mut_ptr() as usize;
-        let data_addr = buffer_base + offset_of!(MessageBuffer, data);
+        let buffer_data_addr = self.buffer.as_mut_ptr() as usize;
 
         // SAFETY: We have mutable (exclusive) access thanks to the &mut self,
         //         and it has exactly the right size for a MessageBuffer.
-        let dst = unsafe { slice::from_raw_parts_mut(data_addr as *mut u8, MESSAGE_DATA_MAX_LEN) };
+        let dst = unsafe { slice::from_raw_parts_mut(buffer_data_addr as *mut u8, MESSAGE_DATA_MAX_LEN) };
         // SAFETY: It's just another way to reference the message. Also,
         //         we owns T and don't have any other references to it.
         let src = unsafe { slice::from_raw_parts(&msg as *const T as *const u8, size_of::<T>()) };
@@ -57,8 +57,20 @@ trait MessageType {
 
 #[repr(C)]
 pub struct FsOpenMessage {
+    pub path: isize,
     pub handle: OwnedHandle,
-    pub handles: [OwnedHandle; 3],
 }
 
-pub fn main() {}
+impl MessageType for FsOpenMessage {
+    const NUM_HANDLES: usize = 1;
+    const MSGINFO: MessageInfo = MessageInfo::from_raw(0x5a5a5a);
+}
+
+pub fn main(mut buffer: OwnedMessageBuffer, ch: crate::channel::Channel) -> Result<(), ftl_types::error::FtlError> {
+    let buf = buffer.use_for_send(FsOpenMessage {
+        handle: OwnedHandle::from_raw(HandleId::from_raw(1)),
+        path: 0x1234abcd,
+    });
+
+    ch.send(FsOpenMessage::MSGINFO, buf)
+}
