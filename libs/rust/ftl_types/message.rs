@@ -1,7 +1,5 @@
 use core::mem::size_of;
 
-use ftl_utils::static_assert;
-
 use crate::handle::HandleId;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
