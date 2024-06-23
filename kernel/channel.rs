@@ -2,6 +2,7 @@ use alloc::collections::VecDeque;
 use alloc::vec::Vec;
 
 use ftl_types::error::FtlError;
+use ftl_types::message::MessageBuffer;
 use ftl_types::message::MessageInfo;
 
 use crate::poll::PollPoint;
@@ -48,8 +49,8 @@ impl Channel {
         Ok((ch0, ch1))
     }
 
-    pub fn send(&self, msginfo: MessageInfo, data: &[u8]) -> Result<(), FtlError> {
-        let data = data.to_vec();
+    pub fn send(&self, msginfo: MessageInfo, msg: &MessageBuffer) -> Result<(), FtlError> {
+        let data = msg.data[0..msginfo.data_len()].to_vec();
         let entry = MessageEntry { msginfo, data };
 
         let mutable = self.mutable.lock();
@@ -61,13 +62,16 @@ impl Channel {
         Ok(())
     }
 
-    pub fn recv(&self) -> Result<MessageInfo, FtlError> {
-        self.event_point.poll_loop(&self.mutable, |mutable| {
+    pub fn recv(&self, msg: &mut MessageBuffer) -> Result<MessageInfo, FtlError> {
+        let entry = self.event_point.poll_loop(&self.mutable, |mutable| {
             if let Some(entry) = mutable.queue.pop_front() {
-                return PollResult::Ready(Ok(entry.msginfo));
+                return PollResult::Ready(entry);
             }
 
             PollResult::Sleep
-        })
+        });
+
+        msg.data[0..entry.msginfo.data_len()].copy_from_slice(&entry.data);
+        Ok(entry.msginfo)
     }
 }

@@ -15,7 +15,11 @@ pub const VSYSCALL_PAGE: VsyscallPage = VsyscallPage {
     entry: syscall_entry,
 };
 
-fn channel_send(handle: HandleId, msginfo: MessageInfo, data: &[u8]) -> Result<(), FtlError> {
+fn channel_send(
+    handle: HandleId,
+    msginfo: MessageInfo,
+    msg: &MessageBuffer,
+) -> Result<(), FtlError> {
     let ch: Handle<Channel> = {
         current_thread()
             .process()
@@ -26,10 +30,10 @@ fn channel_send(handle: HandleId, msginfo: MessageInfo, data: &[u8]) -> Result<(
             .clone()
     };
 
-    ch.send(msginfo, data)
+    ch.send(msginfo, msg)
 }
 
-fn channel_recv(handle: HandleId, data: &mut [u8]) -> Result<MessageInfo, FtlError> {
+fn channel_recv(handle: HandleId, msg: &mut MessageBuffer) -> Result<MessageInfo, FtlError> {
     let ch: Handle<Channel> = {
         current_thread()
             .process()
@@ -40,7 +44,7 @@ fn channel_recv(handle: HandleId, data: &mut [u8]) -> Result<MessageInfo, FtlErr
             .clone()
     };
 
-    ch.recv()
+    ch.recv(msg)
 }
 
 pub fn syscall_entry(
@@ -65,10 +69,8 @@ pub fn syscall_entry(
         _ if n == SyscallNumber::ChannelSend as isize => {
             let handle = HandleId::from_raw(a0 as i32 /* FIXME: */);
             let msginfo = MessageInfo::from_raw(a1);
-            let data_addr = (a2 as usize) + offset_of!(MessageBuffer, data);
-            let buf =
-                unsafe { core::slice::from_raw_parts(data_addr as *const u8, msginfo.data_len()) };
-            let err = channel_send(handle, msginfo, buf);
+            let msg = unsafe { &*((a2 as usize) as *const MessageBuffer) };
+            let err = channel_send(handle, msginfo, msg);
             if let Err(e) = err {
                 println!("channel_send failed: {:?}", e);
                 return Err(e);
@@ -78,12 +80,8 @@ pub fn syscall_entry(
         }
         _ if n == SyscallNumber::ChannelRecv as isize => {
             let handle = HandleId::from_raw(a0 as i32 /* FIXME: */);
-            let data_addr = (a2 as usize) + offset_of!(MessageBuffer, data);
-            let buf = unsafe {
-                core::slice::from_raw_parts_mut(data_addr as *mut u8, 0 /* FIXME: */)
-            };
-
-            let msginfo = channel_recv(handle, buf)?;
+            let msg = unsafe { &mut *((a2 as usize) as *mut MessageBuffer) };
+            let msginfo = channel_recv(handle, msg)?;
             Ok(msginfo.as_raw())
         }
         _ => {

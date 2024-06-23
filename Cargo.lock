@@ -92,6 +92,9 @@ dependencies = [
 [[package]]
 name = "ftl_types"
 version = "0.0.0"
+dependencies = [
+ "ftl_utils",
+]
 
 [[package]]
 name = "ftl_utils"

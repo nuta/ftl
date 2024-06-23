@@ -1,5 +1,7 @@
 use core::mem::size_of;
 
+use ftl_utils::static_assert;
+
 use crate::handle::HandleId;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -16,6 +18,9 @@ impl MessageInfo {
     }
 
     pub const fn data_len(self) -> usize {
+        // FIXME:
+        debug_assert!(self.0 & 0xffff < MESSAGE_DATA_MAX_LEN as isize);
+
         (self.0 & 0xffff) as usize
     }
 }
