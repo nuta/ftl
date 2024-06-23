@@ -21,7 +21,7 @@ fn channel_send(handle: HandleId, msginfo: MessageInfo, data: &[u8]) -> Result<(
             .process()
             .handles()
             .lock()
-            .get_owned::<Channel>(handle)?
+            .get_owned(handle)?
             .as_channel()?
             .clone()
     };
@@ -35,7 +35,7 @@ fn channel_recv(handle: HandleId, data: &mut [u8]) -> Result<MessageInfo, FtlErr
             .process()
             .handles()
             .lock()
-            .get_owned::<Channel>(handle)?
+            .get_owned(handle)?
             .as_channel()?
             .clone()
     };

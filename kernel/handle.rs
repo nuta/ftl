@@ -1,10 +1,8 @@
-use core::any::Any;
 use core::ops::Deref;
 
 use ftl_types::error::FtlError;
 use ftl_types::handle::HandleId;
 use ftl_types::handle::HandleRights;
-use ftl_utils::downcast::Downcastable;
 use hashbrown::HashMap;
 
 use crate::app_loader::KernelAppMemory;
@@ -12,32 +10,20 @@ use crate::channel::Channel;
 use crate::ref_counted::SharedRef;
 use crate::thread::Thread;
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum HandleableType {
-    Channel,
-    Thread,
-    KernelAppMemory,
-}
-
-/// A trait for kernel objects that can be referred to by a handle ([`Handle`]).
-pub trait Handleable: Any + Sync + Send {
-    fn handle_type(&self) -> HandleableType;
-}
-
 /// Handle, a reference-counted pointer to a kernel object with allowed
 /// operations on it, aka *"capability"*.
-pub struct Handle<T: Handleable + ?Sized> {
+pub struct Handle<T: ?Sized> {
     object: SharedRef<T>,
     rights: HandleRights,
 }
 
-impl<T: Handleable> Handle<T> {
+impl<T> Handle<T> {
     pub const fn new(object: SharedRef<T>, rights: HandleRights) -> Handle<T> {
         Handle { object, rights }
     }
 }
 
-impl<T: Handleable> Clone for Handle<T> {
+impl<T> Clone for Handle<T> {
     fn clone(&self) -> Handle<T> {
         Handle {
             object: self.object.clone(),
@@ -46,7 +32,7 @@ impl<T: Handleable> Clone for Handle<T> {
     }
 }
 
-impl<T: Handleable> Deref for Handle<T> {
+impl<T> Deref for Handle<T> {
     type Target = T;
 
     fn deref(&self) -> &T {
@@ -64,7 +50,7 @@ impl AnyHandle {
     pub fn as_channel(&self) -> Result<&Handle<Channel>, FtlError> {
         match self {
             AnyHandle::Channel(ref channel) => Ok(channel),
-            _ => Err(FtlError::UnexpectedHandleType)
+            _ => Err(FtlError::UnexpectedHandleType),
         }
     }
 }
@@ -120,11 +106,8 @@ impl HandleTable {
         Ok(id)
     }
 
-    /// Get a handle by ID, as a concrete type `T`.
-    pub fn get_owned<T>(&self, id: HandleId) -> Result<&AnyHandle, FtlError>
-    where
-        T: Handleable,
-    {
+    /// Get a handle by ID.
+    pub fn get_owned(&self, id: HandleId) -> Result<&AnyHandle, FtlError> {
         let handle = self.handles.get(&id).ok_or(FtlError::HandleNotFound)?;
         Ok(handle)
     }

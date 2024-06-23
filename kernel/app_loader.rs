@@ -8,8 +8,6 @@ use ftl_utils::alignment::align_up;
 use crate::arch::PAGE_SIZE;
 use crate::handle::AnyHandle;
 use crate::handle::Handle;
-use crate::handle::Handleable;
-use crate::handle::HandleableType;
 use crate::memory::AllocPagesError;
 use crate::memory::AllocatedPages;
 use crate::process::Process;
@@ -29,12 +27,6 @@ pub enum Error {
 pub struct KernelAppMemory {
     #[allow(dead_code)]
     pages: AllocatedPages,
-}
-
-impl Handleable for KernelAppMemory {
-    fn handle_type(&self) -> HandleableType {
-        HandleableType::KernelAppMemory
-    }
 }
 
 pub struct AppLoader<'a> {

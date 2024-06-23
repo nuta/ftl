@@ -4,8 +4,6 @@ use alloc::vec::Vec;
 use ftl_types::error::FtlError;
 use ftl_types::message::MessageInfo;
 
-use crate::handle::Handleable;
-use crate::handle::HandleableType;
 use crate::poll::PollPoint;
 use crate::poll::PollResult;
 use crate::ref_counted::SharedRef;
@@ -71,11 +69,5 @@ impl Channel {
 
             PollResult::Sleep
         })
-    }
-}
-
-impl Handleable for Channel {
-    fn handle_type(&self) -> HandleableType {
-        HandleableType::Channel
     }
 }

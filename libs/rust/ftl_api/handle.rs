@@ -32,7 +32,3 @@ impl Drop for OwnedHandle {
         }
     }
 }
-
-pub trait Handleable {
-    fn handle_id(&self) -> HandleId;
-}

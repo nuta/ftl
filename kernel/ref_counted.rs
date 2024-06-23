@@ -2,9 +2,7 @@
 
 use alloc::boxed::Box;
 use core::any::Any;
-use core::marker::Unsize;
 use core::mem;
-use core::ops::CoerceUnsized;
 use core::ops::Deref;
 use core::ptr::NonNull;
 use core::sync::atomic;
@@ -128,6 +126,3 @@ impl<T> Deref for SharedRef<T> {
 
 unsafe impl<T: Sync> Sync for SharedRef<T> {}
 unsafe impl<T: Send> Send for SharedRef<T> {}
-
-// Allow `x as SharedRef<dyn Handleable>`, where `x: SharedRef<T: Handleable>`.
-impl<T: ?Sized + Unsize<U>, U: ?Sized> CoerceUnsized<SharedRef<U>> for SharedRef<T> {}

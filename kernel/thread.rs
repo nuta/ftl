@@ -2,9 +2,7 @@ use core::num::NonZeroIsize;
 use core::sync::atomic::AtomicIsize;
 use core::sync::atomic::Ordering;
 
-use crate::arch::{self};
-use crate::handle::Handleable;
-use crate::handle::HandleableType;
+use crate::arch;
 use crate::process::kernel_process;
 use crate::process::Process;
 use crate::ref_counted::SharedRef;
@@ -120,11 +118,5 @@ impl Thread {
 
         mutable.state = State::Runnable;
         GLOBAL_SCHEDULER.push(self.clone());
-    }
-}
-
-impl Handleable for Thread {
-    fn handle_type(&self) -> HandleableType {
-        HandleableType::Thread
     }
 }

@@ -1,9 +1,7 @@
 use ftl_types::error::FtlError;
-use ftl_types::handle::HandleId;
 use ftl_types::message::MessageBuffer;
 use ftl_types::message::MessageInfo;
 
-use crate::handle::Handleable;
 use crate::handle::OwnedHandle;
 use crate::syscall;
 
@@ -34,11 +32,5 @@ impl Channel {
 
     pub fn recv(&self, msg: &mut MessageBuffer) -> Result<MessageInfo, FtlError> {
         syscall::channel_recv(self.handle.id(), msg as *mut _ as *mut u8)
-    }
-}
-
-impl Handleable for Channel {
-    fn handle_id(&self) -> HandleId {
-        self.handle.id()
     }
 }
