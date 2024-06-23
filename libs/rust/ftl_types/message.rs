@@ -23,8 +23,9 @@ impl MessageInfo {
     }
 }
 
-const MESSAGE_DATA_MAX_LEN: usize = 4096 - 4 * size_of::<HandleId>();
+pub const MESSAGE_DATA_MAX_LEN: usize = 4096 - 4 * size_of::<HandleId>();
 
+#[repr(C)] // Don't reorder fields
 pub struct MessageBuffer {
     pub handles: [HandleId; 4],
     pub data: [u8; MESSAGE_DATA_MAX_LEN],
