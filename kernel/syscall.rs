@@ -80,7 +80,7 @@ pub fn syscall_entry(
         }
         _ if n == SyscallNumber::ChannelRecv as isize => {
             let handle = HandleId::from_raw(a0 as i32 /* FIXME: */);
-            let msg = unsafe { &mut *((a2 as usize) as *mut MessageBuffer) };
+            let msg = unsafe { &mut *((a1 as usize) as *mut MessageBuffer) };
             let msginfo = channel_recv(handle, msg)?;
             Ok(msginfo.as_raw())
         }
