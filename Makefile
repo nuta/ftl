@@ -74,10 +74,14 @@ ftl.elf: $(sources) Makefile $(app_elfs)
 build/startup.elf: build/$(STARTUP).elf
 	cp $< $@
 
-build/%.elf: $(sources)
+# TODO: Can't add "-C link-args=-Map=$(@:.elf=.map)" to RUSTFLAGS because rustc considers it as
+#       a change in compiler flags. Indeed it is, but it doesn't affect the output binary.
+#
+#       I'll file an issue on rust-lang/rust to hear  community's opinion.
+build/%.elf: $(sources) Makefile
 	$(PROGRESS) "CARGO" "$(@)"
 	mkdir -p $(@D)
-	RUSTFLAGS="$(RUSTFLAGS) -C link-args=-Map=$(@:.elf=.map)" \
+	RUSTFLAGS="$(RUSTFLAGS)" \
 	CARGO_TARGET_DIR="build/cargo" \
 		$(CARGO) build $(CARGOFLAGS) \
 		--target libs/rust/ftl_api/arch/$(ARCH)/riscv64-user.json \
