@@ -4,6 +4,7 @@ use core::mem::offset_of;
 use core::mem::size_of;
 use core::mem::MaybeUninit;
 use core::mem;
+use core::ptr;
 use core::slice;
 
 use ftl_types::message::MessageBuffer;
@@ -30,16 +31,39 @@ impl OwnedMessageBuffer {
     }
 
     pub fn use_for_send<T: MessageType>(&mut self, msg: T) -> &MessageBuffer {
-        let buffer_data_addr = self.buffer.as_mut_ptr() as usize;
+        let dst = self.buffer.as_mut_ptr() as *mut T;
+        let src = &msg as *const T;
 
-        // SAFETY: We have mutable (exclusive) access thanks to the &mut self,
-        //         and it has exactly the right size for a MessageBuffer.
-        let dst = unsafe { slice::from_raw_parts_mut(buffer_data_addr as *mut u8, MESSAGE_DATA_MAX_LEN) };
-        // SAFETY: It's just another way to reference the message. Also,
-        //         we owns T and don't have any other references to it.
-        let src = unsafe { slice::from_raw_parts(&msg as *const T as *const u8, size_of::<T>()) };
-
-        dst.copy_from_slice(src);
+        // Use ptr::copy_nonoverlapping to avoid calling destructors (i.e. avoid
+        // freeing moved handles) and to avoid unnecessary length checks.
+        //
+        // SAFETY: Let's check the requirements for ptr::copy_nonoverlapping one
+        //         by one:
+        //
+        // > src must be valid for reads of count * size_of::<T>() bytes.
+        //
+        // True because msg is a valid reference to a single T.
+        //
+        // > dst must be valid for writes of count * size_of::<T>() bytes.
+        //
+        // We assume size_of::<T>() <= size_of::<MessageBuffer> holds. It is
+        // guaranteed IDL stub generator.
+        //
+        // > Both src and dst must be properly aligned.
+        //
+        // True because MessageBuffer is aligned to 16 bytes through #[repr] and
+        // IDL stub generator guarantees that it's big enough for all field types
+        // in T.
+        //
+        // > The region of memory beginning at src with a size of
+        // > count * size_of::<T>() bytes must not overlap with the region of
+        // > memory beginning at dst with the same size.
+        //
+        // True because self.buffer is unique and we have an exclusive acces
+        //  (&mut self) to it.
+        unsafe {
+            ptr::copy_nonoverlapping::<T>(src, dst, 1);
+        }
 
         // Don't call destructors on handles transferred to this buffer.
         mem::forget(msg);
@@ -50,7 +74,8 @@ impl OwnedMessageBuffer {
     }
 }
 
-trait MessageType {
+/// Invariant: size_of::<T>() <= size_of::<MessageBuffer>.
+pub trait MessageType {
     const NUM_HANDLES: usize;
     const MSGINFO: MessageInfo;
 }
@@ -66,7 +91,8 @@ impl MessageType for FsOpenMessage {
     const MSGINFO: MessageInfo = MessageInfo::from_raw(0x5a5a5a);
 }
 
-pub fn main(mut buffer: OwnedMessageBuffer, ch: crate::channel::Channel) -> Result<(), ftl_types::error::FtlError> {
+#[no_mangle]
+pub fn message_buffer_test(mut buffer: OwnedMessageBuffer, ch: crate::channel::Channel) -> Result<(), ftl_types::error::FtlError> {
     let buf = buffer.use_for_send(FsOpenMessage {
         handle: OwnedHandle::from_raw(HandleId::from_raw(1)),
         path: 0x1234abcd,
