@@ -1,41 +1,67 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
-use spin::Mutex;
 use core::marker::PhantomData;
 use core::mem;
-use core::mem::offset_of;
 use core::mem::size_of;
 use core::mem::MaybeUninit;
 use core::ptr;
-use core::slice;
+use core::ptr::NonNull;
 
 use ftl_types::error::FtlError;
 use ftl_types::handle::HandleId;
 use ftl_types::message::MessageBuffer;
 use ftl_types::message::MessageInfo;
-use ftl_types::message::MESSAGE_DATA_MAX_LEN;
+use ftl_utils::static_assert;
+use spin::Mutex;
 
 use crate::handle::OwnedHandle;
+use crate::print::GLOBAL_PRINTER;
 
 pub struct BufferGuard<T: MessageType> {
-    pool: &'static Mutex<MessageBufferPool>,
-    buffer: Box<MessageBuffer>,
+    buffer: NonNull<MessageBuffer>,
     _phantom: PhantomData<T>,
 }
 
-static GLOBAL_BUFFER_POOL: Mutex<MessageBufferPool> = Mutex::new(MessageBufferPool::new());
+impl<T: MessageType> BufferGuard<T> {
+    pub fn buffer(&self) -> &MessageBuffer {
+        // SAFETY: We know that the buffer is initialized because it was
+        // initialized by use_for_send.
+        unsafe { self.buffer.as_ref() }
+    }
+
+    pub fn msginfo(&self) -> MessageInfo {
+        T::MSGINFO
+    }
+}
+
+impl<T: MessageType> Drop for BufferGuard<T> {
+    fn drop(&mut self) {
+        static_assert!(size_of::<MessageBuffer>() == size_of::<MaybeUninit<MessageBuffer>>());
+
+        // SAFETY: We *assume* MaybeUninit<MessageBuffer> and MessageBuffer have
+        //         the same size and layout.
+        let boxed =
+            unsafe { Box::from_raw(self.buffer.as_ptr() as *mut MaybeUninit<MessageBuffer>) };
+
+        MESSAGE_BUFFER_POOL.lock().free_buffers.push(boxed);
+    }
+}
+
+static MESSAGE_BUFFER_POOL: Mutex<MessageBufferPool> = Mutex::new(MessageBufferPool::new());
 
 pub struct MessageBufferPool {
-    buffer: Vec<Box<MaybeUninit<MessageBuffer>>>,
+    free_buffers: Vec<Box<MaybeUninit<MessageBuffer>>>,
 }
 
 impl MessageBufferPool {
     pub const fn new() -> MessageBufferPool {
-        MessageBufferPool { buffer: Vec::new() }
+        MessageBufferPool {
+            free_buffers: Vec::new(),
+        }
     }
 
     pub fn use_for_send<T: MessageType>(&mut self, msg: T) -> BufferGuard<T> {
-        let dst = self.buffer.as_mut_ptr() as *mut T;
+        let dst = self.free_buffers.as_mut_ptr() as *mut T;
         let src = &msg as *const T;
 
         // Use ptr::copy_nonoverlapping to avoid calling destructors (i.e. avoid
@@ -72,12 +98,16 @@ impl MessageBufferPool {
         // Don't call destructors on handles transferred to this buffer.
         mem::forget(msg);
 
-        // SAFETY: We just wrote to the buffer. Some of the fields are not
-        // initialized, but it's fine until the caller use T::MSGINFO.
-        let buffer = unsafe { self.buffer.assume_init_ref() };
+        let buffer = self
+            .free_buffers
+            .pop()
+            .unwrap_or_else(|| Box::new(MaybeUninit::uninit()));
+
+        // TODO: describe safety
+        let buffer_ptr = unsafe { NonNull::new_unchecked(Box::leak(buffer).as_mut_ptr()) };
 
         BufferGuard {
-            buffer,
+            buffer: buffer_ptr,
             _phantom: PhantomData,
         }
     }
@@ -102,9 +132,8 @@ impl MessageType for FsOpenMessage {
 
 impl crate::channel::Channel {
     fn typed_send<T: MessageType>(&self, msg: T) -> Result<(), FtlError> {
-        let mut buffer = MessageBufferPool::allocate::<T>();
-        let guard = buffer.use_for_send(msg);
-        self.send(T::MSGINFO, guard.buffer)
+        let guard = MESSAGE_BUFFER_POOL.lock().use_for_send(msg);
+        self.send(guard.msginfo(), guard.buffer())
     }
 }
 
