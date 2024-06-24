@@ -1,7 +1,6 @@
 #![no_std]
 #![no_main]
 
-
 use ftl_api::autogen::protocols::PingReply;
 use ftl_api::autogen::protocols::PingRequest;
 use ftl_api::channel::Channel;
