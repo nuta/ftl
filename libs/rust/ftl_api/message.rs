@@ -74,7 +74,7 @@ pub struct PingPongMessage {
 }
 
 impl MessageBody for PingPongMessage {
-    const MSGINFO: MessageInfo = MessageInfo::from_raw(0x5a5a5a);
+    const MSGINFO: MessageInfo = MessageInfo::from_raw(4);
     type Reader<'a> = PingPongMessageReader<'a>;
 
     fn deserialize<'a>(buffer: &'a MessageBuffer) -> Self::Reader<'a> {

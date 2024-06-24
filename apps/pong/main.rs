@@ -21,7 +21,7 @@ pub fn main() {
         let r = ch
             .recv_with_buffer::<PingPongMessage>(&mut buffer)
             .expect("failed to recv");
-        println!("[pong] {}: received message: {:x?}", i, r.value());
+        println!("[pong] {}: received message: {}", i, r.value());
 
         println!("[pong] {}: replying message", i);
         ch.send_with_buffer(&mut buffer, PingPongMessage { value: 84 })
