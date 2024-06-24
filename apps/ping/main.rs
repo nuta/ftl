@@ -1,7 +1,12 @@
 #![no_std]
 #![no_main]
 
-use ftl_api::{channel::Channel, handle::OwnedHandle, message::MessageBuffer, prelude::*, types::{handle::HandleId, message::MessageInfo}};
+use ftl_api::channel::Channel;
+use ftl_api::handle::OwnedHandle;
+use ftl_api::message::MessageBuffer;
+use ftl_api::prelude::*;
+use ftl_api::types::handle::HandleId;
+use ftl_api::types::message::MessageInfo;
 
 #[ftl_api::main]
 pub fn main() {
@@ -10,9 +15,7 @@ pub fn main() {
     let handle = OwnedHandle::from_raw(handle_id);
     let ch = Channel::from_handle(handle);
 
-    let mut message = MessageBuffer {
-        data: [0; 4095],
-    };
+    let mut message = MessageBuffer { data: [0; 4095] };
 
     for i in 0.. {
         println!("[ping] sending message");
@@ -22,6 +25,10 @@ pub fn main() {
 
         println!("[ping] receiving message");
         let ret_msginfo = ch.recv(&mut message).expect("failed to recv");
-        println!("[ping] received message: {:x?} \"{}\"", ret_msginfo, core::str::from_utf8(&message.data[0..5]).unwrap());
+        println!(
+            "[ping] received message: {:x?} \"{}\"",
+            ret_msginfo,
+            core::str::from_utf8(&message.data[0..5]).unwrap()
+        );
     }
 }

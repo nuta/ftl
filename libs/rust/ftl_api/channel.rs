@@ -1,8 +1,8 @@
 use ftl_types::error::FtlError;
 use ftl_types::message::MessageInfo;
 
-use crate::message::MessageBuffer;
 use crate::handle::OwnedHandle;
+use crate::message::MessageBuffer;
 use crate::syscall;
 
 pub enum RecvError {

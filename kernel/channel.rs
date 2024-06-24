@@ -49,8 +49,15 @@ impl Channel {
         Ok((ch0, ch1))
     }
 
-    pub fn send(&self, msginfo: MessageInfo, buf: &[u8; MESSAGE_DATA_MAX_LEN]) -> Result<(), FtlError> {
-        let entry = MessageEntry { msginfo, data: buf.to_vec() };
+    pub fn send(
+        &self,
+        msginfo: MessageInfo,
+        buf: &[u8; MESSAGE_DATA_MAX_LEN],
+    ) -> Result<(), FtlError> {
+        let entry = MessageEntry {
+            msginfo,
+            data: buf.to_vec(),
+        };
 
         let mutable = self.mutable.lock();
         let peer = mutable.peer.as_ref().ok_or(FtlError::NoPeer)?;
