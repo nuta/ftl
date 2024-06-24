@@ -45,6 +45,7 @@ impl Channel {
         buffer.write(msg);
 
         // TODO: return send error to keep owning handles
+        // TODO: Optimize parameter order to avoid unnecessary register swaps.
         syscall::channel_send(
             self.handle.id(),
             M::MSGINFO,
@@ -57,6 +58,7 @@ impl Channel {
         &self,
         buffer: &'a mut MessageBuffer,
     ) -> Result<M::Reader<'a>, RecvError> {
+        // TODO: Optimize parameter order to avoid unnecessary register swaps.
         let msginfo = syscall::channel_recv(
             self.handle.id(),
             buffer.data.as_mut_ptr(),
