@@ -90,18 +90,29 @@ pub fn channel_send(
     handle: HandleId,
     msginfo: MessageInfo,
     buf: *const u8,
+    handles: *const HandleId,
 ) -> Result<(), FtlError> {
-    syscall3(
+    syscall4(
         SyscallNumber::ChannelSend,
         handle.as_isize(),
         msginfo.as_raw(),
         buf as isize,
+        handles as isize,
     )?;
     Ok(())
 }
 
-pub fn channel_recv(handle: HandleId, buf: *mut u8) -> Result<MessageInfo, FtlError> {
-    let ret = syscall2(SyscallNumber::ChannelRecv, handle.as_isize(), buf as isize)?;
+pub fn channel_recv(
+    handle: HandleId,
+    buf: *mut u8,
+    handles: *mut HandleId,
+) -> Result<MessageInfo, FtlError> {
+    let ret = syscall3(
+        SyscallNumber::ChannelRecv,
+        handle.as_isize(),
+        buf as isize,
+        handles as isize,
+    )?;
     Ok(MessageInfo::from_raw(ret))
 }
 

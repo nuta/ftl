@@ -1,4 +1,5 @@
 pub const MESSAGE_DATA_MAX_LEN: usize = 0xfff;
+pub const MESSAGE_HANDLES_MAX_COUNT: usize = 3;
 
 /// The message metadata.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
