@@ -1,12 +1,14 @@
-use std::{fmt, fs::File};
+use std::fmt;
+use std::fs::File;
 use std::path::PathBuf;
 
 use anyhow::Result;
 use clap::Parser;
-use ftl_types::idl::{self, IdlFile};
-use minijinja::{context, Environment};
+use ftl_types::idl::IdlFile;
+use ftl_types::idl::{self};
+use minijinja::context;
+use minijinja::Environment;
 use serde::Serialize;
-
 
 #[derive(Debug, Serialize)]
 struct Field {
@@ -17,6 +19,7 @@ struct Field {
 #[derive(Debug, Serialize)]
 struct Message {
     name: String,
+    msgid: isize,
     fields: Vec<Field>,
 }
 
@@ -50,8 +53,6 @@ impl fmt::Display for CamelCase<'_> {
 #[command(version, about, long_about = None)]
 struct Args {
     #[arg(index = 1)]
-    out_dir: PathBuf,
-    #[arg(index = 2)]
     idl_file: PathBuf,
 }
 
@@ -66,25 +67,41 @@ fn main() -> Result<()> {
         .unwrap();
 
     let mut messages = Vec::new();
-    for protocol in protocol.protocols {
-        for rpc in protocol.rpcs {
+    for (i, protocol) in protocol.protocols.iter().enumerate() {
+        for rpc in &protocol.rpcs {
             let request_name = format!("{}Request", CamelCase(&rpc.name));
             let reply_name = format!("{}Reply", CamelCase(&rpc.name));
 
             messages.push(Message {
                 name: request_name,
-                fields: rpc.request.fields.into_iter().map(|f| Field {
-                    name: f.name,
-                    ty: resolve_type_name(&f.ty),
-                }).collect(),
+                msgid: i as isize, // TODO: derive a globally unique ID
+                fields: rpc
+                    .request
+                    .fields
+                    .iter()
+                    .map(|f| {
+                        Field {
+                            name: f.name.clone(),
+                            ty: resolve_type_name(&f.ty),
+                        }
+                    })
+                    .collect(),
             });
 
             messages.push(Message {
                 name: reply_name,
-                fields: rpc.response.fields.into_iter().map(|f| Field {
-                    name: f.name,
-                    ty: resolve_type_name(&f.ty),
-                }).collect(),
+                msgid: i as isize, // TODO: derive a globally unique ID
+                fields: rpc
+                    .response
+                    .fields
+                    .iter()
+                    .map(|f| {
+                        Field {
+                            name: f.name.clone(),
+                            ty: resolve_type_name(&f.ty),
+                        }
+                    })
+                    .collect(),
             });
         }
     }
@@ -95,7 +112,6 @@ fn main() -> Result<()> {
     })?;
 
     println!("{}", lib_rs);
-
 
     Ok(())
 }
