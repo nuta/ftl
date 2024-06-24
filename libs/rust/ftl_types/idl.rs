@@ -42,7 +42,7 @@ pub struct Rpc {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct StringHeader {
+pub struct StringField {
     pub len: u16,
     pub offset: u16,
 }

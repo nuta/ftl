@@ -23,7 +23,7 @@ struct Message {
 fn resolve_type_name(ty: &idl::Ty) -> String {
     match ty {
         idl::Ty::Int32 => "i32".to_string(),
-        idl::Ty::String => "String".to_string(),
+        idl::Ty::String => "StringField".to_string(),
         _ => panic!("Unknown type: {:?}", ty),
     }
 }
