@@ -21,7 +21,7 @@ impl MessageBuffer {
         }
     }
 
-    pub fn write<T: MessageBody>(&mut self, msg: T) {
+    pub(crate) fn write<T: MessageBody>(&mut self, msg: T) {
         let dst = self as *mut _ as *mut T;
         let src = &msg as *const T;
 

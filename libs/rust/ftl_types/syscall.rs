@@ -14,6 +14,7 @@ pub enum SyscallNumber {
     PollAdd = 9,
 }
 
+#[repr(C)]
 pub struct VsyscallPage {
     pub entry: fn(isize, isize, isize, isize, isize, isize, isize) -> Result<isize, FtlError>,
 }
