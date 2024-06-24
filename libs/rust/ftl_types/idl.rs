@@ -25,6 +25,7 @@ pub enum Ty {
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Field {
     pub name: String,
+    #[serde(rename = "type")]
     pub ty: Ty,
 }
 
