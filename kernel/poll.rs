@@ -57,7 +57,6 @@ impl PollPoint {
                     drop(guard);
                     drop(pollers);
 
-                    println!("[poll] sleeping");
                     arch::yield_cpu();
                 }
             }
