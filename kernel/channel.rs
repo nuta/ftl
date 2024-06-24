@@ -54,9 +54,10 @@ impl Channel {
         msginfo: MessageInfo,
         buf: &[u8; MESSAGE_DATA_MAX_LEN],
     ) -> Result<(), FtlError> {
+        let data_len = msginfo.data_len();
         let entry = MessageEntry {
             msginfo,
-            data: buf.to_vec(),
+            data: buf[0..data_len].to_vec(),
         };
 
         let mutable = self.mutable.lock();
@@ -78,7 +79,7 @@ impl Channel {
         });
 
         let data_len = entry.msginfo.data_len();
-        buf[0..data_len].copy_from_slice(&entry.data[..data_len]);
+        buf[0..data_len].copy_from_slice(&entry.data[0..data_len]);
         Ok(entry.msginfo)
     }
 }
