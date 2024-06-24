@@ -1,11 +1,6 @@
-use alloc::boxed::Box;
-use core::marker::PhantomData;
 use core::mem;
-use core::mem::MaybeUninit;
 use core::ptr;
-use core::ptr::NonNull;
 
-use ftl_types::error::FtlError;
 use ftl_types::handle::HandleId;
 use ftl_types::message::MessageBuffer;
 use ftl_types::message::MessageInfo;
@@ -69,17 +64,23 @@ pub fn use_for_send<T: MessageType>(buffer: &mut MessageBuffer, msg: T) {
     mem::forget(msg);
 }
 
+extern "C" {
+    fn do_send(ch: HandleId, msg: &MessageBuffer, info: MessageInfo);
+}
+
 impl crate::channel::Channel {
-    fn typed_send<T: MessageType>(&self, buf: &mut MessageBuffer, msg: T) -> Result<(), FtlError> {
+    #[inline(always)]
+    fn typed_send<T: MessageType>(&self, buf: &mut MessageBuffer, msg: T) {
         use_for_send(buf, msg);
-        self.send(T::MSGINFO, buf)
+        unsafe { do_send(self.handle().id(), buf, T::MSGINFO) }
+        // self.send(T::MSGINFO, buf);
     }
 }
 
 #[no_mangle]
-pub fn message_buffer_test(ch: crate::channel::Channel) -> Result<(), ftl_types::error::FtlError> {
-    ch.typed_send(FsOpenMessage {
+pub fn message_buffer_test(ch: crate::channel::Channel, buf: &mut MessageBuffer,) {
+    ch.typed_send(buf, FsOpenMessage {
         handle: OwnedHandle::from_raw(HandleId::from_raw(1)),
         path: 0x1234abcd,
-    })
+    });
 }

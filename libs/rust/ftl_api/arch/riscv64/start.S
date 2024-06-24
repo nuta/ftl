@@ -8,7 +8,12 @@ start:
     la sp, __stack_top
     call start_ftl_api
 
+    la a0, message_buffer_test
+
     // Reachable if main returns.
+    unimp
+
+do_send:
     unimp
 
 .section .bss  // .bss, not .data to avoid having zeroes in the ELF file

@@ -26,6 +26,10 @@ impl Channel {
         Ok((ch0, ch1))
     }
 
+    pub fn handle(&self) -> &OwnedHandle {
+        &self.handle
+    }
+
     pub fn send(&self, msginfo: MessageInfo, msg: &MessageBuffer) -> Result<(), FtlError> {
         syscall::channel_send(self.handle.id(), msginfo, msg as *const _ as *const u8)
     }

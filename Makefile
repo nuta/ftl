@@ -84,6 +84,6 @@ build/%.elf: $(sources) Makefile
 	RUSTFLAGS="$(RUSTFLAGS)" \
 	CARGO_TARGET_DIR="build/cargo" \
 		$(CARGO) build $(CARGOFLAGS) \
-		--target libs/rust/ftl_api/arch/$(ARCH)/riscv64-user.json \
+		--target libs/rust/ftl_api/arch/$(ARCH)/$(ARCH)-user.json \
 		--manifest-path $(patsubst build/%.elf,%,$(@))/Cargo.toml
 	cp build/cargo/$(ARCH)-user/$(BUILD)/$(patsubst build/apps/%.elf,%,$(@)) $(@)
