@@ -161,6 +161,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "ftl_api_autogen"
+version = "0.0.0"
+dependencies = [
+ "ftl_types",
+]
+
+[[package]]
 name = "ftl_api_macros"
 version = "0.0.0"
 dependencies = [

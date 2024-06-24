@@ -93,6 +93,7 @@ fn main() -> Result<()> {
     let lib_rs = template.render(context! {
         messages => messages,
     })?;
+
     println!("{}", lib_rs);
 
 
