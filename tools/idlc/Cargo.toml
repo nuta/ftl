@@ -1,0 +1,14 @@
+[package]
+name = "ftl_idlc"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "ftl_idlc"
+path = "main.rs"
+
+[dependencies]
+clap = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+ftl_types = { workspace = true }
