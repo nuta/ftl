@@ -9,6 +9,7 @@ name = "ftl_idlc"
 path = "main.rs"
 
 [dependencies]
+anyhow = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 ftl_types = { workspace = true }

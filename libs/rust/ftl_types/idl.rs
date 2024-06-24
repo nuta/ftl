@@ -1,5 +1,13 @@
-use alloc::{string::String, vec::Vec};
-use serde::{Deserialize, Serialize};
+use alloc::string::String;
+use alloc::vec::Vec;
+
+use serde::Deserialize;
+use serde::Serialize;
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IdlFile {
+    pub protocols: Vec<Protocol>,
+}
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Protocol {

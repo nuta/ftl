@@ -58,7 +58,7 @@ clippy:
 
 .PHONY: fmt
 fmt:
-	find boot kernel libs apps -name '*.rs' | xargs rustup run nightly rustfmt
+	find boot kernel libs apps tools -name '*.rs' | xargs rustup run nightly rustfmt
 
 .PHONY: fix
 fix:
