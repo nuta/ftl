@@ -26,6 +26,16 @@ pub mod protocols {
     }
 
     impl<'a> {{ m.name }}Reader<'a> {
+        fn cast_buffer(buffer: &'a MessageBuffer) -> &'a {{ m.name }} {
+            unsafe { &*(buffer as *const _ as *const {{ m.name }}) }
+        }
+
+        {% for f in m.fields %}
+        pub fn {{ f.name }}(&self) -> {{ f.ty }} {
+            let m = self.cast_buffer(self.buffer);
+            m.{{ f.name }}
+        }
+        {% endfor %}
     }
     {% endfor %}
 }

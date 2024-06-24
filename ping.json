@@ -8,10 +8,6 @@
                     "request": {
                         "fields": [
                             {
-                                "name": "str_value1",
-                                "type": "string"
-                            },
-                            {
                                 "name": "int_value1",
                                 "type": "int32"
                             }
@@ -19,10 +15,6 @@
                     },
                     "response": {
                         "fields": [
-                            {
-                                "name": "str_value2",
-                                "type": "string"
-                            },
                             {
                                 "name": "int_value2",
                                 "type": "int32"

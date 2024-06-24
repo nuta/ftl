@@ -19,7 +19,6 @@ pub struct Protocol {
 #[serde(rename_all = "lowercase")]
 pub enum Ty {
     Int32,
-    String,
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
