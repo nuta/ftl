@@ -1,0 +1,39 @@
+use alloc::{string::String, vec::Vec};
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Protocol {
+    pub name: String,
+    pub rpcs: Vec<Rpc>,
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Ty {
+    Int32,
+    String,
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Field {
+    pub name: String,
+    pub ty: Ty,
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Message {
+    pub fields: Vec<Field>,
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Rpc {
+    pub name: String,
+    pub request: Message,
+    pub response: Message,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct StringHeader {
+    pub len: u16,
+    pub offset: u16,
+}
