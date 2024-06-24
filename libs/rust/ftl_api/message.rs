@@ -5,8 +5,6 @@ use ftl_types::handle::HandleId;
 use ftl_types::message::MessageBuffer;
 use ftl_types::message::MessageInfo;
 
-use crate::handle::OwnedHandle;
-
 /// Invariant: size_of::<T>() <= size_of::<MessageBuffer>.
 pub trait MessageType {
     const NUM_HANDLES: usize;
@@ -16,7 +14,6 @@ pub trait MessageType {
 #[repr(C)]
 pub struct FsOpenMessage {
     pub path: isize,
-    pub handle: OwnedHandle,
 }
 
 impl MessageType for FsOpenMessage {
@@ -72,7 +69,7 @@ impl crate::channel::Channel {
     #[inline(always)]
     fn typed_send<T: MessageType>(&self, buf: &mut MessageBuffer, msg: T) {
         use_for_send(buf, msg);
-        unsafe { do_send(self.handle().id(), buf, T::MSGINFO) }
+        // unsafe { do_send(self.handle().id(), buf, T::MSGINFO) }
         // self.send(T::MSGINFO, buf);
     }
 }
@@ -80,7 +77,6 @@ impl crate::channel::Channel {
 #[no_mangle]
 pub fn message_buffer_test(ch: crate::channel::Channel, buf: &mut MessageBuffer,) {
     ch.typed_send(buf, FsOpenMessage {
-        handle: OwnedHandle::from_raw(HandleId::from_raw(1)),
         path: 0x1234abcd,
     });
 }

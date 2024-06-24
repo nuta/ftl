@@ -13,9 +13,6 @@ start:
     // Reachable if main returns.
     unimp
 
-do_send:
-    unimp
-
 .section .bss  // .bss, not .data to avoid having zeroes in the ELF file
 .align 4       // 16-bytes (2^4) alignment as required by RISC-V ABI
 __stack_bottom:
