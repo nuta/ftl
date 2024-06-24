@@ -16,18 +16,18 @@ If the kernel fails returns an error code, it's guaranteed that `handles` will n
 
 |63 or 31                                      14|13   12|11         0|
 +------------------------------------------------+-------+------------+
-|                       TYPE                     |   H   |    LEN     |
+|                        ID                      |   H   |    LEN     |
 +------------------------------------------------+-------+------------+
 
 LEN  (12 bits) - # of bytes in the message data.
 H    (2 bits)  - # of handles in the message.
-TYPE (rest)    - Message type.
+ID (rest)    - Message ID.
 
 ```
 
 # Design decisions
 
-## A single `isize` for `TYPE`, `H`, and `LEN`
+## A single `isize` for `ID`, `H`, and `LEN`
 
 This is because:
 
@@ -35,7 +35,7 @@ This is because:
   can be done with simply setting an immediate value to a register.
 
 - The message structure (i.e. its length and the number of handles) can be
-  validated at once when checking the message type.
+  validated at once when checking the message ID.
 
 - It forcibly limits the message data length and the number of handles, in
   other words, the kernel just need to do bitwise AND operations to get them,
@@ -49,6 +49,6 @@ This is because:
   message buffer first to determine the number/length of handles/data that
   it needs to copy.
 
-- It's useful for debugging. We can determine the message type even if an
+- It's useful for debugging. We can determine the message ID even if an
   app accidentally passed an invalid pointer to the kernel. It could be a
   key clue for debugging.
