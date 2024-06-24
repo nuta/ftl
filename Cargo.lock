@@ -185,6 +185,8 @@ dependencies = [
  "anyhow",
  "clap",
  "ftl_types",
+ "minijinja",
+ "serde",
  "serde_json",
 ]
 
@@ -265,6 +267,15 @@ checksum = "07af8b9cdd281b7915f413fa73f29ebd5d55d0d3f0155584dade1ff18cea1b17"
 dependencies = [
  "autocfg",
  "scopeguard",
+]
+
+[[package]]
+name = "minijinja"
+version = "2.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e136ef580d7955019ab0a407b68d77c292a9976907e217900f3f76bc8f6dc1a4"
+dependencies = [
+ "serde",
 ]
 
 [[package]]

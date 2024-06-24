@@ -21,6 +21,7 @@ proc-macro2 = "1.0.85"
 proc-macro-error = "1.0.4"
 serde_json = "1.0.117"
 clap = "4.5.7"
+minijinja = "2.0.2"
 
 ftl_kernel = { path = "kernel" }
 ftl_types = { path = "libs/rust/ftl_types" }

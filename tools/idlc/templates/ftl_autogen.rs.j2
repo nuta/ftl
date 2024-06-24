@@ -1,0 +1,12 @@
+use ftl_api::message::MessageBody;
+
+pub mod protocols {
+    {% for m in messages %}
+    #[repr(C)]
+    pub struct {{ m.name }} {
+        {% for f in m.fields %}
+        pub {{ f.name }}: {{ f.ty }},
+        {% endfor %}
+    }
+    {% endfor %}
+}
