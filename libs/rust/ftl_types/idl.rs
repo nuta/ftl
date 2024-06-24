@@ -17,14 +17,16 @@ pub struct Protocol {
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[serde(tag = "type")]
 pub enum Ty {
     Int32,
+    Bytes { capacity: usize },
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Field {
     pub name: String,
-    #[serde(rename = "type")]
+    #[serde(flatten)]
     pub ty: Ty,
 }
 
@@ -41,7 +43,7 @@ pub struct Rpc {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct StringField {
+pub struct BytesField {
     pub len: u16,
     pub offset: u16,
 }

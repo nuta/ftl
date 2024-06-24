@@ -17,16 +17,47 @@ struct Field {
 }
 
 #[derive(Debug, Serialize)]
+struct VaField {
+    name: String,
+    ty: String,
+}
+
+#[derive(Debug, Serialize)]
 struct Message {
     name: String,
     msgid: isize,
     fields: Vec<Field>,
+    va_fields: Vec<VaField>,
 }
 
-fn resolve_type_name(ty: &idl::Ty) -> String {
-    match ty {
-        idl::Ty::Int32 => "i32".to_string(),
-        _ => panic!("Unknown type: {:?}", ty),
+fn visit_message(name: String, idl_message: &idl::Message, msgid: isize) -> Message {
+    let mut fields = Vec::new();
+    let mut va_fields = Vec::new();
+    for f in &idl_message.fields {
+        let type_name = match &f.ty {
+            idl::Ty::Int32 => "i32",
+            idl::Ty::Bytes { .. } => "::ftl_types::idl::BytesField",
+            _ => panic!("Unknown type: {:?}", f.ty),
+        };
+
+        fields.push(Field {
+            name: f.name.clone(),
+            ty: type_name.to_string(),
+        });
+
+        if let idl::Ty::Bytes { capacity } = &f.ty {
+            va_fields.push(VaField {
+                name: format!("va_{}", f.name),
+                ty: format!("[u8; {}]", capacity),
+            });
+        }
+    }
+
+    Message {
+        name,
+        msgid: 0, // TODO: derive a globally unique ID
+        fields,
+        va_fields,
     }
 }
 
@@ -69,40 +100,16 @@ fn main() -> Result<()> {
     let mut messages = Vec::new();
     for (i, protocol) in protocol.protocols.iter().enumerate() {
         for rpc in &protocol.rpcs {
-            let request_name = format!("{}Request", CamelCase(&rpc.name));
-            let reply_name = format!("{}Reply", CamelCase(&rpc.name));
-
-            messages.push(Message {
-                name: request_name,
-                msgid: i as isize, // TODO: derive a globally unique ID
-                fields: rpc
-                    .request
-                    .fields
-                    .iter()
-                    .map(|f| {
-                        Field {
-                            name: f.name.clone(),
-                            ty: resolve_type_name(&f.ty),
-                        }
-                    })
-                    .collect(),
-            });
-
-            messages.push(Message {
-                name: reply_name,
-                msgid: i as isize, // TODO: derive a globally unique ID
-                fields: rpc
-                    .response
-                    .fields
-                    .iter()
-                    .map(|f| {
-                        Field {
-                            name: f.name.clone(),
-                            ty: resolve_type_name(&f.ty),
-                        }
-                    })
-                    .collect(),
-            });
+            messages.push(visit_message(
+                format!("{}Request", CamelCase(&rpc.name)),
+                &rpc.request,
+                i as isize,
+            ));
+            messages.push(visit_message(
+                format!("{}Reply", CamelCase(&rpc.name)),
+                &rpc.response,
+                i as isize,
+            ));
         }
     }
 
