@@ -8,6 +8,7 @@ start:
     call start_ftl_api
     int3
 
+.global do_send
 do_send:
     ud2
 
