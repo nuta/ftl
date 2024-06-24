@@ -1,6 +1,4 @@
-use core::mem::size_of;
-
-use crate::handle::HandleId;
+pub const MESSAGE_DATA_MAX_LEN: usize = 0xfff;
 
 /// The message metadata.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -25,17 +23,6 @@ impl MessageInfo {
     }
 
     pub const fn data_len(self) -> usize {
-        // FIXME:
-        debug_assert!(self.0 & 0xffff < MESSAGE_DATA_MAX_LEN as isize);
-
-        (self.0 & 0xffff) as usize
+        self.0 as usize & 0xfff
     }
-}
-
-pub const MESSAGE_DATA_MAX_LEN: usize = 4096 - 4 * size_of::<HandleId>();
-
-#[repr(C, align(16))] // Don't reorder fields
-pub struct MessageBuffer {
-    pub handles: [HandleId; 4],
-    pub data: [u8; MESSAGE_DATA_MAX_LEN],
 }

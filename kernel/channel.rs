@@ -2,8 +2,8 @@ use alloc::collections::VecDeque;
 use alloc::vec::Vec;
 
 use ftl_types::error::FtlError;
-use ftl_types::message::MessageBuffer;
 use ftl_types::message::MessageInfo;
+use ftl_types::message::MESSAGE_DATA_MAX_LEN;
 
 use crate::poll::PollPoint;
 use crate::poll::PollResult;
@@ -49,9 +49,8 @@ impl Channel {
         Ok((ch0, ch1))
     }
 
-    pub fn send(&self, msginfo: MessageInfo, msg: &MessageBuffer) -> Result<(), FtlError> {
-        let data = msg.data[0..msginfo.data_len()].to_vec();
-        let entry = MessageEntry { msginfo, data };
+    pub fn send(&self, msginfo: MessageInfo, buf: &[u8; MESSAGE_DATA_MAX_LEN]) -> Result<(), FtlError> {
+        let entry = MessageEntry { msginfo, data: buf.to_vec() };
 
         let mutable = self.mutable.lock();
         let peer = mutable.peer.as_ref().ok_or(FtlError::NoPeer)?;
@@ -62,7 +61,7 @@ impl Channel {
         Ok(())
     }
 
-    pub fn recv(&self, msg: &mut MessageBuffer) -> Result<MessageInfo, FtlError> {
+    pub fn recv(&self, buf: &mut [u8; MESSAGE_DATA_MAX_LEN]) -> Result<MessageInfo, FtlError> {
         let entry = self.event_point.poll_loop(&self.mutable, |mutable| {
             if let Some(entry) = mutable.queue.pop_front() {
                 return PollResult::Ready(entry);
@@ -71,7 +70,7 @@ impl Channel {
             PollResult::Sleep
         });
 
-        msg.data[0..entry.msginfo.data_len()].copy_from_slice(&entry.data);
+        buf[0..entry.msginfo.data_len()].copy_from_slice(&entry.data);
         Ok(entry.msginfo)
     }
 }

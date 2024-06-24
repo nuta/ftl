@@ -1,7 +1,7 @@
 use ftl_types::error::FtlError;
-use ftl_types::message::MessageBuffer;
 use ftl_types::message::MessageInfo;
 
+use crate::message::MessageBuffer;
 use crate::handle::OwnedHandle;
 use crate::syscall;
 
@@ -44,11 +44,11 @@ impl Channel {
     }
 
     pub fn recv2<T>(&self, msg: &mut MessageBuffer) -> Result<T, RecvError> {
-        let msginfo = self.recv(msg).map_err(RecvError::KernelError)?;
-        if msginfo != T::MSGINFO {
-            todo!("free received handles here");
-            return Err(RecvError::UnexpectedMessageType(msginfo));
-        }
+        // let msginfo = self.recv(msg).map_err(RecvError::KernelError)?;
+        // if msginfo != T::MSGINFO {
+        //     todo!("free received handles here");
+        //     return Err(RecvError::UnexpectedMessageType(msginfo));
+        // }
 
         todo!()
     }

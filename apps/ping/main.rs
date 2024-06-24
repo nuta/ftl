@@ -1,7 +1,7 @@
 #![no_std]
 #![no_main]
 
-use ftl_api::{channel::Channel, handle::OwnedHandle, prelude::*, types::{handle::HandleId, message::{MessageBuffer, MessageInfo}}};
+use ftl_api::{channel::Channel, handle::OwnedHandle, message::MessageBuffer, prelude::*, types::{handle::HandleId, message::MessageInfo}};
 
 #[ftl_api::main]
 pub fn main() {
@@ -11,8 +11,7 @@ pub fn main() {
     let ch = Channel::from_handle(handle);
 
     let mut message = MessageBuffer {
-        handles: [HandleId::from_raw(0); 4],
-        data: [0; 4096 - 4 * core::mem::size_of::<HandleId>()],
+        data: [0; 4095],
     };
 
     for i in 0.. {

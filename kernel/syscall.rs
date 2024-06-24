@@ -1,7 +1,9 @@
+use core::slice;
+
 use ftl_types::error::FtlError;
 use ftl_types::handle::HandleId;
-use ftl_types::message::MessageBuffer;
 use ftl_types::message::MessageInfo;
+use ftl_types::message::MESSAGE_DATA_MAX_LEN;
 use ftl_types::syscall::SyscallNumber;
 use ftl_types::syscall::VsyscallPage;
 
@@ -23,7 +25,7 @@ fn channel_create() -> Result<isize, FtlError> {
 fn channel_send(
     handle: HandleId,
     msginfo: MessageInfo,
-    msg: &MessageBuffer,
+    buf: &[u8; MESSAGE_DATA_MAX_LEN],
 ) -> Result<(), FtlError> {
     let ch: Handle<Channel> = {
         current_thread()
@@ -35,10 +37,10 @@ fn channel_send(
             .clone()
     };
 
-    ch.send(msginfo, msg)
+    ch.send(msginfo, buf)
 }
 
-fn channel_recv(handle: HandleId, msg: &mut MessageBuffer) -> Result<MessageInfo, FtlError> {
+fn channel_recv(handle: HandleId, buf: &mut [u8; MESSAGE_DATA_MAX_LEN]) -> Result<MessageInfo, FtlError> {
     let ch: Handle<Channel> = {
         current_thread()
             .process()
@@ -49,7 +51,7 @@ fn channel_recv(handle: HandleId, msg: &mut MessageBuffer) -> Result<MessageInfo
             .clone()
     };
 
-    ch.recv(msg)
+    ch.recv(buf)
 }
 
 pub fn syscall_entry(
@@ -72,8 +74,8 @@ pub fn syscall_entry(
         _ if n == SyscallNumber::ChannelSend as isize => {
             let handle = HandleId::from_raw_isize_truncated(a0);
             let msginfo = MessageInfo::from_raw(a1);
-            let msg = unsafe { &*((a2 as usize) as *const MessageBuffer) };
-            let err = channel_send(handle, msginfo, msg);
+            let buf = unsafe { slice::from_raw_parts(a2 as *const u8, MESSAGE_DATA_MAX_LEN) };
+            let err = channel_send(handle, msginfo, buf);
             if let Err(e) = err {
                 println!("channel_send failed: {:?}", e);
                 return Err(e);
@@ -83,8 +85,8 @@ pub fn syscall_entry(
         }
         _ if n == SyscallNumber::ChannelRecv as isize => {
             let handle = HandleId::from_raw_isize_truncated(a0);
-            let msg = unsafe { &mut *((a1 as usize) as *mut MessageBuffer) };
-            let msginfo = channel_recv(handle, msg)?;
+            let buf = unsafe { slice::from_raw_parts_mut(a2 as *mut u8, MESSAGE_DATA_MAX_LEN) };
+            let msginfo = channel_recv(handle, buf)?;
             Ok(msginfo.as_raw())
         }
         _ => {
@@ -96,4 +98,3 @@ pub fn syscall_entry(
             Err(FtlError::UnknownSyscall)
         }
     }
-}

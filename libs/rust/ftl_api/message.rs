@@ -2,8 +2,35 @@ use core::mem;
 use core::ptr;
 
 use ftl_types::handle::HandleId;
-use ftl_types::message::MessageBuffer;
 use ftl_types::message::MessageInfo;
+use ftl_types::message::MESSAGE_DATA_MAX_LEN;
+
+
+#[repr(C, align(16))] // Align to 16 bytes for SIMD instructions.
+pub struct MessageBuffer {
+    pub data: [u8; MESSAGE_DATA_MAX_LEN],
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 /// Invariant: size_of::<T>() <= size_of::<MessageBuffer>.
 pub trait MessageType {
