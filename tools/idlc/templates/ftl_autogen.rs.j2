@@ -1,4 +1,5 @@
 use ftl_api::message::MessageBody;
+use ftl_api::message::MessageBuffer;
 use ftl_api::message::StringField;
 
 pub mod protocols {
@@ -8,6 +9,23 @@ pub mod protocols {
         {% for f in m.fields %}
         pub {{ f.name }}: {{ f.ty }},
         {% endfor %}
+    }
+
+    impl MessageBody for {{ m.name }} {
+        const MSGINFO: MessageInfo = MessageInfo::from_raw({{ m.msginfo }});
+        type Reader<'a> = {{ m.name }}Reader<'a>;
+
+        fn deserialize<'a>(buffer: &'a MessageBuffer) -> Self::Reader<'a> {
+            {{ m.name }}Reader { buffer }
+        }
+    }
+
+
+    pub struct {{ m.name }}Reader<'a> {
+        buffer: &'a MessageBuffer,
+    }
+
+    impl<'a> {{ m.name }}Reader<'a> {
     }
     {% endfor %}
 }

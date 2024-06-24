@@ -1,4 +1,4 @@
-use std::fs::File;
+use std::{fmt, fs::File};
 use std::path::PathBuf;
 
 use anyhow::Result;
@@ -28,6 +28,25 @@ fn resolve_type_name(ty: &idl::Ty) -> String {
     }
 }
 
+struct CamelCase<'a>(&'a str);
+
+impl fmt::Display for CamelCase<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut next_upper = true;
+        for c in self.0.chars() {
+            if c == '_' {
+                next_upper = true;
+            } else if next_upper {
+                write!(f, "{}", c.to_ascii_uppercase())?;
+                next_upper = false;
+            } else {
+                write!(f, "{}", c)?;
+            }
+        }
+        Ok(())
+    }
+}
+
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
@@ -50,15 +69,19 @@ fn main() -> Result<()> {
     let mut messages = Vec::new();
     for protocol in protocol.protocols {
         for rpc in protocol.rpcs {
+            let request_name = format!("{}Request", CamelCase(&rpc.name));
+            let reply_name = format!("{}Reply", CamelCase(&rpc.name));
+
             messages.push(Message {
-                name: rpc.name.clone(),
+                name: request_name,
                 fields: rpc.request.fields.into_iter().map(|f| Field {
                     name: f.name,
                     ty: resolve_type_name(&f.ty),
                 }).collect(),
             });
+
             messages.push(Message {
-                name: rpc.name.clone(),
+                name: reply_name,
                 fields: rpc.response.fields.into_iter().map(|f| Field {
                     name: f.name,
                     ty: resolve_type_name(&f.ty),
