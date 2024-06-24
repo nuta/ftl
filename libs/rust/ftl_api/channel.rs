@@ -1,13 +1,12 @@
 use ftl_types::error::FtlError;
-use ftl_types::handle::HandleId;
 use ftl_types::message::MessageInfo;
-use ftl_types::message::MESSAGE_DATA_MAX_LEN;
 
 use crate::handle::OwnedHandle;
+use crate::message::MessageBody;
 use crate::message::MessageBuffer;
-use crate::message::MessageType;
 use crate::syscall;
 
+#[derive(Debug, PartialEq, Eq)]
 pub enum RecvError {
     KernelError(FtlError),
     UnexpectedMessageType(MessageInfo),
@@ -38,19 +37,26 @@ impl Channel {
         &self.handle
     }
 
-    pub fn send<T: MessageType>(&self, buffer: &mut MessageBuffer, msg: T) -> Result<(), FtlError> {
+    pub fn send_with_buffer<M: MessageBody>(
+        &self,
+        buffer: &mut MessageBuffer,
+        msg: M,
+    ) -> Result<(), FtlError> {
         buffer.write(msg);
 
         // TODO: return send error to keep owning handles
         syscall::channel_send(
             self.handle.id(),
-            T::MSGINFO,
+            M::MSGINFO,
             buffer.data.as_ptr(),
             buffer.handles.as_ptr(),
         )
     }
 
-    pub fn recv<T: MessageType>(&self, buffer: &mut MessageBuffer) -> Result<T, RecvError> {
+    pub fn recv_with_buffer<'a, M: MessageBody>(
+        &self,
+        buffer: &'a mut MessageBuffer,
+    ) -> Result<M::Reader<'a>, RecvError> {
         let msginfo = syscall::channel_recv(
             self.handle.id(),
             buffer.data.as_mut_ptr(),
@@ -59,7 +65,7 @@ impl Channel {
         .map_err(RecvError::KernelError)?;
 
         // Is it really the message we're expecting?
-        if msginfo != T::MSGINFO {
+        if msginfo != M::MSGINFO {
             // Close transferred handles to prevent resource leaks.
             //
             // Also, if they're IPC-related handles like channels, this might
@@ -73,6 +79,6 @@ impl Channel {
             return Err(RecvError::UnexpectedMessageType(msginfo));
         }
 
-        todo!()
+        Ok(M::deserialize(buffer))
     }
 }

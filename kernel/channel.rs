@@ -54,6 +54,8 @@ impl Channel {
         msginfo: MessageInfo,
         buf: &[u8; MESSAGE_DATA_MAX_LEN],
     ) -> Result<(), FtlError> {
+        debug_assert!(msginfo.num_handles() == 0, "TODO: handle passing");
+
         let data_len = msginfo.data_len();
         let entry = MessageEntry {
             msginfo,
@@ -77,6 +79,8 @@ impl Channel {
 
             PollResult::Sleep
         });
+
+        debug_assert!(entry.msginfo.num_handles() == 0, "TODO: handle passing");
 
         let data_len = entry.msginfo.data_len();
         buf[0..data_len].copy_from_slice(&entry.data[0..data_len]);

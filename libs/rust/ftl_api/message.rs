@@ -13,7 +13,15 @@ pub struct MessageBuffer {
 }
 
 impl MessageBuffer {
-    pub fn write<T: MessageType>(&mut self, msg: T) {
+    pub fn new() -> Self {
+        // TODO: Avoid zeroing the buffer because it's not necessary.
+        Self {
+            data: [0; MESSAGE_DATA_MAX_LEN],
+            handles: [HandleId::from_raw(0); MESSAGE_HANDLES_MAX_COUNT],
+        }
+    }
+
+    pub fn write<T: MessageBody>(&mut self, msg: T) {
         let dst = self as *mut _ as *mut T;
         let src = &msg as *const T;
 
@@ -53,18 +61,33 @@ impl MessageBuffer {
     }
 }
 
-/// Invariant: size_of::<T>() <= size_of::<MessageBuffer>.
-pub trait MessageType {
-    const NUM_HANDLES: usize;
+/// Invariant: size_of::<MessageBuffer> >= size_of::<T>().
+pub trait MessageBody {
     const MSGINFO: MessageInfo;
+    type Reader<'a>: 'a;
+    fn deserialize<'a>(buffer: &'a MessageBuffer) -> Self::Reader<'a>;
 }
 
 #[repr(C)]
-pub struct FsOpenMessage {
-    pub path: isize,
+pub struct PingPongMessage {
+    pub value: isize,
 }
 
-impl MessageType for FsOpenMessage {
-    const NUM_HANDLES: usize = 1;
+impl MessageBody for PingPongMessage {
     const MSGINFO: MessageInfo = MessageInfo::from_raw(0x5a5a5a);
+    type Reader<'a> = PingPongMessageReader<'a>;
+
+    fn deserialize<'a>(buffer: &'a MessageBuffer) -> Self::Reader<'a> {
+        PingPongMessageReader { buffer }
+    }
+}
+
+pub struct PingPongMessageReader<'a> {
+    buffer: &'a MessageBuffer,
+}
+
+impl<'a> PingPongMessageReader<'a> {
+    pub fn value(&self) -> isize {
+        unsafe { (*(self.buffer as *const _ as *const PingPongMessage)).value }
+    }
 }

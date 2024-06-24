@@ -8,8 +8,6 @@ start:
     la sp, __stack_top
     call start_ftl_api
 
-    la a0, message_buffer_test
-
     // Reachable if main returns.
     unimp
 

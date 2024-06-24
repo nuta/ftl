@@ -4,9 +4,9 @@
 use ftl_api::channel::Channel;
 use ftl_api::handle::OwnedHandle;
 use ftl_api::message::MessageBuffer;
+use ftl_api::message::PingPongMessage;
 use ftl_api::prelude::*;
 use ftl_api::types::handle::HandleId;
-use ftl_api::types::message::MessageInfo;
 
 #[ftl_api::main]
 pub fn main() {
@@ -15,21 +15,16 @@ pub fn main() {
     let handle = OwnedHandle::from_raw(handle_id);
     let ch = Channel::from_handle(handle);
 
-    let mut message = MessageBuffer { data: [0; 4095] };
-
+    let mut buffer = MessageBuffer::new();
     for i in 0.. {
-        println!("[pong] receiving message");
-        let ret_msginfo = ch.recv(&mut message).expect("failed to recv");
-        println!(
-            "[pong] received message: {:x?} \"{}\"",
-            ret_msginfo,
-            core::str::from_utf8(&message.data[0..5]).unwrap()
-        );
+        println!("[pong] {}: receiving message", i);
+        let r = ch
+            .recv_with_buffer::<PingPongMessage>(&mut buffer)
+            .expect("failed to recv");
+        println!("[pong] {}: received message: {:x?}", i, r.value());
 
-        println!("[pong] replying message 2");
-        let msginfo = MessageInfo::from_raw(i << 20 | 5);
-        message.data[0..5].copy_from_slice("WORLD".as_bytes());
-        println!("sending ....: {:?}", msginfo);
-        ch.send(msginfo, &message).expect("failed to send");
+        println!("[pong] {}: replying message", i);
+        ch.send_with_buffer(&mut buffer, PingPongMessage { value: 84 })
+            .expect("failed to send");
     }
 }
