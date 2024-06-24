@@ -77,7 +77,8 @@ impl Channel {
             PollResult::Sleep
         });
 
-        buf[0..entry.msginfo.data_len()].copy_from_slice(&entry.data);
+        let data_len = entry.msginfo.data_len();
+        buf[0..data_len].copy_from_slice(&entry.data[..data_len]);
         Ok(entry.msginfo)
     }
 }
