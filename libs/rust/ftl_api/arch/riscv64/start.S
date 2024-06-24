@@ -13,6 +13,7 @@ start:
     // Reachable if main returns.
     unimp
 
+.global do_send
 do_send:
     unimp
 
