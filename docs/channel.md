@@ -4,7 +4,7 @@ Channel is an asynchronous, bounded, and bi-directional message-passing mechanis
 
 ## Why classic two-copies message passing?
 
-In FTL, to implement the nature of "async", the kernel will copy the message into the kernel memory, and copy it again to the receiver process' memory.
+In FTL, to implement the nature of "async", the kernel will copy the message twice: copy it into the kernel memory, and copy it again to the receiver process' memory.
 
 If you're familar with recent microkernels design, you might find this channel design a bit old-fashioned. For example, IPC in L4 microkernels is synchronous to avoid having a in-kernel queue, and they avoid expensive memory copies by forcing much smaller message size to even fit in CPU registers. Futhermore, some recent microkernels use shared memory + asynchronous notification mechanism to avoid memory copies and keep the kernel minimal.
 
