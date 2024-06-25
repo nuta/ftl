@@ -64,6 +64,8 @@ impl Channel {
         let mutable = self.mutable.lock();
         let peer_ch = mutable.peer.as_ref().ok_or(FtlError::NoPeer)?;
 
+        // TODO: Message size check.
+
         // Move handles.
         //
         // In this phase, since we don't know the receiver process, we don't
