@@ -25,7 +25,7 @@ ID (rest)    - Message ID.
 
 # Design decisions
 
-## A single `isize` for `ID`, `H`, and `LEN`
+## A single `isize` for everything (`ID`, `H`, and `LEN`)
 
 - It can fit in a single CPU register. Specifying the message metadata
   can be done with simply setting an immediate value to a register.
@@ -53,6 +53,24 @@ ID (rest)    - Message ID.
 - Small enough to keep it allocated, even on the stack. It allows reusing the same memory space for all messages, like L4's virtual/message registers.
 - Not big enough for bulk send. It encourages you to use transferring Buffer handle instead of memory copies via kernel.
 - Ideally it should be 4KiB to be page-sized, but 4096 (0x1000) will require two steps to read the message length: bitwise AND (0x1fff) and then validate if it's less than 0x1000.
+
+## A pointer to message buffer, not separate pointers to `data` and `handles`
+
+Let's compare with an alternative interface design for "send a message" API. Here's the signature of `zx_channel_write` syscall in Fuchsia ([doc](https://fuchsia.dev/reference/syscalls/channel_write)):
+
+```c
+zx_status_t zx_channel_write(zx_handle_t handle,
+                             uint32_t options,
+                             const void* bytes,
+                             uint32_t num_bytes,
+                             const zx_handle_t* handles,
+                             uint32_t num_handles);
+```
+
+It's super intuitive, right? In contrast, FTL merges `bytes` and `handles` into a single constant-sized buffer called *"message buffer"*. This is because:
+
+- It makes FTL developers (you!) aware that they need to prepare a big enough buffer for receiving theoritically maximum-sized message. Otherwise, malicious clients can easily cause a buffer overflow by sending a huge message.
+- Fewer system call parameters. Fewer instructions and memory accesses when sending/receiving messages. I don't think this matters much by the way.
 
 ## `handles` in the message buffer come after the data part
 
