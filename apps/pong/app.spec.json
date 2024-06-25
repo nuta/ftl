@@ -1,0 +1,8 @@
+{
+    "name": "pong",
+    "kind": "app/v1",
+    "spec": {
+        "deps": [],
+        "provides": ["pong"]
+    }
+}
