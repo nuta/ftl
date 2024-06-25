@@ -2,11 +2,15 @@
 
 ## System calls
 
-### `channel_send(ch, header, buf, handles) -> ()`
+### `channel_send(ch, msginfo, msgbuffer) -> ()`
 
-Sends a message. The message will be delivered to `ch`'s peer.
+Sends a message. The message will be delivered to `ch`'s peer. It copies the `msginfo.len`-bytes message data and moves `msginfo.handles` handles to the peer channel queue.
 
 If the kernel fails returns an error code, it's guaranteed that `handles` will not be transferred. That is, **the caller must keep ownership of the handles**. This is why `Channel::send` returns `SendError` instead of `FtlError`.
+
+### `channel_recv(ch, msgbuffer) -> msginfo` **(blocking)**
+
+Waits for and receives a message. Message will be copied to `msgbuffer`.
 
 # Layout
 
@@ -54,7 +58,7 @@ ID (rest)    - Message ID.
 - Not big enough for bulk send. It encourages you to use transferring Buffer handle instead of memory copies via kernel.
 - Ideally it should be 4KiB to be page-sized, but 4096 (0x1000) will require two steps to read the message length: bitwise AND (0x1fff) and then validate if it's less than 0x1000.
 
-## A pointer to message buffer, not separate pointers to `data` and `handles`
+## A pointer to a single constant-sized buffer, not separate pointers to `data` and `handles`
 
 Let's compare with an alternative interface design for "send a message" API. Here's the signature of `zx_channel_write` syscall in Fuchsia ([doc](https://fuchsia.dev/reference/syscalls/channel_write)):
 
