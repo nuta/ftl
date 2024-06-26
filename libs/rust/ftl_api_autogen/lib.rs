@@ -8,21 +8,16 @@ use ftl_types::message::MessageInfo;
 pub mod protocols {
     use super::*;
 
-    
     #[repr(C)]
     pub struct PingRequest {
-        
         pub int_value1: i32,
-        
     }
 
     // TODO: static_assert for size
 
     impl MessageBody for PingRequest {
-        const MSGINFO: MessageInfo = MessageInfo::from_raw(
-            0 << 14
-            | ::core::mem::size_of::<PingRequest>() as isize,
-        );
+        const MSGINFO: MessageInfo =
+            MessageInfo::from_raw(0 << 14 | ::core::mem::size_of::<PingRequest>() as isize);
 
         type Reader<'a> = PingRequestReader<'a>;
 
@@ -30,7 +25,6 @@ pub mod protocols {
             PingRequestReader { buffer }
         }
     }
-
 
     pub struct PingRequestReader<'a> {
         buffer: &'a MessageBuffer,
@@ -41,28 +35,22 @@ pub mod protocols {
             unsafe { &*(buffer as *const _ as *const PingRequest) }
         }
 
-        
         pub fn int_value1(&self) -> i32 {
             let m = self.as_ref(self.buffer);
             m.int_value1
         }
-        
     }
-    
+
     #[repr(C)]
     pub struct PingReply {
-        
         pub int_value2: i32,
-        
     }
 
     // TODO: static_assert for size
 
     impl MessageBody for PingReply {
-        const MSGINFO: MessageInfo = MessageInfo::from_raw(
-            0 << 14
-            | ::core::mem::size_of::<PingReply>() as isize,
-        );
+        const MSGINFO: MessageInfo =
+            MessageInfo::from_raw(0 << 14 | ::core::mem::size_of::<PingReply>() as isize);
 
         type Reader<'a> = PingReplyReader<'a>;
 
@@ -70,7 +58,6 @@ pub mod protocols {
             PingReplyReader { buffer }
         }
     }
-
 
     pub struct PingReplyReader<'a> {
         buffer: &'a MessageBuffer,
@@ -81,12 +68,9 @@ pub mod protocols {
             unsafe { &*(buffer as *const _ as *const PingReply) }
         }
 
-        
         pub fn int_value2(&self) -> i32 {
             let m = self.as_ref(self.buffer);
             m.int_value2
         }
-        
     }
-    
 }

@@ -18,7 +18,9 @@ impl HandleId {
         // the lower 32-bits.
         //
         // https://godbolt.org/z/Yjc4bfhzs
-        let id_u32: u32 = ((id as usize) & (HANDLE_ID_MASK as usize)).try_into().unwrap();
+        let id_u32: u32 = ((id as usize) & (HANDLE_ID_MASK as usize))
+            .try_into()
+            .unwrap();
         HandleId(id_u32 as i32)
     }
 

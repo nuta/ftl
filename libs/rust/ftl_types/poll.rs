@@ -1,6 +1,8 @@
 use core::ops;
 
-use crate::handle::{HandleId, HANDLE_ID_BITS, HANDLE_ID_MASK};
+use crate::handle::HandleId;
+use crate::handle::HANDLE_ID_BITS;
+use crate::handle::HANDLE_ID_MASK;
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 #[repr(transparent)]
