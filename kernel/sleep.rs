@@ -23,7 +23,7 @@ impl SleepPoint {
         }
     }
 
-    pub fn wake(&self) {
+    pub fn wake_all(&self) {
         for waiter in self.pollers.lock().drain(..) {
             waiter.set_runnable();
         }

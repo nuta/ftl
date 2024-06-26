@@ -107,7 +107,7 @@ impl Channel {
 
         let mut peer_mutable = peer_ch.mutable.lock();
         peer_mutable.queue.push_back(entry);
-        peer_ch.sleep_point.wake();
+        peer_ch.sleep_point.wake_all();
 
         Ok(())
     }
