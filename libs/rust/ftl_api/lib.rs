@@ -15,6 +15,7 @@ pub mod poll;
 pub mod prelude;
 pub mod print;
 pub mod syscall;
+pub mod mainloop;
 
 pub use ftl_api_autogen as autogen;
 pub use ftl_api_macros::main;
