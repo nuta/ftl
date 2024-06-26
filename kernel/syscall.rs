@@ -80,7 +80,7 @@ fn buffer_create(len: usize) -> Result<HandleId, FtlError> {
 
 fn poll_create() -> Result<HandleId, FtlError> {
     let poll = Poll::new();
-    let handle = Handle::new(SharedRef::new(poll), HandleRights::NONE);
+    let handle = Handle::new(poll, HandleRights::NONE);
 
     let handle_id = current_thread()
         .process()
@@ -99,7 +99,7 @@ fn poll_add(
     let current_thread = current_thread();
     let handles = current_thread.process().handles().lock();
     let poll = handles.get_owned(poll_handle_id)?.as_poll()?;
-    let object = handles.get_owned(poll_handle_id)?;
+    let object = handles.get_owned(target_handle_id)?;
     poll.add(object, target_handle_id, interests);
 
     Ok(())
@@ -167,7 +167,10 @@ pub fn syscall_entry(
             let poll_handle_id = HandleId::from_raw_isize_truncated(a0);
             let target_handle_id = HandleId::from_raw_isize_truncated(a1);
             let interests = PollEvent::from_raw(a2 as u8);
-            poll_add(poll_handle_id, target_handle_id, interests)?;
+            if let Err(e) = poll_add(poll_handle_id, target_handle_id, interests) {
+                println!("poll_add failed: {:?}", e);
+                return Err(e);
+            }
             Ok(0)
         }
         _ if n == SyscallNumber::PollWait as isize => {

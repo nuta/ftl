@@ -97,6 +97,12 @@ impl Into<AnyHandle> for Handle<Buffer> {
     }
 }
 
+impl Into<AnyHandle> for Handle<Poll> {
+    fn into(self) -> AnyHandle {
+        AnyHandle::Poll(self)
+    }
+}
+
 /// The number of maximum handles per process.
 ///
 /// The current 64K limit has no particular reason, but it should be low

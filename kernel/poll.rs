@@ -26,7 +26,7 @@ impl Poller {
             return;
         }
 
-        self.ready.fetch_and(intersects.as_raw(), Ordering::SeqCst); // TODO: correct ordering
+        self.ready.fetch_or(intersects.as_raw(), Ordering::SeqCst); // TODO: correct ordering
         self.sleep_point.wake_all();
     }
 }
@@ -43,11 +43,13 @@ pub struct Poll {
 }
 
 impl Poll {
-    pub fn new() -> Poll {
-        Poll {
+    pub fn new() -> SharedRef<Poll> {
+        let poll = Poll {
             entries: SpinLock::new(HashMap::new()),
             sleep_point: SharedRef::new(SleepPoint::new()),
-        }
+        };
+
+        SharedRef::new(poll)
     }
 
     pub fn add(&self, object: &AnyHandle, object_id: HandleId, interests: PollEvent) {
@@ -72,8 +74,9 @@ impl Poll {
 
     pub fn wait(&self) -> Result<(PollEvent, HandleId), FtlError> {
         self.sleep_point.sleep_loop(&self.entries, |entries| {
+            println!("Poll::wait: entries = {}", entries.len());
             for entry in entries.values() {
-                let raw_ready = entry.ready.load(Ordering::SeqCst); // TODO: correct ordering
+                let raw_ready = entry.ready.swap(0, Ordering::SeqCst); // TODO: correct ordering
                 let ready = PollEvent::from_raw(raw_ready);
                 if ready.is_empty() {
                     continue;

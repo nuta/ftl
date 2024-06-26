@@ -21,15 +21,17 @@ pub fn main() {
     };
 
     let poll = {
-        let handle_id = HandleId::from_raw(1);
+        let handle_id = HandleId::from_raw(2);
         let handle = OwnedHandle::from_raw(handle_id);
         Poll::from_handle(handle)
     };
 
+    println!("[pong] adding poll entry");
     poll.add(ch.handle().id(), PollEvent::READABLE).unwrap();
 
     let mut buffer = MessageBuffer::new();
     for i in 0.. {
+        println!("[pong] {}: polling", i);
         let (ev, handle_id) = poll.wait().unwrap();
         if handle_id != ch.handle().id() {
             println!("[pong] unexpected handle id: {:?}", handle_id);

@@ -6,6 +6,7 @@ use ftl_types::error::FtlError;
 use ftl_types::message::MessageBuffer;
 use ftl_types::message::MessageInfo;
 use ftl_types::message::MESSAGE_HANDLES_MAX_COUNT;
+use ftl_types::poll::PollEvent;
 
 use crate::cpuvar::current_thread;
 use crate::handle::AnyHandle;
@@ -60,6 +61,11 @@ impl Channel {
 
     pub fn add_poller(&self, poller: SharedRef<Poller>) {
         let mut mutable = self.mutable.lock();
+
+        if !mutable.queue.is_empty() {
+            poller.set_ready(PollEvent::READABLE);
+        }
+
         mutable.pollers.push(poller);
     }
 
@@ -113,6 +119,10 @@ impl Channel {
         let mut peer_mutable = peer_ch.mutable.lock();
         peer_mutable.queue.push_back(entry);
         peer_ch.sleep_point.wake_all();
+
+        for poller in &peer_mutable.pollers {
+            poller.set_ready(PollEvent::READABLE);
+        }
 
         Ok(())
     }
