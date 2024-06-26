@@ -1,3 +1,5 @@
+use core::fmt;
+
 use ftl_types::error::FtlError;
 use ftl_types::message::MessageBody;
 use ftl_types::message::MessageBuffer;
@@ -77,5 +79,11 @@ impl Channel {
                 return Err(RecvError::Deserialize(msginfo));
             }
         }
+    }
+}
+
+impl fmt::Debug for Channel {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        todo!()
     }
 }
