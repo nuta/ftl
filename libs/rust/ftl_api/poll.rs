@@ -14,6 +14,10 @@ impl Poll {
         Poll { handle }
     }
 
+    pub fn add(&self, handle: HandleId, interests: PollEvent) -> Result<(), FtlError> {
+        syscall::poll_add(self.handle.id(), handle, interests)
+    }
+
     pub fn wait(&self) -> Result<(PollEvent, HandleId), FtlError> {
         let ret = syscall::poll_wait(self.handle.id())?;
         Ok((ret.event(), ret.handle()))

@@ -2,6 +2,7 @@ use ftl_types::error::FtlError;
 use ftl_types::handle::HandleId;
 use ftl_types::message::MessageBuffer;
 use ftl_types::message::MessageInfo;
+use ftl_types::poll::PollEvent;
 use ftl_types::poll::PollSyscallResult;
 use ftl_types::syscall::SyscallNumber;
 use ftl_types::syscall::VsyscallPage;
@@ -78,6 +79,20 @@ pub fn handle_close(handle: HandleId) -> Result<(), FtlError> {
 
 pub fn print(s: &[u8]) -> Result<(), FtlError> {
     syscall2(SyscallNumber::Print, s.as_ptr() as isize, s.len() as isize)?;
+    Ok(())
+}
+
+pub fn poll_add(
+    poll_handle_id: HandleId,
+    target_handle_id: HandleId,
+    interests: PollEvent,
+) -> Result<(), FtlError> {
+    syscall3(
+        SyscallNumber::PollAdd,
+        poll_handle_id.as_isize(),
+        target_handle_id.as_isize(),
+        interests.as_raw() as isize,
+    )?;
     Ok(())
 }
 
