@@ -6,7 +6,7 @@ use ftl_types::handle::HandleId;
 use ftl_types::handle::HandleRights;
 use hashbrown::HashMap;
 
-use crate::app_loader::KernelAppMemory;
+use crate::buffer::Buffer;
 use crate::channel::Channel;
 use crate::ref_counted::SharedRef;
 use crate::thread::Thread;
@@ -44,7 +44,7 @@ impl<T> Deref for Handle<T> {
 pub enum AnyHandle {
     Channel(Handle<Channel>),
     Thread(Handle<Thread>),
-    KernelAppMemory(Handle<KernelAppMemory>),
+    Buffer(Handle<Buffer>),
 }
 
 impl AnyHandle {
@@ -62,7 +62,7 @@ impl fmt::Debug for AnyHandle {
         match self {
             AnyHandle::Channel(_) => write!(f, "Channel"),
             AnyHandle::Thread(_) => write!(f, "Thread"),
-            AnyHandle::KernelAppMemory(_) => write!(f, "KernelAppMemory"),
+            AnyHandle::Buffer(_) => write!(f, "Buffer"),
         }
     }
 }
@@ -79,9 +79,9 @@ impl Into<AnyHandle> for Handle<Thread> {
     }
 }
 
-impl Into<AnyHandle> for Handle<KernelAppMemory> {
+impl Into<AnyHandle> for Handle<Buffer> {
     fn into(self) -> AnyHandle {
-        AnyHandle::KernelAppMemory(self)
+        AnyHandle::Buffer(self)
     }
 }
 
@@ -89,9 +89,7 @@ impl Into<AnyHandle> for Handle<KernelAppMemory> {
 ///
 /// The current 64K limit has no particular reason, but it should be low
 /// enough to prevent an overflow in `next_id + 1` in `HandleTable::add`.
-///
-/// The hard limit is `2^HANDLE_ID_BITS - 1`.
-const NUM_HANDLES_MAX: i32 = 64 * 1024 - 1;
+const NUM_HANDLES_MAX: usize = 64 * 1024;
 
 pub struct HandleTable {
     next_id: i32,
@@ -112,7 +110,7 @@ impl HandleTable {
 
     /// Add a handle to the table.
     pub fn add<H: Into<AnyHandle>>(&mut self, handle: H) -> Result<HandleId, FtlError> {
-        if self.next_id >= NUM_HANDLES_MAX {
+        if self.handles.len() >= NUM_HANDLES_MAX {
             return Err(FtlError::TooManyHandles);
         }
 

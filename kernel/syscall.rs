@@ -1,14 +1,18 @@
 use ftl_types::error::FtlError;
 use ftl_types::handle::HandleId;
+use ftl_types::handle::HandleRights;
+use ftl_types::message::MessageBuffer;
 use ftl_types::message::MessageInfo;
-use ftl_types::message::MESSAGE_DATA_MAX_LEN;
-use ftl_types::message::MESSAGE_HANDLES_MAX_COUNT;
 use ftl_types::syscall::SyscallNumber;
 use ftl_types::syscall::VsyscallPage;
 
+use crate::buffer::Buffer;
 use crate::channel::Channel;
 use crate::cpuvar::current_thread;
+use crate::handle::AnyHandle;
 use crate::handle::Handle;
+use crate::memory::AllocPagesError;
+use crate::ref_counted::SharedRef;
 
 pub const VSYSCALL_PAGE: VsyscallPage = VsyscallPage {
     entry: syscall_entry,
@@ -24,8 +28,7 @@ fn channel_create() -> Result<isize, FtlError> {
 fn channel_send(
     handle: HandleId,
     msginfo: MessageInfo,
-    buf: &[u8; MESSAGE_DATA_MAX_LEN],
-    handles: &[HandleId; MESSAGE_HANDLES_MAX_COUNT],
+    msgbuffer: &MessageBuffer,
 ) -> Result<(), FtlError> {
     let ch: Handle<Channel> = {
         current_thread()
@@ -37,14 +40,10 @@ fn channel_send(
             .clone()
     };
 
-    ch.send(msginfo, buf, handles)
+    ch.send(msginfo, msgbuffer)
 }
 
-fn channel_recv(
-    handle: HandleId,
-    buf: &mut [u8; MESSAGE_DATA_MAX_LEN],
-    handles: &mut [HandleId; MESSAGE_HANDLES_MAX_COUNT],
-) -> Result<MessageInfo, FtlError> {
+fn channel_recv(handle: HandleId, msgbuffer: &mut MessageBuffer) -> Result<MessageInfo, FtlError> {
     let ch: Handle<Channel> = {
         current_thread()
             .process()
@@ -55,7 +54,25 @@ fn channel_recv(
             .clone()
     };
 
-    ch.recv(buf, handles)
+    ch.recv(msgbuffer)
+}
+
+fn buffer_create(len: usize) -> Result<HandleId, FtlError> {
+    let buffer = match Buffer::alloc(len) {
+        Ok(buffer) => buffer,
+        Err(AllocPagesError::InvalidLayout(_err)) => {
+            return Err(FtlError::InvalidArg);
+        }
+    };
+
+    let handle = Handle::new(SharedRef::new(buffer), HandleRights::NONE);
+    let handle_id = current_thread()
+        .process()
+        .handles()
+        .lock()
+        .add(AnyHandle::Buffer(handle))?;
+
+    Ok(handle_id)
 }
 
 pub fn syscall_entry(
@@ -78,10 +95,8 @@ pub fn syscall_entry(
         _ if n == SyscallNumber::ChannelSend as isize => {
             let handle = HandleId::from_raw_isize_truncated(a0);
             let msginfo = MessageInfo::from_raw(a1);
-            let buf = unsafe { &*(a2 as usize as *const [u8; MESSAGE_DATA_MAX_LEN]) };
-            let handles =
-                unsafe { &*(a3 as usize as *const [HandleId; MESSAGE_HANDLES_MAX_COUNT]) };
-            let err = channel_send(handle, msginfo, buf, handles);
+            let msgbuffer = unsafe { &*(a2 as usize as *const MessageBuffer) };
+            let err = channel_send(handle, msginfo, msgbuffer);
             if let Err(e) = err {
                 println!("channel_send failed: {:?}", e);
                 return Err(e);
@@ -91,11 +106,13 @@ pub fn syscall_entry(
         }
         _ if n == SyscallNumber::ChannelRecv as isize => {
             let handle = HandleId::from_raw_isize_truncated(a0);
-            let buf = unsafe { &mut *(a1 as usize as *mut [u8; MESSAGE_DATA_MAX_LEN]) };
-            let handles =
-                unsafe { &mut *(a2 as usize as *mut [HandleId; MESSAGE_HANDLES_MAX_COUNT]) };
-            let msginfo = channel_recv(handle, buf, handles)?;
+            let msgbuffer = unsafe { &mut *(a1 as usize as *mut MessageBuffer) };
+            let msginfo = channel_recv(handle, msgbuffer)?;
             Ok(msginfo.as_raw())
+        }
+        _ if n == SyscallNumber::BufferCreate as isize => {
+            let handle_id = buffer_create(a0 as usize)?;
+            Ok(handle_id.as_isize())
         }
         _ => {
             println!(
