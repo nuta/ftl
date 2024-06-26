@@ -1,13 +1,13 @@
 #![no_std]
 #![no_main]
 
-use ftl_api::autogen::protocols::PingReply;
-use ftl_api::autogen::protocols::PingRequest;
 use ftl_api::channel::Channel;
 use ftl_api::handle::OwnedHandle;
 use ftl_api::prelude::*;
 use ftl_api::types::handle::HandleId;
 use ftl_api::types::message::MessageBuffer;
+use ftl_api_autogen::protocols::PingReply;
+use ftl_api_autogen::protocols::PingRequest;
 
 #[ftl_api::main]
 pub fn main() {

@@ -15,6 +15,5 @@ pub mod prelude;
 pub mod print;
 pub mod syscall;
 
-pub use ftl_autogen as autogen;
 pub use ftl_api_macros::main;
 pub use ftl_types as types;

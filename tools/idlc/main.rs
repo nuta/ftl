@@ -136,7 +136,10 @@ fn main() -> Result<()> {
         .add_template("ftl_autogen", include_str!("templates/ftl_autogen.rs.j2"))
         .unwrap();
     j2env
-        .add_template("ftl_api_autogen", include_str!("templates/ftl_api_autogen.rs.j2"))
+        .add_template(
+            "ftl_api_autogen",
+            include_str!("templates/ftl_api_autogen.rs.j2"),
+        )
         .unwrap();
 
     let template = j2env.get_template("ftl_autogen")?;
