@@ -21,8 +21,11 @@ pub mod protocols {
 
         type Reader<'a> = PingRequestReader<'a>;
 
-        fn deserialize<'a>(buffer: &'a MessageBuffer) -> Self::Reader<'a> {
-            PingRequestReader { buffer }
+        fn deserialize<'a>(
+            buffer: &'a MessageBuffer,
+            _msginfo: MessageInfo,
+        ) -> Option<Self::Reader<'a>> {
+            Some(PingRequestReader { buffer })
         }
     }
 
@@ -54,8 +57,11 @@ pub mod protocols {
 
         type Reader<'a> = PingReplyReader<'a>;
 
-        fn deserialize<'a>(buffer: &'a MessageBuffer) -> Self::Reader<'a> {
-            PingReplyReader { buffer }
+        fn deserialize<'a>(
+            buffer: &'a MessageBuffer,
+            _msginfo: MessageInfo,
+        ) -> Option<Self::Reader<'a>> {
+            Some(PingReplyReader { buffer })
         }
     }
 

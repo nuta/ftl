@@ -26,8 +26,8 @@ pub mod protocols {
 
         type Reader<'a> = {{ m.name }}Reader<'a>;
 
-        fn deserialize<'a>(buffer: &'a MessageBuffer) -> Self::Reader<'a> {
-            {{ m.name }}Reader { buffer }
+        fn deserialize<'a>(buffer: &'a MessageBuffer, _msginfo: MessageInfo) -> Option<Self::Reader<'a>> {
+            Some({{ m.name }}Reader { buffer })
         }
     }
 

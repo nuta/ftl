@@ -1,7 +1,10 @@
+use core::marker::PhantomData;
+
 use ftl_types::error::FtlError;
 use ftl_types::handle::HandleId;
 use ftl_types::message::MessageBody;
 use ftl_types::message::MessageBuffer;
+use ftl_types::message::MessageInfo;
 use ftl_types::poll::PollEvent;
 use hashbrown::HashMap;
 
@@ -19,7 +22,10 @@ pub enum Error {
 
 #[derive(Debug)]
 pub enum Event<'a, St, M: MessageBody> {
-    Message { state: &'a mut St, message: M::Reader<'a> },
+    Message {
+        state: &'a mut St,
+        message: M::Reader<'a>,
+    },
 }
 
 enum Object {
@@ -31,13 +37,14 @@ struct Entry<St> {
     object: Object,
 }
 
-pub struct Mainloop<St> {
+pub struct Mainloop<St, AllM> {
     poll: Poll,
     msgbuffer: MessageBuffer,
     objects: HashMap<HandleId, Entry<St>>,
+    _pd: PhantomData<AllM>,
 }
 
-impl<St> Mainloop<St> {
+impl<St, AllM: MessageBody> Mainloop<St, AllM> {
     pub fn new() -> Result<Self, Error> {
         let poll = Poll::new().map_err(Error::PollCreate)?;
 
@@ -45,17 +52,18 @@ impl<St> Mainloop<St> {
             poll,
             msgbuffer: MessageBuffer::new(),
             objects: HashMap::new(),
+            _pd: PhantomData,
         })
     }
 
-    pub fn next<M: MessageBody>(&mut self) -> Result<Event<'_, St, M>, Error> {
+    pub fn next(&mut self) -> Result<Event<'_, St, AllM>, Error> {
         let (poll_ev, handle_id) = self.poll.wait().map_err(Error::PollWait)?;
         let entry = self.objects.get_mut(&handle_id).unwrap();
         if poll_ev.contains(PollEvent::READABLE) {
             match &entry.object {
                 Object::Channel(channel) => {
                     let message = channel
-                        .recv_with_buffer::<M>(&mut self.msgbuffer)
+                        .recv_with_buffer::<AllM>(&mut self.msgbuffer)
                         .map_err(Error::ChannelRecv)?;
                     return Ok(Event::Message {
                         state: &mut entry.state,
@@ -71,21 +79,48 @@ impl<St> Mainloop<St> {
 
 fn main() {
     pub struct State {}
-    pub struct Msg {}
-    pub struct MsgReader<'a> {
-        buffer: &'a MessageBuffer,
+
+    pub enum AllMessage<'a> {
+        Foo(FooMsgReader<'a>),
     }
-    impl MessageBody for Msg {
-        const MSGINFO: ftl_types::message::MessageInfo = ftl_types::message::MessageInfo::from_raw(123);
-        type Reader<'a> = MsgReader<'a>;
-        fn deserialize<'a>(buffer: &'a MessageBuffer) -> Self::Reader<'a> {
-            todo!()
+
+    impl<'b> MessageBody for AllMessage<'b> {
+        const MSGINFO: ftl_types::message::MessageInfo =
+            ftl_types::message::MessageInfo::from_raw(0);
+        type Reader<'a> = AllMessage<'a>;
+        fn deserialize<'a>(
+            buffer: &'a MessageBuffer,
+            msginfo: MessageInfo,
+        ) -> Option<AllMessage<'a>> {
+            match msginfo {
+                FooMsg::MSGINFO => {
+                    let reader = FooMsg::deserialize(buffer, msginfo)?;
+                    Some(AllMessage::Foo(reader))
+                }
+                _ => None,
+            }
         }
     }
 
-    let mut mainloop: Mainloop<State> = Mainloop::new().unwrap();
+    pub struct FooMsg {}
+    pub struct FooMsgReader<'a> {
+        buffer: &'a MessageBuffer,
+    }
+    impl MessageBody for FooMsg {
+        const MSGINFO: ftl_types::message::MessageInfo =
+            ftl_types::message::MessageInfo::from_raw(123);
+        type Reader<'a> = FooMsgReader<'a>;
+        fn deserialize<'a>(
+            buffer: &'a MessageBuffer,
+            _msginfo: MessageInfo,
+        ) -> Option<Self::Reader<'a>> {
+            Some(FooMsgReader { buffer })
+        }
+    }
+
+    let mut mainloop: Mainloop<State, AllMessage> = Mainloop::new().unwrap();
     loop {
-        match mainloop.next::<Msg>() {
+        match mainloop.next() {
             Ok(Event::Message { state, message }) => {
                 println!("Received message");
             }
