@@ -58,6 +58,11 @@ impl Channel {
         Ok((ch0, ch1))
     }
 
+    pub fn add_poller(&self, poller: SharedRef<Poller>) {
+        let mut mutable = self.mutable.lock();
+        mutable.pollers.push(poller);
+    }
+
     pub fn send(&self, msginfo: MessageInfo, msgbuffer: &MessageBuffer) -> Result<(), FtlError> {
         let mutable = self.mutable.lock();
         let peer_ch = mutable.peer.as_ref().ok_or(FtlError::NoPeer)?;

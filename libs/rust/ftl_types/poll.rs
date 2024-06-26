@@ -9,8 +9,9 @@ use crate::handle::HANDLE_ID_MASK;
 pub struct PollEvent(u8);
 
 impl PollEvent {
-    pub const READABLE: PollEvent = PollEvent::from_raw(1 << 0);
-    pub const WRITABLE: PollEvent = PollEvent::from_raw(1 << 1);
+    pub const CLOSED: PollEvent = PollEvent::from_raw(1 << 0);
+    pub const READABLE: PollEvent = PollEvent::from_raw(1 << 1);
+    pub const WRITABLE: PollEvent = PollEvent::from_raw(1 << 2);
 
     pub const fn zeroed() -> PollEvent {
         PollEvent(0)
@@ -28,12 +29,8 @@ impl PollEvent {
         self.0 == 0
     }
 
-    pub fn is_readable(&self) -> bool {
-        self.0 & Self::READABLE.0 != 0
-    }
-
-    pub fn is_writable(&self) -> bool {
-        self.0 & Self::WRITABLE.0 != 0
+    pub fn contains(&self, other: PollEvent) -> bool {
+        (self.0 & other.0) != 0
     }
 }
 
@@ -56,8 +53,16 @@ impl ops::BitAnd for PollEvent {
 pub struct PollSyscallResult(isize);
 
 impl PollSyscallResult {
+    pub const fn new(event: PollEvent, handle: HandleId) -> PollSyscallResult {
+        PollSyscallResult((event.0 as isize) << HANDLE_ID_BITS | handle.as_isize())
+    }
+
     pub const fn from_raw(value: isize) -> PollSyscallResult {
         PollSyscallResult(value)
+    }
+
+    pub fn as_raw(&self) -> isize {
+        self.0
     }
 
     pub fn event(&self) -> PollEvent {
