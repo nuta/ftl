@@ -7,11 +7,12 @@ use serde::Serialize;
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SpecFile {
     pub name: String,
+    #[serde(flatten)]
     pub spec: Spec,
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "kind")]
+#[serde(tag = "kind", content = "spec")]
 pub enum Spec {
     #[serde(rename = "app/v0")]
     App(AppSpec),
@@ -19,6 +20,6 @@ pub enum Spec {
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AppSpec {
-    pub deps: Vec<String>,
+    pub depends: Vec<String>,
     pub provides: Vec<String>,
 }

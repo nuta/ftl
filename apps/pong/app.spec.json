@@ -1,8 +1,8 @@
 {
     "name": "pong",
-    "kind": "app/v1",
+    "kind": "app/v0",
     "spec": {
-        "deps": [],
+        "depends": [],
         "provides": ["pong"]
     }
 }

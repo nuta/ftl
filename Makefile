@@ -101,5 +101,5 @@ build/ftl_idlc: $(shell find tools/idlc -name '*.rs')
 libs/rust/ftl_api_autogen/lib.rs: idl.json build/ftl_idlc
 	mkdir -p build
 	$(PROGRESS) "ILDC" "$(@)"
-	./build/ftl_idlc idl.json > build/idlstub.rs.tmp
+	./build/ftl_idlc --idl-file idl.json $(foreach app_dir,$(APPS),--app-specs $(app_dir)/app.spec.json) > build/idlstub.rs.tmp
 	mv build/idlstub.rs.tmp $(@)
