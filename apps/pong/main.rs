@@ -3,29 +3,43 @@
 
 use ftl_api::channel::Channel;
 use ftl_api::handle::OwnedHandle;
+use ftl_api::mainloop::Event;
+use ftl_api::mainloop::Mainloop;
 use ftl_api::prelude::*;
 use ftl_api::types::handle::HandleId;
 use ftl_api::types::message::MessageBuffer;
 use ftl_api_autogen::protocols::PingReply;
 use ftl_api_autogen::protocols::PingRequest;
 
+struct State {
+    counter: i32,
+}
+
 #[ftl_api::main]
 pub fn main() {
-    println!("[pong] starting pong");
-    let handle_id = HandleId::from_raw(1);
-    let handle = OwnedHandle::from_raw(handle_id);
-    let ch = Channel::from_handle(handle);
+
+    let ch = {
+        let handle_id = HandleId::from_raw(1);
+        let handle = OwnedHandle::from_raw(handle_id);
+        Channel::from_handle(handle)
+    };
+
+    let mut mainloop = Mainloop::<State, PingRequest>::new().unwrap();
+    mainloop.add_channel(ch, State { counter: 0 }).unwrap();
 
     let mut buffer = MessageBuffer::new();
-    for i in 0.. {
-        println!("[pong] {}: receiving message", i);
-        let r = ch
-            .recv_with_buffer::<PingRequest>(&mut buffer)
-            .expect("failed to recv");
-        println!("[pong] {}: received message: {}", i, r.int_value1());
+    loop {
+        let ev = mainloop.next().unwrap();
+        match ev {
+            Event::Message { ch, state, m } => {
+                println!("[pong] received message: {}", m.int_value1());
+                state.counter += 1;
 
-        println!("[pong] {}: replying message", i);
-        ch.send_with_buffer(&mut buffer, PingReply { int_value2: 84 })
-            .expect("failed to send");
+                let reply = PingReply { int_value2: state.counter };
+                if let Err(err) = ch.send_with_buffer(&mut buffer, reply) {
+                    println!("failed to reply: {:?}", err);
+                }
+            }
+        }
     }
 }

@@ -4,10 +4,12 @@ use core::ops::Deref;
 use ftl_types::error::FtlError;
 use ftl_types::handle::HandleId;
 use ftl_types::handle::HandleRights;
+use ftl_types::handle::HANDLE_ID_MASK;
 use hashbrown::HashMap;
 
 use crate::buffer::Buffer;
 use crate::channel::Channel;
+use crate::poll::Poll;
 use crate::ref_counted::SharedRef;
 use crate::thread::Thread;
 
@@ -45,12 +47,20 @@ pub enum AnyHandle {
     Channel(Handle<Channel>),
     Thread(Handle<Thread>),
     Buffer(Handle<Buffer>),
+    Poll(Handle<Poll>),
 }
 
 impl AnyHandle {
     pub fn as_channel(&self) -> Result<&Handle<Channel>, FtlError> {
         match self {
             AnyHandle::Channel(ref channel) => Ok(channel),
+            _ => Err(FtlError::UnexpectedHandleType),
+        }
+    }
+
+    pub fn as_poll(&self) -> Result<&Handle<Poll>, FtlError> {
+        match self {
+            AnyHandle::Poll(ref poll) => Ok(poll),
             _ => Err(FtlError::UnexpectedHandleType),
         }
     }
@@ -63,6 +73,7 @@ impl fmt::Debug for AnyHandle {
             AnyHandle::Channel(_) => write!(f, "Channel"),
             AnyHandle::Thread(_) => write!(f, "Thread"),
             AnyHandle::Buffer(_) => write!(f, "Buffer"),
+            AnyHandle::Poll(_) => write!(f, "Poll"),
         }
     }
 }
@@ -85,10 +96,16 @@ impl Into<AnyHandle> for Handle<Buffer> {
     }
 }
 
+impl Into<AnyHandle> for Handle<Poll> {
+    fn into(self) -> AnyHandle {
+        AnyHandle::Poll(self)
+    }
+}
+
 /// The number of maximum handles per process.
 ///
 /// The current 64K limit has no particular reason, but it should be low
-/// enough to prevent an overflow in `next_id + 1` in `HandleTable::add`.
+/// enough to prevent a process from consuming too many resources.
 const NUM_HANDLES_MAX: usize = 64 * 1024;
 
 pub struct HandleTable {
@@ -114,8 +131,14 @@ impl HandleTable {
             return Err(FtlError::TooManyHandles);
         }
 
+        if self.next_id == 0 {
+            self.next_id += 1;
+        }
+
         let id = HandleId::from_raw(self.next_id);
-        self.next_id = self.next_id + 1;
+        self.next_id = (self.next_id + 1) & HANDLE_ID_MASK;
+
+        debug_assert!(id.as_i32() != 0);
         self.handles.insert(id, handle.into());
         Ok(id)
     }
