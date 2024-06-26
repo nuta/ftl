@@ -17,7 +17,6 @@ struct State {
 
 #[ftl_api::main]
 pub fn main() {
-
     let ch = {
         let handle_id = HandleId::from_raw(1);
         let handle = OwnedHandle::from_raw(handle_id);
@@ -29,16 +28,20 @@ pub fn main() {
 
     let mut buffer = MessageBuffer::new();
     loop {
-        let ev = mainloop.next().unwrap();
-        match ev {
+        match mainloop.next() {
             Event::Message { ch, state, m } => {
                 println!("[pong] received message: {}", m.int_value1());
                 state.counter += 1;
 
-                let reply = PingReply { int_value2: state.counter };
+                let reply = PingReply {
+                    int_value2: state.counter,
+                };
                 if let Err(err) = ch.send_with_buffer(&mut buffer, reply) {
                     println!("failed to reply: {:?}", err);
                 }
+            }
+            Event::Error(err) => {
+                panic!("mainloop error: {:?}", err);
             }
         }
     }
