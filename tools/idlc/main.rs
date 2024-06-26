@@ -61,6 +61,10 @@ impl fmt::Display for CamelCase<'_> {
 #[command(version, about, long_about = None)]
 struct Args {
     #[arg(long)]
+    autogen_outfile: PathBuf,
+    #[arg(long)]
+    api_autogen_outfile: PathBuf,
+    #[arg(long)]
     idl_file: PathBuf,
     #[arg(long)]
     app_specs: Vec<PathBuf>,
@@ -129,16 +133,23 @@ fn main() -> Result<()> {
 
     let mut j2env = Environment::new();
     j2env
-        .add_template("template", include_str!("templates/ftl_autogen.rs.j2"))
+        .add_template("ftl_autogen", include_str!("templates/ftl_autogen.rs.j2"))
+        .unwrap();
+    j2env
+        .add_template("ftl_api_autogen", include_str!("templates/ftl_api_autogen.rs.j2"))
         .unwrap();
 
-    let template = j2env.get_template("template")?;
+    let template = j2env.get_template("ftl_autogen")?;
     let lib_rs = template.render(context! {
         messages => messages,
+    })?;
+    std::fs::write(&args.autogen_outfile, lib_rs)?;
+
+    let template = j2env.get_template("ftl_api_autogen")?;
+    let api_lib_rs = template.render(context! {
         apps => apps,
     })?;
-
-    println!("{}", lib_rs);
+    std::fs::write(&args.api_autogen_outfile, api_lib_rs)?;
 
     Ok(())
 }

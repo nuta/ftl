@@ -50,26 +50,3 @@ pub mod protocols {
     }
     {% endfor %}
 }
-
-#[cfg(feature = "api")]
-pub mod apps {
-    use super::*;
-
-    {% for app in apps %}
-    pub mod {{ app.name }} {
-        use super::*;
-
-        #[repr(C)]
-        pub struct Environ {
-            pub depends: Depends,
-        }
-
-        #[repr(C)]
-        pub struct Depends {
-            {% for dep in app.depends %}
-            pub {{ dep }}: Option<Channel>,
-            {% endfor %}
-        }
-    }
-    {% endfor %}
-}

@@ -1,0 +1,22 @@
+pub mod apps {
+    use super::*;
+    use ftl_api::channel::Channel;
+
+    {% for app in apps %}
+    pub mod {{ app.name }} {
+        use super::*;
+
+        #[repr(C)]
+        pub struct Environ {
+            pub depends: Depends,
+        }
+
+        #[repr(C)]
+        pub struct Depends {
+            {% for dep in app.depends %}
+            pub {{ dep }}: Option<Channel>,
+            {% endfor %}
+        }
+    }
+    {% endfor %}
+}
