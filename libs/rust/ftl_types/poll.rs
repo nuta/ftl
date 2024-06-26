@@ -9,11 +9,23 @@ use crate::handle::HANDLE_ID_MASK;
 pub struct PollEvent(u8);
 
 impl PollEvent {
-    pub const READABLE: PollEvent = PollEvent(1 << 0);
-    pub const WRITABLE: PollEvent = PollEvent(1 << 1);
+    pub const READABLE: PollEvent = PollEvent::from_raw(1 << 0);
+    pub const WRITABLE: PollEvent = PollEvent::from_raw(1 << 1);
 
-    pub fn zeroed() -> PollEvent {
+    pub const fn zeroed() -> PollEvent {
         PollEvent(0)
+    }
+
+    pub const fn from_raw(value: u8) -> PollEvent {
+        PollEvent(value)
+    }
+
+    pub fn as_raw(&self) -> u8 {
+        self.0
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0 == 0
     }
 
     pub fn is_readable(&self) -> bool {
@@ -33,9 +45,11 @@ impl ops::BitOr for PollEvent {
     }
 }
 
-impl ops::BitOrAssign for PollEvent {
-    fn bitor_assign(&mut self, rhs: Self) {
-        self.0 |= rhs.0;
+impl ops::BitAnd for PollEvent {
+    type Output = Self;
+
+    fn bitand(self, rhs: Self) -> Self {
+        PollEvent(self.0 & rhs.0)
     }
 }
 

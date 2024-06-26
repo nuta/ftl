@@ -48,6 +48,13 @@ pub enum AnyHandle {
     Buffer(Handle<Buffer>),
 }
 
+// FIXME: Merge AnyHandle and AnyObject.
+pub enum AnyObject {
+    Channel(SharedRef<Channel>),
+    Thread(SharedRef<Thread>),
+    Buffer(SharedRef<Buffer>),
+}
+
 impl AnyHandle {
     pub fn as_channel(&self) -> Result<&Handle<Channel>, FtlError> {
         match self {

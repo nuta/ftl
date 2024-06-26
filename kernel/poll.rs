@@ -1,65 +1,59 @@
-use alloc::vec::Vec;
+use core::sync::atomic::AtomicU8;
+use core::sync::atomic::Ordering;
 
-use crate::arch;
-use crate::cpuvar::current_thread;
+use ftl_types::error::FtlError;
+use ftl_types::handle::HandleId;
+use ftl_types::poll::PollEvent;
+use hashbrown::HashMap;
+
 use crate::ref_counted::SharedRef;
+use crate::sleep::SleepCallbackResult;
+use crate::sleep::SleepPoint;
 use crate::spinlock::SpinLock;
-use crate::spinlock::SpinLockGuard;
-use crate::thread::Thread;
 
-struct Poller {
-    thread: SharedRef<Thread>,
+pub struct Poller {
+    handle_id: HandleId,
+    interests: PollEvent,
+    ready: AtomicU8,
 }
 
-pub enum PollResult<T> {
-    Ready(T),
-    Sleep,
-}
-
-pub struct PollPoint {
-    pollers: SpinLock<Vec<Poller>>,
-}
-
-impl PollPoint {
-    pub const fn new() -> PollPoint {
-        PollPoint {
-            pollers: SpinLock::new(Vec::new()),
+impl Poller {
+    pub fn new(handle_id: HandleId, interests: PollEvent) -> Poller {
+        Poller {
+            handle_id,
+            interests,
+            ready: AtomicU8::new(0),
         }
     }
 
-    pub fn wake(&self) {
-        for poller in self.pollers.lock().drain(..) {
-            poller.thread.set_runnable();
+    pub fn set_ready(&self, ready: PollEvent) {
+        self.ready.fetch_and(ready.as_raw(), Ordering::SeqCst); // TODO: correct ordering
+    }
+}
+
+pub struct Poll {
+    entries: SpinLock<HashMap<HandleId, SharedRef<Poller>>>,
+    sleep_point: SleepPoint,
+}
+
+impl Poll {
+    pub fn new() -> Poll {
+        Poll {
+            entries: SpinLock::new(HashMap::new()),
+            sleep_point: SleepPoint::new(),
         }
     }
 
-    pub fn poll_loop<'a, F, T, U>(&self, lock: &'a SpinLock<T>, is_ready: F) -> U
-    where
-        F: Fn(&mut SpinLockGuard<'a, T>) -> PollResult<U>,
-    {
-        loop {
-            let mut pollers = self.pollers.lock();
-            let mut guard = lock.lock();
-            match is_ready(&mut guard) {
-                PollResult::Ready(ret) => {
-                    return ret;
-                }
-                PollResult::Sleep => {
-                    let current_thread = current_thread();
-                    pollers.push(Poller {
-                        thread: current_thread.clone(),
-                    });
-
-                    current_thread.set_blocked();
-
-                    // Release the lock.
-                    drop(current_thread);
-                    drop(guard);
-                    drop(pollers);
-
-                    arch::yield_cpu();
+    pub fn wait(&self) -> Result<(PollEvent, HandleId), FtlError> {
+        self.sleep_point.sleep_loop(&self.entries, |entries| {
+            for entry in entries.values() {
+                let ready = entry.ready.load(Ordering::SeqCst); // TODO: correct ordering
+                if ready != 0 {
+                    return SleepCallbackResult::Ready(Ok((PollEvent::from_raw(ready), entry.handle_id)));
                 }
             }
-        }
+
+            SleepCallbackResult::Sleep
+        })
     }
 }
