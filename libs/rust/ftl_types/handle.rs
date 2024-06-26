@@ -14,11 +14,11 @@ impl HandleId {
     }
 
     pub fn from_raw_isize_truncated(id: isize) -> HandleId {
-        // value & HANDLE_ID_BITS allows the compiler to assume we just need the
+        // value & HANDLE_ID_MASK allows the compiler to assume we just need the
         // the lower 32-bits.
         //
         // https://godbolt.org/z/Yjc4bfhzs
-        let id_u32: u32 = ((id as usize) & HANDLE_ID_BITS).try_into().unwrap();
+        let id_u32: u32 = ((id as usize) & (HANDLE_ID_MASK as usize)).try_into().unwrap();
         HandleId(id_u32 as i32)
     }
 
