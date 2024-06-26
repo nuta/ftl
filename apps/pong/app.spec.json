@@ -3,6 +3,6 @@
     "kind": "app/v0",
     "spec": {
         "depends": [],
-        "provides": ["pong"]
+        "provides": ["ping_server"]
     }
 }

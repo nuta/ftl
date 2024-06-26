@@ -14,7 +14,7 @@ pub mod apps {
         #[repr(C)]
         pub struct Depends {
             
-            pub pong: Option<ftl_api::channel::Channel>,
+            pub ping_server: Option<ftl_api::channel::Channel>,
             
         }
     }

@@ -31,13 +31,6 @@ pub fn main(_args: TokenStream, item: TokenStream) -> TokenStream {
         );
     }
 
-    if func.sig.inputs.len() > 0 {
-        abort!(
-            func.span(),
-            "main function should not have any arguments (ftl_api_macros::main)"
-        );
-    }
-
     let output: proc_macro2::TokenStream = quote! {
         #[no_mangle]
         #func
