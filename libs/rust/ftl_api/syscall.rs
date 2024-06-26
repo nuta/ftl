@@ -2,6 +2,7 @@ use ftl_types::error::FtlError;
 use ftl_types::handle::HandleId;
 use ftl_types::message::MessageBuffer;
 use ftl_types::message::MessageInfo;
+use ftl_types::poll::PollSyscallResult;
 use ftl_types::syscall::SyscallNumber;
 use ftl_types::syscall::VsyscallPage;
 use spin::Mutex;
@@ -78,6 +79,11 @@ pub fn handle_close(handle: HandleId) -> Result<(), FtlError> {
 pub fn print(s: &[u8]) -> Result<(), FtlError> {
     syscall2(SyscallNumber::Print, s.as_ptr() as isize, s.len() as isize)?;
     Ok(())
+}
+
+pub fn poll_wait(handle: HandleId) -> Result<PollSyscallResult, FtlError> {
+    let ret = syscall1(SyscallNumber::PollWait, handle.as_isize())?;
+    Ok(PollSyscallResult::from_raw(ret))
 }
 
 pub fn channel_create() -> Result<(HandleId, HandleId), FtlError> {
