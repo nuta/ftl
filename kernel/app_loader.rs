@@ -37,6 +37,7 @@ pub struct AppLoader<'a> {
 
 impl<'a> AppLoader<'a> {
     pub fn parse(elf_file: &[u8]) -> Result<AppLoader, Error> {
+        println!("elf_file pointer: {:p}", elf_file.as_ptr());
         let elf = Elf::parse(elf_file).map_err(Error::ParseElf)?;
 
         // TODO: Check DF_1_PIE flag to make sure it's a PIE, not a shared
@@ -162,15 +163,15 @@ impl<'a> AppLoader<'a> {
     fn install_handles_and_environ(
         &mut self,
         handles: &mut HandleTable,
-        mut depends: Vec<(String, AnyHandle)>,
-        handles_base: i32,
+        depends: Vec<(String, AnyHandle)>,
     ) -> (usize, usize) {
         let mut depends_map = serde_json::Map::with_capacity(depends.len());
-        for (i, (depend_name, handle)) in depends.drain(..).enumerate() {
-            let handle_id = serde_json::Number::from(handles_base + i as i32);
-            depends_map.insert(depend_name, serde_json::Value::Number(handle_id));
-
-            handles.add(handle).unwrap();
+        for (depend_name, handle) in depends {
+            let handle_id = handles.add(handle).unwrap();
+            depends_map.insert(
+                depend_name,
+                serde_json::Value::Number(serde_json::Number::from(handle_id.as_i32())),
+            );
         }
 
         let environ_json = serde_json::to_string(&serde_json::json!({
@@ -215,9 +216,7 @@ impl<'a> AppLoader<'a> {
             handles.add(init_handle).unwrap();
         }
 
-        let next_id = handles.next_id();
-        let (environ_ptr, environ_len) =
-            self.install_handles_and_environ(&mut *handles, depends, next_id);
+        let (environ_ptr, environ_len) = self.install_handles_and_environ(&mut *handles, depends);
 
         let mut vsyscall_buffer = Buffer::alloc(PAGE_SIZE).unwrap();
         let vsyscall_ptr = vsyscall_buffer.allocated_pages_mut().as_ptr() as *mut VsyscallPage;

@@ -121,10 +121,6 @@ impl HandleTable {
         }
     }
 
-    pub fn next_id(&self) -> i32 {
-        self.next_id
-    }
-
     pub fn is_movable(&self, id: HandleId) -> bool {
         self.handles.get(&id).is_some()
     }

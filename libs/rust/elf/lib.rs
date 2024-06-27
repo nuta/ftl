@@ -117,6 +117,7 @@ pub type Rela = Rela64;
 pub enum ParseError {
     BufferTooShort,
     InvalidMagic,
+    TooBigPhnum(usize),
 }
 
 #[derive(Debug)]

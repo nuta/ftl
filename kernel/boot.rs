@@ -30,7 +30,10 @@ pub struct BootInfo {
     pub dtb_addr: *const u8,
 }
 
-// const STARTUP_ELF: &[u8] = include_bytes!("../build/startup.elf");
+#[repr(C, align(4096))]
+struct Aligned<T: ?Sized>(T);
+static PING_ELF: &Aligned<[u8]> = &Aligned(*include_bytes!("../build/apps/ping.elf"));
+static PONG_ELF: &Aligned<[u8]> = &Aligned(*include_bytes!("../build/apps/pong.elf"));
 
 /// The entry point of the kernel.
 pub fn boot(cpu_id: CpuId, bootinfo: BootInfo) -> ! {
@@ -49,14 +52,8 @@ pub fn boot(cpu_id: CpuId, bootinfo: BootInfo) -> ! {
     let mut autopilot = Autopilot::new();
     autopilot
         .start_apps(vec![
-            load_app_spec(
-                include_bytes!("../apps/ping/app.spec.json"),
-                include_bytes!("../build/apps/ping.elf"),
-            ),
-            load_app_spec(
-                include_bytes!("../apps/pong/app.spec.json"),
-                include_bytes!("../build/apps/pong.elf"),
-            ),
+            load_app_spec(include_bytes!("../apps/ping/app.spec.json"), &PING_ELF.0),
+            load_app_spec(include_bytes!("../apps/pong/app.spec.json"), &PONG_ELF.0),
         ])
         .expect("failed to start apps");
 
