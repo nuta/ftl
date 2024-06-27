@@ -11,10 +11,48 @@ pub mod apps {
             pub depends: Depends,
         }
 
+        impl Environ {
+            pub fn from_environ_ptr(environ_ptr: ftl_types::environ::EnvironPtr) -> Self {
+                #[allow(unused_variables)]
+                let environ_json: EnvironJson = serde_json::from_slice(environ_ptr.envion_as_bytes())
+                    .expect("failed to parse environ JSON");
+
+                let depends = Depends {
+                    {% for dep in app.depends %}
+                    {{ dep }}: {
+                        use ftl_api::channel::Channel;
+                        use ftl_api::handle::OwnedHandle;
+                        use ftl_types::handle::HandleId;
+
+                        let handle_id = HandleId::from_raw(environ_json.depends.{{ dep }});
+                        let handle = OwnedHandle::from_raw(handle_id);
+                        Some(Channel::from_handle(handle))
+                    },
+                    {% endfor %}
+                };
+
+                Self {
+                    depends,
+                }
+            }
+        }
+
         #[repr(C)]
         pub struct Depends {
             {% for dep in app.depends %}
             pub {{ dep }}: Option<ftl_api::channel::Channel>,
+            {% endfor %}
+        }
+
+        #[derive(serde::Serialize, serde::Deserialize)]
+        struct EnvironJson {
+            pub depends: DependsJson,
+        }
+
+        #[derive(serde::Serialize, serde::Deserialize)]
+        struct DependsJson {
+            {% for dep in app.depends %}
+            pub {{ dep }}: i32 /* Handle ID */,
             {% endfor %}
         }
     }

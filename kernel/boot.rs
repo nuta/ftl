@@ -11,7 +11,6 @@ use crate::handle::Handle;
 use crate::memory;
 use crate::poll::Poll;
 use crate::process;
-use crate::syscall::VSYSCALL_PAGE;
 
 /// A free region of memory available for software.
 #[derive(Debug)]
