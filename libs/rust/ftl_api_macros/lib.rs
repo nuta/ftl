@@ -54,6 +54,12 @@ pub fn main(_args: TokenStream, item: TokenStream) -> TokenStream {
         #[no_mangle]
         pub extern "C" fn ftl_app_main(environ_ptr: ::ftl_api::types::environ::EnvironPtr) {
             let env = #environ_type::from_environ_ptr(environ_ptr);
+
+            // SAFETY: We won't call this function twice.
+            unsafe {
+                ::ftl_api::init::init_internal(env.vsyscall);
+            }
+
             main(env);
         }
     };

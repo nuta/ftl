@@ -7,11 +7,14 @@ pub mod apps {
     
     pub mod ping {
         pub struct Environ {
+            pub vsyscall: &'static ftl_types::syscall::VsyscallPage,
             pub depends: Depends,
         }
 
         impl Environ {
             pub fn from_environ_ptr(environ_ptr: ftl_types::environ::EnvironPtr) -> Self {
+                use ftl_types::syscall::VsyscallPage;
+
                 #[allow(unused_variables)]
                 let environ_json: EnvironJson = serde_json::from_slice(environ_ptr.envion_as_bytes())
                     .expect("failed to parse environ JSON");
@@ -30,7 +33,12 @@ pub mod apps {
                     
                 };
 
+                // SAFETY: Vsyscall page will be always available at the same
+                //         address.
+                let vsyscall = unsafe { &*(environ_json.vsyscall as *const VsyscallPage) };
+
                 Self {
+                    vsyscall,
                     depends,
                 }
             }
@@ -58,11 +66,14 @@ pub mod apps {
     
     pub mod pong {
         pub struct Environ {
+            pub vsyscall: &'static ftl_types::syscall::VsyscallPage,
             pub depends: Depends,
         }
 
         impl Environ {
             pub fn from_environ_ptr(environ_ptr: ftl_types::environ::EnvironPtr) -> Self {
+                use ftl_types::syscall::VsyscallPage;
+
                 #[allow(unused_variables)]
                 let environ_json: EnvironJson = serde_json::from_slice(environ_ptr.envion_as_bytes())
                     .expect("failed to parse environ JSON");
@@ -71,7 +82,12 @@ pub mod apps {
                     
                 };
 
+                // SAFETY: Vsyscall page will be always available at the same
+                //         address.
+                let vsyscall = unsafe { &*(environ_json.vsyscall as *const VsyscallPage) };
+
                 Self {
+                    vsyscall,
                     depends,
                 }
             }

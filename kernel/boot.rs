@@ -6,6 +6,7 @@ use ftl_utils::byte_size::ByteSize;
 
 use crate::app_loader::AppLoader;
 use crate::arch;
+use crate::channel::Channel;
 use crate::cpuvar;
 use crate::cpuvar::CpuId;
 use crate::handle::Handle;
@@ -69,6 +70,5 @@ pub fn boot(cpu_id: CpuId, bootinfo: BootInfo) -> ! {
 
     arch::yield_cpu();
 
-    println!("kernel is ready!");
-    arch::halt();
+    panic!("halt");
 }

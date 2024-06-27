@@ -10,13 +10,13 @@ use ftl_utils::alignment::align_up;
 
 use crate::arch::PAGE_SIZE;
 use crate::buffer::Buffer;
-use crate::channel::Channel;
 use crate::handle::AnyHandle;
 use crate::handle::Handle;
 use crate::handle::HandleTable;
 use crate::memory::AllocPagesError;
 use crate::process::Process;
 use crate::ref_counted::SharedRef;
+use crate::syscall::VSYSCALL_PAGE;
 use crate::thread::Thread;
 
 #[derive(Debug)]
@@ -174,7 +174,7 @@ impl<'a> AppLoader<'a> {
         }
 
         let environ_json = serde_json::to_string(&serde_json::json!({
-            "vsyscall": &VSYSCALL_PAGE as usize,
+            "vsyscall": &VSYSCALL_PAGE as *const _ as usize, // FIXME: userspace
             "depends": depends_map
         }))
         .unwrap();
