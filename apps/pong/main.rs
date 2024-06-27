@@ -9,6 +9,7 @@ use ftl_api::prelude::*;
 use ftl_api::types::handle::HandleId;
 use ftl_api::types::message::MessageBuffer;
 use ftl_api_autogen::apps::pong::Environ;
+use ftl_api_autogen::protocols::NewclientRequest;
 use ftl_api_autogen::protocols::PingReply;
 use ftl_api_autogen::protocols::PingRequest;
 
@@ -24,7 +25,7 @@ pub fn main(_env: Environ) {
         Channel::from_handle(handle)
     };
 
-    let mut mainloop = Mainloop::<State, PingRequest>::new().unwrap();
+    let mut mainloop = Mainloop::<State, NewclientRequest>::new().unwrap();
     mainloop.add_channel(ch, State { counter: 0 }).unwrap();
 
     let mut buffer = MessageBuffer::new();
