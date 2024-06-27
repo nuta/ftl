@@ -54,15 +54,16 @@ pub fn main(_args: TokenStream, item: TokenStream) -> TokenStream {
         #[no_mangle]
         pub extern "C" fn ftl_app_main(
             vsyscall: *const ::ftl_api::types::syscall::VsyscallPage,
-            environ_ptr: *const u8,
-            environ_len: usize,
         ) {
             // SAFETY: We won't call this function twice.
             unsafe {
                 ::ftl_api::init::init_internal(vsyscall);
             }
 
-            let env = #environ_type::from_environ_ptr(environ_ptr, environ_len);
+            let env = #environ_type::from_environ_ptr(
+                unsafe { (*vsyscall).environ_ptr },
+                unsafe { (*vsyscall).environ_len }
+            );
             main(env);
         }
     };
