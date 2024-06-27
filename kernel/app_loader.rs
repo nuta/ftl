@@ -174,7 +174,6 @@ impl<'a> AppLoader<'a> {
         }
 
         let environ_json = serde_json::to_string(&serde_json::json!({
-            "vsyscall": &VSYSCALL_PAGE as *const _ as usize, // FIXME: userspace
             "depends": depends_map
         }))
         .unwrap();
@@ -218,7 +217,9 @@ impl<'a> AppLoader<'a> {
         let next_id = handles.next_id();
         let environ_ptr = self.install_handles_and_environ(&mut *handles, depends, next_id);
 
-        let thread = Thread::spawn_kernel(proc.clone(), entry, environ_ptr.as_raw());
+        let arg0 = &VSYSCALL_PAGE as *const _ as usize; // FIXME: userspace
+        let arg1 = environ_ptr.as_raw();
+        let thread = Thread::spawn_kernel(proc.clone(), entry, arg0, arg1);
 
         handles
             .add(Handle::new(thread, HandleRights::NONE))

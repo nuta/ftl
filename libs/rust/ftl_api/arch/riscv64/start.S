@@ -1,4 +1,5 @@
-// a0: EnvironPtr
+// a0: *const VsyscallPage
+// a1: EnvironPtr
 .section .text
 .align 4
 .global start
