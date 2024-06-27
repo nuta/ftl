@@ -35,6 +35,7 @@ struct App {
 fn resolve_type_name(ty: &idl::Ty) -> String {
     match ty {
         idl::Ty::Int32 => "i32".to_string(),
+        idl::Ty::Handle => "ftl_types::handle::HandleId".to_string(),
     }
 }
 

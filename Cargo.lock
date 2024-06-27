@@ -220,6 +220,7 @@ name = "ftl_kernel"
 version = "0.0.0"
 dependencies = [
  "arrayvec",
+ "ftl_autogen",
  "ftl_bump_allocator",
  "ftl_elf",
  "ftl_inlinedvec",
