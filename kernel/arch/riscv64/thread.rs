@@ -21,6 +21,7 @@ extern "C" fn kernel_entry() -> ! {
                 mv ra, s1    // The desired entry point for the thread.
                 mv a0, s2    // The 1st argument for the thread.
                 mv a1, s3    // The 2nd argument for the thread.
+                mv a2, s4    // The 3rd argument for the thread.
                 ret
             "#,
             options(noreturn)
@@ -165,7 +166,7 @@ impl Thread {
         }
     }
 
-    pub fn new_kernel(pc: usize, arg0: usize, arg1: usize) -> Thread {
+    pub fn new_kernel(pc: usize, arg0: usize, arg1: usize, arg2: usize) -> Thread {
         let stack_size = 64 * 1024;
 
         // Use Vec<u128> to ensure 16-byte alignment as specified in the RISC-V calling convention:
@@ -187,6 +188,7 @@ impl Thread {
                 s1: pc,
                 s2: arg0,
                 s3: arg1,
+                s4: arg2,
                 ..Default::default()
             },
         }

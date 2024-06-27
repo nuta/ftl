@@ -11,9 +11,11 @@ pub mod apps {
         }
 
         impl Environ {
-            pub fn from_environ_ptr(environ_ptr: ftl_types::environ::EnvironPtr) -> Self {
+            pub fn from_environ_ptr(environ_ptr: *const u8, environ_len: usize) -> Self {
+                let environ_bytes = unsafe { ::core::slice::from_raw_parts(environ_ptr, environ_len) };
+
                 #[allow(unused_variables)]
-                let environ_json: EnvironJson = serde_json::from_slice(environ_ptr.envion_as_bytes())
+                let environ_json: EnvironJson = serde_json::from_slice(environ_bytes)
                     .expect("failed to parse environ JSON");
 
                 let depends = Depends {

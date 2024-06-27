@@ -68,13 +68,14 @@ impl Thread {
         pc: fn(usize),
         arg0: usize,
         arg1: usize,
+        arg2: usize,
     ) -> SharedRef<Thread> {
         let thread = SharedRef::new(Thread {
             id: ThreadId::alloc(),
             mutable: SpinLock::new(Mutable {
                 state: State::Runnable,
             }),
-            arch: arch::Thread::new_kernel(pc as usize, arg0, arg1),
+            arch: arch::Thread::new_kernel(pc as usize, arg0, arg1, arg2),
             process,
         });
 

@@ -2,7 +2,6 @@
 
 extern crate alloc;
 
-pub mod environ;
 pub mod error;
 pub mod handle;
 pub mod idl;

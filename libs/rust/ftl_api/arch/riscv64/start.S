@@ -1,5 +1,6 @@
 // a0: *const VsyscallPage
-// a1: EnvironPtr
+// a1: *const u8 (environ JSON)
+// a2: usize (the length of the environ JSON)
 .section .text
 .align 4
 .global start

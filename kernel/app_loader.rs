@@ -4,7 +4,6 @@ use alloc::vec::Vec;
 use ftl_elf::Elf;
 use ftl_elf::PhdrType;
 use ftl_elf::ET_DYN;
-use ftl_types::environ::EnvironPtr;
 use ftl_types::handle::HandleRights;
 use ftl_utils::alignment::align_up;
 
@@ -164,7 +163,7 @@ impl<'a> AppLoader<'a> {
         handles: &mut HandleTable,
         mut depends: Vec<(String, AnyHandle)>,
         handles_base: i32,
-    ) -> EnvironPtr {
+    ) -> (usize, usize) {
         let mut depends_map = serde_json::Map::with_capacity(depends.len());
         for (i, (depend_name, handle)) in depends.drain(..).enumerate() {
             let handle_id = serde_json::Number::from(handles_base + i as i32);
@@ -179,20 +178,21 @@ impl<'a> AppLoader<'a> {
         .unwrap();
 
         // Copy into a buffer.
-        let num_pages = align_up(environ_json.len(), PAGE_SIZE) / PAGE_SIZE;
-        let mut buffer = Buffer::alloc(align_up(num_pages * PAGE_SIZE, PAGE_SIZE))
+        let mut buffer = Buffer::alloc(align_up(environ_json.len(), PAGE_SIZE))
             .expect("failed to allocate buffer");
         buffer.allocated_pages_mut().as_slice_mut()[..environ_json.len()]
             .copy_from_slice(environ_json.as_bytes());
-        let environ_ptr =
-            EnvironPtr::new(buffer.allocated_pages().as_ptr() as usize, num_pages).unwrap();
+        let args = (
+            buffer.allocated_pages().as_ptr() as usize,
+            environ_json.len(),
+        );
 
         // Move the ownership of the buffer to the process.
         handles
             .add(Handle::new(SharedRef::new(buffer), HandleRights::NONE))
             .unwrap();
 
-        environ_ptr
+        args
     }
 
     pub fn load(
@@ -215,11 +215,10 @@ impl<'a> AppLoader<'a> {
         }
 
         let next_id = handles.next_id();
-        let environ_ptr = self.install_handles_and_environ(&mut *handles, depends, next_id);
+        let (arg1, arg2) = self.install_handles_and_environ(&mut *handles, depends, next_id);
 
         let arg0 = &VSYSCALL_PAGE as *const _ as usize; // FIXME: userspace
-        let arg1 = environ_ptr.as_raw();
-        let thread = Thread::spawn_kernel(proc.clone(), entry, arg0, arg1);
+        let thread = Thread::spawn_kernel(proc.clone(), entry, arg0, arg1, arg2);
 
         handles
             .add(Handle::new(thread, HandleRights::NONE))
