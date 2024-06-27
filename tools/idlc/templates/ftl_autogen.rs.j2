@@ -41,10 +41,12 @@ pub mod protocols {
     }
 
     pub struct {{ m.name }}Reader<'a> {
+        #[allow(dead_code)]
         buffer: &'a MessageBuffer,
     }
 
     impl<'a> {{ m.name }}Reader<'a> {
+        #[allow(dead_code)]
         fn as_ref(&self, buffer: &'a MessageBuffer) -> &'a {{ m.name }} {
             unsafe { &*(buffer as *const _ as *const {{ m.name }}) }
         }

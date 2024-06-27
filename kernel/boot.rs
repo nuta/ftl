@@ -1,17 +1,15 @@
-use alloc::string::ToString;
+use alloc::borrow::ToOwned;
+use alloc::vec;
 
 use arrayvec::ArrayVec;
-use ftl_types::handle::HandleRights;
+use ftl_types::spec::AppSpec;
 use ftl_utils::byte_size::ByteSize;
 
-use crate::app_loader::AppLoader;
 use crate::arch;
-use crate::channel::Channel;
+use crate::autopilot::Autopilot;
 use crate::cpuvar;
 use crate::cpuvar::CpuId;
-use crate::handle::Handle;
 use crate::memory;
-use crate::poll::Poll;
 use crate::process;
 
 /// A free region of memory available for software.
@@ -40,33 +38,25 @@ pub fn boot(cpu_id: CpuId, bootinfo: BootInfo) -> ! {
     process::init();
     cpuvar::percpu_init(cpu_id);
 
-    // AppLoader::parse(STARTUP_ELF)
-    //     .expect("startup.elf is invalid")
-    //     .load(&VSYSCALL_PAGE)
-    //     .expect("failed to load startup.elf");
-
-    let (ch0, ch1) = Channel::new().expect("failed to create channel");
-    let ch0_handle = Handle::new(ch0, HandleRights::NONE);
-    let ch1_handle = Handle::new(ch1, HandleRights::NONE);
-    let pong_poll = Handle::new(Poll::new(), HandleRights::NONE);
-
-    {
-        AppLoader::parse(include_bytes!("../build/apps/ping.elf"))
-            .expect("ping.elf is invalid")
-            .load(
-                alloc::vec![],
-                alloc::vec![("ping_server".to_string(), ch0_handle.into())],
-            )
-            .expect("failed to load ping.elf");
+    fn load_app_spec(spec: &[u8]) -> AppSpec {
+        serde_json::from_slice(spec).expect("failed to parse app spec")
     }
 
-    AppLoader::parse(include_bytes!("../build/apps/pong.elf"))
-        .expect("pong.elf is invalid")
-        .load(
-            alloc::vec![ch1_handle.into(), pong_poll.into()],
-            alloc::vec![],
-        )
-        .expect("failed to load pong.elf");
+    let mut autopilot = Autopilot::new();
+    autopilot
+        .start_apps(vec![
+            (
+                "ping".to_owned(),
+                load_app_spec(include_bytes!("../apps/ping/app.spec.json")),
+                include_bytes!("../build/apps/ping.elf"),
+            ),
+            (
+                "pong".to_owned(),
+                load_app_spec(include_bytes!("../apps/pong/app.spec.json")),
+                include_bytes!("../build/apps/pong.elf"),
+            ),
+        ])
+        .expect("failed to start apps");
 
     arch::yield_cpu();
 
