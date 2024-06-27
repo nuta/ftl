@@ -34,9 +34,11 @@ impl EnvironPtr {
         self.0 & !NUM_PAGES_BITMASK
     }
 
+    pub fn as_raw(&self) -> usize {
+        self.0
+    }
+
     pub fn envion_as_bytes(&self) -> &[u8] {
-        unsafe {
-            slice::from_raw_parts(self.addr() as *const u8, self.len())
-        }
+        unsafe { slice::from_raw_parts(self.addr() as *const u8, self.len()) }
     }
 }

@@ -3,8 +3,8 @@ use alloc::vec::Vec;
 use ftl_elf::Elf;
 use ftl_elf::PhdrType;
 use ftl_elf::ET_DYN;
+use ftl_types::environ::EnvironPtr;
 use ftl_types::handle::HandleRights;
-use ftl_types::syscall::VsyscallPage;
 use ftl_utils::alignment::align_up;
 
 use crate::arch::PAGE_SIZE;
@@ -158,7 +158,7 @@ impl<'a> AppLoader<'a> {
 
     pub fn load(
         mut self,
-        vsyscall_page: *const VsyscallPage,
+        environ_ptr: EnvironPtr,
         init_handles: Vec<AnyHandle>,
     ) -> Result<SharedRef<Process>, Error> {
         self.load_segments();
@@ -168,7 +168,7 @@ impl<'a> AppLoader<'a> {
 
         let entry = unsafe { core::mem::transmute(self.entry_addr()) };
         let proc = SharedRef::new(Process::create());
-        let thread = Thread::spawn_kernel(proc.clone(), entry, vsyscall_page as usize);
+        let thread = Thread::spawn_kernel(proc.clone(), entry, environ_ptr.as_raw());
 
         let buffer = SharedRef::new(self.memory);
 

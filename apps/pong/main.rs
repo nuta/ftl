@@ -5,6 +5,7 @@ use ftl_api::channel::Channel;
 use ftl_api::handle::OwnedHandle;
 use ftl_api::mainloop::Event;
 use ftl_api::mainloop::Mainloop;
+use ftl_api_autogen::apps::pong::Environ;
 use ftl_api::prelude::*;
 use ftl_api::types::handle::HandleId;
 use ftl_api::types::message::MessageBuffer;
@@ -16,7 +17,7 @@ struct State {
 }
 
 #[ftl_api::main]
-pub fn main() {
+pub fn main(mut env: Environ) {
     let ch = {
         let handle_id = HandleId::from_raw(1);
         let handle = OwnedHandle::from_raw(handle_id);
