@@ -4,7 +4,7 @@
 pub use ftl_autogen::*;
 
 pub mod apps {
-
+    
     pub mod ping {
         #[repr(C)]
         pub struct Environ {
@@ -13,10 +13,12 @@ pub mod apps {
 
         #[repr(C)]
         pub struct Depends {
+            
             pub ping_server: Option<ftl_api::channel::Channel>,
+            
         }
     }
-
+    
     pub mod pong {
         #[repr(C)]
         pub struct Environ {
@@ -24,6 +26,9 @@ pub mod apps {
         }
 
         #[repr(C)]
-        pub struct Depends {}
+        pub struct Depends {
+            
+        }
     }
+    
 }
