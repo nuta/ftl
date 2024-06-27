@@ -15,6 +15,7 @@ ftl_bump_allocator = { workspace = true }
 ftl_elf = { workspace = true }
 ftl_inlinedvec = { workspace = true }
 hashbrown = { workspace = true }
+serde_json = { workspace = true, features = ["alloc"] }
 
 # TODO: Remove this dependency
 spin = { workspace = true }

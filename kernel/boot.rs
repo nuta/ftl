@@ -1,10 +1,11 @@
+use alloc::string::ToString;
+
 use arrayvec::ArrayVec;
 use ftl_types::handle::HandleRights;
 use ftl_utils::byte_size::ByteSize;
 
 use crate::app_loader::AppLoader;
 use crate::arch;
-use crate::channel::Channel;
 use crate::cpuvar;
 use crate::cpuvar::CpuId;
 use crate::handle::Handle;
@@ -48,15 +49,21 @@ pub fn boot(cpu_id: CpuId, bootinfo: BootInfo) -> ! {
     let ch1_handle = Handle::new(ch1, HandleRights::NONE);
     let pong_poll = Handle::new(Poll::new(), HandleRights::NONE);
 
-    AppLoader::parse(include_bytes!("../build/apps/ping.elf"))
-        .expect("ping.elf is invalid")
-        .load(&VSYSCALL_PAGE, alloc::vec![ch0_handle.into()])
-        .expect("failed to load ping.elf");
+    {
+        AppLoader::parse(include_bytes!("../build/apps/ping.elf"))
+            .expect("ping.elf is invalid")
+            .load(
+                alloc::vec![],
+                alloc::vec![("ping_server".to_string(), ch0_handle.into())],
+            )
+            .expect("failed to load ping.elf");
+    }
+
     AppLoader::parse(include_bytes!("../build/apps/pong.elf"))
         .expect("pong.elf is invalid")
         .load(
-            &VSYSCALL_PAGE,
             alloc::vec![ch1_handle.into(), pong_poll.into()],
+            alloc::vec![],
         )
         .expect("failed to load pong.elf");
 

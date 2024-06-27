@@ -1,3 +1,4 @@
+use alloc::string::String;
 use alloc::vec::Vec;
 
 use ftl_elf::Elf;
@@ -9,8 +10,10 @@ use ftl_utils::alignment::align_up;
 
 use crate::arch::PAGE_SIZE;
 use crate::buffer::Buffer;
+use crate::channel::Channel;
 use crate::handle::AnyHandle;
 use crate::handle::Handle;
+use crate::handle::HandleTable;
 use crate::memory::AllocPagesError;
 use crate::process::Process;
 use crate::ref_counted::SharedRef;
@@ -156,10 +159,47 @@ impl<'a> AppLoader<'a> {
         Ok(())
     }
 
+    fn install_handles_and_environ(
+        &mut self,
+        handles: &mut HandleTable,
+        mut depends: Vec<(String, AnyHandle)>,
+        handles_base: i32,
+    ) -> EnvironPtr {
+        let mut depends_map = serde_json::Map::with_capacity(depends.len());
+        for (i, (depend_name, handle)) in depends.drain(..).enumerate() {
+            let handle_id = serde_json::Number::from(handles_base + i as i32);
+            depends_map.insert(depend_name, serde_json::Value::Number(handle_id));
+
+            handles.add(handle).unwrap();
+        }
+
+        let environ_json = serde_json::to_string(&serde_json::json!({
+            "vsyscall": &VSYSCALL_PAGE as usize,
+            "depends": depends_map
+        }))
+        .unwrap();
+
+        // Copy into a buffer.
+        let num_pages = align_up(environ_json.len(), PAGE_SIZE) / PAGE_SIZE;
+        let mut buffer = Buffer::alloc(align_up(num_pages * PAGE_SIZE, PAGE_SIZE))
+            .expect("failed to allocate buffer");
+        buffer.allocated_pages_mut().as_slice_mut()[..environ_json.len()]
+            .copy_from_slice(environ_json.as_bytes());
+        let environ_ptr =
+            EnvironPtr::new(buffer.allocated_pages().as_ptr() as usize, num_pages).unwrap();
+
+        // Move the ownership of the buffer to the process.
+        handles
+            .add(Handle::new(SharedRef::new(buffer), HandleRights::NONE))
+            .unwrap();
+
+        environ_ptr
+    }
+
     pub fn load(
         mut self,
-        environ_ptr: EnvironPtr,
         init_handles: Vec<AnyHandle>,
+        depends: Vec<(String, AnyHandle)>,
     ) -> Result<SharedRef<Process>, Error> {
         self.load_segments();
 
@@ -168,23 +208,25 @@ impl<'a> AppLoader<'a> {
 
         let entry = unsafe { core::mem::transmute(self.entry_addr()) };
         let proc = SharedRef::new(Process::create());
+
+        let mut handles = proc.handles().lock();
+
+        for init_handle in init_handles {
+            handles.add(init_handle).unwrap();
+        }
+
+        let next_id = handles.next_id();
+        let environ_ptr = self.install_handles_and_environ(&mut *handles, depends, next_id);
+
         let thread = Thread::spawn_kernel(proc.clone(), entry, environ_ptr.as_raw());
 
-        let buffer = SharedRef::new(self.memory);
-
-        {
-            let mut handles = proc.handles().lock();
-            for init_handle in init_handles {
-                handles.add(init_handle).unwrap();
-            }
-
-            handles
-                .add(Handle::new(buffer, HandleRights::NONE))
-                .unwrap();
-            handles
-                .add(Handle::new(thread, HandleRights::NONE))
-                .unwrap();
-        }
+        handles
+            .add(Handle::new(thread, HandleRights::NONE))
+            .unwrap();
+        handles
+            .add(Handle::new(SharedRef::new(self.memory), HandleRights::NONE))
+            .unwrap();
+        drop(handles);
 
         Ok(proc)
     }

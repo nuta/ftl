@@ -4,9 +4,8 @@
 pub use ftl_autogen::*;
 
 pub mod apps {
-
+    
     pub mod ping {
-        #[repr(C)]
         pub struct Environ {
             pub depends: Depends,
         }
@@ -14,11 +13,11 @@ pub mod apps {
         impl Environ {
             pub fn from_environ_ptr(environ_ptr: ftl_types::environ::EnvironPtr) -> Self {
                 #[allow(unused_variables)]
-                let environ_json: EnvironJson =
-                    serde_json::from_slice(environ_ptr.envion_as_bytes())
-                        .expect("failed to parse environ JSON");
+                let environ_json: EnvironJson = serde_json::from_slice(environ_ptr.envion_as_bytes())
+                    .expect("failed to parse environ JSON");
 
                 let depends = Depends {
+                    
                     ping_server: {
                         use ftl_api::channel::Channel;
                         use ftl_api::handle::OwnedHandle;
@@ -28,30 +27,36 @@ pub mod apps {
                         let handle = OwnedHandle::from_raw(handle_id);
                         Some(Channel::from_handle(handle))
                     },
+                    
                 };
 
-                Self { depends }
+                Self {
+                    depends,
+                }
             }
         }
 
-        #[repr(C)]
         pub struct Depends {
+            
             pub ping_server: Option<ftl_api::channel::Channel>,
+            
         }
 
         #[derive(serde::Serialize, serde::Deserialize)]
         struct EnvironJson {
+            pub vsyscall: usize,
             pub depends: DependsJson,
         }
 
         #[derive(serde::Serialize, serde::Deserialize)]
         struct DependsJson {
-            pub ping_server: i32, /* Handle ID */
+            
+            pub ping_server: i32 /* Handle ID */,
+            
         }
     }
-
+    
     pub mod pong {
-        #[repr(C)]
         pub struct Environ {
             pub depends: Depends,
         }
@@ -59,25 +64,33 @@ pub mod apps {
         impl Environ {
             pub fn from_environ_ptr(environ_ptr: ftl_types::environ::EnvironPtr) -> Self {
                 #[allow(unused_variables)]
-                let environ_json: EnvironJson =
-                    serde_json::from_slice(environ_ptr.envion_as_bytes())
-                        .expect("failed to parse environ JSON");
+                let environ_json: EnvironJson = serde_json::from_slice(environ_ptr.envion_as_bytes())
+                    .expect("failed to parse environ JSON");
 
-                let depends = Depends {};
+                let depends = Depends {
+                    
+                };
 
-                Self { depends }
+                Self {
+                    depends,
+                }
             }
         }
 
-        #[repr(C)]
-        pub struct Depends {}
+        pub struct Depends {
+            
+        }
 
         #[derive(serde::Serialize, serde::Deserialize)]
         struct EnvironJson {
+            pub vsyscall: usize,
             pub depends: DependsJson,
         }
 
         #[derive(serde::Serialize, serde::Deserialize)]
-        struct DependsJson {}
+        struct DependsJson {
+            
+        }
     }
+    
 }

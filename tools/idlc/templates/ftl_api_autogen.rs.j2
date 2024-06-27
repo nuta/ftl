@@ -6,7 +6,6 @@ pub use ftl_autogen::*;
 pub mod apps {
     {% for app in apps %}
     pub mod {{ app.name }} {
-        #[repr(C)]
         pub struct Environ {
             pub depends: Depends,
         }
@@ -37,7 +36,6 @@ pub mod apps {
             }
         }
 
-        #[repr(C)]
         pub struct Depends {
             {% for dep in app.depends %}
             pub {{ dep }}: Option<ftl_api::channel::Channel>,
@@ -46,6 +44,7 @@ pub mod apps {
 
         #[derive(serde::Serialize, serde::Deserialize)]
         struct EnvironJson {
+            pub vsyscall: usize,
             pub depends: DependsJson,
         }
 

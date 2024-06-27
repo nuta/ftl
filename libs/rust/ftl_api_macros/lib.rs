@@ -5,7 +5,6 @@ use quote::quote;
 use syn::parse_macro_input;
 use syn::spanned::Spanned;
 use syn::FnArg;
-use syn::Pat;
 
 #[proc_macro_error]
 #[proc_macro_attribute]
