@@ -6,7 +6,6 @@ use ftl_types::message::MessageInfo;
 use ftl_types::poll::PollEvent;
 use ftl_types::poll::PollSyscallResult;
 use ftl_types::syscall::SyscallNumber;
-use ftl_types::syscall::VsyscallPage;
 
 use crate::buffer::Buffer;
 use crate::channel::Channel;
@@ -114,10 +113,6 @@ fn poll_wait(handle_id: HandleId) -> Result<PollSyscallResult, FtlError> {
     let (ev, ready_handle_id) = poll.wait()?;
     Ok(PollSyscallResult::new(ev, ready_handle_id))
 }
-
-pub const VSYSCALL_PAGE: VsyscallPage = VsyscallPage {
-    entry: syscall_entry,
-};
 
 pub fn syscall_entry(
     n: isize,

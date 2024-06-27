@@ -5,6 +5,7 @@ use ftl_elf::Elf;
 use ftl_elf::PhdrType;
 use ftl_elf::ET_DYN;
 use ftl_types::handle::HandleRights;
+use ftl_types::syscall::VsyscallPage;
 use ftl_utils::alignment::align_up;
 
 use crate::arch::PAGE_SIZE;
@@ -15,7 +16,7 @@ use crate::handle::HandleTable;
 use crate::memory::AllocPagesError;
 use crate::process::Process;
 use crate::ref_counted::SharedRef;
-use crate::syscall::VSYSCALL_PAGE;
+use crate::syscall::syscall_entry;
 use crate::thread::Thread;
 
 #[derive(Debug)]
@@ -215,10 +216,20 @@ impl<'a> AppLoader<'a> {
         }
 
         let next_id = handles.next_id();
-        let (arg1, arg2) = self.install_handles_and_environ(&mut *handles, depends, next_id);
+        let (environ_ptr, environ_len) =
+            self.install_handles_and_environ(&mut *handles, depends, next_id);
 
-        let arg0 = &VSYSCALL_PAGE as *const _ as usize; // FIXME: userspace
-        let thread = Thread::spawn_kernel(proc.clone(), entry, arg0, arg1, arg2);
+        let mut vsyscall_buffer = Buffer::alloc(PAGE_SIZE).unwrap();
+        let vsyscall_ptr = vsyscall_buffer.allocated_pages_mut().as_ptr() as *mut VsyscallPage;
+        unsafe {
+            vsyscall_ptr.write(VsyscallPage {
+                entry: syscall_entry,
+                environ_ptr: environ_ptr as *const u8,
+                environ_len,
+            });
+        }
+
+        let thread = Thread::spawn_kernel(proc.clone(), entry, vsyscall_ptr as usize);
 
         handles
             .add(Handle::new(thread, HandleRights::NONE))

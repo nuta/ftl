@@ -66,16 +66,14 @@ impl Thread {
     pub fn spawn_kernel(
         process: SharedRef<Process>,
         pc: fn(usize),
-        arg0: usize,
-        arg1: usize,
-        arg2: usize,
+        arg: usize,
     ) -> SharedRef<Thread> {
         let thread = SharedRef::new(Thread {
             id: ThreadId::alloc(),
             mutable: SpinLock::new(Mutable {
                 state: State::Runnable,
             }),
-            arch: arch::Thread::new_kernel(pc as usize, arg0, arg1, arg2),
+            arch: arch::Thread::new_kernel(pc as usize, arg),
             process,
         });
 
