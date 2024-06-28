@@ -32,10 +32,10 @@ pub fn main(_env: Environ) {
         match mainloop.next() {
             Event::Message { ch, state, m } => {
                 match m {
-                    Message::NewclientRequest(_m) => {
-                        println!("got new client");
-                        // todo!()
-                        // mainloop.add_channel(m.handle(), State { counter: 0 });
+                    Message::NewclientRequest(m) => {
+                        println!("got new client: {:?}", m.handle());
+                        let new_ch = Channel::from_handle(OwnedHandle::from_raw(m.handle()));
+                        mainloop.add_channel(new_ch, State { counter: 0 }).unwrap();
                     }
                     Message::PingRequest(_m) => {
                         // println!("[pong] received message: {}", m.int_value1());
