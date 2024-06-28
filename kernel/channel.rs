@@ -81,6 +81,7 @@ impl Channel {
         let num_handles = msginfo.num_handles();
         let mut moved_handles = InlinedVec::new();
         if num_handles > 0 {
+            println!("sending {} handles ---------------------------------", num_handles);
             let current_thread = current_thread();
 
             // Note: Don't release this lock until we've moved all handles

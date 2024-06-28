@@ -26,6 +26,7 @@ struct Message {
     protocol_name: String,
     name: String,
     msgid: isize,
+    num_handles: usize,
     fields: Vec<Field>,
 }
 
@@ -121,19 +122,23 @@ fn main() -> Result<()> {
     for protocol in idl.protocols {
         let mut messages = Vec::new();
         for rpc in &protocol.rpcs {
+            let req_fields = visit_fields(&rpc.request.fields);
             let req_msg = Message {
                 protocol_name: protocol.name.clone(),
                 name: format!("{}Request", CamelCase(&rpc.name)),
                 msgid: next_msgid,
-                fields: visit_fields(&rpc.request.fields),
+                num_handles: req_fields.iter().filter(|f| f.is_handle).count(),
+                fields: req_fields,
             };
             next_msgid += 1;
 
+            let res_fields = visit_fields(&rpc.response.fields);
             let res_msg = Message {
                 protocol_name: protocol.name.clone(),
                 name: format!("{}Reply", CamelCase(&rpc.name)),
                 msgid: next_msgid,
-                fields: visit_fields(&rpc.response.fields),
+                num_handles: res_fields.iter().filter(|f| f.is_handle).count(),
+                fields: res_fields,
             };
             next_msgid += 1;
 
