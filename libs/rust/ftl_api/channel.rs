@@ -45,9 +45,7 @@ impl Channel {
         buffer: &mut MessageBuffer,
         msg: M,
     ) -> Result<(), FtlError> {
-        unsafe {
-            buffer.write(msg);
-        }
+        msg.serialize(buffer);
 
         // TODO: return send error to keep owning handles
         // TODO: Optimize parameter order to avoid unnecessary register swaps.

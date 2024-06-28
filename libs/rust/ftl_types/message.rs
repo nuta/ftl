@@ -89,7 +89,7 @@ impl MessageBuffer {
 /// Invariant: size_of::<MessageBuffer> >= size_of::<T>().
 pub trait MessageSerialize: Sized {
     const MSGINFO: MessageInfo;
-    fn serialize(self, _buffer: &mut MessageBuffer) {}
+    fn serialize(self, buffer: &mut MessageBuffer);
 }
 
 pub trait MessageDeserialize: Sized {

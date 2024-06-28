@@ -30,6 +30,18 @@ pub mod protocols {
                 {{ m.msgid }} << 14
                 | ::core::mem::size_of::<{{ m.name }}>() as isize,
             );
+
+            fn serialize(self, buffer: &mut MessageBuffer) {
+                let dst = buffer as *mut _ as *mut {{ m.name }};
+                let src = &self as *const {{ m.name }};
+
+                unsafe {
+                    core::ptr::copy_nonoverlapping::<{{ m.name }}>(src, dst, 1);
+                }
+
+                // Don't call destructors on handles transferred to this buffer.
+                core::mem::forget(self);
+            }
         }
 
         impl MessageDeserialize for {{ m.name }} {
