@@ -87,10 +87,10 @@ impl MessageBuffer {
 }
 
 /// Invariant: size_of::<MessageBuffer> >= size_of::<T>().
-pub trait MessageBody {
+pub trait MessageBody: Sized {
     const MSGINFO: MessageInfo;
     type Reader<'a>: 'a;
-    fn serialize(&self, buffer: &mut MessageBuffer) {}
+    fn serialize(self, buffer: &mut MessageBuffer) {}
     fn deserialize<'a>(buffer: &'a MessageBuffer, msginfo: MessageInfo)
         -> Option<Self::Reader<'a>>;
 }
