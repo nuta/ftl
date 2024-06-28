@@ -2,7 +2,7 @@ use core::marker::PhantomData;
 
 use ftl_types::error::FtlError;
 use ftl_types::handle::HandleId;
-use ftl_types::message::MessageBody;
+use ftl_types::message::MessageDeserialize;
 use ftl_types::message::MessageBuffer;
 use ftl_types::poll::PollEvent;
 use hashbrown::HashMap;
@@ -21,7 +21,7 @@ pub enum Error {
 }
 
 #[derive(Debug)]
-pub enum Event<'a, St, M: MessageBody> {
+pub enum Event<'a, St, M: MessageDeserialize> {
     Message {
         state: &'a mut St,
         ch: &'a mut Channel,
@@ -46,7 +46,7 @@ pub struct Mainloop<St, AllM> {
     _pd: PhantomData<AllM>,
 }
 
-impl<St, AllM: MessageBody> Mainloop<St, AllM> {
+impl<St, AllM: MessageDeserialize> Mainloop<St, AllM> {
     pub fn new() -> Result<Self, Error> {
         let poll = Poll::new().map_err(Error::PollCreate)?;
 

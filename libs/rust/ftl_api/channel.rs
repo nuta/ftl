@@ -1,7 +1,8 @@
 use core::fmt;
 
 use ftl_types::error::FtlError;
-use ftl_types::message::MessageBody;
+use ftl_types::message::MessageDeserialize;
+use ftl_types::message::MessageSerialize;
 use ftl_types::message::MessageBuffer;
 use ftl_types::message::MessageInfo;
 
@@ -39,7 +40,7 @@ impl Channel {
         &self.handle
     }
 
-    pub fn send_with_buffer<M: MessageBody>(
+    pub fn send_with_buffer<M: MessageSerialize>(
         &self,
         buffer: &mut MessageBuffer,
         msg: M,
@@ -53,7 +54,7 @@ impl Channel {
         syscall::channel_send(self.handle.id(), M::MSGINFO, buffer)
     }
 
-    pub fn recv_with_buffer<'a, M: MessageBody>(
+    pub fn recv_with_buffer<'a, M: MessageDeserialize>(
         &self,
         buffer: &'a mut MessageBuffer,
     ) -> Result<M::Reader<'a>, RecvError> {

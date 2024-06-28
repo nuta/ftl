@@ -62,12 +62,12 @@ pub mod apps {
             {% endfor %}
         }
 
-        use ftl_types::message::MessageBody;
+        use ftl_types::message::MessageSerialize;
+        use ftl_types::message::MessageDeserialize;
         use ftl_types::message::MessageInfo;
         use ftl_types::message::MessageBuffer;
 
-        impl<'b> MessageBody for Message<'b> {
-            const MSGINFO: MessageInfo = MessageInfo::from_raw(0); // TODO: remove this
+        impl<'b> MessageDeserialize for Message<'b> {
             type Reader<'a> = Message<'a>;
 
             fn deserialize<'a>(

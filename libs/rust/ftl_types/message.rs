@@ -48,7 +48,7 @@ impl MessageBuffer {
         }
     }
 
-    pub unsafe fn write<T: MessageBody>(&mut self, msg: T) {
+    pub unsafe fn write<T: MessageSerialize>(&mut self, msg: T) {
         let dst = self as *mut _ as *mut T;
         let src = &msg as *const T;
 
@@ -87,10 +87,13 @@ impl MessageBuffer {
 }
 
 /// Invariant: size_of::<MessageBuffer> >= size_of::<T>().
-pub trait MessageBody: Sized {
+pub trait MessageSerialize: Sized {
     const MSGINFO: MessageInfo;
+    fn serialize(self, _buffer: &mut MessageBuffer) {}
+}
+
+pub trait MessageDeserialize: Sized {
     type Reader<'a>: 'a;
-    fn serialize(self, buffer: &mut MessageBuffer) {}
     fn deserialize<'a>(buffer: &'a MessageBuffer, msginfo: MessageInfo)
         -> Option<Self::Reader<'a>>;
 }
