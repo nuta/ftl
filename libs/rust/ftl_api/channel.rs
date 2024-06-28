@@ -1,10 +1,10 @@
 use core::fmt;
 
 use ftl_types::error::FtlError;
-use ftl_types::message::MessageDeserialize;
-use ftl_types::message::MessageSerialize;
 use ftl_types::message::MessageBuffer;
+use ftl_types::message::MessageDeserialize;
 use ftl_types::message::MessageInfo;
+use ftl_types::message::MessageSerialize;
 
 use crate::handle::OwnedHandle;
 use crate::syscall;

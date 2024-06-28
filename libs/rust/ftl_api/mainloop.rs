@@ -2,8 +2,8 @@ use core::marker::PhantomData;
 
 use ftl_types::error::FtlError;
 use ftl_types::handle::HandleId;
-use ftl_types::message::MessageDeserialize;
 use ftl_types::message::MessageBuffer;
+use ftl_types::message::MessageDeserialize;
 use ftl_types::poll::PollEvent;
 use hashbrown::HashMap;
 
