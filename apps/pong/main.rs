@@ -32,7 +32,7 @@ pub fn main(_env: Environ) {
     loop {
         match mainloop.next() {
             Event::Message { ch, state, m } => {
-                println!("[pong] received message: {}", m.int_value1());
+                // println!("[pong] received message: {}", m.int_value1());
                 state.counter += 1;
 
                 let reply = PingReply {
