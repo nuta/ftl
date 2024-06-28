@@ -81,7 +81,6 @@ impl Autopilot {
         }
 
         let current_thread = current_thread();
-        let mut kernel_handles = current_thread.process().handles().lock();
         let mut msgbuffer = MessageBuffer::new();
         for app in self.apps.values() {
             let mut depend_handles = Vec::new();
@@ -98,12 +97,18 @@ impl Autopilot {
                     }
                 };
 
-                let handle_id = kernel_handles
+                let handle_id = current_thread
+                    .process()
+                    .handles()
+                    .lock()
                     .add(Handle::new(provider_ch.into(), HandleRights::NONE))
                     .unwrap();
 
                 let provider = self.apps.get(provider_name).unwrap();
-                (NewclientRequest { handle: HandleOwnership(handle_id) }).serialize(&mut msgbuffer);
+                (NewclientRequest {
+                    handle: HandleOwnership(handle_id),
+                })
+                .serialize(&mut msgbuffer);
 
                 provider
                     .our_ch

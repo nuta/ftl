@@ -4,7 +4,7 @@
 pub use ftl_autogen::*;
 
 pub mod apps {
-    
+
     pub mod ping {
         pub struct Environ {
             pub depends: Depends,
@@ -12,14 +12,14 @@ pub mod apps {
 
         impl Environ {
             pub fn from_environ_ptr(environ_ptr: *const u8, environ_len: usize) -> Self {
-                let environ_bytes = unsafe { ::core::slice::from_raw_parts(environ_ptr, environ_len) };
+                let environ_bytes =
+                    unsafe { ::core::slice::from_raw_parts(environ_ptr, environ_len) };
 
                 #[allow(unused_variables)]
-                let environ_json: EnvironJson = serde_json::from_slice(environ_bytes)
-                    .expect("failed to parse environ JSON");
+                let environ_json: EnvironJson =
+                    serde_json::from_slice(environ_bytes).expect("failed to parse environ JSON");
 
                 let depends = Depends {
-                    
                     ping_server: {
                         use ftl_api::channel::Channel;
                         use ftl_api::handle::OwnedHandle;
@@ -29,19 +29,14 @@ pub mod apps {
                         let handle = OwnedHandle::from_raw(handle_id);
                         Some(Channel::from_handle(handle))
                     },
-                    
                 };
 
-                Self {
-                    depends,
-                }
+                Self { depends }
             }
         }
 
         pub struct Depends {
-            
             pub ping_server: Option<ftl_api::channel::Channel>,
-            
         }
 
         #[derive(serde::Serialize, serde::Deserialize)]
@@ -51,71 +46,66 @@ pub mod apps {
 
         #[derive(serde::Serialize, serde::Deserialize)]
         struct DependsJson {
-            
-            pub ping_server: i32 /* Handle ID */,
-            
+            pub ping_server: i32, /* Handle ID */
         }
 
         pub enum Message<'a> {
-            
             NewclientRequest(ftl_autogen::protocols::autopilot::NewclientRequestReader<'a>),
-            
+
             NewclientReply(ftl_autogen::protocols::autopilot::NewclientReplyReader<'a>),
-            
+
             PingRequest(ftl_autogen::protocols::ping::PingRequestReader<'a>),
-            
+
             PingReply(ftl_autogen::protocols::ping::PingReplyReader<'a>),
-            
         }
 
-        use ftl_types::message::MessageSerialize;
+        use ftl_types::message::MessageBuffer;
         use ftl_types::message::MessageDeserialize;
         use ftl_types::message::MessageInfo;
-        use ftl_types::message::MessageBuffer;
+        use ftl_types::message::MessageSerialize;
 
         impl<'b> MessageDeserialize for Message<'b> {
             type Reader<'a> = Message<'a>;
 
             fn deserialize<'a>(
                 buffer: &'a MessageBuffer,
-                msginfo: MessageInfo
+                msginfo: MessageInfo,
             ) -> Option<Self::Reader<'a>> {
                 match msginfo {
-                    
                     ftl_autogen::protocols::autopilot::NewclientRequest::MSGINFO => {
                         use ftl_autogen::protocols::autopilot::NewclientRequest as M;
 
                         let reader = M::deserialize(buffer, msginfo)?;
                         Some(Message::NewclientRequest(reader))
-                    },
-                    
+                    }
+
                     ftl_autogen::protocols::autopilot::NewclientReply::MSGINFO => {
                         use ftl_autogen::protocols::autopilot::NewclientReply as M;
 
                         let reader = M::deserialize(buffer, msginfo)?;
                         Some(Message::NewclientReply(reader))
-                    },
-                    
+                    }
+
                     ftl_autogen::protocols::ping::PingRequest::MSGINFO => {
                         use ftl_autogen::protocols::ping::PingRequest as M;
 
                         let reader = M::deserialize(buffer, msginfo)?;
                         Some(Message::PingRequest(reader))
-                    },
-                    
+                    }
+
                     ftl_autogen::protocols::ping::PingReply::MSGINFO => {
                         use ftl_autogen::protocols::ping::PingReply as M;
 
                         let reader = M::deserialize(buffer, msginfo)?;
                         Some(Message::PingReply(reader))
-                    },
-                    
+                    }
+
                     _ => None,
                 }
             }
         }
     }
-    
+
     pub mod pong {
         pub struct Environ {
             pub depends: Depends,
@@ -123,25 +113,20 @@ pub mod apps {
 
         impl Environ {
             pub fn from_environ_ptr(environ_ptr: *const u8, environ_len: usize) -> Self {
-                let environ_bytes = unsafe { ::core::slice::from_raw_parts(environ_ptr, environ_len) };
+                let environ_bytes =
+                    unsafe { ::core::slice::from_raw_parts(environ_ptr, environ_len) };
 
                 #[allow(unused_variables)]
-                let environ_json: EnvironJson = serde_json::from_slice(environ_bytes)
-                    .expect("failed to parse environ JSON");
+                let environ_json: EnvironJson =
+                    serde_json::from_slice(environ_bytes).expect("failed to parse environ JSON");
 
-                let depends = Depends {
-                    
-                };
+                let depends = Depends {};
 
-                Self {
-                    depends,
-                }
+                Self { depends }
             }
         }
 
-        pub struct Depends {
-            
-        }
+        pub struct Depends {}
 
         #[derive(serde::Serialize, serde::Deserialize)]
         struct EnvironJson {
@@ -149,68 +134,62 @@ pub mod apps {
         }
 
         #[derive(serde::Serialize, serde::Deserialize)]
-        struct DependsJson {
-            
-        }
+        struct DependsJson {}
 
         pub enum Message<'a> {
-            
             NewclientRequest(ftl_autogen::protocols::autopilot::NewclientRequestReader<'a>),
-            
+
             NewclientReply(ftl_autogen::protocols::autopilot::NewclientReplyReader<'a>),
-            
+
             PingRequest(ftl_autogen::protocols::ping::PingRequestReader<'a>),
-            
+
             PingReply(ftl_autogen::protocols::ping::PingReplyReader<'a>),
-            
         }
 
-        use ftl_types::message::MessageSerialize;
+        use ftl_types::message::MessageBuffer;
         use ftl_types::message::MessageDeserialize;
         use ftl_types::message::MessageInfo;
-        use ftl_types::message::MessageBuffer;
+        use ftl_types::message::MessageSerialize;
 
         impl<'b> MessageDeserialize for Message<'b> {
             type Reader<'a> = Message<'a>;
 
             fn deserialize<'a>(
                 buffer: &'a MessageBuffer,
-                msginfo: MessageInfo
+                msginfo: MessageInfo,
             ) -> Option<Self::Reader<'a>> {
                 match msginfo {
-                    
                     ftl_autogen::protocols::autopilot::NewclientRequest::MSGINFO => {
                         use ftl_autogen::protocols::autopilot::NewclientRequest as M;
 
                         let reader = M::deserialize(buffer, msginfo)?;
                         Some(Message::NewclientRequest(reader))
-                    },
-                    
+                    }
+
                     ftl_autogen::protocols::autopilot::NewclientReply::MSGINFO => {
                         use ftl_autogen::protocols::autopilot::NewclientReply as M;
 
                         let reader = M::deserialize(buffer, msginfo)?;
                         Some(Message::NewclientReply(reader))
-                    },
-                    
+                    }
+
                     ftl_autogen::protocols::ping::PingRequest::MSGINFO => {
                         use ftl_autogen::protocols::ping::PingRequest as M;
 
                         let reader = M::deserialize(buffer, msginfo)?;
                         Some(Message::PingRequest(reader))
-                    },
-                    
+                    }
+
                     ftl_autogen::protocols::ping::PingReply::MSGINFO => {
                         use ftl_autogen::protocols::ping::PingReply as M;
 
                         let reader = M::deserialize(buffer, msginfo)?;
                         Some(Message::PingReply(reader))
-                    },
-                    
+                    }
+
                     _ => None,
                 }
             }
         }
     }
-    
 }
