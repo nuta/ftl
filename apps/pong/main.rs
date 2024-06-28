@@ -9,9 +9,9 @@ use ftl_api::prelude::*;
 use ftl_api::types::handle::HandleId;
 use ftl_api::types::message::MessageBuffer;
 use ftl_api_autogen::apps::pong::Environ;
-use ftl_api_autogen::protocols::NewclientRequest;
-use ftl_api_autogen::protocols::PingReply;
-use ftl_api_autogen::protocols::PingRequest;
+use ftl_api_autogen::protocols::autopilot::NewclientRequest;
+use ftl_api_autogen::protocols::ping::PingReply;
+use ftl_api_autogen::protocols::ping::PingRequest;
 
 struct State {
     counter: i32,

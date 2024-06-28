@@ -4,7 +4,7 @@
 pub use ftl_autogen::*;
 
 pub mod apps {
-
+    
     pub mod ping {
         pub struct Environ {
             pub depends: Depends,
@@ -12,14 +12,14 @@ pub mod apps {
 
         impl Environ {
             pub fn from_environ_ptr(environ_ptr: *const u8, environ_len: usize) -> Self {
-                let environ_bytes =
-                    unsafe { ::core::slice::from_raw_parts(environ_ptr, environ_len) };
+                let environ_bytes = unsafe { ::core::slice::from_raw_parts(environ_ptr, environ_len) };
 
                 #[allow(unused_variables)]
-                let environ_json: EnvironJson =
-                    serde_json::from_slice(environ_bytes).expect("failed to parse environ JSON");
+                let environ_json: EnvironJson = serde_json::from_slice(environ_bytes)
+                    .expect("failed to parse environ JSON");
 
                 let depends = Depends {
+                    
                     ping_server: {
                         use ftl_api::channel::Channel;
                         use ftl_api::handle::OwnedHandle;
@@ -29,14 +29,19 @@ pub mod apps {
                         let handle = OwnedHandle::from_raw(handle_id);
                         Some(Channel::from_handle(handle))
                     },
+                    
                 };
 
-                Self { depends }
+                Self {
+                    depends,
+                }
             }
         }
 
         pub struct Depends {
+            
             pub ping_server: Option<ftl_api::channel::Channel>,
+            
         }
 
         #[derive(serde::Serialize, serde::Deserialize)]
@@ -46,10 +51,24 @@ pub mod apps {
 
         #[derive(serde::Serialize, serde::Deserialize)]
         struct DependsJson {
-            pub ping_server: i32, /* Handle ID */
+            
+            pub ping_server: i32 /* Handle ID */,
+            
+        }
+
+        pub enum Message {
+            
+            NewclientRequest(ftl_autogen::protocols::autopilot::NewclientRequest),
+            
+            NewclientReply(ftl_autogen::protocols::autopilot::NewclientReply),
+            
+            PingRequest(ftl_autogen::protocols::ping::PingRequest),
+            
+            PingReply(ftl_autogen::protocols::ping::PingReply),
+            
         }
     }
-
+    
     pub mod pong {
         pub struct Environ {
             pub depends: Depends,
@@ -57,20 +76,25 @@ pub mod apps {
 
         impl Environ {
             pub fn from_environ_ptr(environ_ptr: *const u8, environ_len: usize) -> Self {
-                let environ_bytes =
-                    unsafe { ::core::slice::from_raw_parts(environ_ptr, environ_len) };
+                let environ_bytes = unsafe { ::core::slice::from_raw_parts(environ_ptr, environ_len) };
 
                 #[allow(unused_variables)]
-                let environ_json: EnvironJson =
-                    serde_json::from_slice(environ_bytes).expect("failed to parse environ JSON");
+                let environ_json: EnvironJson = serde_json::from_slice(environ_bytes)
+                    .expect("failed to parse environ JSON");
 
-                let depends = Depends {};
+                let depends = Depends {
+                    
+                };
 
-                Self { depends }
+                Self {
+                    depends,
+                }
             }
         }
 
-        pub struct Depends {}
+        pub struct Depends {
+            
+        }
 
         #[derive(serde::Serialize, serde::Deserialize)]
         struct EnvironJson {
@@ -78,6 +102,21 @@ pub mod apps {
         }
 
         #[derive(serde::Serialize, serde::Deserialize)]
-        struct DependsJson {}
+        struct DependsJson {
+            
+        }
+
+        pub enum Message {
+            
+            NewclientRequest(ftl_autogen::protocols::autopilot::NewclientRequest),
+            
+            NewclientReply(ftl_autogen::protocols::autopilot::NewclientReply),
+            
+            PingRequest(ftl_autogen::protocols::ping::PingRequest),
+            
+            PingReply(ftl_autogen::protocols::ping::PingReply),
+            
+        }
     }
+    
 }

@@ -13,23 +13,39 @@ use minijinja::context;
 use minijinja::Environment;
 use serde::Serialize;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 struct Field {
     name: String,
     ty: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 struct Message {
+    protocol_name: String,
     name: String,
     msgid: isize,
     fields: Vec<Field>,
 }
 
 #[derive(Debug, Serialize)]
+struct UsedMessage {
+    /// `"PingRequest"`, `"PingReply"`, ...
+    camel_name: String,
+    /// `ftl_api_autogen::protocols::ping::PingRequest`, ...
+    ty: String,
+}
+
+#[derive(Debug, Serialize)]
+struct Protocol {
+    name: String,
+    messages: Vec<Message>,
+}
+
+#[derive(Debug, Serialize)]
 struct App {
     name: String,
     depends: Vec<String>,
+    used_messages: Vec<UsedMessage>,
 }
 
 fn resolve_type_name(ty: &idl::Ty) -> String {
@@ -58,6 +74,18 @@ impl fmt::Display for CamelCase<'_> {
     }
 }
 
+fn visit_fields(idl_fields: &[idl::Field]) -> Vec<Field> {
+    let mut fields = Vec::with_capacity(idl_fields.len());
+    for f in idl_fields {
+        fields.push(Field {
+            name: f.name.clone(),
+            ty: resolve_type_name(&f.ty),
+        });
+    }
+
+    fields
+}
+
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
@@ -74,46 +102,37 @@ struct Args {
 fn main() -> Result<()> {
     let args = Args::parse();
     let idl_file = File::open(args.idl_file)?;
-    let protocol: IdlFile = serde_json::from_reader(&idl_file)?;
+    let idl: IdlFile = serde_json::from_reader(&idl_file)?;
 
-    let mut messages = Vec::new();
-    for (i, protocol) in protocol.protocols.iter().enumerate() {
+    let mut protocols = Vec::new();
+    let mut all_messages = Vec::new();
+    for (i, protocol) in idl.protocols.iter().enumerate() {
+        let mut messages = Vec::new();
         for rpc in &protocol.rpcs {
-            let request_name = format!("{}Request", CamelCase(&rpc.name));
-            let reply_name = format!("{}Reply", CamelCase(&rpc.name));
-
-            messages.push(Message {
-                name: request_name,
+            let req_msg = Message {
+                protocol_name: protocol.name.clone(),
+                name: format!("{}Request", CamelCase(&rpc.name)),
                 msgid: i as isize, // TODO: derive a globally unique ID
-                fields: rpc
-                    .request
-                    .fields
-                    .iter()
-                    .map(|f| {
-                        Field {
-                            name: f.name.clone(),
-                            ty: resolve_type_name(&f.ty),
-                        }
-                    })
-                    .collect(),
-            });
+                fields: visit_fields(&rpc.request.fields),
+            };
 
-            messages.push(Message {
-                name: reply_name,
+            let res_msg = Message {
+                protocol_name: protocol.name.clone(),
+                name: format!("{}Reply", CamelCase(&rpc.name)),
                 msgid: i as isize, // TODO: derive a globally unique ID
-                fields: rpc
-                    .response
-                    .fields
-                    .iter()
-                    .map(|f| {
-                        Field {
-                            name: f.name.clone(),
-                            ty: resolve_type_name(&f.ty),
-                        }
-                    })
-                    .collect(),
-            });
+                fields: visit_fields(&rpc.response.fields),
+            };
+
+            all_messages.push(req_msg.clone());
+            all_messages.push(res_msg.clone());
+            messages.push(req_msg);
+            messages.push(res_msg);
         }
+
+        protocols.push(Protocol {
+            name: protocol.name.clone(),
+            messages,
+        });
     }
 
     let mut apps = Vec::new();
@@ -122,11 +141,25 @@ fn main() -> Result<()> {
             .with_context(|| format!("failed to open {}", spec_path.display()))?;
         let spec: SpecFile = serde_json::from_reader(&spec_file)
             .with_context(|| format!("failed to parse {}", spec_path.display()))?;
+
+        let mut used_messages = Vec::new();
+        for m in &all_messages {
+            used_messages.push(UsedMessage {
+                camel_name: format!("{}", CamelCase(&m.name)),
+                ty: format!(
+                    "ftl_autogen::protocols::{}::{}",
+                    &m.protocol_name,
+                    CamelCase(&m.name)
+                ),
+            });
+        }
+
         match spec.spec {
             Spec::App(app) => {
                 apps.push(App {
                     name: spec.name,
                     depends: app.depends,
+                    used_messages,
                 });
             }
         }
@@ -145,7 +178,7 @@ fn main() -> Result<()> {
 
     let template = j2env.get_template("ftl_autogen")?;
     let lib_rs = template.render(context! {
-        messages => messages,
+        protocols => protocols,
     })?;
     std::fs::write(&args.autogen_outfile, lib_rs)?;
 

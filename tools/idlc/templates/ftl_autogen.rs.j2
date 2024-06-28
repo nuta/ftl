@@ -10,51 +10,57 @@ use ftl_types::message::MessageInfo;
 pub mod protocols {
     use super::*;
 
-    {% for m in messages %}
-    #[repr(C)]
-    pub struct {{ m.name }} {
-        {%- for f in m.fields %}
-        pub {{ f.name }}: {{ f.ty }},
-        {%- endfor %}
-    }
+    {% for protocol in protocols %}
+    pub mod {{ protocol.name }} {
+        use super::*;
 
-    // TODO: static_assert for size
+        {% for m in protocol.messages %}
+        #[repr(C)]
+        pub struct {{ m.name }} {
+            {%- for f in m.fields %}
+            pub {{ f.name }}: {{ f.ty }},
+            {%- endfor %}
+        }
 
-    impl MessageBody for {{ m.name }} {
-        const MSGINFO: MessageInfo = MessageInfo::from_raw(
-            {{ m.msgid }} << 14
-            | ::core::mem::size_of::<{{ m.name }}>() as isize,
-        );
+        // TODO: static_assert for size
 
-        type Reader<'a> = {{ m.name }}Reader<'a>;
+        impl MessageBody for {{ m.name }} {
+            const MSGINFO: MessageInfo = MessageInfo::from_raw(
+                {{ m.msgid }} << 14
+                | ::core::mem::size_of::<{{ m.name }}>() as isize,
+            );
 
-        fn deserialize<'a>(
-            buffer: &'a MessageBuffer,
-            msginfo: MessageInfo
-        ) -> Option<Self::Reader<'a>> {
-            if msginfo == Self::MSGINFO {
-                Some({{ m.name }}Reader { buffer })
-            } else {
-                None
+            type Reader<'a> = {{ m.name }}Reader<'a>;
+
+            fn deserialize<'a>(
+                buffer: &'a MessageBuffer,
+                msginfo: MessageInfo
+            ) -> Option<Self::Reader<'a>> {
+                if msginfo == Self::MSGINFO {
+                    Some({{ m.name }}Reader { buffer })
+                } else {
+                    None
+                }
             }
         }
-    }
 
-    pub struct {{ m.name }}Reader<'a> {
-        #[allow(dead_code)]
-        buffer: &'a MessageBuffer,
-    }
-
-    impl<'a> {{ m.name }}Reader<'a> {
-        #[allow(dead_code)]
-        fn as_ref(&self, buffer: &'a MessageBuffer) -> &'a {{ m.name }} {
-            unsafe { &*(buffer as *const _ as *const {{ m.name }}) }
+        pub struct {{ m.name }}Reader<'a> {
+            #[allow(dead_code)]
+            buffer: &'a MessageBuffer,
         }
 
-        {% for f in m.fields %}
-        pub fn {{ f.name }}(&self) -> {{ f.ty }} {
-            let m = self.as_ref(self.buffer);
-            m.{{ f.name }}
+        impl<'a> {{ m.name }}Reader<'a> {
+            #[allow(dead_code)]
+            fn as_ref(&self, buffer: &'a MessageBuffer) -> &'a {{ m.name }} {
+                unsafe { &*(buffer as *const _ as *const {{ m.name }}) }
+            }
+
+            {% for f in m.fields %}
+            pub fn {{ f.name }}(&self) -> {{ f.ty }} {
+                let m = self.as_ref(self.buffer);
+                m.{{ f.name }}
+            }
+            {% endfor %}
         }
         {% endfor %}
     }

@@ -55,6 +55,12 @@ pub mod apps {
             pub {{ dep }}: i32 /* Handle ID */,
             {% endfor %}
         }
+
+        pub enum Message {
+            {% for m in app.used_messages %}
+            {{ m.camel_name }}({{ m.ty }}),
+            {% endfor %}
+        }
     }
     {% endfor %}
 }

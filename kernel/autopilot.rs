@@ -2,7 +2,7 @@ use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 
-use ftl_autogen::protocols::NewclientRequest;
+use ftl_autogen::protocols::autopilot::NewclientRequest;
 use ftl_types::error::FtlError;
 use ftl_types::handle::HandleRights;
 use ftl_types::message::MessageBody;
