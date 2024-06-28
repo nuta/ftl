@@ -73,31 +73,30 @@ pub mod apps {
             ) -> Option<Self::Reader<'a>> {
                 match msginfo {
                     ftl_autogen::protocols::autopilot::NewclientRequest::MSGINFO => {
-                        let reader =
-                            ftl_autogen::protocols::autopilot::NewclientRequest::deserialize(
-                                buffer, msginfo,
-                            )?;
+                        use ftl_autogen::protocols::autopilot::NewclientRequest as M;
+
+                        let reader = M::deserialize(buffer, msginfo)?;
                         Some(Message::NewclientRequest(reader))
                     }
 
                     ftl_autogen::protocols::autopilot::NewclientReply::MSGINFO => {
-                        let reader =
-                            ftl_autogen::protocols::autopilot::NewclientReply::deserialize(
-                                buffer, msginfo,
-                            )?;
+                        use ftl_autogen::protocols::autopilot::NewclientReply as M;
+
+                        let reader = M::deserialize(buffer, msginfo)?;
                         Some(Message::NewclientReply(reader))
                     }
 
                     ftl_autogen::protocols::ping::PingRequest::MSGINFO => {
-                        let reader = ftl_autogen::protocols::ping::PingRequest::deserialize(
-                            buffer, msginfo,
-                        )?;
+                        use ftl_autogen::protocols::ping::PingRequest as M;
+
+                        let reader = M::deserialize(buffer, msginfo)?;
                         Some(Message::PingRequest(reader))
                     }
 
                     ftl_autogen::protocols::ping::PingReply::MSGINFO => {
-                        let reader =
-                            ftl_autogen::protocols::ping::PingReply::deserialize(buffer, msginfo)?;
+                        use ftl_autogen::protocols::ping::PingReply as M;
+
+                        let reader = M::deserialize(buffer, msginfo)?;
                         Some(Message::PingReply(reader))
                     }
 
@@ -161,31 +160,30 @@ pub mod apps {
             ) -> Option<Self::Reader<'a>> {
                 match msginfo {
                     ftl_autogen::protocols::autopilot::NewclientRequest::MSGINFO => {
-                        let reader =
-                            ftl_autogen::protocols::autopilot::NewclientRequest::deserialize(
-                                buffer, msginfo,
-                            )?;
+                        use ftl_autogen::protocols::autopilot::NewclientRequest as M;
+
+                        let reader = M::deserialize(buffer, msginfo)?;
                         Some(Message::NewclientRequest(reader))
                     }
 
                     ftl_autogen::protocols::autopilot::NewclientReply::MSGINFO => {
-                        let reader =
-                            ftl_autogen::protocols::autopilot::NewclientReply::deserialize(
-                                buffer, msginfo,
-                            )?;
+                        use ftl_autogen::protocols::autopilot::NewclientReply as M;
+
+                        let reader = M::deserialize(buffer, msginfo)?;
                         Some(Message::NewclientReply(reader))
                     }
 
                     ftl_autogen::protocols::ping::PingRequest::MSGINFO => {
-                        let reader = ftl_autogen::protocols::ping::PingRequest::deserialize(
-                            buffer, msginfo,
-                        )?;
+                        use ftl_autogen::protocols::ping::PingRequest as M;
+
+                        let reader = M::deserialize(buffer, msginfo)?;
                         Some(Message::PingRequest(reader))
                     }
 
                     ftl_autogen::protocols::ping::PingReply::MSGINFO => {
-                        let reader =
-                            ftl_autogen::protocols::ping::PingReply::deserialize(buffer, msginfo)?;
+                        use ftl_autogen::protocols::ping::PingReply as M;
+
+                        let reader = M::deserialize(buffer, msginfo)?;
                         Some(Message::PingReply(reader))
                     }
 
