@@ -49,14 +49,61 @@ pub mod apps {
             pub ping_server: i32, /* Handle ID */
         }
 
-        pub enum Message {
-            NewclientRequest(ftl_autogen::protocols::autopilot::NewclientRequest),
+        pub enum Message<'a> {
+            NewclientRequest(ftl_autogen::protocols::autopilot::NewclientRequestReader<'a>),
 
-            NewclientReply(ftl_autogen::protocols::autopilot::NewclientReply),
+            NewclientReply(ftl_autogen::protocols::autopilot::NewclientReplyReader<'a>),
 
-            PingRequest(ftl_autogen::protocols::ping::PingRequest),
+            PingRequest(ftl_autogen::protocols::ping::PingRequestReader<'a>),
 
-            PingReply(ftl_autogen::protocols::ping::PingReply),
+            PingReply(ftl_autogen::protocols::ping::PingReplyReader<'a>),
+        }
+
+        use ftl_types::message::MessageBody;
+        use ftl_types::message::MessageBuffer;
+        use ftl_types::message::MessageInfo;
+
+        impl<'b> MessageBody for Message<'b> {
+            const MSGINFO: MessageInfo = MessageInfo::from_raw(0); // TODO: remove this
+            type Reader<'a> = Message<'a>;
+
+            fn deserialize<'a>(
+                buffer: &'a MessageBuffer,
+                msginfo: MessageInfo,
+            ) -> Option<Self::Reader<'a>> {
+                match msginfo {
+                    ftl_autogen::protocols::autopilot::NewclientRequest::MSGINFO => {
+                        let reader =
+                            ftl_autogen::protocols::autopilot::NewclientRequest::deserialize(
+                                buffer, msginfo,
+                            )?;
+                        Some(Message::NewclientRequest(reader))
+                    }
+
+                    ftl_autogen::protocols::autopilot::NewclientReply::MSGINFO => {
+                        let reader =
+                            ftl_autogen::protocols::autopilot::NewclientReply::deserialize(
+                                buffer, msginfo,
+                            )?;
+                        Some(Message::NewclientReply(reader))
+                    }
+
+                    ftl_autogen::protocols::ping::PingRequest::MSGINFO => {
+                        let reader = ftl_autogen::protocols::ping::PingRequest::deserialize(
+                            buffer, msginfo,
+                        )?;
+                        Some(Message::PingRequest(reader))
+                    }
+
+                    ftl_autogen::protocols::ping::PingReply::MSGINFO => {
+                        let reader =
+                            ftl_autogen::protocols::ping::PingReply::deserialize(buffer, msginfo)?;
+                        Some(Message::PingReply(reader))
+                    }
+
+                    _ => None,
+                }
+            }
         }
     }
 
@@ -90,14 +137,61 @@ pub mod apps {
         #[derive(serde::Serialize, serde::Deserialize)]
         struct DependsJson {}
 
-        pub enum Message {
-            NewclientRequest(ftl_autogen::protocols::autopilot::NewclientRequest),
+        pub enum Message<'a> {
+            NewclientRequest(ftl_autogen::protocols::autopilot::NewclientRequestReader<'a>),
 
-            NewclientReply(ftl_autogen::protocols::autopilot::NewclientReply),
+            NewclientReply(ftl_autogen::protocols::autopilot::NewclientReplyReader<'a>),
 
-            PingRequest(ftl_autogen::protocols::ping::PingRequest),
+            PingRequest(ftl_autogen::protocols::ping::PingRequestReader<'a>),
 
-            PingReply(ftl_autogen::protocols::ping::PingReply),
+            PingReply(ftl_autogen::protocols::ping::PingReplyReader<'a>),
+        }
+
+        use ftl_types::message::MessageBody;
+        use ftl_types::message::MessageBuffer;
+        use ftl_types::message::MessageInfo;
+
+        impl<'b> MessageBody for Message<'b> {
+            const MSGINFO: MessageInfo = MessageInfo::from_raw(0); // TODO: remove this
+            type Reader<'a> = Message<'a>;
+
+            fn deserialize<'a>(
+                buffer: &'a MessageBuffer,
+                msginfo: MessageInfo,
+            ) -> Option<Self::Reader<'a>> {
+                match msginfo {
+                    ftl_autogen::protocols::autopilot::NewclientRequest::MSGINFO => {
+                        let reader =
+                            ftl_autogen::protocols::autopilot::NewclientRequest::deserialize(
+                                buffer, msginfo,
+                            )?;
+                        Some(Message::NewclientRequest(reader))
+                    }
+
+                    ftl_autogen::protocols::autopilot::NewclientReply::MSGINFO => {
+                        let reader =
+                            ftl_autogen::protocols::autopilot::NewclientReply::deserialize(
+                                buffer, msginfo,
+                            )?;
+                        Some(Message::NewclientReply(reader))
+                    }
+
+                    ftl_autogen::protocols::ping::PingRequest::MSGINFO => {
+                        let reader = ftl_autogen::protocols::ping::PingRequest::deserialize(
+                            buffer, msginfo,
+                        )?;
+                        Some(Message::PingRequest(reader))
+                    }
+
+                    ftl_autogen::protocols::ping::PingReply::MSGINFO => {
+                        let reader =
+                            ftl_autogen::protocols::ping::PingReply::deserialize(buffer, msginfo)?;
+                        Some(Message::PingReply(reader))
+                    }
+
+                    _ => None,
+                }
+            }
         }
     }
 }

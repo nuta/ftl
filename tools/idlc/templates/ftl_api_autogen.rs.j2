@@ -56,10 +56,34 @@ pub mod apps {
             {% endfor %}
         }
 
-        pub enum Message {
+        pub enum Message<'a> {
             {% for m in app.used_messages %}
-            {{ m.camel_name }}({{ m.ty }}),
+            {{ m.camel_name }}({{ m.ty }}Reader<'a>),
             {% endfor %}
+        }
+
+        use ftl_types::message::MessageBody;
+        use ftl_types::message::MessageInfo;
+        use ftl_types::message::MessageBuffer;
+
+        impl<'b> MessageBody for Message<'b> {
+            const MSGINFO: MessageInfo = MessageInfo::from_raw(0); // TODO: remove this
+            type Reader<'a> = Message<'a>;
+
+            fn deserialize<'a>(
+                buffer: &'a MessageBuffer,
+                msginfo: MessageInfo
+            ) -> Option<Self::Reader<'a>> {
+                match msginfo {
+                    {% for m in app.used_messages %}
+                    {{ m.ty }}::MSGINFO => {
+                        let reader = {{ m.ty }}::deserialize(buffer, msginfo)?;
+                        Some(Message::{{ m.camel_name }}(reader))
+                    },
+                    {% endfor %}
+                    _ => None,
+                }
+            }
         }
     }
     {% endfor %}
