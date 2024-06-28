@@ -66,7 +66,7 @@ pub mod protocols {
                 }
 
                 // FIXME: Support multiple handles.
-                debug_assert!(MessageInfo::from_raw(Self::MSGINFO.as_raw()).num_handles() == 1);
+                debug_assert!(MessageInfo::from_raw(Self::MSGINFO.as_raw()).num_handles() <= 1);
                 {%- for f in m.fields %}
                 {% if f.is_handle %}
                 buffer.handles[0] = self.{{ f.name }}.0;
