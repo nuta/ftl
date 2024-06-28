@@ -104,24 +104,27 @@ fn main() -> Result<()> {
     let idl_file = File::open(args.idl_file)?;
     let idl: IdlFile = serde_json::from_reader(&idl_file)?;
 
+    let mut next_msgid = 1;
     let mut protocols = Vec::new();
     let mut all_messages = Vec::new();
-    for (i, protocol) in idl.protocols.iter().enumerate() {
+    for protocol in idl.protocols {
         let mut messages = Vec::new();
         for rpc in &protocol.rpcs {
             let req_msg = Message {
                 protocol_name: protocol.name.clone(),
                 name: format!("{}Request", CamelCase(&rpc.name)),
-                msgid: i as isize, // TODO: derive a globally unique ID
+                msgid: next_msgid,
                 fields: visit_fields(&rpc.request.fields),
             };
+            next_msgid += 1;
 
             let res_msg = Message {
                 protocol_name: protocol.name.clone(),
                 name: format!("{}Reply", CamelCase(&rpc.name)),
-                msgid: i as isize, // TODO: derive a globally unique ID
+                msgid: next_msgid,
                 fields: visit_fields(&rpc.response.fields),
             };
+            next_msgid += 1;
 
             all_messages.push(req_msg.clone());
             all_messages.push(res_msg.clone());
