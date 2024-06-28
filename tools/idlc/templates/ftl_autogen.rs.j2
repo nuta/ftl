@@ -7,6 +7,7 @@ use ftl_types::message::MessageSerialize;
 use ftl_types::message::MessageDeserialize;
 use ftl_types::message::MessageBuffer;
 use ftl_types::message::MessageInfo;
+use ftl_types::message::HandleOwnership;
 
 pub mod protocols {
     use super::*;
@@ -19,7 +20,24 @@ pub mod protocols {
         #[repr(C)]
         pub struct {{ m.name }} {
             {%- for f in m.fields %}
-            pub {{ f.name }}: {{ f.ty }},
+            {% if not f.is_handle %}
+            pub {{ f.name }}: {{ f.builder_ty }},
+            {%- endif %}
+            {%- endfor %}
+
+            {%- for f in m.fields %}
+            {% if f.is_handle %}
+            pub {{ f.name }}: HandleOwnership,
+            {% endif %}
+            {%- endfor %}
+        }
+
+        #[repr(C)]
+        struct InlinedPart{{ m.name }} {
+            {%- for f in m.fields %}
+            {% if not f.is_handle %}
+            pub {{ f.name }}: {{ f.raw_ty }},
+            {% endif %}
             {%- endfor %}
         }
 
@@ -32,11 +50,19 @@ pub mod protocols {
             );
 
             fn serialize(self, buffer: &mut MessageBuffer) {
-                let dst = buffer as *mut _ as *mut {{ m.name }};
-                let src = &self as *const {{ m.name }};
+                let object = InlinedPart{{ m.name }} {
+                    {%- for f in m.fields %}
+                    {% if not f.is_handle %}
+                    {{ f.name }}: self.{{ f.name }},
+                    {%- endif %}
+                    {%- endfor %}
+                };
+
+                let dst = buffer as *mut _ as *mut InlinedPart{{ m.name }};
+                let src = &object as *const _ as *const InlinedPart{{ m.name }};
 
                 unsafe {
-                    core::ptr::copy_nonoverlapping::<{{ m.name }}>(src, dst, 1);
+                    core::ptr::copy_nonoverlapping::<InlinedPart{{ m.name }}>(src, dst, 1);
                 }
 
                 // Don't call destructors on handles transferred to this buffer.
@@ -71,10 +97,13 @@ pub mod protocols {
             }
 
             {% for f in m.fields %}
-            pub fn {{ f.name }}(&self) -> {{ f.ty }} {
+            {% if f.is_handle %}
+            {% else %}
+            pub fn {{ f.name }}(&self) -> {{ f.builder_ty }} {
                 let m = self.as_ref(self.buffer);
                 m.{{ f.name }}
             }
+            {% endif %}
             {% endfor %}
         }
         {% endfor %}

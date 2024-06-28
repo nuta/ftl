@@ -16,7 +16,9 @@ use serde::Serialize;
 #[derive(Debug, Serialize, Clone)]
 struct Field {
     name: String,
-    ty: String,
+    is_handle: bool,
+    builder_ty: String,
+    raw_ty: String,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -48,7 +50,14 @@ struct App {
     used_messages: Vec<UsedMessage>,
 }
 
-fn resolve_type_name(ty: &idl::Ty) -> String {
+fn resolve_builder_type_name(ty: &idl::Ty) -> String {
+    match ty {
+        idl::Ty::Int32 => "i32".to_string(),
+        idl::Ty::Handle => "ftl_types::handle::HandleId".to_string(),
+    }
+}
+
+fn resolve_raw_type_name(ty: &idl::Ty) -> String {
     match ty {
         idl::Ty::Int32 => "i32".to_string(),
         idl::Ty::Handle => "ftl_types::handle::HandleId".to_string(),
@@ -79,7 +88,9 @@ fn visit_fields(idl_fields: &[idl::Field]) -> Vec<Field> {
     for f in idl_fields {
         fields.push(Field {
             name: f.name.clone(),
-            ty: resolve_type_name(&f.ty),
+            is_handle: f.ty == idl::Ty::Handle,
+            builder_ty: resolve_builder_type_name(&f.ty),
+            raw_ty: resolve_raw_type_name(&f.ty),
         });
     }
 

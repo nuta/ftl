@@ -57,3 +57,7 @@ pub trait MessageDeserialize: Sized {
     fn deserialize<'a>(buffer: &'a MessageBuffer, msginfo: MessageInfo)
         -> Option<Self::Reader<'a>>;
 }
+
+#[derive(Debug, PartialEq, Eq)]
+#[repr(transparent)]
+pub struct HandleOwnership(pub HandleId);

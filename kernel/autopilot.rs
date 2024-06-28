@@ -5,6 +5,7 @@ use alloc::vec::Vec;
 use ftl_autogen::protocols::autopilot::NewclientRequest;
 use ftl_types::error::FtlError;
 use ftl_types::handle::HandleRights;
+use ftl_types::message::HandleOwnership;
 use ftl_types::message::MessageBuffer;
 use ftl_types::message::MessageSerialize;
 use ftl_types::spec::AppSpec;
@@ -102,7 +103,7 @@ impl Autopilot {
                     .unwrap();
 
                 let provider = self.apps.get(provider_name).unwrap();
-                (NewclientRequest { handle: handle_id }).serialize(&mut msgbuffer);
+                (NewclientRequest { handle: HandleOwnership(handle_id) }).serialize(&mut msgbuffer);
 
                 provider
                     .our_ch
