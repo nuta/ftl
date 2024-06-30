@@ -34,6 +34,29 @@ impl Endianess for LittleEndian {
     }
 }
 
+pub struct BigEndian;
+
+impl Endianess for BigEndian {
+    fn into_host_u16(&self, n: u16) -> u16 {
+        u16::from_be(n)
+    }
+    fn into_host_u32(&self, n: u32) -> u32 {
+        u32::from_be(n)
+    }
+    fn into_host_u64(&self, n: u64) -> u64 {
+        u64::from_be(n)
+    }
+    fn from_host_u16(&self, n: u16) -> u16 {
+        u16::to_be(n)
+    }
+    fn from_host_u32(&self, n: u32) -> u32 {
+        u32::to_be(n)
+    }
+    fn from_host_u64(&self, n: u64) -> u64 {
+        u64::to_be(n)
+    }
+}
+
 pub trait Access {}
 pub struct ReadOnly;
 pub struct WriteOnly;
