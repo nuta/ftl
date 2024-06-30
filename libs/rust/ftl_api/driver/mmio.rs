@@ -32,32 +32,16 @@ impl Endianess for LittleEndian {
     }
 }
 
-pub trait WritableReg<T: Copy> {
-    fn write(&self, folio: &mut Folio, value: T) {
-        todo!()
-    }
-}
-
-pub trait ReadableReg<T: Copy> {
-    /// Reads a value from the MMIO region.
-    ///
-    /// # Why is `&mut Folio` required?
-    ///
-    /// This is to ensure that the caller has exclusive access to the MMIO
-    /// region. This is important because reads from MMIO may have side effects
-    /// (e.g. clearing an interrupt) and concurrent access to the same MMIO
-    /// region might lead to unexpected behavior.
-    fn read(&self, folio: &mut Folio, value: T) {
-        todo!()
-    }
-}
-
 pub struct Folio;
 
 pub trait Access {}
+pub struct ReadOnly;
+pub struct WriteOnly;
+pub struct ReadWrite;
 
-pub struct Read;
-impl Access for Read {}
+impl Access for ReadOnly {}
+impl Access for WriteOnly {}
+impl Access for ReadWrite {}
 
 pub struct MmioReg<E: Endianess, A: Access, T: Copy> {
     offset: usize,
@@ -75,7 +59,45 @@ impl<E: Endianess, A: Access, T: Copy> MmioReg<E, A, T> {
             _pd3: PhantomData,
         }
     }
+
+    /// Reads a value from the MMIO region.
+    ///
+    /// # Why is `&mut Folio` required?
+    ///
+    /// This is to ensure that the caller has exclusive access to the MMIO
+    /// region. This is important because reads from MMIO may have side effects
+    /// (e.g. clearing an interrupt) and concurrent access to the same MMIO
+    /// region might lead to unexpected behavior.
+    fn do_read(&self, folio: &mut Folio) -> T {
+        todo!()
+    }
+
+    fn do_write(&self, folio: &mut Folio, value: T) {
+        todo!()
+    }
 }
 
-static A: MmioReg<LittleEndian, Read, u32> = MmioReg::new(0);
+impl <E: Endianess, T: Copy> MmioReg<E, ReadOnly, T> {
+    pub fn read(&self, folio: &mut Folio) -> T {
+        self.do_read(folio)
+    }
+}
+
+impl <E: Endianess, T: Copy> MmioReg<E, WriteOnly, T> {
+    pub fn write(&self, folio: &mut Folio, value: T) {
+        self.do_write(folio, value)
+    }
+}
+
+impl <E: Endianess, T: Copy> MmioReg<E, ReadWrite, T> {
+    pub fn read(&self, folio: &mut Folio) -> T {
+        self.do_read(folio)
+    }
+
+    pub fn write(&self, folio: &mut Folio, value: T) {
+        self.do_write(folio, value)
+    }
+}
+
+static A: MmioReg<LittleEndian, ReadOnly, u32> = MmioReg::new(0);
 
