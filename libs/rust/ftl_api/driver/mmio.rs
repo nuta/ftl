@@ -1,6 +1,6 @@
 use core::marker::PhantomData;
 
-use crate::folio::Folio;
+use crate::folio::MmioFolio;
 
 pub trait Endianess {
     fn into_host_u16(&self, n: u16) -> u16;
@@ -66,7 +66,6 @@ impl Access for ReadOnly {}
 impl Access for WriteOnly {}
 impl Access for ReadWrite {}
 
-#[derive(Clone, Copy, Debug)]
 pub struct MmioReg<E: Endianess, A: Access, T: Copy> {
     offset: usize,
     _pd1: PhantomData<E>,
@@ -86,7 +85,7 @@ impl<E: Endianess, A: Access, T: Copy> MmioReg<E, A, T> {
 
     /// Reads a value from the MMIO region.
     ///
-    /// # Why is `&mut Folio` required?
+    /// # Why is `&mut MmioFolio` required?
     ///
     /// This is to ensure that the caller has exclusive access to the MMIO
     /// region. This is important because reads from MMIO may have side effects
@@ -94,36 +93,36 @@ impl<E: Endianess, A: Access, T: Copy> MmioReg<E, A, T> {
     /// region might lead to unexpected behavior.
     ///
     /// TODO: What about memory ordering?
-    fn do_read(&self, folio: &mut Folio) -> T {
-        let vaddr = folio.vaddr().expect("failed to get vaddr") + self.offset;
+    fn do_read(&self, folio: &mut MmioFolio) -> T {
+        let vaddr = folio.vaddr() + self.offset;
         let value = unsafe { core::ptr::read_volatile(vaddr as *const T) };
         value
     }
 
-    fn do_write(&self, folio: &mut Folio, value: T) {
-        let vaddr = folio.vaddr().expect("failed to get vaddr") + self.offset;
+    fn do_write(&self, folio: &mut MmioFolio, value: T) {
+        let vaddr = folio.vaddr() + self.offset;
         unsafe { core::ptr::write_volatile(vaddr as *mut T, value) };
     }
 }
 
 impl<E: Endianess, T: Copy> MmioReg<E, ReadOnly, T> {
-    pub fn read(&self, folio: &mut Folio) -> T {
+    pub fn read(&self, folio: &mut MmioFolio) -> T {
         self.do_read(folio)
     }
 }
 
 impl<E: Endianess, T: Copy> MmioReg<E, WriteOnly, T> {
-    pub fn write(&self, folio: &mut Folio, value: T) {
+    pub fn write(&self, folio: &mut MmioFolio, value: T) {
         self.do_write(folio, value)
     }
 }
 
 impl<E: Endianess, T: Copy> MmioReg<E, ReadWrite, T> {
-    pub fn read(&self, folio: &mut Folio) -> T {
+    pub fn read(&self, folio: &mut MmioFolio) -> T {
         self.do_read(folio)
     }
 
-    pub fn write(&self, folio: &mut Folio, value: T) {
+    pub fn write(&self, folio: &mut MmioFolio, value: T) {
         self.do_write(folio, value)
     }
 }
