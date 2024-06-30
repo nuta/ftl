@@ -66,7 +66,7 @@ impl Access for ReadOnly {}
 impl Access for WriteOnly {}
 impl Access for ReadWrite {}
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Debug)]
 pub struct MmioReg<E: Endianess, A: Access, T: Copy> {
     offset: usize,
     _pd1: PhantomData<E>,
