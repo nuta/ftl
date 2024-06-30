@@ -10,8 +10,8 @@ use ftl_types::syscall::VsyscallPage;
 use ftl_utils::alignment::align_up;
 
 use crate::arch::PAGE_SIZE;
-use crate::folio::Folio;
 use crate::channel::Channel;
+use crate::folio::Folio;
 use crate::handle::AnyHandle;
 use crate::handle::Handle;
 use crate::handle::HandleTable;

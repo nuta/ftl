@@ -7,9 +7,9 @@ use ftl_types::poll::PollEvent;
 use ftl_types::poll::PollSyscallResult;
 use ftl_types::syscall::SyscallNumber;
 
-use crate::folio::Folio;
 use crate::channel::Channel;
 use crate::cpuvar::current_thread;
+use crate::folio::Folio;
 use crate::handle::AnyHandle;
 use crate::handle::Handle;
 use crate::memory::AllocPagesError;

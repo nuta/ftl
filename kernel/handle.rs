@@ -7,8 +7,8 @@ use ftl_types::handle::HandleRights;
 use ftl_types::handle::HANDLE_ID_MASK;
 use hashbrown::HashMap;
 
-use crate::folio::Folio;
 use crate::channel::Channel;
+use crate::folio::Folio;
 use crate::poll::Poll;
 use crate::ref_counted::SharedRef;
 use crate::thread::Thread;

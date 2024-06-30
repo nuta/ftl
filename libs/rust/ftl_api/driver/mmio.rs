@@ -71,27 +71,30 @@ impl<E: Endianess, A: Access, T: Copy> MmioReg<E, A, T> {
     ///
     /// TODO: What about memory ordering?
     fn do_read(&self, folio: &mut Folio) -> T {
-        todo!()
+        let vaddr = folio.as_ptr() as usize + self.offset;
+        let value = unsafe { core::ptr::read_volatile(vaddr as *const T) };
+        value
     }
 
     fn do_write(&self, folio: &mut Folio, value: T) {
-        todo!()
+        let vaddr = folio.as_ptr() as usize + self.offset;
+        unsafe { core::ptr::write_volatile(vaddr as *mut T, value) };
     }
 }
 
-impl <E: Endianess, T: Copy> MmioReg<E, ReadOnly, T> {
+impl<E: Endianess, T: Copy> MmioReg<E, ReadOnly, T> {
     pub fn read(&self, folio: &mut Folio) -> T {
         self.do_read(folio)
     }
 }
 
-impl <E: Endianess, T: Copy> MmioReg<E, WriteOnly, T> {
+impl<E: Endianess, T: Copy> MmioReg<E, WriteOnly, T> {
     pub fn write(&self, folio: &mut Folio, value: T) {
         self.do_write(folio, value)
     }
 }
 
-impl <E: Endianess, T: Copy> MmioReg<E, ReadWrite, T> {
+impl<E: Endianess, T: Copy> MmioReg<E, ReadWrite, T> {
     pub fn read(&self, folio: &mut Folio) -> T {
         self.do_read(folio)
     }

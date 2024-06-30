@@ -1,6 +1,7 @@
 use ftl_types::error::FtlError;
 
-use crate::{handle::OwnedHandle, syscall};
+use crate::handle::OwnedHandle;
+use crate::syscall;
 
 pub struct Folio {
     handle: OwnedHandle,
@@ -10,7 +11,11 @@ pub struct Folio {
 
 impl Folio {
     pub fn from_handle(handle: OwnedHandle) -> Folio {
-        Folio { handle, vaddr: None, paddr: None }
+        Folio {
+            handle,
+            vaddr: None,
+            paddr: None,
+        }
     }
 
     pub fn create(len: usize) -> Result<Folio, FtlError> {
@@ -43,5 +48,9 @@ impl Folio {
                 Ok(vaddr)
             }
         }
+    }
+
+    pub fn as_ptr<T>(&mut self) -> Result<*mut T, FtlError> {
+        self.vaddr().map(|vaddr| vaddr as *mut T)
     }
 }
