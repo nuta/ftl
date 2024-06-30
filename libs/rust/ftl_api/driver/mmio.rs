@@ -68,6 +68,8 @@ impl<E: Endianess, A: Access, T: Copy> MmioReg<E, A, T> {
     /// region. This is important because reads from MMIO may have side effects
     /// (e.g. clearing an interrupt) and concurrent access to the same MMIO
     /// region might lead to unexpected behavior.
+    ///
+    /// TODO: What about memory ordering?
     fn do_read(&self, folio: &mut Folio) -> T {
         todo!()
     }
@@ -98,6 +100,3 @@ impl <E: Endianess, T: Copy> MmioReg<E, ReadWrite, T> {
         self.do_write(folio, value)
     }
 }
-
-static A: MmioReg<LittleEndian, ReadOnly, u32> = MmioReg::new(0);
-
