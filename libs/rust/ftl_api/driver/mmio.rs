@@ -1,5 +1,7 @@
 use core::marker::PhantomData;
 
+use crate::folio::Folio;
+
 pub trait Endianess {
     fn into_host_u16(&self, n: u16) -> u16;
     fn into_host_u32(&self, n: u32) -> u32;
@@ -31,8 +33,6 @@ impl Endianess for LittleEndian {
         u64::to_le(n)
     }
 }
-
-pub struct Folio;
 
 pub trait Access {}
 pub struct ReadOnly;
