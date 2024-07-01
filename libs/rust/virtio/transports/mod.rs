@@ -15,8 +15,19 @@ const VIRTIO_STATUS_FEAT_OK: u8 = 8;
 
 #[repr(transparent)]
 pub struct IsrStatus(pub u8);
-pub const QUEUE_INTR: u8 = 1 << 0;
-pub const DEVICE_CONFIG_INTR: u8 = 1 << 1;
+
+const QUEUE_INTR: u8 = 1 << 0;
+const DEVICE_CONFIG_INTR: u8 = 1 << 1;
+
+impl IsrStatus {
+    pub fn queue_intr(&self) -> bool {
+        (self.0 & QUEUE_INTR) != 0
+    }
+
+    pub fn device_config_intr(&self) -> bool {
+        (self.0 & DEVICE_CONFIG_INTR) != 0
+    }
+}
 
 pub trait VirtioTransport: Send + Sync {
     fn probe(&mut self) -> Option<DeviceType>;
