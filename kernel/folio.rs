@@ -1,6 +1,7 @@
 use core::borrow::Borrow;
 
 use ftl_types::address::PAddr;
+use ftl_types::address::VAddr;
 use ftl_types::error::FtlError;
 
 use crate::arch;
@@ -44,23 +45,24 @@ impl Folio {
         self.len
     }
 
-    pub fn vaddr(&self) -> Result<usize, FtlError> {
+    pub fn vaddr(&self) -> Result<VAddr, FtlError> {
         if current_thread().borrow().process().is_kernel_process() {
-            match &self.pages {
-                Pages::Anonymous(pages) => Ok(pages.as_ptr() as usize),
+            let vaddr = match &self.pages {
+                Pages::Anonymous(pages) => pages.as_vaddr(),
                 Pages::Mmio { paddr } => {
-                    let vaddr = arch::paddr2vaddr(*paddr).ok_or(FtlError::InvalidArg)?;
-                    Ok(vaddr.as_usize())
+                    arch::paddr2vaddr(*paddr).ok_or(FtlError::InvalidArg)?
                 }
-            }
+            };
+
+            Ok(vaddr)
         } else {
             Err(FtlError::NotSupported)
         }
     }
 
-    pub fn paddr(&self) -> Result<usize, FtlError> {
+    pub fn paddr(&self) -> Result<PAddr, FtlError> {
         match &self.pages {
-            Pages::Mmio { paddr, .. } => Ok(paddr.as_usize()),
+            Pages::Mmio { paddr, .. } => Ok(*paddr),
             _ => Err(FtlError::NotSupported),
         }
     }
