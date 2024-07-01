@@ -236,7 +236,10 @@ impl<'a> AppLoader<'a> {
             .add(Handle::new(thread, HandleRights::NONE))
             .unwrap();
         handles
-            .add(Handle::new(SharedRef::new(Folio::from_allocated_pages(self.memory)), HandleRights::NONE))
+            .add(Handle::new(
+                SharedRef::new(Folio::from_allocated_pages(self.memory)),
+                HandleRights::NONE,
+            ))
             .unwrap();
         handles
             .add(Handle::new(

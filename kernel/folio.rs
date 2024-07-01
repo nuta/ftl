@@ -49,9 +49,7 @@ impl Folio {
         if current_thread().borrow().process().is_kernel_process() {
             let vaddr = match &self.pages {
                 Pages::Anonymous(pages) => pages.as_vaddr(),
-                Pages::Mmio { paddr } => {
-                    arch::paddr2vaddr(*paddr).ok_or(FtlError::InvalidArg)?
-                }
+                Pages::Mmio { paddr } => arch::paddr2vaddr(*paddr).ok_or(FtlError::InvalidArg)?,
             };
 
             Ok(vaddr)
