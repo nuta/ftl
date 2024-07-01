@@ -1,11 +1,11 @@
 [package]
-name = "virtio_blk_app"
+name = "virtio_blk"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
 
 [[bin]]
-name = "virtio_blk_app"
+name = "virtio_blk"
 path = "main.rs"
 
 [dependencies]
