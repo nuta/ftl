@@ -96,6 +96,10 @@ impl AllocatedPages {
         })
     }
 
+    pub fn len(&self) -> usize {
+        self.len
+    }
+
     pub fn as_ptr(&self) -> *mut u8 {
         self.base.as_ptr()
     }
