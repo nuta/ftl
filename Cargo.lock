@@ -284,6 +284,13 @@ name = "ftl_utils"
 version = "0.0.0"
 
 [[package]]
+name = "ftl_virtio"
+version = "0.0.0"
+dependencies = [
+ "ftl_api",
+]
+
+[[package]]
 name = "hashbrown"
 version = "0.14.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -561,6 +568,15 @@ name = "version_check"
 version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
+
+[[package]]
+name = "virtio_blk_app"
+version = "0.0.0"
+dependencies = [
+ "ftl_api",
+ "ftl_api_autogen",
+ "ftl_virtio",
+]
 
 [[package]]
 name = "walkdir"

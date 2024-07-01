@@ -94,13 +94,16 @@ impl<E: Endianess, A: Access, T: Copy> MmioReg<E, A, T> {
     ///
     /// TODO: What about memory ordering?
     fn do_read(&self, folio: &mut MmioFolio) -> T {
-        let vaddr = folio.vaddr() + self.offset;
-        let value = unsafe { core::ptr::read_volatile(vaddr as *const T) };
-        value
+        self.do_read_with_offset(folio, 0)
+    }
+
+    pub fn do_read_with_offset(&self, folio: &mut MmioFolio, offset: usize) -> T {
+        let vaddr = folio.vaddr().as_usize() + self.offset + offset;
+        unsafe { core::ptr::read_volatile(vaddr as *const T) }
     }
 
     fn do_write(&self, folio: &mut MmioFolio, value: T) {
-        let vaddr = folio.vaddr() + self.offset;
+        let vaddr = folio.vaddr().as_usize() + self.offset;
         unsafe { core::ptr::write_volatile(vaddr as *mut T, value) };
     }
 }
@@ -108,6 +111,10 @@ impl<E: Endianess, A: Access, T: Copy> MmioReg<E, A, T> {
 impl<E: Endianess, T: Copy> MmioReg<E, ReadOnly, T> {
     pub fn read(&self, folio: &mut MmioFolio) -> T {
         self.do_read(folio)
+    }
+
+    pub fn read_with_offset(&self, folio: &mut MmioFolio, offset: usize) -> T {
+        self.do_read_with_offset(folio, offset)
     }
 }
 
@@ -120,6 +127,10 @@ impl<E: Endianess, T: Copy> MmioReg<E, WriteOnly, T> {
 impl<E: Endianess, T: Copy> MmioReg<E, ReadWrite, T> {
     pub fn read(&self, folio: &mut MmioFolio) -> T {
         self.do_read(folio)
+    }
+
+    pub fn read_with_offset(&self, folio: &mut MmioFolio, offset: usize) -> T {
+        self.do_read_with_offset(folio, offset)
     }
 
     pub fn write(&self, folio: &mut MmioFolio, value: T) {
