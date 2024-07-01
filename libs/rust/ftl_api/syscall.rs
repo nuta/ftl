@@ -94,13 +94,13 @@ pub fn folio_create_mmio(paddr: usize, len: usize) -> Result<HandleId, FtlError>
     Ok(handle_id)
 }
 
-pub fn folio_paddr(handle: HandleId) -> Result<usize, FtlError> {
-    let ret = syscall1(SyscallNumber::FolioPAddr, handle.as_isize())?;
+pub fn folio_vaddr(handle: HandleId) -> Result<usize, FtlError> {
+    let ret = syscall1(SyscallNumber::FolioVAddr, handle.as_isize())?;
     Ok(ret as usize)
 }
 
-pub fn folio_vaddr(handle: HandleId) -> Result<usize, FtlError> {
-    let ret = syscall1(SyscallNumber::FolioVAddr, handle.as_isize())?;
+pub fn folio_paddr(handle: HandleId) -> Result<usize, FtlError> {
+    let ret = syscall1(SyscallNumber::FolioPAddr, handle.as_isize())?;
     Ok(ret as usize)
 }
 
