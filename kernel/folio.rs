@@ -54,6 +54,7 @@ impl Folio {
 
             Ok(vaddr)
         } else {
+            // TODO: Map this folio into the current process' address space.
             Err(FtlError::NotSupported)
         }
     }
