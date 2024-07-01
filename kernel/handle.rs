@@ -64,6 +64,13 @@ impl AnyHandle {
             _ => Err(FtlError::UnexpectedHandleType),
         }
     }
+
+    pub fn as_folio(&self) -> Result<&Handle<Folio>, FtlError> {
+        match self {
+            AnyHandle::Folio(ref folio) => Ok(folio),
+            _ => Err(FtlError::UnexpectedHandleType),
+        }
+    }
 }
 
 impl fmt::Debug for AnyHandle {
