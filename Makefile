@@ -28,7 +28,7 @@ QEMU      ?= qemu-system-riscv64
 QEMUFLAGS += -machine virt -m 256 -bios default
 else ifeq ($(ARCH),arm64)
 QEMU      ?= qemu-system-aarch64
-QEMUFLAGS += -machine virt -cpu neoverse-v1 -m 256 -bios default
+QEMUFLAGS += -machine virt -cpu neoverse-v1 -m 256
 else
 $(error "Unknown ARCH: $(ARCH)")
 endif
