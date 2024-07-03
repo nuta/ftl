@@ -23,14 +23,22 @@ else
 BUILD := debug
 endif
 
-QEMU     ?= qemu-system-riscv64
+ifeq ($(ARCH),riscv64)
+QEMU      ?= qemu-system-riscv64
+QEMUFLAGS += -machine virt -m 256 -bios default
+else ifeq ($(ARCH),arm64)
+QEMU      ?= qemu-system-aarch64
+QEMUFLAGS += -machine virt -cpu neoverse-v1 -m 256 -bios default
+else
+$(error "Unknown ARCH: $(ARCH)")
+endif
+
 CARGO    ?= cargo
 PROGRESS ?= printf "  \\033[1;96m%8s\\033[0m  \\033[1;m%s\\033[0m\\n"
 
 RUSTFLAGS += -Z macro-backtrace
 CARGOFLAGS += -Z build-std=core,alloc -Z build-std-features=compiler-builtins-mem
 
-QEMUFLAGS += -machine virt -m 256 -bios default
 QEMUFLAGS += -nographic -serial mon:stdio --no-reboot
 QEMUFLAGS += -d cpu_reset,unimp,guest_errors,int -D qemu.log
 QEMUFLAGS += -global virtio-mmio.force-legacy=false
