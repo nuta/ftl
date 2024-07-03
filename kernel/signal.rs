@@ -47,13 +47,26 @@ impl Signal {
         let mut mutable = self.mutable.lock();
         mutable.pending |= or_mask;
 
+        // TODO: Wake only one thread. Others will see empty value and go back
+        //       to sleep.
         self.sleep_point.wake_all();
 
+        // TODO: EPOLLEXCLUSIVE-like behavior to prevent thundering herd
         for poller in &mutable.pollers {
             poller.set_ready(PollEvent::READABLE);
         }
 
         Ok(())
+    }
+
+    pub fn clear(&self) -> Result<SignalBits, FtlError> {
+        let mut mutable = self.mutable.lock();
+        let value = mutable.pending.clear();
+        if value.is_empty() {
+            return Err(FtlError::WouldBlock);
+        }
+
+        Ok(value)
     }
 
     pub fn wait(&self) -> Result<SignalBits, FtlError> {
