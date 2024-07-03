@@ -2,6 +2,17 @@ use core::arch::asm;
 
 use ftl_types::address::{PAddr, VAddr};
 
+mod backtrace;
+mod cpuvar;
+mod thread;
+
+pub use backtrace::backtrace;
+pub use cpuvar::cpuvar;
+pub use cpuvar::set_cpuvar;
+pub use cpuvar::CpuVar;
+pub use thread::yield_cpu;
+pub use thread::Thread;
+
 pub const PAGE_SIZE: usize = 4096;
 pub const NUM_CPUS_MAX: usize = 8;
 

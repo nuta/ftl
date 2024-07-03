@@ -26,6 +26,9 @@ endif
 ifeq ($(ARCH),riscv64)
 QEMU      ?= qemu-system-riscv64
 QEMUFLAGS += -machine virt -m 256 -bios default
+QEMUFLAGS += -global virtio-mmio.force-legacy=false
+QEMUFLAGS += -drive id=drive0,file=disk.img,format=raw
+QEMUFLAGS += -device virtio-blk-device,drive=drive0,bus=virtio-mmio-bus.0
 else ifeq ($(ARCH),arm64)
 QEMU      ?= qemu-system-aarch64
 QEMUFLAGS += -machine virt -cpu neoverse-v1 -m 256
@@ -41,9 +44,6 @@ CARGOFLAGS += -Z build-std=core,alloc -Z build-std-features=compiler-builtins-me
 
 QEMUFLAGS += -nographic -serial mon:stdio --no-reboot
 QEMUFLAGS += -d cpu_reset,unimp,guest_errors,int -D qemu.log
-QEMUFLAGS += -global virtio-mmio.force-legacy=false
-QEMUFLAGS += -drive id=drive0,file=disk.img,format=raw
-QEMUFLAGS += -device virtio-blk-device,drive=drive0,bus=virtio-mmio-bus.0
 QEMUFLAGS += $(if $(GDB),-gdb tcp::7789 -S)
 
 app_elfs := $(foreach app,$(APPS),build/$(app).elf)
