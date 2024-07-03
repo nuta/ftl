@@ -18,6 +18,7 @@ mod autopilot;
 mod bootfs;
 mod channel;
 mod folio;
+mod signal;
 mod handle;
 mod memory;
 mod panic;
