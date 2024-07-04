@@ -47,6 +47,8 @@ impl Channel {
     ) -> Result<(), FtlError> {
         msg.serialize(buffer);
 
+        crate::info!("send_with_buffer");
+
         // TODO: return send error to keep owning handles
         // TODO: Optimize parameter order to avoid unnecessary register swaps.
         syscall::channel_send(self.handle.id(), M::MSGINFO, buffer)

@@ -20,6 +20,7 @@ enum Context {
 #[ftl_api::main]
 pub fn main(mut env: Environ) {
     info!("start main...");
+
     let mut mainloop = Mainloop::<Context, Message>::new().unwrap();
     mainloop
         .add_channel(env.autopilot_ch.take().unwrap(), Context::Autopilot)
@@ -45,10 +46,12 @@ pub fn main(mut env: Environ) {
                         );
                         *counter += 1;
 
+                        info!("build reply");
                         let reply = PingReply {
                             int_value2: *counter,
                             str_value2: StringField::try_from("howdy!").unwrap(),
                         };
+                        info!("reply");
                         if let Err(err) = ch.send_with_buffer(&mut buffer, reply) {
                             info!("failed to reply: {:?}", err);
                         }
