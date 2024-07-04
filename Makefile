@@ -5,7 +5,7 @@ V       ?=            # "1" to enable verbose output
 STARTUP ?= apps/hello
 
 # Note: Don't forget to update boot.spec.json as well!
-APPS    ?= apps/ping apps/pong # apps/virtio_blk
+APPS    ?= apps/ping apps/pong apps/virtio_blk
 
 # Disable builtin implicit rules and variables.
 MAKEFLAGS += --no-builtin-rules --no-builtin-variables
@@ -27,14 +27,14 @@ ifeq ($(ARCH),riscv64)
 QEMU      ?= qemu-system-riscv64
 QEMUFLAGS += -machine virt -m 256 -bios default
 QEMUFLAGS += -global virtio-mmio.force-legacy=false
-QEMUFLAGS += -drive id=drive0,file=disk.img,format=raw
+QEMUFLAGS += -drive id=drive0,file=disk.img,format=raw,if=none
 QEMUFLAGS += -device virtio-blk-device,drive=drive0,bus=virtio-mmio-bus.0
 else ifeq ($(ARCH),arm64)
 QEMU      ?= qemu-system-aarch64
 QEMUFLAGS += -machine virt -cpu cortex-a53 -m 256
 QEMUFLAGS += -global virtio-mmio.force-legacy=false
-QEMUFLAGS += -drive id=drive0,file=disk.img,format=raw
-# QEMUFLAGS += -device virtio-blk-device,drive=drive0,bus=virtio-mmio-bus.0
+QEMUFLAGS += -drive id=drive0,file=disk.img,format=raw,if=none
+QEMUFLAGS += -device virtio-blk-device,drive=drive0,bus=virtio-mmio-bus.0
 else
 $(error "Unknown ARCH: $(ARCH)")
 endif

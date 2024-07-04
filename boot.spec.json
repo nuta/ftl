@@ -4,7 +4,8 @@
     "spec": {
         "autostart_apps": [
             "ping",
-            "pong"
+            "pong",
+            "virtio_blk"
         ]
     }
 }
