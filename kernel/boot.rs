@@ -1,5 +1,4 @@
 use ftl_inlinedvec::InlinedVec;
-use ftl_types::idl::StringField;
 use ftl_types::spec::Spec;
 use ftl_types::spec::SpecFile;
 use ftl_utils::byte_size::ByteSize;
@@ -57,16 +56,6 @@ pub fn boot(cpu_id: CpuId, bootinfo: BootInfo) -> ! {
 
     let mut autopilot = Autopilot::new();
     autopilot.boot(&bootfs, &boot_spec, &devices);
-
-    #[no_mangle]
-    #[inline(never)]
-    pub extern "C" fn foo() -> StringField<32> {
-        StringField::<32>::try_from("howdy!").unwrap()
-    }
-    println!("StringField...");
-    let s = foo();
-    println!("StringField: {:?}", s);
-    println!("done");
 
     println!("starting...");
     arch::yield_cpu();
