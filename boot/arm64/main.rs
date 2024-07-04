@@ -30,6 +30,7 @@ unsafe extern "C" fn arm64_boot(cpuid: u64, dtb_addr: u64) -> ! {
     }
 
     console_write(b"\nFTL BOOTING...\n\n");
+    loop {}
 
     let bss_start = &__bss as *const _ as usize;
     let bss_end = &__bss_end as *const _ as usize;
