@@ -154,7 +154,6 @@ impl Thread {
     }
 
     pub fn resume(&self) -> ! {
-        println!("Resuming thread {:p}", self);
         resume(&self.context as *const _ as *mut _);
     }
 }

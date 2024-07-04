@@ -51,8 +51,6 @@ pub fn walk_device_nodes(dtb_addr: *const u8) -> Vec<Device> {
 
                         interrupts = Some(list);
                     }
-
-                    println!("{:?}: interrupts: {:?}", compatible, interrupts);
                 }
                 _ => {}
             }
