@@ -14,7 +14,6 @@ extern "C" fn kernel_entry() -> ! {
             r#"
                 mov lr, x19   // The desired entry point for the thread.
                 mov x0, x20    // The argument for the thread.
-                b .
                 ret
             "#,
             options(noreturn)

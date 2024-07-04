@@ -2,8 +2,8 @@
 .global start
 start:
     // Set the stack pointer.
-    adr  x0, __stack_top
-    mov  sp, x0
+    adr  x30, __stack_top
+    mov  sp, x30
 
     // Initialize the user library and run main().
     bl ftl_app_main

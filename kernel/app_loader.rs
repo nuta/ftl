@@ -225,7 +225,6 @@ impl<'a> AppLoader<'a> {
         devices: Vec<(String, Vec<ftl_types::environ::Device>)>,
     ) -> Result<SharedRef<Process>, Error> {
         self.load_segments();
-
         self.relocate_rela_dyn()?;
 
         let entry = unsafe { core::mem::transmute(self.entry_addr()) };
