@@ -20,18 +20,6 @@ extern "C" {
 
 #[no_mangle]
 unsafe extern "C" fn arm64_boot(cpuid: u64, dtb_addr: u64) -> ! {
-    pub fn console_write(bytes: &[u8]) {
-        let ptr: *mut u8 = 0x9000000 as *mut u8;
-        unsafe {
-            for byte in bytes {
-                core::ptr::write_volatile(ptr, *byte);
-            }
-        }
-    }
-
-    console_write(b"\nFTL BOOTING...\n\n");
-    loop {}
-
     let bss_start = &__bss as *const _ as usize;
     let bss_end = &__bss_end as *const _ as usize;
     let free_ram = &__free_ram as *const _ as usize;
