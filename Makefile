@@ -1,4 +1,4 @@
-ARCH    ?= riscv64
+ARCH    ?= arm64# riscv64
 MACHINE ?= qemu-virt
 RELEASE ?=            # "1" to build release version
 V       ?=            # "1" to enable verbose output
@@ -31,7 +31,7 @@ QEMUFLAGS += -drive id=drive0,file=disk.img,format=raw
 QEMUFLAGS += -device virtio-blk-device,drive=drive0,bus=virtio-mmio-bus.0
 else ifeq ($(ARCH),arm64)
 QEMU      ?= qemu-system-aarch64
-QEMUFLAGS += -machine virt -cpu neoverse-v1 -m 256
+QEMUFLAGS += -machine virt -cpu cortex-a53 -m 256
 else
 $(error "Unknown ARCH: $(ARCH)")
 endif
@@ -97,7 +97,7 @@ build/bootfs.bin: build/ftl_mkbootfs $(app_elfs) Makefile
 	for app_elf in $(app_elfs); do \
 		app_name=$$(basename $${app_elf%.elf}); \
 		mkdir -p build/bootfs/apps/$${app_name}; \
-		cp $${app_elf} build/bootfs/apps/$${app_name}/app.elf; \
+		cp $${app_elf}.stripped build/bootfs/apps/$${app_name}/app.elf; \
 		cp apps/$${app_name}/app.spec.json build/bootfs/apps/$${app_name}/app.spec.json; \
 	done
 	$(PROGRESS) "MKBOOTFS" "$(@)"
@@ -116,6 +116,7 @@ build/%.elf: $(sources) libs/rust/ftl_autogen/lib.rs Makefile
 		--target libs/rust/ftl_api/arch/$(ARCH)/$(ARCH)-user.json \
 		--manifest-path $(patsubst build/%.elf,%,$(@))/Cargo.toml
 	cp build/cargo/$(ARCH)-user/$(BUILD)/$(patsubst build/apps/%.elf,%,$(@)) $(@)
+	$(OBJCOPY) --strip-all --strip-debug $(@) $(@).stripped
 
 build/ftl_idlc: $(shell find tools/idlc libs/rust/ftl_types -name '*.rs') $(shell find tools/idlc -name '*.j2')
 	mkdir -p $(@D)

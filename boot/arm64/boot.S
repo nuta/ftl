@@ -1,6 +1,7 @@
 .text
-.global _start
-_start:
+.section ".text.boot", "ax"
+.global boot
+boot:
     // Set the stack pointer.
     ldr  x0, =__boot_stack_top
     mov  sp, x0
