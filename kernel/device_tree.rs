@@ -15,6 +15,11 @@ pub struct Device {
 }
 
 pub fn walk_device_nodes(dtb_addr: *const u8) -> Vec<Device> {
+    if dtb_addr.is_null() {
+        println!("no device tree found: dtb_addr is null");
+        return Vec::new();
+    }
+
     let devtree = unsafe {
         // Check  the magic number and read the size of the device tree.
         let dtb_magic = { slice::from_raw_parts(dtb_addr, size_of::<fdt_header>()) };

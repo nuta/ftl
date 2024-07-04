@@ -5,7 +5,7 @@ V       ?=            # "1" to enable verbose output
 STARTUP ?= apps/hello
 
 # Note: Don't forget to update boot.spec.json as well!
-APPS    ?= apps/ping apps/pong apps/virtio_blk
+APPS    ?= apps/ping apps/pong # apps/virtio_blk
 
 # Disable builtin implicit rules and variables.
 MAKEFLAGS += --no-builtin-rules --no-builtin-variables
@@ -38,6 +38,7 @@ endif
 
 CARGO    ?= cargo
 PROGRESS ?= printf "  \\033[1;96m%8s\\033[0m  \\033[1;m%s\\033[0m\\n"
+OBJCOPY  ?= llvm-objcopy
 
 RUSTFLAGS += -Z macro-backtrace
 CARGOFLAGS += -Z build-std=core,alloc -Z build-std-features=compiler-builtins-mem

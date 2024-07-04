@@ -34,10 +34,29 @@ pub extern "C" fn yield_cpu() {
     unsafe {
         asm!(
             r#"
-                // ld a0, {context_offset}(tp)
+                mrs x0, tpidr_el0
+                ldr x0, [x0, #{context_offset}]
+
+                stp x19, x20, [x0, #{x19_offset}]
+                stp x21, x22, [x0, #{x21_offset}]
+                stp x23, x24, [x0, #{x23_offset}]
+                stp x25, x26, [x0, #{x25_offset}]
+                stp x27, x28, [x0, #{x27_offset}]
+                stp x29, x30, [x0, #{x29_offset}]
+
+                mov x1, sp
+                str x1, [x0, #{sp_offset}]
+
                 b {switch_to_next}
             "#,
             context_offset = const offset_of!(CpuVar, context),
+            x19_offset = const offset_of!(Context, x19),
+            x21_offset = const offset_of!(Context, x21),
+            x23_offset = const offset_of!(Context, x23),
+            x25_offset = const offset_of!(Context, x25),
+            x27_offset = const offset_of!(Context, x27),
+            x29_offset = const offset_of!(Context, fp /* aka x29 */),
+            sp_offset = const offset_of!(Context, sp),
             switch_to_next = sym switch_to_next,
             options(noreturn)
         )
@@ -46,7 +65,37 @@ pub extern "C" fn yield_cpu() {
 
 /// Resumes a thread.
 fn resume(next: *mut Context) -> ! {
-    todo!()
+    unsafe {
+        asm!(
+            r#"
+                // Update CpuVar.arch.context
+                mrs x1, tpidr_el0
+                str x0, [x1, #{context_offset}]
+
+                ldp x19, x20, [x0, #{x19_offset}]
+                ldp x21, x22, [x0, #{x21_offset}]
+                ldp x23, x24, [x0, #{x23_offset}]
+                ldp x25, x26, [x0, #{x25_offset}]
+                ldp x27, x28, [x0, #{x27_offset}]
+                ldp x29, x30, [x0, #{x29_offset}]
+
+                ldr x0, [x0, #{sp_offset}]
+                mov sp, x0
+
+                ret
+            "#,
+            in ("x0") next as usize,
+            context_offset = const offset_of!(CpuVar, context),
+            x19_offset = const offset_of!(Context, x19),
+            x21_offset = const offset_of!(Context, x21),
+            x23_offset = const offset_of!(Context, x23),
+            x25_offset = const offset_of!(Context, x25),
+            x27_offset = const offset_of!(Context, x27),
+            x29_offset = const offset_of!(Context, fp /* aka x29 */),
+            sp_offset = const offset_of!(Context, sp),
+            options(noreturn)
+        )
+    }
 }
 
 /// Context of a thread.

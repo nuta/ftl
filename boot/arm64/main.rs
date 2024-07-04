@@ -19,7 +19,7 @@ extern "C" {
 }
 
 #[no_mangle]
-unsafe extern "C" fn arm64_boot(cpuid: u64, dtb_addr: u64) -> ! {
+unsafe extern "C" fn arm64_boot(dtb_addr: u64) -> ! {
     let bss_start = &__bss as *const _ as usize;
     let bss_end = &__bss_end as *const _ as usize;
     let free_ram = &__free_ram as *const _ as usize;
@@ -37,7 +37,7 @@ unsafe extern "C" fn arm64_boot(cpuid: u64, dtb_addr: u64) -> ! {
         .expect("too many free mems");
 
     ftl_kernel::boot::boot(
-        CpuId::new(cpuid.try_into().expect("too big cpuid")),
+        CpuId::new(0 /* TODO: support multi-processors */),
         BootInfo {
             free_mems,
             dtb_addr: dtb_addr as *const u8,
