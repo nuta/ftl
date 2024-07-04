@@ -25,6 +25,7 @@
         ]
     },
     "relocation-model": "static",
+    "frame-pointer": "always",
     "stack-probes": {
       "kind": "inline"
     },

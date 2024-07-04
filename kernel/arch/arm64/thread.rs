@@ -1,7 +1,9 @@
-use core::{arch::asm, mem::offset_of};
+use core::arch::asm;
+use core::mem::offset_of;
 
 use super::cpuvar::CpuVar;
-use crate::{folio::Folio, scheduler::GLOBAL_SCHEDULER};
+use crate::folio::Folio;
+use crate::scheduler::GLOBAL_SCHEDULER;
 
 /// The entry point of kernel threads.
 #[no_mangle]
@@ -18,7 +20,6 @@ extern "C" fn kernel_entry() -> ! {
         )
     }
 }
-
 
 fn switch_to_next() {
     GLOBAL_SCHEDULER.yield_cpu();

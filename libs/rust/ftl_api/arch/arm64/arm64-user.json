@@ -25,6 +25,7 @@
     },
     "static-position-independent-executables": true,
     "relocation-model": "pie",
+    "frame-pointer": "always",
     "stack-probes": {
       "kind": "inline"
     },

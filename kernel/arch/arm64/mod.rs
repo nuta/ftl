@@ -1,6 +1,7 @@
 use core::arch::asm;
 
-use ftl_types::address::{PAddr, VAddr};
+use ftl_types::address::PAddr;
+use ftl_types::address::VAddr;
 
 mod backtrace;
 mod cpuvar;
@@ -37,11 +38,10 @@ pub fn halt() -> ! {
 pub fn console_write(bytes: &[u8]) {
     let ptr: *mut u8 = 0x9000000 as *mut u8;
     for byte in bytes {
-            unsafe {
+        unsafe {
             core::ptr::write_volatile(ptr, *byte);
         }
     }
 }
 
-pub fn init() {
-}
+pub fn init() {}
