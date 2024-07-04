@@ -32,6 +32,9 @@ QEMUFLAGS += -device virtio-blk-device,drive=drive0,bus=virtio-mmio-bus.0
 else ifeq ($(ARCH),arm64)
 QEMU      ?= qemu-system-aarch64
 QEMUFLAGS += -machine virt -cpu cortex-a53 -m 256
+QEMUFLAGS += -global virtio-mmio.force-legacy=false
+QEMUFLAGS += -drive id=drive0,file=disk.img,format=raw
+# QEMUFLAGS += -device virtio-blk-device,drive=drive0,bus=virtio-mmio-bus.0
 else
 $(error "Unknown ARCH: $(ARCH)")
 endif

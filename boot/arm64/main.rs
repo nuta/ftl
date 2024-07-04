@@ -19,7 +19,7 @@ extern "C" {
 }
 
 #[no_mangle]
-unsafe extern "C" fn arm64_boot(dtb_addr: u64) -> ! {
+unsafe extern "C" fn arm64_boot() -> ! {
     let bss_start = &__bss as *const _ as usize;
     let bss_end = &__bss_end as *const _ as usize;
     let free_ram = &__free_ram as *const _ as usize;
@@ -35,6 +35,12 @@ unsafe extern "C" fn arm64_boot(dtb_addr: u64) -> ! {
             size: ByteSize(free_ram_end - free_ram),
         })
         .expect("too many free mems");
+
+    // > For guests booting as “bare-metal” (any other kind of boot), the DTB
+    // > is at the start of RAM (0x4000_0000)
+    // >
+    // > https://www.qemu.org/docs/master/system/arm/virt.html
+    let dtb_addr = 0x4000_0000;
 
     ftl_kernel::boot::boot(
         CpuId::new(0 /* TODO: support multi-processors */),
