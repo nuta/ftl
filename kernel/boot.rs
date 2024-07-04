@@ -57,6 +57,7 @@ pub fn boot(cpu_id: CpuId, bootinfo: BootInfo) -> ! {
     let mut autopilot = Autopilot::new();
     autopilot.boot(&bootfs, &boot_spec, &devices);
 
+    println!("starting...");
     arch::yield_cpu();
 
     panic!("halt");

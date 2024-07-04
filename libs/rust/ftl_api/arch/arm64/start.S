@@ -1,16 +1,15 @@
 .text
-.global _start
-_start:
+.global start
+start:
     // Set the stack pointer.
-    ldr  x0, =__stack_top
+    adr  x0, __stack_top
     mov  sp, x0
 
     // Initialize the user library and run main().
-    bl arm64_boot
+    bl ftl_app_main
 
-.global halt
-halt:
-    b halt
+    // TODO: Call process_exit system call instead
+    b .
 
 .section .bss  // .bss, not .data to avoid having zeroes in the ELF file
 .balign 16

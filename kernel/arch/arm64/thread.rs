@@ -14,6 +14,7 @@ extern "C" fn kernel_entry() -> ! {
             r#"
                 mov lr, x19   // The desired entry point for the thread.
                 mov x0, x20    // The argument for the thread.
+                b .
                 ret
             "#,
             options(noreturn)
@@ -30,6 +31,7 @@ fn switch_to_next() {
 /// - To get the correct return address from ra. #[naked] prevents inlining.
 /// - To eliminate the needless prologue.
 #[naked]
+#[no_mangle]
 pub extern "C" fn yield_cpu() {
     unsafe {
         asm!(
@@ -64,6 +66,7 @@ pub extern "C" fn yield_cpu() {
 }
 
 /// Resumes a thread.
+#[no_mangle]
 fn resume(next: *mut Context) -> ! {
     unsafe {
         asm!(
@@ -79,8 +82,8 @@ fn resume(next: *mut Context) -> ! {
                 ldp x27, x28, [x0, #{x27_offset}]
                 ldp x29, x30, [x0, #{x29_offset}]
 
-                ldr x0, [x0, #{sp_offset}]
-                mov sp, x0
+                ldr x1, [x0, #{sp_offset}]
+                mov sp, x1
 
                 ret
             "#,
@@ -141,6 +144,7 @@ impl Thread {
         let sp = stack_folio.vaddr().unwrap().as_usize() + stack_size;
         Thread {
             context: Context {
+                lr: kernel_entry as usize,
                 sp,
                 x19: pc,
                 x20: arg,
