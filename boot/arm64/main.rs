@@ -34,9 +34,7 @@ unsafe extern "C" fn arm64_boot(dtb_addr: u64 /* docs/cpu_templates/boot-protoco
         }
     }
 
-
-    console_write(b"\nYAY HELLO FROM ARM64 BOOT\n\n");
-    loop {}
+    console_write(b"\nbooting FTL.....\n\n");
 
     // Clear bss section.
     core::ptr::write_bytes(bss_start as *mut u8, 0, bss_end - bss_start);
