@@ -6,3 +6,4 @@
 *.elf
 *.map
 *.pcap
+*.pe

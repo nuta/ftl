@@ -87,17 +87,21 @@ disk.img:
 	$(PROGRESS) "GEN" "$(@)"
 	dd if=/dev/zero of=$(@) bs=1M count=8
 
-ftl.elf: $(sources) libs/rust/ftl_autogen/lib.rs Makefile build/bootfs.bin
+ftl.elf: $(sources) libs/rust/ftl_autogen/lib.rs build/bootfs.bin
 	$(PROGRESS) "CARGO" "boot/$(ARCH)"
 	RUSTFLAGS="$(RUSTFLAGS)" CARGO_TARGET_DIR="build/cargo" $(CARGO) build $(CARGOFLAGS) \
 		--target boot/$(ARCH)/$(ARCH)-$(MACHINE).json \
 		--manifest-path boot/$(ARCH)/Cargo.toml
 	cp build/cargo/$(ARCH)-$(MACHINE)/$(BUILD)/boot_$(ARCH) $(@)
 
+ftl.pe: ftl.elf
+	$(PROGRESS) "OBJCOPY" $(@)
+	objcopy -O binary --strip-all $< $(@)
+
 build/startup.elf: build/$(STARTUP).elf
 	cp $< $@
 
-build/bootfs.bin: build/ftl_mkbootfs $(app_elfs) Makefile
+build/bootfs.bin: build/ftl_mkbootfs $(app_elfs)
 	rm -rf build/bootfs
 	mkdir -p build/bootfs
 	mkdir -p build/bootfs/cfg
@@ -115,7 +119,7 @@ build/bootfs.bin: build/ftl_mkbootfs $(app_elfs) Makefile
 #       a change in compiler flags. Indeed it is, but it doesn't affect the output binary.
 #
 #       I'll file an issue on rust-lang/rust to hear  community's opinion.
-build/%.elf: $(sources) libs/rust/ftl_autogen/lib.rs Makefile
+build/%.elf: libs/rust/ftl_autogen/lib.rs
 	$(PROGRESS) "CARGO" "$(@)"
 	mkdir -p $(@D)
 	RUSTFLAGS="$(RUSTFLAGS)" \
@@ -146,7 +150,7 @@ build/ftl_mkbootfs: $(shell find tools/mkbootfs -name '*.rs')
 			--manifest-path tools/mkbootfs/Cargo.toml
 	mv build/cargo/$(BUILD)/ftl_mkbootfs $(@)
 
-libs/rust/ftl_autogen/lib.rs: idl.json build/ftl_idlc $(shell find $(APPS) -name '*.spec.json') Makefile
+libs/rust/ftl_autogen/lib.rs: idl.json build/ftl_idlc $(shell find $(APPS) -name '*.spec.json')
 	mkdir -p build
 	$(PROGRESS) "ILDC" "$(@)"
 	./build/ftl_idlc \
