@@ -37,7 +37,7 @@ unsafe extern "C" fn arm64_boot() -> ! {
     console_write(b"in arm64_boot\n");
 
     // Clear bss section.
-    console_write(b"filling bss... {x:}\n", bss_start as *mut u8 as usize);
+    ftl_kernel::println!("filling bss... {:x}\n", bss_start as *mut u8 as usize);
     core::ptr::write_bytes(bss_start as *mut u8, 0, bss_end - bss_start);
     console_write(b"filled bss...\n");
 

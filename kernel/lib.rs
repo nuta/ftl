@@ -7,7 +7,7 @@
 extern crate alloc;
 
 #[macro_use]
-mod print;
+pub mod print;
 
 pub mod boot;
 pub mod cpuvar;

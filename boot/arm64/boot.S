@@ -87,7 +87,7 @@ jump_to_rust:
 
     b .
 
-.section ".bss"
+.section ".data"
 .balign 4096
 __page_table_l0:
     .space 4096
