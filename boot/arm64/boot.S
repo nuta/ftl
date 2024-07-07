@@ -74,7 +74,6 @@ enable_mmu:
     ldr  x10, =0x30d00801 // Lttile Endian, MMU enabled, Don't disable I/D-cache
     dsb ish
     isb
-    b .
     msr  sctlr_el1, x10
     isb
 

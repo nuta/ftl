@@ -25,8 +25,21 @@ unsafe extern "C" fn arm64_boot() -> ! {
     let free_ram = &__free_ram as *const _ as usize;
     let free_ram_end = &__free_ram_end as *const _ as usize;
 
+    pub fn console_write(bytes: &[u8]) {
+        let ptr: *mut u8 = 0x9000000 as *mut u8;
+        for byte in bytes {
+            unsafe {
+                core::ptr::write_volatile(ptr, *byte);
+            }
+        }
+    }
+
+    console_write(b"in arm64_boot\n");
+
     // Clear bss section.
+    console_write(b"filling bss...\n");
     core::ptr::write_bytes(bss_start as *mut u8, 0, bss_end - bss_start);
+    console_write(b"filled bss...\n");
 
     let mut free_mems = InlinedVec::<FreeMem, 8>::new();
     free_mems
