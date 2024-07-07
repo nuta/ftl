@@ -8,14 +8,17 @@ build_page_table:
     // Level-0 table: Only 1 entry, pointing to the L1 table.
     adrp x10, __page_table_l0
     add  x10, x10, :lo12:__page_table_l0
-    mov  x11, #0x00000403 // nG (not global), AttrIndex = 0, Table
+    adrp x11, __page_table_l1
+    add  x11, x11, :lo12:__page_table_l1
+    mov  x12, #0x00000403 // nG (not global), AttrIndex = 0, Table
+    orr  x11, x11, x12
     str  x11, [x10], #8
 
     // Level-1 table: Only 1 entry, pointing to the L2 table.
     adrp x10, __page_table_l1
     add  x10, x10, :lo12:__page_table_l1
-    adrp x11, __page_table_l0
-    add  x11, x10, :lo12:__page_table_l0
+    adrp x11, __page_table_l2_0
+    add  x11, x11, :lo12:__page_table_l2_0
     mov  x12, #0x00000403 // nG (not global), AttrIndex = 0, Table
     orr  x11, x11, x12
     str  x11, [x10], #8
@@ -61,7 +64,7 @@ enable_mmu:
     msr  ttbr1_el1, x10
     msr  ttbr0_el1, x10
 
-    ldr  x10, =0x10d00801 // Lttile Endian, MMU enabled, Don't disable I/D-cache
+    ldr  x10, =0x30d00801 // Lttile Endian, MMU enabled, Don't disable I/D-cache
     dsb ish
     isb
     msr  sctlr_el1, x10
