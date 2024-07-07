@@ -16,7 +16,6 @@ linux_image_header:
 
 .global boot
 boot:
-
 // "D8.3.1 VMSAv8-64 descriptor formats"
 build_page_table:
     // Level-0 table: Only 1 entry, pointing to the L1 table.
