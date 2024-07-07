@@ -37,9 +37,7 @@ unsafe extern "C" fn arm64_boot(dtb_addr: u64 /* docs/cpu_templates/boot-protoco
     console_write(b"\nbooting FTL.....\n\n");
 
     // Clear bss section.
-    ftl_kernel::println!("filling bss... {:x}\n", bss_start as *mut u8 as usize);
     core::ptr::write_bytes(bss_start as *mut u8, 0, bss_end - bss_start);
-    console_write(b"filled bss...\n");
 
     let mut free_mems = InlinedVec::<FreeMem, 8>::new();
     free_mems

@@ -42,6 +42,12 @@ build_page_table:
     orr  x11, x11, x12
     str  x11, [x10], #8
 
+    adrp x11, __page_table_l2_2
+    add  x11, x11, :lo12:__page_table_l2_2
+    mov  x12, #0x00000b03 // nG (not global), AttrIndex = 0, Table
+    orr  x11, x11, x12
+    str  x11, [x10], #8
+
     // Level-2 table: 0x00000000-0x3fffffff (1GB)
     adrp x10, __page_table_l2_0
     add  x10, x10, :lo12:__page_table_l2_0
@@ -60,6 +66,20 @@ build_page_table:
     adrp x10, __page_table_l2_1
     add  x10, x10, :lo12:__page_table_l2_1
     mov x11, #0x40000000 // paddr base
+    mov x12, #0x00000401 // nG (not global), AttrIndex = 0, Block
+    orr x11, x11, x12
+    mov x12, #512        // 512 entries
+    mov x13, #0x200000   // 2MB block size
+2:
+    str x11, [x10], #8
+    add x11, x11, x13
+    subs x12, x12, #1
+    bne 2b
+
+    // Level-2 table: 0x80000000-0xbfffffff (1GB)
+    adrp x10, __page_table_l2_2
+    add  x10, x10, :lo12:__page_table_l2_2
+    mov x11, #0x80000000 // paddr base
     mov x12, #0x00000401 // nG (not global), AttrIndex = 0, Block
     orr x11, x11, x12
     mov x12, #512        // 512 entries
@@ -116,4 +136,8 @@ __page_table_l2_0:
 
 .balign 4096
 __page_table_l2_1:
+    .space 4096
+
+.balign 4096
+__page_table_l2_2:
     .space 4096
