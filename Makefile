@@ -96,7 +96,7 @@ ftl.elf: $(sources) libs/rust/ftl_autogen/lib.rs build/bootfs.bin
 
 ftl.pe: ftl.elf
 	$(PROGRESS) "OBJCOPY" $(@)
-	objcopy -O binary --strip-all $< $(@)
+	$(OBJCOPY) -O binary --strip-all $< $(@)
 
 build/startup.elf: build/$(STARTUP).elf
 	cp $< $@

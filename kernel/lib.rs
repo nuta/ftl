@@ -3,6 +3,7 @@
 #![feature(naked_functions)]
 #![feature(arbitrary_self_types)]
 #![feature(fn_align)]
+#![feature(fmt_internals)]
 
 extern crate alloc;
 

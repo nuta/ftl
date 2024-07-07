@@ -1,7 +1,7 @@
 ENTRY(boot)
 
 SECTIONS {
-    . = 0x80000;
+    . = 0x80000000;
 
     __kernel_start = .;
 
