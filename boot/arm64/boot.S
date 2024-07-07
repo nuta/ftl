@@ -19,8 +19,13 @@ build_page_table:
     add  x10, x10, :lo12:__page_table_l1
     adrp x11, __page_table_l2_0
     add  x11, x11, :lo12:__page_table_l2_0
-    mov  x12, #0x00000403 // nG (not global), AttrIndex = 0, Table
+    mov  x12, #0x00000b03 // nG (not global), AttrIndex = 0, Table
     orr  x11, x11, x12
+    str  x11, [x10], #8
+
+    adrp x11, __page_table_l2_1
+    add  x11, x11, :lo12:__page_table_l2_1
+    mov  x12, #0x00000b03 // nG (not global), AttrIndex = 0, Table
     str  x11, [x10], #8
 
     // Level-2 table: 0x00000000-0x3fffffff (1GB)
@@ -61,6 +66,7 @@ enable_mmu:
     msr  tcr_el1, x10
 
     adrp x10, __page_table_l0
+    b .
     msr  ttbr1_el1, x10
     msr  ttbr0_el1, x10
 
