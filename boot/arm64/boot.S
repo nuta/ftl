@@ -84,11 +84,11 @@ build_page_table:
     orr x11, x11, x12
     mov x12, #512        // 512 entries
     mov x13, #0x200000   // 2MB block size
-2:
+3:
     str x11, [x10], #8
     add x11, x11, x13
     subs x12, x12, #1
-    bne 2b
+    bne 3b
 
 enable_mmu:
     // Configure paging.
