@@ -3,6 +3,19 @@
 .global boot
 boot:
 
+    ldr  x0, =0x30d00800 // Lttile Endian, MMU disabled, I/D-cache disabled
+    msr  sctlr_el1, x0
+    ldr  x0, =0x80000000 // EL1 is AArch64.
+    msr  hcr_el2, x0
+    ldr  x0, =0x000001c5 // Switch to EL1h, exceptions are masked.
+    msr  spsr_el2, x0
+
+    adr  x0, el1_mode
+    msr  elr_el2, x0
+    eret
+
+el1_mode:
+
 // "D8.3.1 VMSAv8-64 descriptor formats"
 build_page_table:
     // Level-0 table: Only 1 entry, pointing to the L1 table.
@@ -26,6 +39,7 @@ build_page_table:
     adrp x11, __page_table_l2_1
     add  x11, x11, :lo12:__page_table_l2_1
     mov  x12, #0x00000b03 // nG (not global), AttrIndex = 0, Table
+    orr  x11, x11, x12
     str  x11, [x10], #8
 
     // Level-2 table: 0x00000000-0x3fffffff (1GB)
@@ -66,7 +80,7 @@ enable_mmu:
     msr  tcr_el1, x10
 
     adrp x10, __page_table_l0
-    b .
+    add  x10, x10, :lo12:__page_table_l0
     msr  ttbr1_el1, x10
     msr  ttbr0_el1, x10
 
