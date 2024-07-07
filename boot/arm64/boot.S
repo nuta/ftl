@@ -3,19 +3,6 @@
 .global boot
 boot:
 
-    ldr  x0, =0x30d00800 // Lttile Endian, MMU disabled, I/D-cache disabled
-    msr  sctlr_el1, x0
-    ldr  x0, =0x80000000 // EL1 is AArch64.
-    msr  hcr_el2, x0
-    ldr  x0, =0x000001c5 // Switch to EL1h, exceptions are masked.
-    msr  spsr_el2, x0
-
-    adr  x0, el1_mode
-    msr  elr_el2, x0
-    eret
-
-el1_mode:
-
 // "D8.3.1 VMSAv8-64 descriptor formats"
 build_page_table:
     // Level-0 table: Only 1 entry, pointing to the L1 table.
@@ -87,6 +74,7 @@ enable_mmu:
     ldr  x10, =0x30d00801 // Lttile Endian, MMU enabled, Don't disable I/D-cache
     dsb ish
     isb
+    b .
     msr  sctlr_el1, x10
     isb
 
