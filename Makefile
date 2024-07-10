@@ -7,7 +7,7 @@ V       ?=            # "1" to enable verbose output
 STARTUP ?= apps/hello
 
 # Note: Don't forget to update boot.spec.json as well!
-APPS    ?= apps/ping apps/pong apps/virtio_blk
+APPS    ?= apps/virtio_console
 
 # Disable builtin implicit rules and variables.
 MAKEFLAGS += --no-builtin-rules --no-builtin-variables
@@ -45,6 +45,10 @@ endif
 CARGO    ?= cargo
 PROGRESS ?= printf "  \\033[1;96m%8s\\033[0m  \\033[1;m%s\\033[0m\\n"
 OBJCOPY  ?= llvm-objcopy
+
+QEMUFLAGS += -device virtio-serial-device,bus=virtio-mmio-bus.1
+QEMUFLAGS += -device virtconsole,chardev=console0
+QEMUFLAGS += -chardev file,path=serial.txt,id=console0
 
 RUSTFLAGS += -Z macro-backtrace --emit asm
 CARGOFLAGS += -Z build-std=core,alloc -Z build-std-features=compiler-builtins-mem
