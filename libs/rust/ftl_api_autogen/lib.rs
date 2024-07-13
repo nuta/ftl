@@ -57,6 +57,8 @@ pub mod apps {
         pub enum Message<'a> {
             NewclientRequest(ftl_autogen::protocols::autopilot::NewclientRequestReader<'a>),
             NewclientReply(ftl_autogen::protocols::autopilot::NewclientReplyReader<'a>),
+            ListenRequest(ftl_autogen::protocols::intc::ListenRequestReader<'a>),
+            ListenReply(ftl_autogen::protocols::intc::ListenReplyReader<'a>),
             PingRequest(ftl_autogen::protocols::ping::PingRequestReader<'a>),
             PingReply(ftl_autogen::protocols::ping::PingReplyReader<'a>),
         }
@@ -86,6 +88,20 @@ pub mod apps {
 
                         let reader = M::deserialize(buffer, msginfo)?;
                         Some(Message::NewclientReply(reader))
+                    }
+
+                    ftl_autogen::protocols::intc::ListenRequest::MSGINFO => {
+                        use ftl_autogen::protocols::intc::ListenRequest as M;
+
+                        let reader = M::deserialize(buffer, msginfo)?;
+                        Some(Message::ListenRequest(reader))
+                    }
+
+                    ftl_autogen::protocols::intc::ListenReply::MSGINFO => {
+                        use ftl_autogen::protocols::intc::ListenReply as M;
+
+                        let reader = M::deserialize(buffer, msginfo)?;
+                        Some(Message::ListenReply(reader))
                     }
 
                     ftl_autogen::protocols::ping::PingRequest::MSGINFO => {
@@ -160,6 +176,8 @@ pub mod apps {
         pub enum Message<'a> {
             NewclientRequest(ftl_autogen::protocols::autopilot::NewclientRequestReader<'a>),
             NewclientReply(ftl_autogen::protocols::autopilot::NewclientReplyReader<'a>),
+            ListenRequest(ftl_autogen::protocols::intc::ListenRequestReader<'a>),
+            ListenReply(ftl_autogen::protocols::intc::ListenReplyReader<'a>),
             PingRequest(ftl_autogen::protocols::ping::PingRequestReader<'a>),
             PingReply(ftl_autogen::protocols::ping::PingReplyReader<'a>),
         }
@@ -189,6 +207,20 @@ pub mod apps {
 
                         let reader = M::deserialize(buffer, msginfo)?;
                         Some(Message::NewclientReply(reader))
+                    }
+
+                    ftl_autogen::protocols::intc::ListenRequest::MSGINFO => {
+                        use ftl_autogen::protocols::intc::ListenRequest as M;
+
+                        let reader = M::deserialize(buffer, msginfo)?;
+                        Some(Message::ListenRequest(reader))
+                    }
+
+                    ftl_autogen::protocols::intc::ListenReply::MSGINFO => {
+                        use ftl_autogen::protocols::intc::ListenReply as M;
+
+                        let reader = M::deserialize(buffer, msginfo)?;
+                        Some(Message::ListenReply(reader))
                     }
 
                     ftl_autogen::protocols::ping::PingRequest::MSGINFO => {

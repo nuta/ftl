@@ -6,14 +6,18 @@ use ftl_api::driver::mmio::MmioReg;
 use ftl_api::driver::mmio::ReadOnly;
 use ftl_api::driver::mmio::ReadWrite;
 use ftl_api::folio::MmioFolio;
+use ftl_api::handle::OwnedHandle;
+use ftl_api::mainloop::Event;
 use ftl_api::mainloop::Mainloop;
 use ftl_api::prelude::*;
+use ftl_api::signal::Signal;
 use ftl_api::types::address::PAddr;
 use ftl_api::types::address::VAddr;
 use ftl_api::types::environ::Device;
 use ftl_api::types::message::MessageBuffer;
 use ftl_api_autogen::apps::arm_gic::Environ;
 use ftl_api_autogen::apps::arm_gic::Message;
+use ftl_api_autogen::protocols::intc::ListenReply;
 
 
 // > In the GIC architecture, all registers that are halfword-accessible or
@@ -107,11 +111,28 @@ pub fn main(mut env: Environ) {
     let gicd_paddr: usize = gic.reg.try_into().unwrap();
     let gicd_folio = MmioFolio::create_pinned(PAddr::new(gicd_paddr).unwrap(), 0x1000).unwrap();
     let gicc_folio = MmioFolio::create_pinned(PAddr::new(gicd_paddr + 0x10000 /* FIXME: */).unwrap(), 0x1000).unwrap();
-    let gic = Gic::init_device(gicd_folio, gicc_folio);
+    let mut gic = Gic::init_device(gicd_folio, gicc_folio);
+    let mut listeners = HashMap::new();
 
     let mut buffer = MessageBuffer::new();
     loop {
         match mainloop.next(&mut buffer) {
+            Event::Message { ctx, ch, m } => {
+                match m {
+                    Message::ListenRequest(m) => {
+                        let irq = m.irq();
+                        let signal = Signal::from_handle(OwnedHandle::from_raw(m.signal()));
+                        info!("listen request: {:?}", irq);
+                        gic.enable_irq(irq as usize);
+                        listeners.insert(irq, signal);
+
+                        let _ = ch.send_with_buffer(&mut buffer, ListenReply {});
+                    }
+                    _ => {
+                        warn!("unhandled message");
+                    }
+                }
+            }
             _ => {
                 warn!("unhandled event");
             }

@@ -21,6 +21,30 @@
             ]
         },
         {
+            "name": "intc",
+            "rpcs": [
+                {
+                    "name": "listen",
+                    "request": {
+                        "fields": [
+                            {
+                                "name": "irq",
+                                "type": "int32"
+                            },
+                            {
+                                "name": "signal",
+                                "type": "handle"
+                            }
+                        ]
+                    },
+                    "response": {
+                        "fields": [
+                        ]
+                    }
+                }
+            ]
+        },
+        {
             "name": "ping",
             "rpcs": [
                 {
