@@ -1,0 +1,13 @@
+[package]
+name = "arm_gic"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "arm_gic"
+path = "main.rs"
+
+[dependencies]
+ftl_api = { workspace = true }
+ftl_api_autogen = { workspace = true }

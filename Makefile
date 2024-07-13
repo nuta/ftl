@@ -7,7 +7,7 @@ V       ?=            # "1" to enable verbose output
 STARTUP ?= apps/hello
 
 # Note: Don't forget to update boot.spec.json as well!
-APPS    ?= apps/virtio_console
+APPS    ?= apps/virtio_console apps/arm_gic
 
 # Disable builtin implicit rules and variables.
 MAKEFLAGS += --no-builtin-rules --no-builtin-variables
@@ -34,7 +34,7 @@ QEMUFLAGS += -device virtio-blk-device,drive=drive0,bus=virtio-mmio-bus.0
 else ifeq ($(ARCH),arm64)
 QEMU      ?= qemu-system-aarch64
 QEMUFLAGS += -m 512
-QEMUFLAGS += -machine virt $(if $(KVM), -accel kvm -cpu host, -cpu neoverse-v1)
+QEMUFLAGS += -machine virt,gic-version=2 $(if $(KVM), -accel kvm -cpu host, -cpu neoverse-v1)
 QEMUFLAGS += -global virtio-mmio.force-legacy=false
 QEMUFLAGS += -drive id=drive0,file=disk.img,format=raw,if=none
 QEMUFLAGS += -device virtio-blk-device,drive=drive0,bus=virtio-mmio-bus.0

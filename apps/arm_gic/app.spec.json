@@ -1,0 +1,16 @@
+{
+    "name": "arm_gic",
+    "kind": "app/v0",
+    "spec": {
+        "depends": [
+            {
+                "type": "device",
+                "name": "gic",
+                "device_tree": {
+                    "compatible": ["arm,cortex-a15-gic"]
+                }
+            }
+        ],
+        "provides": []
+    }
+}
