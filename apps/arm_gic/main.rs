@@ -21,7 +21,6 @@ use ftl_api_autogen::protocols::intc::ListenReply;
 use spin::mutex::SpinMutex;
 use spin::Mutex;
 
-
 // > In the GIC architecture, all registers that are halfword-accessible or
 // > byte-accessible use a little endian memory order model.
 // >
@@ -43,7 +42,6 @@ const GICD_ITARGETSRn: MmioReg<LittleEndian, ReadWrite, u32> = MmioReg::new(0x80
 /// CPU Interface Control Register,
 const GICC_CTLR: MmioReg<LittleEndian, ReadWrite, u32> = MmioReg::new(0x000);
 
-
 struct Gic {
     gicd_folio: MmioFolio,
     gicc_folio: MmioFolio,
@@ -57,11 +55,13 @@ impl Gic {
         let it_lines_number = GICD_TYPER.read(&mut gicd_folio) & 0b1111;
         let num_max_intrs = (it_lines_number + 1) * 32;
 
-
         GICC_CTLR.write(&mut gicc_folio, 1);
         GICD_CTLR.write(&mut gicd_folio, 1);
 
-        Self { gicd_folio, gicc_folio }
+        Self {
+            gicd_folio,
+            gicc_folio,
+        }
     }
 
     pub fn enable_irq(&mut self, irq: usize) {
@@ -112,7 +112,11 @@ pub fn main(mut env: Environ) {
 
     let gicd_paddr: usize = gic.reg.try_into().unwrap();
     let gicd_folio = MmioFolio::create_pinned(PAddr::new(gicd_paddr).unwrap(), 0x1000).unwrap();
-    let gicc_folio = MmioFolio::create_pinned(PAddr::new(gicd_paddr + 0x10000 /* FIXME: */).unwrap(), 0x1000).unwrap();
+    let gicc_folio = MmioFolio::create_pinned(
+        PAddr::new(gicd_paddr + 0x10000 /* FIXME: */).unwrap(),
+        0x1000,
+    )
+    .unwrap();
     let mut gic = Gic::init_device(gicd_folio, gicc_folio);
     let listeners = Arc::new(Mutex::new(HashMap::new()));
 

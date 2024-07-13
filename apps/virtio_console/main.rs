@@ -122,23 +122,17 @@ pub fn main(mut env: Environ) {
 
         let data = "Hello World from virtio-console!\r\n";
 
-        let dma_buf = unsafe {
-            core::slice::from_raw_parts_mut(
-                &mut *vaddr.as_mut_ptr::<u8>()
-                ,dma_buf_len
-            )
-        };
+        let dma_buf =
+            unsafe { core::slice::from_raw_parts_mut(&mut *vaddr.as_mut_ptr::<u8>(), dma_buf_len) };
 
         let data_len = data.as_bytes().len();
         assert!(data_len <= dma_buf.len());
         dma_buf[0..data_len].copy_from_slice(data.as_bytes());
 
-        let chain = &[
-            VirtqDescBuffer::ReadOnlyFromDevice {
-                paddr,
-                len: data_len,
-            },
-        ];
+        let chain = &[VirtqDescBuffer::ReadOnlyFromDevice {
+            paddr,
+            len: data_len,
+        }];
 
         info!("chain: {:x?}", chain);
         transmitq.enqueue(chain);
