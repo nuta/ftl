@@ -40,6 +40,7 @@ const GICC_CTLR: MmioReg<LittleEndian, ReadWrite, u32> = MmioReg::new(0x000);
 
 struct Gic {
     gicd_folio: MmioFolio,
+    gicc_folio: MmioFolio,
 }
 
 impl Gic {
@@ -54,7 +55,7 @@ impl Gic {
         GICC_CTLR.write(&mut gicc_folio, 1);
         GICD_CTLR.write(&mut gicd_folio, 1);
 
-        Self { gicd_folio }
+        Self { gicd_folio, gicc_folio }
     }
 
     pub fn enable_irq(&mut self, irq: usize) {
