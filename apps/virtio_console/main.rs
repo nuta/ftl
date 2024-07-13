@@ -111,14 +111,27 @@ pub fn main(mut env: Environ) {
     let mut virtqueues = transport.initialize(0, 2).unwrap();
 
     let mut transmitq = virtqueues.get_mut(1).unwrap().take().unwrap();
+    let mut receiveq = virtqueues.get_mut(0).unwrap().take().unwrap();
     let dma_buf_len = 4096;
-    let mut requestq_buffers = BufferPool::new(dma_buf_len, transmitq.num_descs() as usize);
+    let mut receiveq_buffers = BufferPool::new(dma_buf_len, receiveq.num_descs() as usize);
+    let mut transmitq_buffers = BufferPool::new(dma_buf_len, transmitq.num_descs() as usize);
+
+    // Fill the receive queue with buffers.
+    while let Some(buffer_index) = receiveq_buffers.pop_free() {
+        let chain = &[VirtqDescBuffer::WritableFromDevice {
+            paddr: receiveq_buffers.paddr(buffer_index),
+            len: dma_buf_len,
+        }];
+
+        receiveq.enqueue(chain);
+    }
+    receiveq.notify(&mut *transport);
 
     info!("virtio_console test ----------------------");
     {
-        let buffer_index = requestq_buffers.pop_free().expect("no free tx buffers");
-        let vaddr = requestq_buffers.vaddr(buffer_index);
-        let paddr = requestq_buffers.paddr(buffer_index);
+        let buffer_index = transmitq_buffers.pop_free().expect("no free tx buffers");
+        let vaddr = transmitq_buffers.vaddr(buffer_index);
+        let paddr = transmitq_buffers.paddr(buffer_index);
 
         let data = "Hello World from virtio-console!\r\n";
 
