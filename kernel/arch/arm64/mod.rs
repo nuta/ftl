@@ -1,4 +1,5 @@
 use core::arch::asm;
+use core::arch::global_asm;
 
 use ftl_types::address::PAddr;
 use ftl_types::address::VAddr;
@@ -6,6 +7,8 @@ use ftl_types::address::VAddr;
 mod backtrace;
 mod cpuvar;
 mod thread;
+
+global_asm!(include_str!("interrupt.S"));
 
 pub use backtrace::backtrace;
 pub use cpuvar::cpuvar;
@@ -53,4 +56,27 @@ pub fn console_write(bytes: &[u8]) {
     }
 }
 
-pub fn init() {}
+#[no_mangle]
+extern "C" fn arm64_handle_exception() {
+    panic!("unhandled exception");
+}
+
+#[no_mangle]
+extern "C" fn handle_syscall() {
+    panic!("handle_syscall");
+}
+
+#[no_mangle]
+extern "C" fn arm64_handle_interrupt() {
+    panic!("unhandled interrupt");
+}
+
+extern "C" {
+    static arm64_exception_vector: [u8; 128 * 16];
+}
+
+pub fn init() {
+    unsafe {
+        asm!("msr vbar_el1, {}", in(reg) &arm64_exception_vector as *const _ as u64);
+    }
+}
