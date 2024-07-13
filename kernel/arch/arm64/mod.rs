@@ -38,6 +38,7 @@ pub fn halt() -> ! {
 pub fn idle() -> ! {
     loop {
         unsafe {
+            asm!("msr daifclr, #2");
             asm!("wfi");
         }
     }
