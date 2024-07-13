@@ -116,6 +116,7 @@ pub fn main(mut env: Environ) {
     let mut receiveq_buffers = BufferPool::new(dma_buf_len, receiveq.num_descs() as usize);
     let mut transmitq_buffers = BufferPool::new(dma_buf_len, transmitq.num_descs() as usize);
 
+    info!("receiveq.num_descs = {}", receiveq.num_descs());
     // Fill the receive queue with buffers.
     while let Some(buffer_index) = receiveq_buffers.pop_free() {
         let chain = &[VirtqDescBuffer::WritableFromDevice {
