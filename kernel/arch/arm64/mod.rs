@@ -35,6 +35,14 @@ pub fn halt() -> ! {
     }
 }
 
+pub fn idle() -> ! {
+    loop {
+        unsafe {
+            asm!("wfi");
+        }
+    }
+}
+
 pub fn console_write(bytes: &[u8]) {
     let ptr: *mut u8 = 0x9000000 as *mut u8;
     for byte in bytes {

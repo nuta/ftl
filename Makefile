@@ -40,7 +40,7 @@ QEMUFLAGS += -drive id=drive0,file=disk.img,format=raw,if=none
 QEMUFLAGS += -device virtio-blk-device,drive=drive0,bus=virtio-mmio-bus.0
 QEMUFLAGS += -device virtio-serial-device,bus=virtio-mmio-bus.1
 QEMUFLAGS += -device virtconsole,chardev=console0
-QEMUFLAGS += -chardev file,path=serial.log,id=console0
+QEMUFLAGS += -chardev pipe,path=serial.pipe,id=console0
 else
 $(error "Unknown ARCH: $(ARCH)")
 endif

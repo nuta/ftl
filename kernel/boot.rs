@@ -60,5 +60,6 @@ pub fn boot(cpu_id: CpuId, bootinfo: BootInfo) -> ! {
 
     arch::yield_cpu();
 
-    panic!("halt");
+    println!("entering idle...");
+    arch::idle();
 }
