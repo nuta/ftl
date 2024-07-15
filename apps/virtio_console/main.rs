@@ -4,12 +4,16 @@
 use ftl_api::folio::MmioFolio;
 use ftl_api::mainloop::Mainloop;
 use ftl_api::prelude::*;
+use ftl_api::signal::Signal;
 use ftl_api::types::address::PAddr;
 use ftl_api::types::address::VAddr;
 use ftl_api::types::environ::Device;
+use ftl_api::types::message::HandleOwnership;
 use ftl_api::types::message::MessageBuffer;
 use ftl_api_autogen::apps::virtio_console::Environ;
 use ftl_api_autogen::apps::virtio_console::Message;
+use ftl_api_autogen::protocols::intc::ListenReply;
+use ftl_api_autogen::protocols::intc::ListenRequest;
 use ftl_virtio::transports::mmio::VirtioMmio;
 use ftl_virtio::transports::VirtioTransport;
 use ftl_virtio::virtqueue::align_up;
@@ -85,6 +89,7 @@ fn probe(devices: &[Device], device_type: u32) -> Option<VirtioMmio> {
         let mut transport = VirtioMmio::new(mmio);
         match transport.probe() {
             Some(ty) if ty == device_type => {
+                info!("console: IRQs: {:?}", device.interrupts);
                 return Some(transport);
             }
             Some(ty) => {
@@ -106,6 +111,15 @@ enum Context {
 #[ftl_api::main]
 pub fn main(mut env: Environ) {
     info!("starting virtio_console: {:?}", env.depends.virtio);
+    let mut buffer = MessageBuffer::new();
+    let intc = env.depends.intc.take().unwrap();
+    let signal = Signal::create().unwrap();
+    intc.send_with_buffer(&mut buffer, ListenRequest {
+        irq: 17,
+        signal: HandleOwnership(signal.handle().id()),
+    });
+    intc.recv_with_buffer::<ListenReply>(&mut buffer);
+
     let transport = probe(&env.depends.virtio, VIRTIO_DEVICE_TYPE_CONSOLE).unwrap();
     let mut transport = Box::new(transport) as Box<dyn VirtioTransport>;
     let mut virtqueues = transport.initialize(0, 2).unwrap();
@@ -159,7 +173,6 @@ pub fn main(mut env: Environ) {
         .add_channel(env.autopilot_ch.take().unwrap(), Context::Autopilot)
         .unwrap();
 
-    let mut buffer = MessageBuffer::new();
     loop {
         match mainloop.next(&mut buffer) {
             _ => {

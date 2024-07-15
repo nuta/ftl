@@ -1,6 +1,7 @@
 #![no_std]
 #![no_main]
 
+use ftl_api::channel::Channel;
 use ftl_api::driver::mmio::LittleEndian;
 use ftl_api::driver::mmio::MmioReg;
 use ftl_api::driver::mmio::ReadOnly;
@@ -98,6 +99,7 @@ impl Gic {
 
 enum Context {
     Autopilot,
+    Client,
 }
 
 #[ftl_api::main]
@@ -125,6 +127,13 @@ pub fn main(mut env: Environ) {
         match mainloop.next(&mut buffer) {
             Event::Message { ctx, ch, m } => {
                 match m {
+                    Message::NewclientRequest(m) => {
+                        info!("got new client: {:?}", m.handle());
+                        let new_ch = Channel::from_handle(OwnedHandle::from_raw(m.handle()));
+                        mainloop
+                            .add_channel(new_ch, Context::Client)
+                            .unwrap();
+                    }
                     Message::ListenRequest(m) => {
                         let irq = m.irq();
                         let signal = Signal::from_handle(OwnedHandle::from_raw(m.signal()));
@@ -135,7 +144,7 @@ pub fn main(mut env: Environ) {
                         let _ = ch.send_with_buffer(&mut buffer, ListenReply {});
                     }
                     _ => {
-                        warn!("unhandled message");
+                        warn!("unhandled message, {:?}", m);
                     }
                 }
             }

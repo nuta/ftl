@@ -21,6 +21,16 @@ pub mod apps {
                     serde_json::from_slice(environ_bytes).expect("failed to parse environ JSON");
 
                 let depends = Depends {
+                    intc: {
+                        use ftl_api::channel::Channel;
+                        use ftl_api::handle::OwnedHandle;
+                        use ftl_types::handle::HandleId;
+
+                        let handle_id = HandleId::from_raw(environ_json.depends.intc);
+                        let handle = OwnedHandle::from_raw(handle_id);
+                        Some(Channel::from_handle(handle))
+                    },
+
                     virtio: { environ_json.depends.virtio },
                 };
 
@@ -40,6 +50,7 @@ pub mod apps {
         }
 
         pub struct Depends {
+            pub intc: Option<ftl_api::channel::Channel>,
             pub virtio: ftl_api::prelude::Vec<ftl_types::environ::Device>,
         }
 
@@ -51,6 +62,7 @@ pub mod apps {
 
         #[derive(serde::Serialize, serde::Deserialize)]
         struct DependsJson {
+            pub intc: i32,
             pub virtio: ftl_api::prelude::Vec<ftl_types::environ::Device>,
         }
 
@@ -61,6 +73,19 @@ pub mod apps {
             ListenReply(ftl_autogen::protocols::intc::ListenReplyReader<'a>),
             PingRequest(ftl_autogen::protocols::ping::PingRequestReader<'a>),
             PingReply(ftl_autogen::protocols::ping::PingReplyReader<'a>),
+        }
+
+        impl<'a> ::core::fmt::Debug for Message<'a> {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                match self {
+                    Self::NewclientRequest(_) => write!(f, "NewclientRequest"),
+                    Self::NewclientReply(_) => write!(f, "NewclientReply"),
+                    Self::ListenRequest(_) => write!(f, "ListenRequest"),
+                    Self::ListenReply(_) => write!(f, "ListenReply"),
+                    Self::PingRequest(_) => write!(f, "PingRequest"),
+                    Self::PingReply(_) => write!(f, "PingReply"),
+                }
+            }
         }
 
         use ftl_types::message::MessageBuffer;
@@ -180,6 +205,19 @@ pub mod apps {
             ListenReply(ftl_autogen::protocols::intc::ListenReplyReader<'a>),
             PingRequest(ftl_autogen::protocols::ping::PingRequestReader<'a>),
             PingReply(ftl_autogen::protocols::ping::PingReplyReader<'a>),
+        }
+
+        impl<'a> ::core::fmt::Debug for Message<'a> {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                match self {
+                    Self::NewclientRequest(_) => write!(f, "NewclientRequest"),
+                    Self::NewclientReply(_) => write!(f, "NewclientReply"),
+                    Self::ListenRequest(_) => write!(f, "ListenRequest"),
+                    Self::ListenReply(_) => write!(f, "ListenReply"),
+                    Self::PingRequest(_) => write!(f, "PingRequest"),
+                    Self::PingReply(_) => write!(f, "PingReply"),
+                }
+            }
         }
 
         use ftl_types::message::MessageBuffer;

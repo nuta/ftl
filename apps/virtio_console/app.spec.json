@@ -4,6 +4,11 @@
     "spec": {
         "depends": [
             {
+                "type": "service",
+                "protocol": "intc",
+                "name": "intc"
+            },
+            {
                 "type": "device",
                 "name": "virtio",
                 "device_tree": {
