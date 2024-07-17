@@ -17,6 +17,7 @@ mod arch;
 mod autopilot;
 mod bootfs;
 mod channel;
+mod interrupt;
 mod device_tree;
 mod folio;
 mod handle;
