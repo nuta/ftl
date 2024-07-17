@@ -7,6 +7,7 @@ use ftl_api::driver::mmio::LittleEndian;
 use ftl_api::driver::mmio::MmioReg;
 use ftl_api::driver::mmio::ReadOnly;
 use ftl_api::driver::mmio::ReadWrite;
+use ftl_api::driver::mmio::WriteOnly;
 use ftl_api::folio::MmioFolio;
 use ftl_api::handle::OwnedHandle;
 use ftl_api::mainloop::Event;
@@ -20,7 +21,6 @@ use ftl_api::types::message::MessageBuffer;
 use ftl_api_autogen::apps::arm_gic::Environ;
 use ftl_api_autogen::apps::arm_gic::Message;
 use ftl_api_autogen::protocols::intc::ListenReply;
-use spin::mutex::SpinMutex;
 use spin::Mutex;
 
 // > In the GIC architecture, all registers that are halfword-accessible or
@@ -45,6 +45,10 @@ const GICD_ITARGETSRn: MmioReg<LittleEndian, ReadWrite, u32> = MmioReg::new(0x80
 const GICC_CTLR: MmioReg<LittleEndian, ReadWrite, u32> = MmioReg::new(0x000);
 /// Interrupt Priority Mask Register.
 const GICC_PMR: MmioReg<LittleEndian, ReadWrite, u32> = MmioReg::new(0x004);
+/// Interrupt Acknowledge Register.
+const GICC_IAR: MmioReg<LittleEndian, ReadOnly, u32> = MmioReg::new(0x00c);
+/// End of Interrupt Register.
+const GICC_EOIR: MmioReg<LittleEndian, WriteOnly, u32> = MmioReg::new(0x010);
 
 struct Gic {
     gicd_folio: MmioFolio,
@@ -103,6 +107,15 @@ impl Gic {
             GICD_ITARGETSRn.write_with_offset(&mut self.gicd_folio, offset, value);
         }
     }
+
+    pub fn get_pending_irq(&mut self) -> usize {
+        (GICC_IAR.read(&mut self.gicc_folio) & 0x3ff) as usize
+    }
+
+    pub fn ack_irq(&mut self, irq: usize) {
+        debug_assert!(irq & !0x3ff == 0);
+        GICC_EOIR.write(&mut self.gicc_folio, irq as u32);
+    }
 }
 
 enum Context {
@@ -127,24 +140,33 @@ pub fn main(mut env: Environ) {
         0x1000,
     )
     .unwrap();
-    let mut gic = Gic::init_device(gicd_folio, gicc_folio);
+    let mut gic = Arc::new(Mutex::new(Gic::init_device(gicd_folio, gicc_folio)));
     let listeners = Arc::new(Mutex::new(HashMap::new()));
 
 
     info!("--------------------------------------------");
-    gic.enable_irq(0);
-    gic.enable_irq(1);
-    gic.enable_irq(27);
-    gic.enable_irq(283);
+    gic.lock().enable_irq(0);
+    gic.lock().enable_irq(1);
+    gic.lock().enable_irq(27);
+    gic.lock().enable_irq(17);
+    gic.lock().enable_irq(49);
+    gic.lock().enable_irq(283);
     unsafe {
-        core::arch::asm!("msr cntv_ctl_el0, {}", in(reg) (0));
-        core::arch::asm!("msr cntv_cval_el0, {}", in(reg) (1000000));
-        core::arch::asm!("msr cntv_ctl_el0, {}", in(reg) (1));
+        // core::arch::asm!("msr cntv_ctl_el0, {}", in(reg) (0));
+        // core::arch::asm!("msr cntv_cval_el0, {}", in(reg) (1000000));
+        // core::arch::asm!("msr cntv_ctl_el0, {}", in(reg) (1));
     }
 
-    set_interrupt_handler(|| {
-        info!("caught interrupt!");
-    }).unwrap();
+    {
+        let gic = gic.clone();
+        set_interrupt_handler(move || {
+            info!("caught interrupt!");
+            let mut gic = gic.lock();
+            let irq = gic.get_pending_irq();
+            info!("pending irq: {}", irq);
+            gic.ack_irq(irq);
+        }).unwrap();
+    }
 
 
     let mut buffer = MessageBuffer::new();
@@ -163,8 +185,8 @@ pub fn main(mut env: Environ) {
                         let irq = m.irq();
                         let signal = Signal::from_handle(OwnedHandle::from_raw(m.signal()));
                         info!("listen request: {:?}", irq);
-                        gic.enable_irq(irq as usize);
                         listeners.lock().insert(irq, signal);
+                        gic.lock().enable_irq(irq as usize);
 
                         let _ = ch.send_with_buffer(&mut buffer, ListenReply {});
                     }
