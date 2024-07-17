@@ -14,6 +14,7 @@ pub use backtrace::backtrace;
 pub use cpuvar::cpuvar;
 pub use cpuvar::set_cpuvar;
 pub use cpuvar::CpuVar;
+use ftl_types::error::FtlError;
 pub use thread::yield_cpu;
 pub use thread::Thread;
 
@@ -66,9 +67,36 @@ extern "C" fn handle_syscall() {
     panic!("handle_syscall");
 }
 
+struct Handler {
+    entry: extern "C" fn(usize),
+    arg: usize,
+}
+
+// TODO: Clear when the process exits.
+static INTERRUPT_HANDLER: spin::Mutex<Option<Handler>> = spin::Mutex::new(None);
+
+pub fn set_interrupt_handler(pc: usize, arg: usize) -> Result<(), FtlError> {
+    let mut guard = INTERRUPT_HANDLER.lock();
+    if guard.is_some() {
+        return Err(FtlError::AlreadyExists);
+    }
+
+    *guard = Some(Handler {
+        entry: unsafe { core::mem::transmute::<usize, extern "C" fn(usize)>(pc) },
+        arg,
+    });
+
+    Ok(())
+}
+
 #[no_mangle]
 extern "C" fn arm64_handle_interrupt() {
-    panic!("unhandled interrupt");
+    println!("interrupt!");
+
+    let guard = INTERRUPT_HANDLER.lock();
+    if let Some(ref handler) = *guard {
+        (handler.entry)(handler.arg);
+    }
 }
 
 extern "C" {

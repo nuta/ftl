@@ -10,6 +10,7 @@ use ftl_types::poll::PollSyscallResult;
 use ftl_types::signal::SignalBits;
 use ftl_types::syscall::SyscallNumber;
 
+use crate::arch;
 use crate::channel::Channel;
 use crate::cpuvar::current_thread;
 use crate::folio::Folio;
@@ -204,6 +205,10 @@ fn signal_clear(handle_id: HandleId) -> Result<SignalBits, FtlError> {
     signal.clear()
 }
 
+fn interrupt_set_kernel_handler(pc: usize, arg: usize) -> Result<(), FtlError> {
+    arch::set_interrupt_handler(pc, arg)
+}
+
 pub fn syscall_entry(
     n: isize,
     a0: isize,
@@ -295,6 +300,12 @@ pub fn syscall_entry(
             let handle_id = HandleId::from_raw_isize_truncated(a0);
             let value = signal_clear(handle_id)?;
             Ok(value.as_i32() as isize)
+        }
+        _ if n == SyscallNumber::InterruptSetKernelHandler as isize => {
+            let pc = a0 as usize;
+            let arg = a1 as usize;
+            interrupt_set_kernel_handler(pc, arg)?;
+            Ok(0)
         }
         _ => {
             println!(

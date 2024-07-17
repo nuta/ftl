@@ -2,6 +2,7 @@
 #![no_main]
 
 use ftl_api::channel::Channel;
+use ftl_api::driver::interrupt_controller::set_interrupt_handler;
 use ftl_api::driver::mmio::LittleEndian;
 use ftl_api::driver::mmio::MmioReg;
 use ftl_api::driver::mmio::ReadOnly;
@@ -140,6 +141,10 @@ pub fn main(mut env: Environ) {
         core::arch::asm!("msr cntv_cval_el0, {}", in(reg) (1000000));
         core::arch::asm!("msr cntv_ctl_el0, {}", in(reg) (1));
     }
+
+    set_interrupt_handler(|| {
+        info!("caught interrupt!");
+    }).unwrap();
 
 
     let mut buffer = MessageBuffer::new();

@@ -183,6 +183,11 @@ pub fn signal_clear(handle: HandleId) -> Result<SignalBits, FtlError> {
     Ok(SignalBits::from_raw(ret as i32))
 }
 
+pub fn interrupt_set_kernel_handler(pc: usize, arg: usize) -> Result<(), FtlError> {
+    syscall2(SyscallNumber::InterruptSetKernelHandler, pc as isize, arg as isize)?;
+    Ok(())
+}
+
 pub(crate) fn set_vsyscall(vsyscall: &'static VsyscallPage) {
     *VSYSCALL_PAGE.lock() = Some(vsyscall);
 }
