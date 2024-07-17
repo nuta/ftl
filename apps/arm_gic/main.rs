@@ -42,6 +42,8 @@ const GICD_IPRIORITYRn: MmioReg<LittleEndian, ReadWrite, u32> = MmioReg::new(0x4
 const GICD_ITARGETSRn: MmioReg<LittleEndian, ReadWrite, u32> = MmioReg::new(0x800);
 /// CPU Interface Control Register,
 const GICC_CTLR: MmioReg<LittleEndian, ReadWrite, u32> = MmioReg::new(0x000);
+/// Interrupt Priority Mask Register.
+const GICC_PMR: MmioReg<LittleEndian, ReadWrite, u32> = MmioReg::new(0x004);
 
 struct Gic {
     gicd_folio: MmioFolio,
@@ -49,19 +51,24 @@ struct Gic {
 }
 
 impl Gic {
-    pub fn init_device(mut gicd_folio: MmioFolio, mut gicc_folio: MmioFolio) -> Self {
+    pub fn init_device(mut dist_folio: MmioFolio, mut cpu_folio: MmioFolio) -> Self {
         // Reset the device.
-        GICD_CTLR.write(&mut gicd_folio, 0);
+        GICD_CTLR.write(&mut dist_folio, 0);
         // Determine the maximum number of interrupts (ITLinesNumber field).
-        let it_lines_number = GICD_TYPER.read(&mut gicd_folio) & 0b1111;
+        trace!("reading GICD_TYPER");
+        let it_lines_number = GICD_TYPER.read(&mut dist_folio) & 0b1111;
+        trace!("read GICD_TYPER");
         let num_max_intrs = (it_lines_number + 1) * 32;
 
-        GICC_CTLR.write(&mut gicc_folio, 1);
-        GICD_CTLR.write(&mut gicd_folio, 1);
+        trace!("GIC: max # of IRQs = {}", num_max_intrs);
+        GICC_PMR.write(&mut cpu_folio, 255);
+
+        GICC_CTLR.write(&mut cpu_folio, 1);
+        GICD_CTLR.write(&mut dist_folio, 1);
 
         Self {
-            gicd_folio,
-            gicc_folio,
+            gicd_folio: dist_folio,
+            gicc_folio: cpu_folio,
         }
     }
 
@@ -121,6 +128,19 @@ pub fn main(mut env: Environ) {
     .unwrap();
     let mut gic = Gic::init_device(gicd_folio, gicc_folio);
     let listeners = Arc::new(Mutex::new(HashMap::new()));
+
+
+    info!("--------------------------------------------");
+    gic.enable_irq(0);
+    gic.enable_irq(1);
+    gic.enable_irq(27);
+    gic.enable_irq(283);
+    unsafe {
+        core::arch::asm!("msr cntv_ctl_el0, {}", in(reg) (0));
+        core::arch::asm!("msr cntv_cval_el0, {}", in(reg) (1000000));
+        core::arch::asm!("msr cntv_ctl_el0, {}", in(reg) (1));
+    }
+
 
     let mut buffer = MessageBuffer::new();
     loop {

@@ -110,7 +110,7 @@ enum Context {
 
 #[ftl_api::main]
 pub fn main(mut env: Environ) {
-    info!("starting virtio_console: {:?}", env.depends.virtio);
+    info!("starting virtio_console");
     let mut buffer = MessageBuffer::new();
     let intc = env.depends.intc.take().unwrap();
     let signal = Signal::create().unwrap();
