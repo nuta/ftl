@@ -95,6 +95,7 @@ extern "C" fn arm64_handle_interrupt() {
 
     let guard = INTERRUPT_HANDLER.lock();
     if let Some(ref handler) = *guard {
+        println!("calling interrupt handler...");
         (handler.entry)(handler.arg);
     }
 }
