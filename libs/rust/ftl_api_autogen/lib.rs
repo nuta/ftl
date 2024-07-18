@@ -21,16 +21,6 @@ pub mod apps {
                     serde_json::from_slice(environ_bytes).expect("failed to parse environ JSON");
 
                 let depends = Depends {
-                    intc: {
-                        use ftl_api::channel::Channel;
-                        use ftl_api::handle::OwnedHandle;
-                        use ftl_types::handle::HandleId;
-
-                        let handle_id = HandleId::from_raw(environ_json.depends.intc);
-                        let handle = OwnedHandle::from_raw(handle_id);
-                        Some(Channel::from_handle(handle))
-                    },
-
                     virtio: { environ_json.depends.virtio },
                 };
 
@@ -50,7 +40,6 @@ pub mod apps {
         }
 
         pub struct Depends {
-            pub intc: Option<ftl_api::channel::Channel>,
             pub virtio: ftl_api::prelude::Vec<ftl_types::environ::Device>,
         }
 
@@ -62,7 +51,6 @@ pub mod apps {
 
         #[derive(serde::Serialize, serde::Deserialize)]
         struct DependsJson {
-            pub intc: i32,
             pub virtio: ftl_api::prelude::Vec<ftl_types::environ::Device>,
         }
 

@@ -112,13 +112,6 @@ enum Context {
 pub fn main(mut env: Environ) {
     info!("starting virtio_console");
     let mut buffer = MessageBuffer::new();
-    let intc = env.depends.intc.take().unwrap();
-    let signal = Signal::create().unwrap();
-    intc.send_with_buffer(&mut buffer, ListenRequest {
-        irq: 17,
-        signal: HandleOwnership(signal.handle().id()),
-    });
-    intc.recv_with_buffer::<ListenReply>(&mut buffer);
 
     let transport = probe(&env.depends.virtio, VIRTIO_DEVICE_TYPE_CONSOLE).unwrap();
     let mut transport = Box::new(transport) as Box<dyn VirtioTransport>;
