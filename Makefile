@@ -7,7 +7,7 @@ V       ?=            # "1" to enable verbose output
 STARTUP ?= apps/hello
 
 # Note: Don't forget to update boot.spec.json as well!
-APPS    ?= apps/virtio_console apps/arm_gic
+APPS    ?= apps/virtio_console
 
 # Disable builtin implicit rules and variables.
 MAKEFLAGS += --no-builtin-rules --no-builtin-variables

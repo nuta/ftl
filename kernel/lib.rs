@@ -23,6 +23,7 @@ mod folio;
 mod handle;
 mod memory;
 mod panic;
+mod utils;
 mod poll;
 mod process;
 mod ref_counted;

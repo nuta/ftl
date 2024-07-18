@@ -7,6 +7,7 @@ use ftl_types::address::VAddr;
 mod backtrace;
 mod cpuvar;
 mod thread;
+mod gic_v2;
 
 global_asm!(include_str!("interrupt.S"));
 
