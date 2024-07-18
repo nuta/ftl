@@ -18,6 +18,8 @@ pub use cpuvar::CpuVar;
 use ftl_types::error::FtlError;
 pub use thread::yield_cpu;
 pub use thread::Thread;
+pub use gic_v2::create_interrupt;
+pub use gic_v2::ack_interrupt;
 
 pub const PAGE_SIZE: usize = 4096;
 pub const NUM_CPUS_MAX: usize = 8;

@@ -6,4 +6,8 @@ impl Irq {
     pub fn from_raw(value: usize) -> Irq {
         Irq(value)
     }
+
+    pub fn as_usize(&self) -> usize {
+        self.0
+    }
 }

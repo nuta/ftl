@@ -3,7 +3,7 @@
 // >
 // > 4.1.4 GIC register access
 
-use ftl_types::address::PAddr;
+use ftl_types::{address::PAddr, error::FtlError, interrupt::Irq};
 
 use crate::{device_tree::DeviceTree, folio::Folio, spinlock::SpinLock, utils::mmio::{LittleEndian, MmioFolio, MmioReg, ReadOnly, ReadWrite, WriteOnly}};
 
@@ -95,6 +95,16 @@ impl Gic {
 }
 
 static GIC: SpinLock<Option<Gic>> = SpinLock::new(None);
+
+pub fn create_interrupt(irq: Irq) -> Result<(), FtlError> {
+    GIC.lock().as_mut().unwrap().enable_irq(irq.as_usize());
+    Ok(())
+}
+
+pub fn ack_interrupt(irq: Irq) -> Result<(), FtlError> {
+    GIC.lock().as_mut().unwrap().ack_irq(irq.as_usize());
+    Ok(())
+}
 
 pub fn init(device_tree: &DeviceTree) {
     let gicd_paddr: usize = device_tree.find_device_by_id("arm,cortex-a15-gic").unwrap().reg as usize;
