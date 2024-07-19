@@ -2,12 +2,14 @@
 #![no_main]
 
 use ftl_api::folio::MmioFolio;
+use ftl_api::interrupt::Interrupt;
 use ftl_api::mainloop::Mainloop;
 use ftl_api::prelude::*;
 use ftl_api::signal::Signal;
 use ftl_api::types::address::PAddr;
 use ftl_api::types::address::VAddr;
 use ftl_api::types::environ::Device;
+use ftl_api::types::interrupt::Irq;
 use ftl_api::types::message::HandleOwnership;
 use ftl_api::types::message::MessageBuffer;
 use ftl_api_autogen::apps::virtio_console::Environ;
@@ -81,7 +83,7 @@ impl BufferPool {
     }
 }
 
-fn probe(devices: &[Device], device_type: u32) -> Option<VirtioMmio> {
+fn probe(devices: &[Device], device_type: u32) -> Option<(VirtioMmio, Irq)> {
     for device in devices {
         let base_paddr = PAddr::new(device.reg as usize).unwrap();
         let mmio = MmioFolio::create_pinned(base_paddr, 0x1000).unwrap();
@@ -90,7 +92,8 @@ fn probe(devices: &[Device], device_type: u32) -> Option<VirtioMmio> {
         match transport.probe() {
             Some(ty) if ty == device_type => {
                 info!("console: IRQs: {:?}", device.interrupts);
-                return Some(transport);
+                let irq = Irq::from_raw(device.interrupts.as_ref().unwrap()[0] as usize); // FIXME:
+                return Some((transport, irq));
             }
             Some(ty) => {
                 warn!("unexpected device type: {}", ty);
@@ -106,6 +109,7 @@ fn probe(devices: &[Device], device_type: u32) -> Option<VirtioMmio> {
 
 enum Context {
     Autopilot,
+    Interrupt,
 }
 
 #[ftl_api::main]
@@ -113,7 +117,8 @@ pub fn main(mut env: Environ) {
     info!("starting virtio_console");
     let mut buffer = MessageBuffer::new();
 
-    let transport = probe(&env.depends.virtio, VIRTIO_DEVICE_TYPE_CONSOLE).unwrap();
+    let (transport, irq) = probe(&env.depends.virtio, VIRTIO_DEVICE_TYPE_CONSOLE).unwrap();
+    let interrupt = Interrupt::create(irq).unwrap();
     let mut transport = Box::new(transport) as Box<dyn VirtioTransport>;
     let mut virtqueues = transport.initialize(0, 2).unwrap();
 
@@ -164,6 +169,9 @@ pub fn main(mut env: Environ) {
     let mut mainloop = Mainloop::<Context, Message>::new().unwrap();
     mainloop
         .add_channel(env.autopilot_ch.take().unwrap(), Context::Autopilot)
+        .unwrap();
+    mainloop
+        .add_interrupt(interrupt, Context::Interrupt)
         .unwrap();
 
     loop {

@@ -3,6 +3,7 @@ use ftl_types::address::VAddr;
 use ftl_types::error::FtlError;
 use ftl_types::handle::HandleId;
 use ftl_types::handle::HandleRights;
+use ftl_types::interrupt::Irq;
 use ftl_types::message::MessageBuffer;
 use ftl_types::message::MessageInfo;
 use ftl_types::poll::PollEvent;
@@ -16,6 +17,7 @@ use crate::cpuvar::current_thread;
 use crate::folio::Folio;
 use crate::handle::AnyHandle;
 use crate::handle::Handle;
+use crate::interrupt::Interrupt;
 use crate::memory::AllocPagesError;
 use crate::poll::Poll;
 use crate::ref_counted::SharedRef;
@@ -205,8 +207,16 @@ fn signal_clear(handle_id: HandleId) -> Result<SignalBits, FtlError> {
     signal.clear()
 }
 
-fn interrupt_set_kernel_handler(pc: usize, arg: usize) -> Result<(), FtlError> {
-    arch::set_interrupt_handler(pc, arg)
+fn interrupt_create(irq: Irq) -> Result<HandleId, FtlError> {
+    let interrupt = Interrupt::new(irq)?;
+    let handle = Handle::new(interrupt, HandleRights::NONE);
+    let handle_id = current_thread()
+        .process()
+        .handles()
+        .lock()
+        .add(AnyHandle::Interrupt(handle))?;
+
+    Ok(handle_id)
 }
 
 pub fn syscall_entry(
@@ -301,11 +311,10 @@ pub fn syscall_entry(
             let value = signal_clear(handle_id)?;
             Ok(value.as_i32() as isize)
         }
-        _ if n == SyscallNumber::InterruptSetKernelHandler as isize => {
-            let pc = a0 as usize;
-            let arg = a1 as usize;
-            interrupt_set_kernel_handler(pc, arg)?;
-            Ok(0)
+        _ if n == SyscallNumber::InterruptCreate as isize => {
+            let irq = Irq::from_raw(a0 as usize);
+            let handle_id = interrupt_create(irq)?;
+            Ok(handle_id.as_isize())
         }
         _ => {
             println!(

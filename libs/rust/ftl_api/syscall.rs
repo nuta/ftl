@@ -1,5 +1,6 @@
 use ftl_types::error::FtlError;
 use ftl_types::handle::HandleId;
+use ftl_types::interrupt::Irq;
 use ftl_types::message::MessageBuffer;
 use ftl_types::message::MessageInfo;
 use ftl_types::poll::PollEvent;
@@ -183,9 +184,10 @@ pub fn signal_clear(handle: HandleId) -> Result<SignalBits, FtlError> {
     Ok(SignalBits::from_raw(ret as i32))
 }
 
-pub fn interrupt_set_kernel_handler(pc: usize, arg: usize) -> Result<(), FtlError> {
-    syscall2(SyscallNumber::InterruptSetKernelHandler, pc as isize, arg as isize)?;
-    Ok(())
+pub fn interrupt_create(irq: Irq) -> Result<HandleId, FtlError> {
+    let ret = syscall1(SyscallNumber::InterruptCreate, irq.as_usize() as isize)?;
+    let handle_id = HandleId::from_raw_isize_truncated(ret);
+    Ok(handle_id)
 }
 
 pub(crate) fn set_vsyscall(vsyscall: &'static VsyscallPage) {

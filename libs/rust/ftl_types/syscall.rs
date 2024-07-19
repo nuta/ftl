@@ -19,7 +19,7 @@ pub enum SyscallNumber {
     SignalCreate = 14,
     SignalUpdate = 15,
     SignalClear = 16,
-    InterruptSetKernelHandler = 17,
+    InterruptCreate = 17,
 }
 
 #[repr(C)]
