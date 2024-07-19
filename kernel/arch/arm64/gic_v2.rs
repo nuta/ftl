@@ -3,9 +3,10 @@
 // >
 // > 4.1.4 GIC register access
 
+use alloc::collections::BTreeMap;
 use ftl_types::{address::PAddr, error::FtlError, interrupt::Irq};
 
-use crate::{device_tree::DeviceTree, folio::Folio, spinlock::SpinLock, utils::mmio::{LittleEndian, MmioFolio, MmioReg, ReadOnly, ReadWrite, WriteOnly}};
+use crate::{device_tree::DeviceTree, folio::Folio, interrupt::Interrupt, ref_counted::SharedRef, spinlock::SpinLock, utils::mmio::{LittleEndian, MmioFolio, MmioReg, ReadOnly, ReadWrite, WriteOnly}};
 
 /// Distributor Control Register.
 const GICD_CTLR: MmioReg<LittleEndian, ReadWrite, u32> = MmioReg::new(0x000);
@@ -95,6 +96,7 @@ impl Gic {
 }
 
 static GIC: SpinLock<Option<Gic>> = SpinLock::new(None);
+static LISTENERS: SpinLock<BTreeMap<Irq, SharedRef<Interrupt>>> = SpinLock::new(BTreeMap::new());
 
 pub fn create_interrupt(irq: Irq) -> Result<(), FtlError> {
     GIC.lock().as_mut().unwrap().enable_irq(irq.as_usize());
@@ -104,6 +106,14 @@ pub fn create_interrupt(irq: Irq) -> Result<(), FtlError> {
 pub fn ack_interrupt(irq: Irq) -> Result<(), FtlError> {
     GIC.lock().as_mut().unwrap().ack_irq(irq.as_usize());
     Ok(())
+}
+
+pub fn handle_interrupt() {
+    let irq = GIC.lock().as_mut().unwrap().get_pending_irq();
+    let irq = Irq::from_raw(irq);
+    let listeners = LISTENERS.lock();
+    let listener = listeners.get(&irq).unwrap();
+    listener.trigger().unwrap();
 }
 
 pub fn init(device_tree: &DeviceTree) {
