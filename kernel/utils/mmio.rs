@@ -155,7 +155,7 @@ pub struct MmioFolio {
 
 impl MmioFolio {
     pub fn from_folio(folio: Folio) -> Result<MmioFolio, FtlError> {
-        let vaddr = folio.vaddr()?;
+        let vaddr = folio.vaddr_for_kernel()?;
         Ok(MmioFolio { folio, vaddr })
     }
 }
