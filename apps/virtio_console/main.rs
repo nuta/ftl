@@ -185,6 +185,21 @@ pub fn main(mut env: Environ) {
 
                 while let Some(VirtqUsedChain { descs, total_len }) = receiveq.pop_used() {
                     info!("interrupt: total_len={}", total_len);
+                    for desc in descs {
+                        let VirtqDescBuffer::WritableFromDevice { paddr, len } = desc else {
+                            panic!("unexpected desc");
+                        };
+
+                        let buffer_index = receiveq_buffers
+                            .paddr_to_index(paddr)
+                            .expect("invalid paddr");
+                        let vaddr = receiveq_buffers.vaddr(buffer_index);
+                        let data = unsafe {
+                            core::slice::from_raw_parts(vaddr.as_ptr::<u8>(), len as usize)
+                        };
+                        info!("received: {:?}", core::str::from_utf8(data).unwrap());
+                        receiveq_buffers.push_free(buffer_index);
+                    }
                 }
 
                 interrupt.ack();
