@@ -190,6 +190,11 @@ pub fn interrupt_create(irq: Irq) -> Result<HandleId, FtlError> {
     Ok(handle_id)
 }
 
+pub fn interrupt_ack(handle: HandleId) -> Result<(), FtlError> {
+    syscall1(SyscallNumber::InterruptAck, handle.as_isize())?;
+    Ok(())
+}
+
 pub(crate) fn set_vsyscall(vsyscall: &'static VsyscallPage) {
     *VSYSCALL_PAGE.lock() = Some(vsyscall);
 }

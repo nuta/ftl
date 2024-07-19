@@ -20,6 +20,7 @@ pub enum SyscallNumber {
     SignalUpdate = 15,
     SignalClear = 16,
     InterruptCreate = 17,
+    InterruptAck = 18,
 }
 
 #[repr(C)]

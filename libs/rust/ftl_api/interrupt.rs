@@ -27,6 +27,10 @@ impl Interrupt {
     pub fn handle(&self) -> &OwnedHandle {
         &self.handle
     }
+
+    pub fn ack(&self) -> Result<(), FtlError> {
+        syscall::interrupt_ack(self.handle().id())
+    }
 }
 
 impl fmt::Debug for Interrupt {

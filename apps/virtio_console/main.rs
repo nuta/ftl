@@ -179,6 +179,7 @@ pub fn main(mut env: Environ) {
         match mainloop.next(&mut buffer) {
             Event::Interrupt { ctx, interrupt } => {
                 info!("got interrupt!");
+                interrupt.ack();
             }
             _ => {
                 warn!("unhandled event");

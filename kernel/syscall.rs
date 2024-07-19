@@ -219,6 +219,21 @@ fn interrupt_create(irq: Irq) -> Result<HandleId, FtlError> {
     Ok(handle_id)
 }
 
+fn interrupt_ack(handle_id: HandleId) -> Result<(), FtlError> {
+    let interrupt: Handle<Interrupt> = {
+        current_thread()
+            .process()
+            .handles()
+            .lock()
+            .get_owned(handle_id)?
+            .as_interrupt()?
+            .clone()
+    };
+
+    interrupt.ack()
+}
+
+
 pub fn syscall_entry(
     n: isize,
     a0: isize,
@@ -315,6 +330,11 @@ pub fn syscall_entry(
             let irq = Irq::from_raw(a0 as usize);
             let handle_id = interrupt_create(irq)?;
             Ok(handle_id.as_isize())
+        }
+        _ if n == SyscallNumber::InterruptAck as isize => {
+            let handle_id = HandleId::from_raw_isize_truncated(a0);
+            interrupt_ack(handle_id)?;
+            Ok(0)
         }
         _ => {
             println!(

@@ -82,6 +82,13 @@ impl AnyHandle {
             _ => Err(FtlError::UnexpectedHandleType),
         }
     }
+
+    pub fn as_interrupt(&self) -> Result<&Handle<Interrupt>, FtlError> {
+        match self {
+            AnyHandle::Interrupt(ref interrupt) => Ok(interrupt),
+            _ => Err(FtlError::UnexpectedHandleType),
+        }
+    }
 }
 
 impl fmt::Debug for AnyHandle {
