@@ -33,14 +33,15 @@ pub fn boot(cpu_id: CpuId, bootinfo: BootInfo) -> ! {
     println!("\nFTL - Faster Than \"L\"\n");
 
     memory::init(&bootinfo);
-    arch::init();
-    process::init();
-    cpuvar::percpu_init(cpu_id);
 
     let device_tree = DeviceTree::parse(bootinfo.dtb_addr);
     for device in device_tree.devices() {
         println!("device: {} ({})", device.compatible, device.name);
     }
+
+    arch::init(&device_tree);
+    process::init();
+    cpuvar::percpu_init(cpu_id);
 
     let bootfs = Bootfs::load();
     for file in bootfs.files() {
