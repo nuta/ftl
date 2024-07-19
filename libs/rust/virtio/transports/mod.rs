@@ -13,6 +13,7 @@ const VIRTIO_STATUS_DRIVER_OK: u8 = 4;
 const VIRTIO_STATUS_FEAT_OK: u8 = 8;
 // const VIRTIO_F_VERSION_1: u64 = 1 << 32;
 
+#[derive(Debug)]
 #[repr(transparent)]
 pub struct IsrStatus(pub u8);
 
@@ -34,6 +35,7 @@ pub trait VirtioTransport: Send + Sync {
     fn is_modern(&mut self) -> bool;
     fn read_device_config8(&mut self, offset: u16) -> u8;
     fn read_isr_status(&mut self) -> IsrStatus;
+    fn ack_interrupt(&mut self, status: IsrStatus);
     fn read_device_status(&mut self) -> u8;
     fn write_device_status(&mut self, value: u8);
     fn read_device_features(&mut self) -> u64;

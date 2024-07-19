@@ -31,8 +31,8 @@ const GICC_IAR: MmioReg<LittleEndian, ReadOnly, u32> = MmioReg::new(0x00c);
 const GICC_EOIR: MmioReg<LittleEndian, WriteOnly, u32> = MmioReg::new(0x010);
 
 struct Gic {
-    gicd_folio: MmioFolio,
-    gicc_folio: MmioFolio,
+    dist_folio: MmioFolio,
+    cpu_folio: MmioFolio,
 }
 
 impl Gic {
@@ -49,8 +49,8 @@ impl Gic {
         GICD_CTLR.write(&mut dist_folio, 1);
 
         Self {
-            gicd_folio: dist_folio,
-            gicc_folio: cpu_folio,
+            dist_folio,
+            cpu_folio,
         }
     }
 
@@ -60,17 +60,17 @@ impl Gic {
         // Enable the interrupt.
         {
             let offset = irq / 32;
-            let mut value = GICD_IENABLERn.read_with_offset(&mut self.gicd_folio, offset);
+            let mut value = GICD_IENABLERn.read_with_offset(&mut self.dist_folio, offset);
             value |= 1 << (irq % 32);
-            GICD_IENABLERn.write_with_offset(&mut self.gicd_folio, offset, value);
+            GICD_IENABLERn.write_with_offset(&mut self.dist_folio, offset, value);
         }
 
         // Set the priority of the interrupt to the highest.
         {
             let offset = irq / 4;
-            let mut value = GICD_IPRIORITYRn.read_with_offset(&mut self.gicd_folio, offset);
+            let mut value = GICD_IPRIORITYRn.read_with_offset(&mut self.dist_folio, offset);
             value &= !(0xff << irq_shift);
-            GICD_IPRIORITYRn.write_with_offset(&mut self.gicd_folio, offset, value);
+            GICD_IPRIORITYRn.write_with_offset(&mut self.dist_folio, offset, value);
         }
 
         // Set the target processor to the first processor.
@@ -78,20 +78,20 @@ impl Gic {
         {
             let target = 0; /* CPU interface 0 */
             let offset = irq / 4;
-            let mut value = GICD_ITARGETSRn.read_with_offset(&mut self.gicd_folio, offset);
+            let mut value = GICD_ITARGETSRn.read_with_offset(&mut self.dist_folio, offset);
             value &= !(0xff << irq_shift);
             value |= (1 << target) << irq_shift;
-            GICD_ITARGETSRn.write_with_offset(&mut self.gicd_folio, offset, value);
+            GICD_ITARGETSRn.write_with_offset(&mut self.dist_folio, offset, value);
         }
     }
 
     pub fn get_pending_irq(&mut self) -> usize {
-        (GICC_IAR.read(&mut self.gicc_folio) & 0x3ff) as usize
+        (GICC_IAR.read(&mut self.cpu_folio) & 0x3ff) as usize
     }
 
     pub fn ack_irq(&mut self, irq: usize) {
         debug_assert!(irq & !0x3ff == 0);
-        GICC_EOIR.write(&mut self.gicc_folio, irq as u32);
+        GICC_EOIR.write(&mut self.cpu_folio, irq as u32);
     }
 }
 

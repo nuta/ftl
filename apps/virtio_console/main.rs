@@ -21,6 +21,7 @@ use ftl_virtio::transports::mmio::VirtioMmio;
 use ftl_virtio::transports::VirtioTransport;
 use ftl_virtio::virtqueue::align_up;
 use ftl_virtio::virtqueue::VirtqDescBuffer;
+use ftl_virtio::virtqueue::VirtqUsedChain;
 use ftl_virtio::VIRTIO_DEVICE_TYPE_CONSOLE;
 
 #[derive(Copy, Clone)]
@@ -178,7 +179,14 @@ pub fn main(mut env: Environ) {
     loop {
         match mainloop.next(&mut buffer) {
             Event::Interrupt { ctx, interrupt } => {
-                info!("got interrupt!");
+                let status = transport.read_isr_status();
+                info!("got interrupt!: status={:?}", status);
+                transport.ack_interrupt(status);
+
+                while let Some(VirtqUsedChain { descs, total_len }) = receiveq.pop_used() {
+                    info!("interrupt: total_len={}", total_len);
+                }
+
                 interrupt.ack();
             }
             _ => {
