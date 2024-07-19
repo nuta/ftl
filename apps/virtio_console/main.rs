@@ -3,6 +3,7 @@
 
 use ftl_api::folio::MmioFolio;
 use ftl_api::interrupt::Interrupt;
+use ftl_api::mainloop::Event;
 use ftl_api::mainloop::Mainloop;
 use ftl_api::prelude::*;
 use ftl_api::signal::Signal;
@@ -176,6 +177,9 @@ pub fn main(mut env: Environ) {
 
     loop {
         match mainloop.next(&mut buffer) {
+            Event::Interrupt { ctx, interrupt } => {
+                info!("got interrupt!");
+            }
             _ => {
                 warn!("unhandled event");
             }
