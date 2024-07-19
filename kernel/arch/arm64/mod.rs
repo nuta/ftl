@@ -47,9 +47,12 @@ pub fn halt() -> ! {
 
 pub fn idle() -> ! {
     loop {
+        yield_cpu(); // FIXME:
+
         unsafe {
             asm!("msr daifclr, #2");
-            asm!("wfi");
+            asm!("nop"); // FIXME: use wfi
+            asm!("msr daifset, #2");
         }
     }
 }
@@ -78,6 +81,7 @@ extern "C" fn handle_syscall() {
 extern "C" fn arm64_handle_interrupt() {
     println!("interrupt!");
     gic_v2::handle_interrupt();
+    println!("interrupt done");
 }
 
 extern "C" {

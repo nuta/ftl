@@ -59,8 +59,5 @@ pub fn boot(cpu_id: CpuId, bootinfo: BootInfo) -> ! {
     let mut autopilot = Autopilot::new();
     autopilot.boot(&bootfs, &boot_spec, &device_tree);
 
-    arch::yield_cpu();
-
-    println!("entering idle...");
     arch::idle();
 }
