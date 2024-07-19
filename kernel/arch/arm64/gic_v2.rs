@@ -98,8 +98,10 @@ impl Gic {
 static GIC: SpinLock<Option<Gic>> = SpinLock::new(None);
 static LISTENERS: SpinLock<BTreeMap<Irq, SharedRef<Interrupt>>> = SpinLock::new(BTreeMap::new());
 
-pub fn create_interrupt(irq: Irq) -> Result<(), FtlError> {
+pub fn create_interrupt(interrupt: &SharedRef<Interrupt>) -> Result<(), FtlError> {
+    let irq = interrupt.irq();
     GIC.lock().as_mut().unwrap().enable_irq(irq.as_usize());
+    LISTENERS.lock().insert(irq, interrupt.clone());
     Ok(())
 }
 
@@ -112,8 +114,10 @@ pub fn handle_interrupt() {
     let irq = GIC.lock().as_mut().unwrap().get_pending_irq();
     let irq = Irq::from_raw(irq);
     let listeners = LISTENERS.lock();
-    let listener = listeners.get(&irq).unwrap();
-    listener.trigger().unwrap();
+    if let Some(listener) = listeners.get(&irq) {
+        println!("trigger {:?}", irq);
+        listener.trigger().unwrap();
+    }
 }
 
 pub fn init(device_tree: &DeviceTree) {

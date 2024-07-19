@@ -14,15 +14,19 @@ pub struct Interrupt {
 
 impl Interrupt {
     pub fn new(irq: Irq) -> Result<SharedRef<Interrupt>, FtlError> {
-        arch::create_interrupt(irq)?;
 
         let signal = Signal::new()?;
-        let interrupt = Interrupt {
+        let interrupt = SharedRef::new(Interrupt {
             irq,
             signal
-        };
+        });
 
-        Ok(SharedRef::new(interrupt))
+        arch::create_interrupt(&interrupt)?;
+        Ok(interrupt)
+    }
+
+    pub fn irq(&self) -> Irq {
+        self.irq
     }
 
     pub fn add_poller(&self, poller: SharedRef<Poller>) {
