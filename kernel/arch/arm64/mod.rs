@@ -79,9 +79,7 @@ extern "C" fn handle_syscall() {
 
 #[no_mangle]
 extern "C" fn arm64_handle_interrupt() {
-    println!("interrupt!");
     gic_v2::handle_interrupt();
-    println!("interrupt done");
 }
 
 extern "C" {

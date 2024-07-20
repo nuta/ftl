@@ -115,7 +115,6 @@ pub fn handle_interrupt() {
     let irq = Irq::from_raw(irq);
     let listeners = LISTENERS.lock();
     if let Some(listener) = listeners.get(&irq) {
-        println!("trigger {:?}", irq);
         listener.trigger().unwrap();
     }
 }

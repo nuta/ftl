@@ -25,7 +25,6 @@ impl SleepPoint {
 
     pub fn wake_all(&self) {
         for waiter in self.pollers.lock().drain(..) {
-            println!("wake up");
             waiter.set_runnable();
         }
     }
@@ -35,7 +34,6 @@ impl SleepPoint {
         F: Fn(&mut SpinLockGuard<'a, T>) -> SleepCallbackResult<U>,
     {
         loop {
-            println!("sleep loop");
             let mut waiters = self.pollers.lock();
             let mut guard = lock.lock();
             match is_ready(&mut guard) {

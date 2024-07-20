@@ -78,7 +78,6 @@ impl Poll {
 
     pub fn wait(&self) -> Result<(PollEvent, HandleId), FtlError> {
         self.sleep_point.sleep_loop(&self.entries, |entries| {
-            println!("scanning again...");
             for entry in entries.values() {
                 let raw_ready = entry.ready.swap(0, Ordering::SeqCst); // TODO: correct ordering
                 let ready = PollEvent::from_raw(raw_ready);
