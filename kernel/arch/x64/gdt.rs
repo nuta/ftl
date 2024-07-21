@@ -2,6 +2,7 @@ use core::arch::asm;
 
 use super::tss::Tss;
 
+pub const KERNEL_CS: u16 = 8;
 pub const TSS_SEG: u16 = 48;
 
 const GDT_TEMPLATE: [u64; 8] = [
@@ -27,7 +28,9 @@ pub struct Gdt {
 
 impl Gdt {
     pub fn new() -> Self {
-        Self { entries: GDT_TEMPLATE }
+        Self {
+            entries: GDT_TEMPLATE,
+        }
     }
 
     // TODO: Make sure `self` is at a fixed address.
@@ -42,7 +45,9 @@ impl Gdt {
         self.entries[(TSS_SEG as usize) / 8 + 1] = tss_addr >> 32;
 
         let base = &self.entries as *const _ as u64;
-        let limit = (self.entries.len() * size_of::<u64>() - 1).try_into().unwrap();
+        let limit = (self.entries.len() * size_of::<u64>() - 1)
+            .try_into()
+            .unwrap();
         let gdtr = Gdtr { limit, base };
 
         unsafe {

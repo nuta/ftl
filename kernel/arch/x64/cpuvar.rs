@@ -11,7 +11,7 @@ use crate::thread::Thread;
 pub struct CpuVar {
     pub(super) context: *mut Context,
     pub(super) gdt: RefCell<Gdt>,
-    pub(super) idt: Idt,
+    pub(super) idt: RefCell<Idt>,
     pub(super) tss: Tss,
 }
 
@@ -20,7 +20,7 @@ impl CpuVar {
         Self {
             context: &idle_thread.arch().context as *const _ as *mut _,
             gdt: RefCell::new(Gdt::new()),
-            idt: Idt::new(),
+            idt: RefCell::new(Idt::new()),
             tss: Tss::new(),
         }
     }

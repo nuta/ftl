@@ -1,14 +1,15 @@
 use core::arch::asm;
+use core::arch::global_asm;
 use core::borrow::BorrowMut;
 
 mod backtrace;
 mod cpuvar;
-mod interrupt;
-mod thread;
 mod gdt;
 mod idt;
-mod tss;
+mod interrupt;
 mod lapic;
+mod thread;
+mod tss;
 
 pub use backtrace::backtrace;
 pub use cpuvar::cpuvar;
@@ -84,5 +85,5 @@ pub fn init(_device_tree: Option<&DeviceTree>) {
     let cpuvar = cpuvar();
     cpuvar.arch.gdt.borrow_mut().load(&cpuvar.arch.tss);
     cpuvar.arch.tss.load();
-    cpuvar.arch.idt.load();
+    cpuvar.arch.idt.borrow_mut().load();
 }
