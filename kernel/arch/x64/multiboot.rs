@@ -161,7 +161,7 @@ impl Cmdline {
                             addr, irq
                         );
                         let is_full = virtio_mmio_devices.try_push(VirtioMmioDevice {
-                            mmio_base: PAddr::new(addr),
+                            mmio_base: PAddr::new(addr).unwrap(),
                             irq,
                         }).is_err();
 
