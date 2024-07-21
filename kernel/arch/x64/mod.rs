@@ -67,4 +67,4 @@ pub fn console_write(bytes: &[u8]) {
     }
 }
 
-pub fn init(_device_tree: &DeviceTree) {}
+pub fn init(_device_tree: Option<&DeviceTree>) {}

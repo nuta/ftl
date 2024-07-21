@@ -136,7 +136,7 @@ pub fn handle_interrupt() {
     }
 }
 
-pub fn init(device_tree: &DeviceTree) {
+pub fn init(device_tree: Option<&DeviceTree>) {
     let gicd_paddr: usize = device_tree
         .find_device_by_id("arm,cortex-a15-gic")
         .unwrap()

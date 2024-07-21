@@ -48,7 +48,6 @@ QEMU      ?= qemu-system-x86_64
 QEMUFLAGS += -machine pc -m 256
 QEMUFLAGS += -global virtio-mmio.force-legacy=false
 QEMUFLAGS += -drive id=drive0,file=disk.img,format=raw,if=none
-QEMUFLAGS += -device virtio-blk-device,drive=drive0,bus=virtio-mmio-bus.0
 else
 $(error "Unknown ARCH: $(ARCH)")
 endif

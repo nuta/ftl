@@ -36,17 +36,11 @@ unsafe extern "C" fn x64_boot() -> ! {
         })
         .expect("too many free mems");
 
-    // > For guests booting as “bare-metal” (any other kind of boot), the DTB
-    // > is at the start of RAM (0x4000_0000)
-    // >
-    // > https://www.qemu.org/docs/master/system/arm/virt.html
-    let dtb_addr = 0x4000_0000;
-
     ftl_kernel::boot::boot(
         CpuId::new(0 /* TODO: support multi-processors */),
         BootInfo {
             free_mems,
-            dtb_addr: dtb_addr as *const u8,
+            dtb_addr: None,
         },
     );
 }

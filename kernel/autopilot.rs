@@ -63,7 +63,7 @@ impl Autopilot {
         }
     }
 
-    pub fn boot(&mut self, bootfs: &Bootfs, boot_spec: &BootSpec, device_tree: &DeviceTree) {
+    pub fn boot(&mut self, bootfs: &Bootfs, boot_spec: &BootSpec, device_tree: Option<&DeviceTree>) {
         let mut apps = Vec::new();
         for app_name in &boot_spec.autostart_apps {
             let elf_file = match bootfs.find_by_name(&format!("apps/{}/app.elf", app_name)) {
@@ -89,7 +89,7 @@ impl Autopilot {
             apps.push((app_name.clone(), app_spec, elf_file.data));
         }
 
-        self.start_apps(apps, device_tree.devices())
+        self.start_apps(apps, device_tree.map(|tree| tree.devices()).unwrap_or(&[]))
             .expect("failed to start apps");
     }
 

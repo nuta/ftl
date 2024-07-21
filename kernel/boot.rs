@@ -25,7 +25,7 @@ pub struct FreeMem {
 #[derive(Debug)]
 pub struct BootInfo {
     pub free_mems: InlinedVec<FreeMem, 8>,
-    pub dtb_addr: *const u8,
+    pub dtb_addr: Option<*const u8>,
 }
 
 /// The entry point of the kernel.
@@ -34,12 +34,19 @@ pub fn boot(cpu_id: CpuId, bootinfo: BootInfo) -> ! {
 
     memory::init(&bootinfo);
 
-    let device_tree = DeviceTree::parse(bootinfo.dtb_addr);
-    for device in device_tree.devices() {
-        println!("device: {} ({})", device.compatible, device.name);
-    }
+    let device_tree = match bootinfo.dtb_addr  {
+        Some(dtb_addr) => {
+            let device_tree = DeviceTree::parse(dtb_addr);
+            for device in device_tree.devices() {
+                println!("device: {} ({})", device.compatible, device.name);
+            }
 
-    arch::init(&device_tree);
+            Some(device_tree)
+        }
+        None => None,
+    };
+
+    arch::init(device_tree.as_ref());
     process::init();
     cpuvar::percpu_init(cpu_id);
 
@@ -59,7 +66,7 @@ pub fn boot(cpu_id: CpuId, bootinfo: BootInfo) -> ! {
     };
 
     let mut autopilot = Autopilot::new();
-    autopilot.boot(&bootfs, &boot_spec, &device_tree);
+    autopilot.boot(&bootfs, &boot_spec, device_tree.as_ref());
 
     arch::idle();
 }
