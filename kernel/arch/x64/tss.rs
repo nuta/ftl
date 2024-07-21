@@ -1,5 +1,7 @@
 use core::arch::asm;
 
+use super::gdt::TSS_SEG;
+
 pub const IST_RSP0: u8 = 0;
 
 #[derive(Debug, Copy, Clone)]
@@ -38,7 +40,7 @@ impl Tss {
 
     pub fn load(&self) {
         unsafe {
-            asm!("ltr {}", in(reg) 0x28);
+            asm!("ltr ax", in("ax") TSS_SEG);
         }
     }
 }

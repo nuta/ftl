@@ -1,4 +1,5 @@
 use core::arch::asm;
+use core::borrow::BorrowMut;
 
 mod backtrace;
 mod cpuvar;
@@ -79,4 +80,9 @@ pub fn init(_device_tree: Option<&DeviceTree>) {
         cr4 |= 1 << 16; // FSGSBASE
         asm!("mov cr4, {}", in(reg) cr4);
     }
+
+    let cpuvar = cpuvar();
+    cpuvar.arch.gdt.borrow_mut().load(&cpuvar.arch.tss);
+    cpuvar.arch.tss.load();
+    cpuvar.arch.idt.load();
 }

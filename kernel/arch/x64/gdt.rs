@@ -2,7 +2,7 @@ use core::arch::asm;
 
 use super::tss::Tss;
 
-const TSS_SEG: u16 = 48;
+pub const TSS_SEG: u16 = 48;
 
 const GDT_TEMPLATE: [u64; 8] = [
     0x0000000000000000, // null
@@ -25,7 +25,7 @@ impl Gdt {
     }
 
     // TODO: Make sure `self` is at a fixed address.
-    pub fn load(&mut self, tss: &mut Tss) {
+    pub fn load(&mut self, tss: &Tss) {
         // Fill the TSS descriptor.
         let tss_addr = tss as *const _ as u64;
         self.entries[(TSS_SEG as usize) / 8] = 0x0000890000000000
