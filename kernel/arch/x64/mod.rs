@@ -4,6 +4,10 @@ mod backtrace;
 mod cpuvar;
 mod interrupt;
 mod thread;
+mod gdt;
+mod idt;
+mod tss;
+mod lapic;
 
 pub use backtrace::backtrace;
 pub use cpuvar::cpuvar;
