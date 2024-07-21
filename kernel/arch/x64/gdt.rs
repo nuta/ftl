@@ -15,6 +15,12 @@ const GDT_TEMPLATE: [u64; 8] = [
     0,                  // tss_high
 ];
 
+#[repr(C, packed)]
+struct Gdtr {
+    limit: u16,
+    base: u64,
+}
+
 pub struct Gdt {
     entries: [u64; 8],
 }
@@ -35,8 +41,12 @@ impl Gdt {
             | (((tss_addr >> 24) & 0xff) << 56);
         self.entries[(TSS_SEG as usize) / 8 + 1] = tss_addr >> 32;
 
+        let base = &self.entries as *const _ as u64;
+        let limit = (self.entries.len() * size_of::<u64>() - 1).try_into().unwrap();
+        let gdtr = Gdtr { limit, base };
+
         unsafe {
-            asm!("lgdt [{}]", in(reg) &self.entries);
+            asm!("lgdt [{}]", in(reg) &gdtr);
         }
     }
 }
