@@ -17,6 +17,7 @@ info_request:
   .short 0
   .long  info_request_end - info_request
   .long  6 // memory map
+  .long  1 // cmdline
 info_request_end:
 
 .align 8

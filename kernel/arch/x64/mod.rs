@@ -8,6 +8,7 @@ mod gdt;
 mod idt;
 mod interrupt;
 mod lapic;
+mod multiboot;
 mod thread;
 mod tss;
 
