@@ -97,7 +97,6 @@ impl<'a> AppLoader<'a> {
         }
     }
 
-    #[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
     fn get_shdr_by_name(&self, name: &str) -> Option<&ftl_elf::Shdr> {
         fn get_cstr(buffer: &[u8], offset: usize) -> Option<&str> {
             let mut len = 0;
@@ -156,6 +155,11 @@ impl<'a> AppLoader<'a> {
                 },
                 #[cfg(target_arch = "aarch64")]
                 ftl_elf::R_AARCH64_RELATIVE => unsafe {
+                    let ptr = (self.base_addr() + rela.r_offset as usize) as *mut i64;
+                    *ptr += (self.base_addr() as i64) + rela.r_addend;
+                },
+                #[cfg(target_arch = "x86_64")]
+                ftl_elf::R_X86_64_RELATIVE => unsafe {
                     let ptr = (self.base_addr() + rela.r_offset as usize) as *mut i64;
                     *ptr += (self.base_addr() as i64) + rela.r_addend;
                 },

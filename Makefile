@@ -1,7 +1,9 @@
-# "riscv64" or "arm64"
-ARCH    ?= arm64
+# "x64", "riscv64", or "arm64"
+ARCH    ?= x64
 
-MACHINE ?= qemu-virt
+# "qemu-virt"
+MACHINE ?= pc
+
 RELEASE ?=            # "1" to build release version
 V       ?=            # "1" to enable verbose output
 STARTUP ?= apps/hello
@@ -41,6 +43,12 @@ QEMUFLAGS += -device virtio-blk-device,drive=drive0,bus=virtio-mmio-bus.0
 QEMUFLAGS += -device virtio-serial-device,bus=virtio-mmio-bus.1
 QEMUFLAGS += -device virtconsole,chardev=console0
 QEMUFLAGS += -chardev pipe,path=serial.pipe,id=console0
+else ifeq ($(ARCH),x64)
+QEMU      ?= qemu-system-x86_64
+QEMUFLAGS += -machine pc -m 256
+QEMUFLAGS += -global virtio-mmio.force-legacy=false
+QEMUFLAGS += -drive id=drive0,file=disk.img,format=raw,if=none
+QEMUFLAGS += -device virtio-blk-device,drive=drive0,bus=virtio-mmio-bus.0
 else
 $(error "Unknown ARCH: $(ARCH)")
 endif
