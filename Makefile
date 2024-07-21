@@ -45,9 +45,10 @@ QEMUFLAGS += -device virtconsole,chardev=console0
 QEMUFLAGS += -chardev pipe,path=serial.pipe,id=console0
 else ifeq ($(ARCH),x64)
 QEMU      ?= qemu-system-x86_64
-QEMUFLAGS += -cpu Haswell -m 256
+QEMUFLAGS += -machine microvm -cpu Haswell -m 256
 QEMUFLAGS += -global virtio-mmio.force-legacy=false
 QEMUFLAGS += -drive id=drive0,file=disk.img,format=raw,if=none
+QEMUFLAGS += -device virtio-blk-device,drive=drive0,bus=virtio-mmio-bus.0
 else
 $(error "Unknown ARCH: $(ARCH)")
 endif
