@@ -63,7 +63,12 @@ impl Autopilot {
         }
     }
 
-    pub fn boot(&mut self, bootfs: &Bootfs, boot_spec: &BootSpec, device_tree: Option<&DeviceTree>) {
+    pub fn boot(
+        &mut self,
+        bootfs: &Bootfs,
+        boot_spec: &BootSpec,
+        device_tree: Option<&DeviceTree>,
+    ) {
         let mut apps = Vec::new();
         for app_name in &boot_spec.autostart_apps {
             let elf_file = match bootfs.find_by_name(&format!("apps/{}/app.elf", app_name)) {

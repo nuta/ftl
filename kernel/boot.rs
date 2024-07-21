@@ -30,16 +30,12 @@ pub struct BootInfo {
 
 /// The entry point of the kernel.
 pub fn boot(cpu_id: CpuId, bootinfo: BootInfo) -> ! {
-    println!("\nFTL - Faster Than \"L\"\n");
-
     memory::init(&bootinfo);
 
-    let device_tree = match bootinfo.dtb_addr  {
+    let device_tree = match bootinfo.dtb_addr {
         Some(dtb_addr) => {
             let device_tree = DeviceTree::parse(dtb_addr);
-            for device in device_tree.devices() {
-                println!("device: {} ({})", device.compatible, device.name);
-            }
+            for device in device_tree.devices() {}
 
             Some(device_tree)
         }
@@ -51,9 +47,7 @@ pub fn boot(cpu_id: CpuId, bootinfo: BootInfo) -> ! {
     cpuvar::percpu_init(cpu_id);
 
     let bootfs = Bootfs::load();
-    for file in bootfs.files() {
-        println!("bootfs: file: {}", file.name);
-    }
+    for file in bootfs.files() {}
 
     let boot_spec_file = bootfs
         .find_by_name("cfg/boot.spec.json")

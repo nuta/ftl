@@ -206,14 +206,6 @@ setup_ap:
     ud2
 
 setup_bsp:
-    // Clear .bss section
-    mov al, 0x00
-    lea rdi, [rip + __bss]
-    lea rcx, [rip + __bss_end]
-    sub rcx, rdi
-    cld
-    rep stosb
-
     pop  rsi // the address of multiboot info
     pop  rdi // multiboot magic
 
@@ -240,4 +232,4 @@ __kernel_pdpt:
 
 .balign 4096
 __kernel_pd:
-    .space 4096
+    .space 4 * 512 * 8; /* (# of PDPT entries) * (# of entries in PD) * (size of entry) */

@@ -67,4 +67,12 @@ pub fn console_write(bytes: &[u8]) {
     }
 }
 
-pub fn init(_device_tree: Option<&DeviceTree>) {}
+pub fn init(_device_tree: Option<&DeviceTree>) {
+    unsafe {
+        let mut cr4: u64;
+        asm!("mov {}, cr4", out(reg) cr4);
+
+        cr4 |= 1 << 16; // FSGSBASE
+        asm!("mov cr4, {}", in(reg) cr4);
+    }
+}
