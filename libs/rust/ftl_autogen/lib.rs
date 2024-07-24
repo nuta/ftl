@@ -338,4 +338,158 @@ pub mod protocols {
             }
         }
     }
+
+    pub mod net_device {
+        use super::*;
+
+        #[repr(C)]
+        pub struct Tx {
+            pub payload: ftl_types::idl::BytesField<1500>,
+        }
+
+        #[repr(C)]
+        struct InlinedPartTx {
+            pub payload: ftl_types::idl::BytesField<1500>,
+        }
+
+        // TODO: static_assert for size
+
+        impl MessageSerialize for Tx {
+            const MSGINFO: MessageInfo = MessageInfo::from_raw(
+                (5 << 14) | (0 << 12) | ::core::mem::size_of::<Tx>() as isize,
+            );
+
+            fn serialize(self, buffer: &mut MessageBuffer) {
+                // The actual serialization is done in this const fn. This is to
+                // ensure the serialization can be done with const operations.
+                const fn do_serialize(this: Tx, buffer: &mut MessageBuffer) {
+                    let object = InlinedPartTx {
+                        payload: this.payload,
+                    };
+
+                    let dst = buffer as *mut _ as *mut InlinedPartTx;
+                    let src = &object as *const _ as *const InlinedPartTx;
+
+                    unsafe {
+                        core::ptr::copy_nonoverlapping::<InlinedPartTx>(src, dst, 1);
+                    }
+
+                    // FIXME: Support multiple handles.
+                    debug_assert!(MessageInfo::from_raw(Tx::MSGINFO.as_raw()).num_handles() <= 1);
+
+                    // Don't call destructors on handles transferred to this buffer.
+                    core::mem::forget(this);
+                }
+
+                do_serialize(self, buffer)
+            }
+        }
+
+        impl MessageDeserialize for Tx {
+            type Reader<'a> = TxReader<'a>;
+
+            fn deserialize<'a>(
+                buffer: &'a MessageBuffer,
+                msginfo: MessageInfo,
+            ) -> Option<TxReader<'a>> {
+                if msginfo == Self::MSGINFO {
+                    Some(TxReader { buffer })
+                } else {
+                    None
+                }
+            }
+        }
+
+        pub struct TxReader<'a> {
+            #[allow(dead_code)]
+            buffer: &'a MessageBuffer,
+        }
+
+        impl<'a> TxReader<'a> {
+            #[allow(dead_code)]
+            fn as_ref(&self, buffer: &'a MessageBuffer) -> &'a InlinedPartTx {
+                unsafe { &*(buffer as *const _ as *const InlinedPartTx) }
+            }
+
+            pub fn payload(&self) -> ftl_types::idl::BytesField<1500> {
+                let m = self.as_ref(self.buffer);
+                m.payload
+            }
+        }
+
+        #[repr(C)]
+        pub struct Rx {
+            pub payload: ftl_types::idl::BytesField<1500>,
+        }
+
+        #[repr(C)]
+        struct InlinedPartRx {
+            pub payload: ftl_types::idl::BytesField<1500>,
+        }
+
+        // TODO: static_assert for size
+
+        impl MessageSerialize for Rx {
+            const MSGINFO: MessageInfo = MessageInfo::from_raw(
+                (6 << 14) | (0 << 12) | ::core::mem::size_of::<Rx>() as isize,
+            );
+
+            fn serialize(self, buffer: &mut MessageBuffer) {
+                // The actual serialization is done in this const fn. This is to
+                // ensure the serialization can be done with const operations.
+                const fn do_serialize(this: Rx, buffer: &mut MessageBuffer) {
+                    let object = InlinedPartRx {
+                        payload: this.payload,
+                    };
+
+                    let dst = buffer as *mut _ as *mut InlinedPartRx;
+                    let src = &object as *const _ as *const InlinedPartRx;
+
+                    unsafe {
+                        core::ptr::copy_nonoverlapping::<InlinedPartRx>(src, dst, 1);
+                    }
+
+                    // FIXME: Support multiple handles.
+                    debug_assert!(MessageInfo::from_raw(Rx::MSGINFO.as_raw()).num_handles() <= 1);
+
+                    // Don't call destructors on handles transferred to this buffer.
+                    core::mem::forget(this);
+                }
+
+                do_serialize(self, buffer)
+            }
+        }
+
+        impl MessageDeserialize for Rx {
+            type Reader<'a> = RxReader<'a>;
+
+            fn deserialize<'a>(
+                buffer: &'a MessageBuffer,
+                msginfo: MessageInfo,
+            ) -> Option<RxReader<'a>> {
+                if msginfo == Self::MSGINFO {
+                    Some(RxReader { buffer })
+                } else {
+                    None
+                }
+            }
+        }
+
+        pub struct RxReader<'a> {
+            #[allow(dead_code)]
+            buffer: &'a MessageBuffer,
+        }
+
+        impl<'a> RxReader<'a> {
+            #[allow(dead_code)]
+            fn as_ref(&self, buffer: &'a MessageBuffer) -> &'a InlinedPartRx {
+                unsafe { &*(buffer as *const _ as *const InlinedPartRx) }
+            }
+
+            pub fn payload(&self) -> ftl_types::idl::BytesField<1500> {
+                let m = self.as_ref(self.buffer);
+                m.payload
+            }
+        }
+    }
 }

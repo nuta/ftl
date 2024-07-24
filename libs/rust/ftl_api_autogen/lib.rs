@@ -53,6 +53,8 @@ pub mod apps {
             NewclientReply(ftl_autogen::protocols::autopilot::NewclientReplyReader<'a>),
             PingRequest(ftl_autogen::protocols::ping::PingRequestReader<'a>),
             PingReply(ftl_autogen::protocols::ping::PingReplyReader<'a>),
+            Tx(ftl_autogen::protocols::net_device::TxReader<'a>),
+            Rx(ftl_autogen::protocols::net_device::RxReader<'a>),
         }
 
         impl<'a> ::core::fmt::Debug for Message<'a> {
@@ -62,6 +64,8 @@ pub mod apps {
                     Self::NewclientReply(_) => write!(f, "NewclientReply"),
                     Self::PingRequest(_) => write!(f, "PingRequest"),
                     Self::PingReply(_) => write!(f, "PingReply"),
+                    Self::Tx(_) => write!(f, "Tx"),
+                    Self::Rx(_) => write!(f, "Rx"),
                 }
             }
         }
@@ -105,6 +109,20 @@ pub mod apps {
 
                         let reader = M::deserialize(buffer, msginfo)?;
                         Some(Message::PingReply(reader))
+                    }
+
+                    ftl_autogen::protocols::net_device::Tx::MSGINFO => {
+                        use ftl_autogen::protocols::net_device::Tx as M;
+
+                        let reader = M::deserialize(buffer, msginfo)?;
+                        Some(Message::Tx(reader))
+                    }
+
+                    ftl_autogen::protocols::net_device::Rx::MSGINFO => {
+                        use ftl_autogen::protocols::net_device::Rx as M;
+
+                        let reader = M::deserialize(buffer, msginfo)?;
+                        Some(Message::Rx(reader))
                     }
 
                     _ => None,
@@ -167,6 +185,8 @@ pub mod apps {
             NewclientReply(ftl_autogen::protocols::autopilot::NewclientReplyReader<'a>),
             PingRequest(ftl_autogen::protocols::ping::PingRequestReader<'a>),
             PingReply(ftl_autogen::protocols::ping::PingReplyReader<'a>),
+            Tx(ftl_autogen::protocols::net_device::TxReader<'a>),
+            Rx(ftl_autogen::protocols::net_device::RxReader<'a>),
         }
 
         impl<'a> ::core::fmt::Debug for Message<'a> {
@@ -176,6 +196,8 @@ pub mod apps {
                     Self::NewclientReply(_) => write!(f, "NewclientReply"),
                     Self::PingRequest(_) => write!(f, "PingRequest"),
                     Self::PingReply(_) => write!(f, "PingReply"),
+                    Self::Tx(_) => write!(f, "Tx"),
+                    Self::Rx(_) => write!(f, "Rx"),
                 }
             }
         }
@@ -219,6 +241,20 @@ pub mod apps {
 
                         let reader = M::deserialize(buffer, msginfo)?;
                         Some(Message::PingReply(reader))
+                    }
+
+                    ftl_autogen::protocols::net_device::Tx::MSGINFO => {
+                        use ftl_autogen::protocols::net_device::Tx as M;
+
+                        let reader = M::deserialize(buffer, msginfo)?;
+                        Some(Message::Tx(reader))
+                    }
+
+                    ftl_autogen::protocols::net_device::Rx::MSGINFO => {
+                        use ftl_autogen::protocols::net_device::Rx as M;
+
+                        let reader = M::deserialize(buffer, msginfo)?;
+                        Some(Message::Rx(reader))
                     }
 
                     _ => None,

@@ -59,17 +59,10 @@ impl smoltcp::phy::Device for DeviceImpl {
     type TxToken<'a> = TxTokenImpl<'a>;
 
     fn capabilities(&self) -> DeviceCapabilities {
-        DeviceCapabilities {
-            medium: smoltcp::phy::Medium::Ethernet,
-            max_transmission_unit: 1514,
-            max_burst_size: Some(1500),
-            checksum: ChecksumCapabilities {
-                ipv4: Checksum::None,
-                udp: Checksum::None,
-                tcp: Checksum::None,
-                icmpv4: Checksum::None,
-            },
-        }
+        let mut caps = DeviceCapabilities::default();
+        caps.medium = smoltcp::phy::Medium::Ethernet;
+        caps.max_transmission_unit = 1514;
+        caps
     }
 
     fn receive(&mut self, timestamp: Instant) -> Option<(Self::RxToken<'_>, Self::TxToken<'_>)> {

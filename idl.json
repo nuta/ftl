@@ -53,6 +53,31 @@
                     }
                 }
             ]
+        },
+        {
+            "name": "net_device",
+            "oneways": [
+                {
+                    "name": "tx",
+                    "fields": [
+                        {
+                            "name": "payload",
+                            "type": "bytes",
+                            "capacity": 1500
+                        }
+                    ]
+                },
+                {
+                    "name": "rx",
+                    "fields": [
+                        {
+                            "name": "payload",
+                            "type": "bytes",
+                            "capacity": 1500
+                        }
+                    ]
+                }
+            ]
         }
     ]
 }
