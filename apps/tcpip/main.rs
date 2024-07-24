@@ -149,6 +149,7 @@ pub fn main(mut env: Environ) {
                     // (Context::Client { counter }, _) => {
                     // }
                     (Context::Driver, Message::Rx(m)) => {
+                        trace!("received {} bytes", m.payload().len());
                         device.receive_pkt(m.payload().as_slice());
                     }
                     _ => {
