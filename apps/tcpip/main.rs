@@ -1,36 +1,31 @@
 #![no_std]
 #![no_main]
 
-use core::marker::PhantomData;
-
 use ftl_api::channel::Channel;
 use ftl_api::collections::VecDeque;
 use ftl_api::handle::OwnedHandle;
 use ftl_api::mainloop::Event;
 use ftl_api::mainloop::Mainloop;
 use ftl_api::prelude::*;
-use ftl_api::sync::Arc;
 use ftl_api::types::idl::BytesField;
-use ftl_api::types::idl::StringField;
 use ftl_api::types::message::MessageBuffer;
 use ftl_api_autogen::apps::tcpip::Environ;
 use ftl_api_autogen::apps::tcpip::Message;
 use ftl_api_autogen::protocols::ethernet_device;
-use ftl_api_autogen::protocols::ping::PingReply;
 use smoltcp::iface::Config;
 use smoltcp::iface::Interface;
 use smoltcp::iface::SocketSet;
-use smoltcp::phy::Checksum;
-use smoltcp::phy::ChecksumCapabilities;
 use smoltcp::phy::DeviceCapabilities;
+use smoltcp::socket::tcp;
 use smoltcp::time::Instant;
 use smoltcp::wire::EthernetAddress;
 use smoltcp::wire::HardwareAddress;
+use smoltcp::wire::IpListenEndpoint;
 
 enum Context {
     Autopilot,
     Driver,
-    Client { counter: i32 },
+    Client,
 }
 
 struct RxTokenImpl(Vec<u8>);
@@ -96,11 +91,11 @@ impl smoltcp::phy::Device for DeviceImpl {
         caps
     }
 
-    fn receive(&mut self, timestamp: Instant) -> Option<(Self::RxToken<'_>, Self::TxToken<'_>)> {
+    fn receive(&mut self, _timestamp: Instant) -> Option<(Self::RxToken<'_>, Self::TxToken<'_>)> {
         self.rx_queue.pop_front().map(|pkt| (RxTokenImpl(pkt), TxTokenImpl(self)))
     }
 
-    fn transmit(&mut self, timestamp: Instant) -> Option<Self::TxToken<'_>> {
+    fn transmit(&mut self, _timestamp: Instant) -> Option<Self::TxToken<'_>> {
         Some(TxTokenImpl(self))
     }
 }
@@ -132,6 +127,16 @@ pub fn main(mut env: Environ) {
         .add_channel(driver_ch, Context::Driver)
         .unwrap();
 
+
+    let rx_buf = tcp::SocketBuffer::new(vec![0; 8192]);
+    let tx_buf = tcp::SocketBuffer::new(vec![0; 8192]);
+    let mut sock = tcp::Socket::new(rx_buf, tx_buf);
+    sock.listen(IpListenEndpoint {
+        addr: None,
+        port: 1234
+    }).unwrap();
+    let sock_handle = sockets.add(sock);
+
     let mut buffer = MessageBuffer::new();
     loop {
         let ready = iface.poll(now(), &mut device, &mut sockets);
@@ -143,7 +148,7 @@ pub fn main(mut env: Environ) {
                         info!("got new client: {:?}", m.handle());
                         let new_ch = Channel::from_handle(OwnedHandle::from_raw(m.handle()));
                         mainloop
-                            .add_channel(new_ch, Context::Client { counter: 0 })
+                            .add_channel(new_ch, Context::Client)
                             .unwrap();
                     }
                     // (Context::Client { counter }, _) => {
@@ -160,9 +165,6 @@ pub fn main(mut env: Environ) {
             }
             _ => {
                 panic!("unexpected event");
-            }
-            Event::Error(err) => {
-                panic!("mainloop error: {:?}", err);
             }
         }
     }
