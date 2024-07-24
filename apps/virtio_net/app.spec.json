@@ -11,6 +11,6 @@
                 }
             }
         ],
-        "provides": []
+        "provides": ["ethernet_device"]
     }
 }

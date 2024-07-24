@@ -4,6 +4,7 @@
 use core::marker::PhantomData;
 
 use ftl_api::channel::Channel;
+use ftl_api::collections::VecDeque;
 use ftl_api::handle::OwnedHandle;
 use ftl_api::mainloop::Event;
 use ftl_api::mainloop::Mainloop;
@@ -30,14 +31,14 @@ enum Context {
     Client { counter: i32 },
 }
 
-struct RxTokenImpl<'a>(&'a mut DeviceImpl);
+struct RxTokenImpl(Vec<u8>);
 
-impl<'a> smoltcp::phy::RxToken for RxTokenImpl<'a> {
-    fn consume<R, F>(self, f: F) -> R
+impl smoltcp::phy::RxToken for RxTokenImpl {
+    fn consume<R, F>(mut self, f: F) -> R
     where
         F: FnOnce(&mut [u8]) -> R,
     {
-        todo!()
+        f(&mut self.0)
     }
 }
 
@@ -54,7 +55,7 @@ impl<'a> smoltcp::phy::TxToken for TxTokenImpl<'a> {
         let tx = ethernet_device::Tx{
             payload: BytesField::new(buf, len.try_into().unwrap()),
         };
-        if let Err(err) = self.0.driver_ch.send_with_buffer(&mut self.0.buffer, tx) {
+        if let Err(err) = self.0.driver_ch.send_with_buffer(&mut self.0.msgbuffer, tx) {
             warn!("failed to send: {:?}", err);
         }
 
@@ -64,20 +65,26 @@ impl<'a> smoltcp::phy::TxToken for TxTokenImpl<'a> {
 
 struct DeviceImpl {
     driver_ch: Channel,
-    buffer: MessageBuffer,
+    rx_queue: VecDeque<Vec<u8>>,
+    msgbuffer: MessageBuffer,
 }
 
 impl DeviceImpl {
     pub fn new(driver_ch: Channel) -> DeviceImpl {
         DeviceImpl {
             driver_ch,
-            buffer: MessageBuffer::new(),
+            rx_queue: VecDeque::new(),
+            msgbuffer: MessageBuffer::new(),
         }
+    }
+
+    pub fn receive(&mut self, pkt: &[u8]) {
+        self.rx_queue.push_back(pkt.to_vec());
     }
 }
 
 impl smoltcp::phy::Device for DeviceImpl {
-    type RxToken<'a> = RxTokenImpl<'a>;
+    type RxToken<'a> = RxTokenImpl;
     type TxToken<'a> = TxTokenImpl<'a>;
 
     fn capabilities(&self) -> DeviceCapabilities {
@@ -88,7 +95,7 @@ impl smoltcp::phy::Device for DeviceImpl {
     }
 
     fn receive(&mut self, timestamp: Instant) -> Option<(Self::RxToken<'_>, Self::TxToken<'_>)> {
-        todo!()
+        self.rx_queue.pop_front().map(|pkt| (RxTokenImpl(pkt), TxTokenImpl(self)))
     }
 
     fn transmit(&mut self, timestamp: Instant) -> Option<Self::TxToken<'_>> {
