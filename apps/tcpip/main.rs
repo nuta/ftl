@@ -142,7 +142,7 @@ pub fn main(mut env: Environ) {
     // FIXME: Clone using syscall
     let driver_ch_cloned = Channel::from_handle(OwnedHandle::from_raw(driver_ch.handle().id()));
 
-    let mac = HardwareAddress::Ethernet(EthernetAddress([0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc]));
+    let mac = HardwareAddress::Ethernet(EthernetAddress([0x52, 0x54, 0x00, 0x12, 0x34, 0x56])); // FIXME:
     let config = Config::new(mac.into());
     let mut device = DeviceImpl::new(driver_ch_cloned);
     let mut iface = Interface::new(config, &mut device, now());
