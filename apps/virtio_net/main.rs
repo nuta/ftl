@@ -1,7 +1,9 @@
 #![no_std]
 #![no_main]
 
+use ftl_api::channel::Channel;
 use ftl_api::folio::MmioFolio;
+use ftl_api::handle::OwnedHandle;
 use ftl_api::interrupt::Interrupt;
 use ftl_api::mainloop::Event;
 use ftl_api::mainloop::Mainloop;
@@ -161,10 +163,15 @@ pub fn main(mut env: Environ) {
         .add_interrupt(interrupt, Context::Interrupt)
         .unwrap();
 
+    let mut tcpip_ch = None;
     loop {
         match mainloop.next(&mut buffer) {
             Event::Message { ctx: _ctx, ch: _ch, m } => {
                 match m {
+                    Message::NewclientRequest(m) => {
+                        // FIXME:
+                        tcpip_ch = Some(Channel::from_handle(OwnedHandle::from_raw(m.handle())));
+                    }
                     Message::Tx(tx) => {
                         let buffer_index = transmitq_buffers.pop_free().expect("no free tx buffers");
                         let vaddr = transmitq_buffers.vaddr(buffer_index);
