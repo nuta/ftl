@@ -251,16 +251,23 @@ pub fn main(mut env: Environ) {
                         let vaddr = receiveq_buffers.vaddr(buffer_index);
                         let header_len = unsafe {
                             let header = &*vaddr.as_ptr::<VirtioNetModernHeader>();
-                            header.hdr_len
+                            header.hdr_len as usize
                         };
-                        unsafe { core::slice::from_raw_parts(vaddr.as_ptr::<u8>(), read_len) };
+                        let data = unsafe {
+                            core::slice::from_raw_parts(
+                                vaddr.as_ptr::<u8>().add(header_len),
+                                read_len,
+                            )
+                        };
 
+                        trace!("received {} bytes", data.len());
                         if let Some(tcpip_ch) = &tcpip_ch {
+                            // FIXME:
+                            let mut tmpbuf = [0; 1514];
+                            tmpbuf[..data.len()].copy_from_slice(&data);
+
                             let rx = ethernet_device::Rx {
-                                payload: BytesField::new(
-                                    data.try_into().unwrap(),
-                                    data.len().try_into().unwrap(),
-                                ),
+                                payload: BytesField::new(tmpbuf, data.len() as u16),
                             };
                             trace!("forwarding to tcpip...");
                             if let Err(err) = tcpip_ch.send_with_buffer(&mut buffer, rx) {
