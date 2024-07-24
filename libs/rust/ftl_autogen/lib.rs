@@ -339,17 +339,17 @@ pub mod protocols {
         }
     }
 
-    pub mod net_device {
+    pub mod ethernet_device {
         use super::*;
 
         #[repr(C)]
         pub struct Tx {
-            pub payload: ftl_types::idl::BytesField<1500>,
+            pub payload: ftl_types::idl::BytesField<1514>,
         }
 
         #[repr(C)]
         struct InlinedPartTx {
-            pub payload: ftl_types::idl::BytesField<1500>,
+            pub payload: ftl_types::idl::BytesField<1514>,
         }
 
         // TODO: static_assert for size
@@ -411,7 +411,7 @@ pub mod protocols {
                 unsafe { &*(buffer as *const _ as *const InlinedPartTx) }
             }
 
-            pub fn payload(&self) -> ftl_types::idl::BytesField<1500> {
+            pub fn payload(&self) -> ftl_types::idl::BytesField<1514> {
                 let m = self.as_ref(self.buffer);
                 m.payload
             }
@@ -419,12 +419,12 @@ pub mod protocols {
 
         #[repr(C)]
         pub struct Rx {
-            pub payload: ftl_types::idl::BytesField<1500>,
+            pub payload: ftl_types::idl::BytesField<1514>,
         }
 
         #[repr(C)]
         struct InlinedPartRx {
-            pub payload: ftl_types::idl::BytesField<1500>,
+            pub payload: ftl_types::idl::BytesField<1514>,
         }
 
         // TODO: static_assert for size
@@ -486,7 +486,7 @@ pub mod protocols {
                 unsafe { &*(buffer as *const _ as *const InlinedPartRx) }
             }
 
-            pub fn payload(&self) -> ftl_types::idl::BytesField<1500> {
+            pub fn payload(&self) -> ftl_types::idl::BytesField<1514> {
                 let m = self.as_ref(self.buffer);
                 m.payload
             }

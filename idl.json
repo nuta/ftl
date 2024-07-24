@@ -55,7 +55,7 @@
             ]
         },
         {
-            "name": "net_device",
+            "name": "ethernet_device",
             "oneways": [
                 {
                     "name": "tx",
@@ -63,7 +63,7 @@
                         {
                             "name": "payload",
                             "type": "bytes",
-                            "capacity": 1500
+                            "capacity": 1514
                         }
                     ]
                 },
@@ -73,7 +73,7 @@
                         {
                             "name": "payload",
                             "type": "bytes",
-                            "capacity": 1500
+                            "capacity": 1514
                         }
                     ]
                 }

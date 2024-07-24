@@ -8,11 +8,12 @@ use ftl_api::handle::OwnedHandle;
 use ftl_api::mainloop::Event;
 use ftl_api::mainloop::Mainloop;
 use ftl_api::prelude::*;
+use ftl_api::types::idl::BytesField;
 use ftl_api::types::idl::StringField;
 use ftl_api::types::message::MessageBuffer;
 use ftl_api_autogen::apps::tcpip::Environ;
 use ftl_api_autogen::apps::tcpip::Message;
-use ftl_api_autogen::protocols::net_device::Tx;
+use ftl_api_autogen::protocols::ethernet_device;
 use ftl_api_autogen::protocols::ping::PingReply;
 use smoltcp::iface::Config;
 use smoltcp::iface::Interface;
@@ -29,7 +30,8 @@ enum Context {
     Client { counter: i32 },
 }
 
-struct RxTokenImpl<'a>(&'a DeviceImpl);
+struct RxTokenImpl<'a>(&'a mut DeviceImpl);
+
 impl<'a> smoltcp::phy::RxToken for RxTokenImpl<'a> {
     fn consume<R, F>(self, f: F) -> R
     where
@@ -39,16 +41,24 @@ impl<'a> smoltcp::phy::RxToken for RxTokenImpl<'a> {
     }
 }
 
-struct TxTokenImpl<'a>(&'a DeviceImpl);
+struct TxTokenImpl<'a>(&'a mut DeviceImpl);
+
 impl<'a> smoltcp::phy::TxToken for TxTokenImpl<'a> {
     fn consume<R, F>(self, len: usize, f: F) -> R
     where
         F: FnOnce(&mut [u8]) -> R,
     {
-        debug_assert!(len <= self.0.buffer.data.len());
+        let mut buf = [0u8; 1514];
+        let ret = f(&mut buf[..len]);
 
-        f(&mut self.0.buffer.data[..len]);
-        self.0.driver_ch.send();
+        let tx = ethernet_device::Tx{
+            payload: BytesField::new(buf, len.try_into().unwrap()),
+        };
+        if let Err(err) = self.0.driver_ch.send_with_buffer(&mut self.0.buffer, tx) {
+            warn!("failed to send: {:?}", err);
+        }
+
+        ret
     }
 }
 
@@ -95,9 +105,11 @@ fn now() -> Instant {
 pub fn main(mut env: Environ) {
     info!("starting...");
 
+    let driver_ch = env.depends.ethernet_device.take().unwrap();
+
     let mac = HardwareAddress::Ethernet(EthernetAddress([0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc]));
     let config = Config::new(mac.into());
-    let mut device = DeviceImpl::new();
+    let mut device = DeviceImpl::new(driver_ch);
     let mut iface = Interface::new(config, &mut device, now());
     let mut sockets = SocketSet::new(Vec::with_capacity(16));
 

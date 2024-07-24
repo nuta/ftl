@@ -20,7 +20,17 @@ pub mod apps {
                 let environ_json: EnvironJson =
                     serde_json::from_slice(environ_bytes).expect("failed to parse environ JSON");
 
-                let depends = Depends {};
+                let depends = Depends {
+                    ethernet_device: {
+                        use ftl_api::channel::Channel;
+                        use ftl_api::handle::OwnedHandle;
+                        use ftl_types::handle::HandleId;
+
+                        let handle_id = HandleId::from_raw(environ_json.depends.ethernet_device);
+                        let handle = OwnedHandle::from_raw(handle_id);
+                        Some(Channel::from_handle(handle))
+                    },
+                };
 
                 Self {
                     autopilot_ch: {
@@ -37,7 +47,9 @@ pub mod apps {
             }
         }
 
-        pub struct Depends {}
+        pub struct Depends {
+            pub ethernet_device: Option<ftl_api::channel::Channel>,
+        }
 
         #[derive(serde::Serialize, serde::Deserialize)]
         struct EnvironJson {
@@ -46,15 +58,17 @@ pub mod apps {
         }
 
         #[derive(serde::Serialize, serde::Deserialize)]
-        struct DependsJson {}
+        struct DependsJson {
+            pub ethernet_device: i32,
+        }
 
         pub enum Message<'a> {
             NewclientRequest(ftl_autogen::protocols::autopilot::NewclientRequestReader<'a>),
             NewclientReply(ftl_autogen::protocols::autopilot::NewclientReplyReader<'a>),
             PingRequest(ftl_autogen::protocols::ping::PingRequestReader<'a>),
             PingReply(ftl_autogen::protocols::ping::PingReplyReader<'a>),
-            Tx(ftl_autogen::protocols::net_device::TxReader<'a>),
-            Rx(ftl_autogen::protocols::net_device::RxReader<'a>),
+            Tx(ftl_autogen::protocols::ethernet_device::TxReader<'a>),
+            Rx(ftl_autogen::protocols::ethernet_device::RxReader<'a>),
         }
 
         impl<'a> ::core::fmt::Debug for Message<'a> {
@@ -111,15 +125,15 @@ pub mod apps {
                         Some(Message::PingReply(reader))
                     }
 
-                    ftl_autogen::protocols::net_device::Tx::MSGINFO => {
-                        use ftl_autogen::protocols::net_device::Tx as M;
+                    ftl_autogen::protocols::ethernet_device::Tx::MSGINFO => {
+                        use ftl_autogen::protocols::ethernet_device::Tx as M;
 
                         let reader = M::deserialize(buffer, msginfo)?;
                         Some(Message::Tx(reader))
                     }
 
-                    ftl_autogen::protocols::net_device::Rx::MSGINFO => {
-                        use ftl_autogen::protocols::net_device::Rx as M;
+                    ftl_autogen::protocols::ethernet_device::Rx::MSGINFO => {
+                        use ftl_autogen::protocols::ethernet_device::Rx as M;
 
                         let reader = M::deserialize(buffer, msginfo)?;
                         Some(Message::Rx(reader))
@@ -185,8 +199,8 @@ pub mod apps {
             NewclientReply(ftl_autogen::protocols::autopilot::NewclientReplyReader<'a>),
             PingRequest(ftl_autogen::protocols::ping::PingRequestReader<'a>),
             PingReply(ftl_autogen::protocols::ping::PingReplyReader<'a>),
-            Tx(ftl_autogen::protocols::net_device::TxReader<'a>),
-            Rx(ftl_autogen::protocols::net_device::RxReader<'a>),
+            Tx(ftl_autogen::protocols::ethernet_device::TxReader<'a>),
+            Rx(ftl_autogen::protocols::ethernet_device::RxReader<'a>),
         }
 
         impl<'a> ::core::fmt::Debug for Message<'a> {
@@ -243,15 +257,15 @@ pub mod apps {
                         Some(Message::PingReply(reader))
                     }
 
-                    ftl_autogen::protocols::net_device::Tx::MSGINFO => {
-                        use ftl_autogen::protocols::net_device::Tx as M;
+                    ftl_autogen::protocols::ethernet_device::Tx::MSGINFO => {
+                        use ftl_autogen::protocols::ethernet_device::Tx as M;
 
                         let reader = M::deserialize(buffer, msginfo)?;
                         Some(Message::Tx(reader))
                     }
 
-                    ftl_autogen::protocols::net_device::Rx::MSGINFO => {
-                        use ftl_autogen::protocols::net_device::Rx as M;
+                    ftl_autogen::protocols::ethernet_device::Rx::MSGINFO => {
+                        use ftl_autogen::protocols::ethernet_device::Rx as M;
 
                         let reader = M::deserialize(buffer, msginfo)?;
                         Some(Message::Rx(reader))
