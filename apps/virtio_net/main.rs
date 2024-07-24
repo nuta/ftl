@@ -33,7 +33,7 @@ struct VirtioNetModernHeader {
     gso_size: u16,
     checksum_start: u16,
     checksum_offset: u16,
-    num_buffer: u16,
+    // num_buffer: u16,
 }
 
 #[derive(Copy, Clone)]
@@ -166,6 +166,7 @@ pub fn main(mut env: Environ) {
 
     let mut tcpip_ch = None;
     loop {
+        trace!("waiting for event...");
         match mainloop.next(&mut buffer) {
             Event::Message {
                 ctx: _ctx,
@@ -178,6 +179,7 @@ pub fn main(mut env: Environ) {
                         tcpip_ch = Some(Channel::from_handle(OwnedHandle::from_raw(m.handle())));
                     }
                     Message::Tx(tx) => {
+                        trace!("sending {} bytes", tx.payload().len());
                         let buffer_index =
                             transmitq_buffers.pop_free().expect("no free tx buffers");
                         let vaddr = transmitq_buffers.vaddr(buffer_index);
@@ -192,7 +194,7 @@ pub fn main(mut env: Environ) {
                                     gso_size: 0,
                                     checksum_start: 0,
                                     checksum_offset: 0,
-                                    num_buffer: 0,
+                                    // num_buffer: 0,
                                 },
                             );
                         }
@@ -249,10 +251,7 @@ pub fn main(mut env: Environ) {
                             .paddr_to_index(paddr)
                             .expect("invalid paddr");
                         let vaddr = receiveq_buffers.vaddr(buffer_index);
-                        let header_len = unsafe {
-                            let header = &*vaddr.as_ptr::<VirtioNetModernHeader>();
-                            header.hdr_len as usize
-                        };
+                        let header_len = size_of::<VirtioNetModernHeader>();
                         let data = unsafe {
                             core::slice::from_raw_parts(
                                 vaddr.as_ptr::<u8>().add(header_len),
@@ -260,7 +259,7 @@ pub fn main(mut env: Environ) {
                             )
                         };
 
-                        trace!("received {} bytes", data.len());
+                        trace!("received {} bytes (header_len={}) {:02x?}", data.len(), header_len, &data[0..14]);
                         if let Some(tcpip_ch) = &tcpip_ch {
                             // FIXME:
                             let mut tmpbuf = [0; 1514];
