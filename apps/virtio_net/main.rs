@@ -244,9 +244,12 @@ pub fn main(mut env: Environ) {
                         info!("received: {:?}", core::str::from_utf8(data).unwrap());
 
                         if let Some(tcpip_ch) = &tcpip_ch {
-                            tcpip_ch.send_with_buffer(&mut buffer, ethernet_device::Rx {
+                            let rx = ethernet_device::Rx {
                                 payload: BytesField::new(data.try_into().unwrap(), data.len().try_into().unwrap())
-                            });
+                            };
+                            if let Err(err) = tcpip_ch.send_with_buffer(&mut buffer, rx) {
+                                warn!("failed to send rx: {:?}", err);
+                            }
                         }
 
                         receiveq_buffers.push_free(buffer_index);
