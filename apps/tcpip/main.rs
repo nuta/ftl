@@ -12,6 +12,7 @@ use ftl_api::types::idl::StringField;
 use ftl_api::types::message::MessageBuffer;
 use ftl_api_autogen::apps::tcpip::Environ;
 use ftl_api_autogen::apps::tcpip::Message;
+use ftl_api_autogen::protocols::net_device::Tx;
 use ftl_api_autogen::protocols::ping::PingReply;
 use smoltcp::iface::Config;
 use smoltcp::iface::Interface;
@@ -31,8 +32,9 @@ enum Context {
 struct RxTokenImpl<'a>(&'a DeviceImpl);
 impl<'a> smoltcp::phy::RxToken for RxTokenImpl<'a> {
     fn consume<R, F>(self, f: F) -> R
-        where
-            F: FnOnce(&mut [u8]) -> R {
+    where
+        F: FnOnce(&mut [u8]) -> R,
+    {
         todo!()
     }
 }
@@ -40,17 +42,27 @@ impl<'a> smoltcp::phy::RxToken for RxTokenImpl<'a> {
 struct TxTokenImpl<'a>(&'a DeviceImpl);
 impl<'a> smoltcp::phy::TxToken for TxTokenImpl<'a> {
     fn consume<R, F>(self, len: usize, f: F) -> R
-        where
-            F: FnOnce(&mut [u8]) -> R {
-        todo!()
+    where
+        F: FnOnce(&mut [u8]) -> R,
+    {
+        debug_assert!(len <= self.0.buffer.data.len());
+
+        f(&mut self.0.buffer.data[..len]);
+        self.0.driver_ch.send();
     }
 }
 
-struct DeviceImpl {}
+struct DeviceImpl {
+    driver_ch: Channel,
+    buffer: MessageBuffer,
+}
 
 impl DeviceImpl {
-    pub fn new() -> DeviceImpl {
-        DeviceImpl {}
+    pub fn new(driver_ch: Channel) -> DeviceImpl {
+        DeviceImpl {
+            driver_ch,
+            buffer: MessageBuffer::new(),
+        }
     }
 }
 
@@ -70,7 +82,7 @@ impl smoltcp::phy::Device for DeviceImpl {
     }
 
     fn transmit(&mut self, timestamp: Instant) -> Option<Self::TxToken<'_>> {
-        todo!()
+        Some(TxTokenImpl(self))
     }
 }
 
