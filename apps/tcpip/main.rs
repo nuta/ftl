@@ -9,6 +9,7 @@ use ftl_api::handle::OwnedHandle;
 use ftl_api::mainloop::Event;
 use ftl_api::mainloop::Mainloop;
 use ftl_api::prelude::*;
+use ftl_api::sync::Arc;
 use ftl_api::types::idl::BytesField;
 use ftl_api::types::idl::StringField;
 use ftl_api::types::message::MessageBuffer;
@@ -28,6 +29,7 @@ use smoltcp::wire::HardwareAddress;
 
 enum Context {
     Autopilot,
+    Driver,
     Client { counter: i32 },
 }
 
@@ -78,7 +80,7 @@ impl DeviceImpl {
         }
     }
 
-    pub fn receive(&mut self, pkt: &[u8]) {
+    pub fn receive_pkt(&mut self, pkt: &[u8]) {
         self.rx_queue.push_back(pkt.to_vec());
     }
 }
@@ -113,16 +115,21 @@ pub fn main(mut env: Environ) {
     info!("starting...");
 
     let driver_ch = env.depends.ethernet_device.take().unwrap();
+    // FIXME: Clone using syscall
+    let driver_ch_cloned = Channel::from_handle(OwnedHandle::from_raw(driver_ch.handle().id()));
 
     let mac = HardwareAddress::Ethernet(EthernetAddress([0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc]));
     let config = Config::new(mac.into());
-    let mut device = DeviceImpl::new(driver_ch);
+    let mut device = DeviceImpl::new(driver_ch_cloned);
     let mut iface = Interface::new(config, &mut device, now());
     let mut sockets = SocketSet::new(Vec::with_capacity(16));
 
     let mut mainloop = Mainloop::<Context, Message>::new().unwrap();
     mainloop
         .add_channel(env.autopilot_ch.take().unwrap(), Context::Autopilot)
+        .unwrap();
+    mainloop
+        .add_channel(driver_ch, Context::Driver)
         .unwrap();
 
     let mut buffer = MessageBuffer::new();
@@ -141,6 +148,9 @@ pub fn main(mut env: Environ) {
                     }
                     // (Context::Client { counter }, _) => {
                     // }
+                    (Context::Driver, Message::Rx(m)) => {
+                        device.receive_pkt(m.payload().as_slice());
+                    }
                     _ => {
                         // TODO: dump message with fmt::Debug
                         panic!("unknown message");
