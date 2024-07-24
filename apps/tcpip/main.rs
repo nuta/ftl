@@ -48,6 +48,7 @@ impl<'a> smoltcp::phy::TxToken for TxTokenImpl<'a> {
     where
         F: FnOnce(&mut [u8]) -> R,
     {
+        trace!("transmitting {} bytes", len);
         let mut buf = [0u8; 1514];
         let ret = f(&mut buf[..len]);
 
@@ -109,9 +110,33 @@ fn now() -> Instant {
     Instant::from_millis(0)
 }
 
+struct Logger;
+static LOGGER: Logger = Logger;
+impl log::Log for Logger {
+    fn enabled(&self, _metadata: &log::Metadata) -> bool {
+        true
+    }
+
+    fn flush(&self) {
+
+    }
+
+    fn log(&self, record: &log::Record) {
+        trace!("{}: {}", record.module_path().unwrap_or("(unknown)"), record.args());
+    }
+}
+
 #[ftl_api::main]
 pub fn main(mut env: Environ) {
     info!("starting...");
+
+    // For smoltcp
+    log::set_logger(&LOGGER).unwrap();
+    log::set_max_level(if cfg!(debug_assertions) {
+        log::LevelFilter::Trace
+    } else {
+        log::LevelFilter::Info
+    });
 
     let driver_ch = env.depends.ethernet_device.take().unwrap();
     // FIXME: Clone using syscall
@@ -149,6 +174,7 @@ pub fn main(mut env: Environ) {
     let mut buffer = MessageBuffer::new();
     loop {
         let ready = iface.poll(now(), &mut device, &mut sockets);
+        trace!("polled: ready={}", ready);
 
         match mainloop.next(&mut buffer) {
             Event::Message { ch, ctx, m } => {

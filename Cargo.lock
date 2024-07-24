@@ -747,6 +747,7 @@ version = "0.0.0"
 dependencies = [
  "ftl_api",
  "ftl_api_autogen",
+ "log",
  "smoltcp",
 ]
 
