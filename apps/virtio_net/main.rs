@@ -250,6 +250,8 @@ pub fn main(mut env: Environ) {
                             if let Err(err) = tcpip_ch.send_with_buffer(&mut buffer, rx) {
                                 warn!("failed to send rx: {:?}", err);
                             }
+                        } else {
+                            warn!("no tcpip ch, droppping packet...");
                         }
 
                         receiveq_buffers.push_free(buffer_index);
