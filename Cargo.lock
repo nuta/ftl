@@ -646,6 +646,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "tcpip"
+version = "0.0.0"
+dependencies = [
+ "ftl_api",
+ "ftl_api_autogen",
+]
+
+[[package]]
 name = "tempfile"
 version = "3.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -692,6 +700,15 @@ dependencies = [
 
 [[package]]
 name = "virtio_console"
+version = "0.0.0"
+dependencies = [
+ "ftl_api",
+ "ftl_api_autogen",
+ "ftl_virtio",
+]
+
+[[package]]
+name = "virtio_net"
 version = "0.0.0"
 dependencies = [
  "ftl_api",

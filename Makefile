@@ -4,10 +4,9 @@ ARCH    ?= arm64
 MACHINE ?= qemu-virt
 RELEASE ?=            # "1" to build release version
 V       ?=            # "1" to enable verbose output
-STARTUP ?= apps/hello
 
 # Note: Don't forget to update boot.spec.json as well!
-APPS    ?= apps/virtio_console
+APPS    ?= apps/tcpip apps/virtio_net
 
 # Disable builtin implicit rules and variables.
 MAKEFLAGS += --no-builtin-rules --no-builtin-variables
@@ -104,9 +103,6 @@ ftl.elf: $(sources) libs/rust/ftl_autogen/lib.rs Makefile build/bootfs.bin
 ftl.pe: ftl.elf
 	$(PROGRESS) "OBJCOPY" $(@)
 	$(OBJCOPY) -O binary --strip-all $< $(@)
-
-build/startup.elf: build/$(STARTUP).elf
-	cp $< $@
 
 build/bootfs.bin: build/ftl_mkbootfs $(app_elfs) Makefile
 	rm -rf build/bootfs
