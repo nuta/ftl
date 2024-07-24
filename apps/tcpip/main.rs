@@ -15,6 +15,10 @@ use ftl_api_autogen::apps::tcpip::Message;
 use ftl_api_autogen::protocols::ping::PingReply;
 use smoltcp::iface::Config;
 use smoltcp::iface::Interface;
+use smoltcp::iface::SocketSet;
+use smoltcp::phy::Checksum;
+use smoltcp::phy::ChecksumCapabilities;
+use smoltcp::phy::DeviceCapabilities;
 use smoltcp::time::Instant;
 use smoltcp::wire::EthernetAddress;
 use smoltcp::wire::HardwareAddress;
@@ -54,8 +58,18 @@ impl smoltcp::phy::Device for DeviceImpl {
     type RxToken<'a> = RxTokenImpl<'a>;
     type TxToken<'a> = TxTokenImpl<'a>;
 
-    fn capabilities(&self) -> smoltcp::phy::DeviceCapabilities {
-        todo!()
+    fn capabilities(&self) -> DeviceCapabilities {
+        DeviceCapabilities {
+            medium: smoltcp::phy::Medium::Ethernet,
+            max_transmission_unit: 1514,
+            max_burst_size: Some(1500),
+            checksum: ChecksumCapabilities {
+                ipv4: Checksum::None,
+                udp: Checksum::None,
+                tcp: Checksum::None,
+                icmpv4: Checksum::None,
+            },
+        }
     }
 
     fn receive(&mut self, timestamp: Instant) -> Option<(Self::RxToken<'_>, Self::TxToken<'_>)> {
@@ -67,6 +81,11 @@ impl smoltcp::phy::Device for DeviceImpl {
     }
 }
 
+fn now() -> Instant {
+    // FIXME:
+    Instant::from_millis(0)
+}
+
 #[ftl_api::main]
 pub fn main(mut env: Environ) {
     info!("starting...");
@@ -74,7 +93,8 @@ pub fn main(mut env: Environ) {
     let mac = HardwareAddress::Ethernet(EthernetAddress([0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc]));
     let config = Config::new(mac.into());
     let mut device = DeviceImpl::new();
-    let iface = Interface::new(config, &mut device, Instant::from_secs(0));
+    let mut iface = Interface::new(config, &mut device, now());
+    let mut sockets = SocketSet::new(Vec::with_capacity(16));
 
     let mut mainloop = Mainloop::<Context, Message>::new().unwrap();
     mainloop
@@ -83,6 +103,8 @@ pub fn main(mut env: Environ) {
 
     let mut buffer = MessageBuffer::new();
     loop {
+        let ready = iface.poll(now(), &mut device, &mut sockets);
+
         match mainloop.next(&mut buffer) {
             Event::Message { ch, ctx, m } => {
                 match (ctx, m) {
