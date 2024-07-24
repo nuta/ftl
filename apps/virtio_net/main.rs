@@ -20,6 +20,19 @@ use ftl_virtio::virtqueue::VirtqDescBuffer;
 use ftl_virtio::virtqueue::VirtqUsedChain;
 use ftl_virtio::VIRTIO_DEVICE_TYPE_NET;
 
+
+#[derive(Debug, Copy, Clone)]
+#[repr(C, packed)]
+struct VirtioNetModernHeader {
+    flags: u8,
+    gso_type: u8,
+    hdr_len: u16,
+    gso_size: u16,
+    checksum_start: u16,
+    checksum_offset: u16,
+    num_buffer: u16,
+}
+
 #[derive(Copy, Clone)]
 pub struct BufferIndex(usize);
 
@@ -115,7 +128,9 @@ pub fn main(mut env: Environ) {
     info!("starting virtio_console");
     let mut buffer = MessageBuffer::new();
 
-    let (transport, irq) = probe(&env.depends.virtio, VIRTIO_DEVICE_TYPE_NET).unwrap();
+    let (mut transport, irq) = probe(&env.depends.virtio, VIRTIO_DEVICE_TYPE_NET).unwrap();
+    assert!(transport.is_modern());
+
     let interrupt = Interrupt::create(irq).unwrap();
     let mut transport = Box::new(transport) as Box<dyn VirtioTransport>;
     let mut virtqueues = transport.initialize(0, 2).unwrap();
@@ -138,32 +153,6 @@ pub fn main(mut env: Environ) {
     }
     receiveq.notify(&mut *transport);
 
-    info!("virtio_console test ----------------------");
-    {
-        let buffer_index = transmitq_buffers.pop_free().expect("no free tx buffers");
-        let vaddr = transmitq_buffers.vaddr(buffer_index);
-        let paddr = transmitq_buffers.paddr(buffer_index);
-
-        let data = "Hello World from virtio-console!\r\n";
-
-        let dma_buf =
-            unsafe { core::slice::from_raw_parts_mut(&mut *vaddr.as_mut_ptr::<u8>(), dma_buf_len) };
-
-        let data_len = data.as_bytes().len();
-        assert!(data_len <= dma_buf.len());
-        dma_buf[0..data_len].copy_from_slice(data.as_bytes());
-
-        let chain = &[VirtqDescBuffer::ReadOnlyFromDevice {
-            paddr,
-            len: data_len,
-        }];
-
-        info!("chain: {:x?}", chain);
-        transmitq.enqueue(chain);
-        transmitq.notify(&mut *transport);
-        info!("sent a request");
-    }
-
     let mut mainloop = Mainloop::<Context, Message>::new().unwrap();
     mainloop
         .add_channel(env.autopilot_ch.take().unwrap(), Context::Autopilot)
@@ -174,6 +163,50 @@ pub fn main(mut env: Environ) {
 
     loop {
         match mainloop.next(&mut buffer) {
+            Event::Message { ctx: _ctx, ch: _ch, m } => {
+                match m {
+                    Message::Tx(tx) => {
+                        let buffer_index = transmitq_buffers.pop_free().expect("no free tx buffers");
+                        let vaddr = transmitq_buffers.vaddr(buffer_index);
+                        let paddr = transmitq_buffers.paddr(buffer_index);
+
+                        unsafe {
+                            vaddr.as_mut_ptr::<VirtioNetModernHeader>().write(VirtioNetModernHeader {
+                                flags: 0,
+                                hdr_len: 0,
+                                gso_type: 0,
+                                gso_size: 0,
+                                checksum_start: 0,
+                                checksum_offset: 0,
+                                num_buffer: 0,
+                            });
+                        }
+
+                        let header_len = size_of::<VirtioNetModernHeader>();
+                        unsafe {
+                            let buf = core::slice::from_raw_parts_mut(vaddr.add(header_len).as_mut_ptr(), dma_buf_len - header_len);
+                            buf.copy_from_slice(tx.payload().as_slice());
+                        }
+
+                        let chain = &[
+                            VirtqDescBuffer::ReadOnlyFromDevice {
+                                paddr,
+                                len: header_len,
+                            },
+                            VirtqDescBuffer::ReadOnlyFromDevice {
+                                paddr: paddr.add(header_len),
+                                len: tx.payload().len(),
+                            },
+                        ];
+
+                        transmitq.enqueue(chain);
+                        transmitq.notify(&mut *transport);
+                    }
+                    _ => {
+                        warn!("unepxected message: {:?}", m);
+                    }
+                }
+            }
             Event::Interrupt {
                 ctx: _ctx,
                 interrupt,
