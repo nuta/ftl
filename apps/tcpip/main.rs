@@ -20,6 +20,8 @@ use smoltcp::socket::tcp;
 use smoltcp::time::Instant;
 use smoltcp::wire::EthernetAddress;
 use smoltcp::wire::HardwareAddress;
+use smoltcp::wire::IpAddress;
+use smoltcp::wire::IpCidr;
 use smoltcp::wire::IpListenEndpoint;
 
 enum Context {
@@ -127,6 +129,12 @@ pub fn main(mut env: Environ) {
         .add_channel(driver_ch, Context::Driver)
         .unwrap();
 
+    iface.update_ip_addrs(|ip_addrs| {
+        // FIXME:
+        ip_addrs
+            .push(IpCidr::new(IpAddress::v4(10, 0, 2, 15), 24))
+            .unwrap();
+    });
 
     let rx_buf = tcp::SocketBuffer::new(vec![0; 8192]);
     let tx_buf = tcp::SocketBuffer::new(vec![0; 8192]);
