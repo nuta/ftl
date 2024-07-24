@@ -51,7 +51,7 @@ impl<'a> smoltcp::phy::TxToken for TxTokenImpl<'a> {
         let mut buf = [0u8; 1514];
         let ret = f(&mut buf[..len]);
 
-        let tx = ethernet_device::Tx{
+        let tx = ethernet_device::Tx {
             payload: BytesField::new(buf, len.try_into().unwrap()),
         };
         if let Err(err) = self.0.driver_ch.send_with_buffer(&mut self.0.msgbuffer, tx) {
@@ -94,7 +94,9 @@ impl smoltcp::phy::Device for DeviceImpl {
     }
 
     fn receive(&mut self, _timestamp: Instant) -> Option<(Self::RxToken<'_>, Self::TxToken<'_>)> {
-        self.rx_queue.pop_front().map(|pkt| (RxTokenImpl(pkt), TxTokenImpl(self)))
+        self.rx_queue
+            .pop_front()
+            .map(|pkt| (RxTokenImpl(pkt), TxTokenImpl(self)))
     }
 
     fn transmit(&mut self, _timestamp: Instant) -> Option<Self::TxToken<'_>> {
@@ -125,9 +127,7 @@ pub fn main(mut env: Environ) {
     mainloop
         .add_channel(env.autopilot_ch.take().unwrap(), Context::Autopilot)
         .unwrap();
-    mainloop
-        .add_channel(driver_ch, Context::Driver)
-        .unwrap();
+    mainloop.add_channel(driver_ch, Context::Driver).unwrap();
 
     iface.update_ip_addrs(|ip_addrs| {
         // FIXME:
@@ -141,8 +141,9 @@ pub fn main(mut env: Environ) {
     let mut sock = tcp::Socket::new(rx_buf, tx_buf);
     sock.listen(IpListenEndpoint {
         addr: None,
-        port: 1234
-    }).unwrap();
+        port: 1234,
+    })
+    .unwrap();
     let sock_handle = sockets.add(sock);
 
     let mut buffer = MessageBuffer::new();
@@ -155,9 +156,7 @@ pub fn main(mut env: Environ) {
                     (Context::Autopilot, Message::NewclientRequest(m)) => {
                         info!("got new client: {:?}", m.handle());
                         let new_ch = Channel::from_handle(OwnedHandle::from_raw(m.handle()));
-                        mainloop
-                            .add_channel(new_ch, Context::Client)
-                            .unwrap();
+                        mainloop.add_channel(new_ch, Context::Client).unwrap();
                     }
                     // (Context::Client { counter }, _) => {
                     // }

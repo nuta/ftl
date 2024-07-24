@@ -24,7 +24,6 @@ use ftl_virtio::virtqueue::VirtqDescBuffer;
 use ftl_virtio::virtqueue::VirtqUsedChain;
 use ftl_virtio::VIRTIO_DEVICE_TYPE_NET;
 
-
 #[derive(Debug, Copy, Clone)]
 #[repr(C, packed)]
 struct VirtioNetModernHeader {
@@ -129,7 +128,7 @@ enum Context {
 
 #[ftl_api::main]
 pub fn main(mut env: Environ) {
-    info!("starting virtio_console");
+    info!("starting");
     let mut buffer = MessageBuffer::new();
 
     let (mut transport, irq) = probe(&env.depends.virtio, VIRTIO_DEVICE_TYPE_NET).unwrap();
@@ -168,32 +167,42 @@ pub fn main(mut env: Environ) {
     let mut tcpip_ch = None;
     loop {
         match mainloop.next(&mut buffer) {
-            Event::Message { ctx: _ctx, ch: _ch, m } => {
+            Event::Message {
+                ctx: _ctx,
+                ch: _ch,
+                m,
+            } => {
                 match m {
                     Message::NewclientRequest(m) => {
                         // FIXME:
                         tcpip_ch = Some(Channel::from_handle(OwnedHandle::from_raw(m.handle())));
                     }
                     Message::Tx(tx) => {
-                        let buffer_index = transmitq_buffers.pop_free().expect("no free tx buffers");
+                        let buffer_index =
+                            transmitq_buffers.pop_free().expect("no free tx buffers");
                         let vaddr = transmitq_buffers.vaddr(buffer_index);
                         let paddr = transmitq_buffers.paddr(buffer_index);
 
                         unsafe {
-                            vaddr.as_mut_ptr::<VirtioNetModernHeader>().write(VirtioNetModernHeader {
-                                flags: 0,
-                                hdr_len: 0,
-                                gso_type: 0,
-                                gso_size: 0,
-                                checksum_start: 0,
-                                checksum_offset: 0,
-                                num_buffer: 0,
-                            });
+                            vaddr.as_mut_ptr::<VirtioNetModernHeader>().write(
+                                VirtioNetModernHeader {
+                                    flags: 0,
+                                    hdr_len: 0,
+                                    gso_type: 0,
+                                    gso_size: 0,
+                                    checksum_start: 0,
+                                    checksum_offset: 0,
+                                    num_buffer: 0,
+                                },
+                            );
                         }
 
                         let header_len = size_of::<VirtioNetModernHeader>();
                         unsafe {
-                            let buf = core::slice::from_raw_parts_mut(vaddr.add(header_len).as_mut_ptr(), dma_buf_len - header_len);
+                            let buf = core::slice::from_raw_parts_mut(
+                                vaddr.add(header_len).as_mut_ptr(),
+                                dma_buf_len - header_len,
+                            );
                             buf.copy_from_slice(tx.payload().as_slice());
                         }
 
@@ -225,7 +234,8 @@ pub fn main(mut env: Environ) {
                 transport.ack_interrupt(status);
 
                 while let Some(VirtqUsedChain { descs, total_len }) = receiveq.pop_used() {
-                    info!("interrupt: total_len={}", total_len);
+                    trace!("interrupt: total_len={}", total_len);
+                    debug_assert!(descs.len() == 1);
                     let mut remaining = total_len;
                     for desc in descs {
                         let VirtqDescBuffer::WritableFromDevice { paddr, len } = desc else {
@@ -239,14 +249,20 @@ pub fn main(mut env: Environ) {
                             .paddr_to_index(paddr)
                             .expect("invalid paddr");
                         let vaddr = receiveq_buffers.vaddr(buffer_index);
-                        let data =
-                            unsafe { core::slice::from_raw_parts(vaddr.as_ptr::<u8>(), read_len) };
-                        info!("received: {:?}", core::str::from_utf8(data).unwrap());
+                        let header_len = unsafe {
+                            let header = &*vaddr.as_ptr::<VirtioNetModernHeader>();
+                            header.hdr_len
+                        };
+                        unsafe { core::slice::from_raw_parts(vaddr.as_ptr::<u8>(), read_len) };
 
                         if let Some(tcpip_ch) = &tcpip_ch {
                             let rx = ethernet_device::Rx {
-                                payload: BytesField::new(data.try_into().unwrap(), data.len().try_into().unwrap())
+                                payload: BytesField::new(
+                                    data.try_into().unwrap(),
+                                    data.len().try_into().unwrap(),
+                                ),
                             };
+                            trace!("forwarding to tcpip...");
                             if let Err(err) = tcpip_ch.send_with_buffer(&mut buffer, rx) {
                                 warn!("failed to send rx: {:?}", err);
                             }
@@ -266,8 +282,8 @@ pub fn main(mut env: Environ) {
 
                     receiveq.enqueue(chain);
                 }
-                receiveq.notify(&mut *transport);
 
+                receiveq.notify(&mut *transport);
                 interrupt.ack().unwrap();
             }
             _ => {
