@@ -11,4 +11,4 @@ path = "main.rs"
 [dependencies]
 ftl_api = { workspace = true }
 ftl_api_autogen = { workspace = true }
-smoltcp = { workspace = true, features = ["log", "alloc", "socket-tcp", "proto-ipv4"] }
+smoltcp = { workspace = true, features = ["log", "alloc", "medium-ethernet", "socket-tcp", "proto-ipv4"] }
