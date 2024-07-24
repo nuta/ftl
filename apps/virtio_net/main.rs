@@ -11,10 +11,12 @@ use ftl_api::prelude::*;
 use ftl_api::types::address::PAddr;
 use ftl_api::types::address::VAddr;
 use ftl_api::types::environ::Device;
+use ftl_api::types::idl::BytesField;
 use ftl_api::types::interrupt::Irq;
 use ftl_api::types::message::MessageBuffer;
 use ftl_api_autogen::apps::virtio_net::Environ;
 use ftl_api_autogen::apps::virtio_net::Message;
+use ftl_api_autogen::protocols::ethernet_device;
 use ftl_virtio::transports::mmio::VirtioMmio;
 use ftl_virtio::transports::VirtioTransport;
 use ftl_virtio::virtqueue::align_up;
@@ -240,6 +242,13 @@ pub fn main(mut env: Environ) {
                         let data =
                             unsafe { core::slice::from_raw_parts(vaddr.as_ptr::<u8>(), read_len) };
                         info!("received: {:?}", core::str::from_utf8(data).unwrap());
+
+                        if let Some(tcpip_ch) = &tcpip_ch {
+                            tcpip_ch.send_with_buffer(&mut buffer, ethernet_device::Rx {
+                                payload: BytesField::new(data.try_into().unwrap(), data.len().try_into().unwrap())
+                            });
+                        }
+
                         receiveq_buffers.push_free(buffer_index);
                     }
                 }
