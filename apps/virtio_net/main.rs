@@ -124,6 +124,7 @@ fn probe(devices: &[Device], device_type: u32) -> Option<(VirtioMmio, Irq)> {
 enum Context {
     Autopilot,
     Interrupt,
+    Tcpip,
 }
 
 #[ftl_api::main]
@@ -177,6 +178,11 @@ pub fn main(mut env: Environ) {
                     Message::NewclientRequest(m) => {
                         // FIXME:
                         tcpip_ch = Some(Channel::from_handle(OwnedHandle::from_raw(m.handle())));
+                        let tcpip_ch2 =
+                            Some(Channel::from_handle(OwnedHandle::from_raw(m.handle())));
+                        mainloop
+                            .add_channel(tcpip_ch2.unwrap(), Context::Tcpip)
+                            .unwrap();
                     }
                     Message::Tx(tx) => {
                         trace!("sending {} bytes", tx.payload().len());
@@ -205,7 +211,7 @@ pub fn main(mut env: Environ) {
                                 vaddr.add(header_len).as_mut_ptr(),
                                 dma_buf_len - header_len,
                             );
-                            buf.copy_from_slice(tx.payload().as_slice());
+                            buf[..tx.payload().len()].copy_from_slice(tx.payload().as_slice());
                         }
 
                         let chain = &[
@@ -259,7 +265,12 @@ pub fn main(mut env: Environ) {
                             )
                         };
 
-                        trace!("received {} bytes (header_len={}) {:02x?}", data.len(), header_len, &data[0..14]);
+                        trace!(
+                            "received {} bytes (header_len={}) {:02x?}",
+                            data.len(),
+                            header_len,
+                            &data[0..14]
+                        );
                         if let Some(tcpip_ch) = &tcpip_ch {
                             // FIXME:
                             let mut tmpbuf = [0; 1514];

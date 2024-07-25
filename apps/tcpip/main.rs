@@ -117,12 +117,14 @@ impl log::Log for Logger {
         true
     }
 
-    fn flush(&self) {
-
-    }
+    fn flush(&self) {}
 
     fn log(&self, record: &log::Record) {
-        trace!("{}: {}", record.module_path().unwrap_or("(unknown)"), record.args());
+        trace!(
+            "{}: {}",
+            record.module_path().unwrap_or("(unknown)"),
+            record.args()
+        );
     }
 }
 
@@ -175,6 +177,24 @@ pub fn main(mut env: Environ) {
     loop {
         let ready = iface.poll(now(), &mut device, &mut sockets);
         trace!("polled: ready={}", ready);
+        if ready {
+            let mut socket = sockets.get_mut::<tcp::Socket>(sock_handle);
+            if socket.can_recv() {
+                socket
+                    .recv(|data| {
+                        info!("{}", core::str::from_utf8(data).unwrap_or("(invalid utf8)"));
+                        (data.len(), ())
+                    })
+                    .unwrap();
+
+                socket
+                    .send_slice(b"HTTP/1.1 200 OK\r\nContent-Length: 12\r\n\r\nHello, world!")
+                    .unwrap();
+                iface.poll(now(), &mut device, &mut sockets);
+            } else {
+                warn!("cannot recv");
+            }
+        }
 
         match mainloop.next(&mut buffer) {
             Event::Message { ch, ctx, m } => {
@@ -187,7 +207,11 @@ pub fn main(mut env: Environ) {
                     // (Context::Client { counter }, _) => {
                     // }
                     (Context::Driver, Message::Rx(m)) => {
-                        trace!("received {} bytes: {:02x?}", m.payload().len(), &m.payload().as_slice()[0..14]);
+                        trace!(
+                            "received {} bytes: {:02x?}",
+                            m.payload().len(),
+                            &m.payload().as_slice()[0..14]
+                        );
                         device.receive_pkt(m.payload().as_slice());
                     }
                     _ => {
