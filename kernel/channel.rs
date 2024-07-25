@@ -130,6 +130,14 @@ impl Channel {
     pub fn recv(&self, msgbuffer: &mut MessageBuffer) -> Result<MessageInfo, FtlError> {
         let mut entry = self.sleep_point.sleep_loop(&self.mutable, |mutable| {
             if let Some(entry) = mutable.queue.pop_front() {
+                if !mutable.queue.is_empty() {
+                    // FIXME: level-triggered
+                    // FIXME: use try_recv in mainloop
+                    for poller in &mutable.pollers {
+                        poller.set_ready(PollEvent::READABLE);
+                    }
+                }
+
                 return SleepCallbackResult::Ready(entry);
             }
 

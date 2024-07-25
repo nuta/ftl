@@ -176,7 +176,7 @@ pub fn main(mut env: Environ) {
     let mut buffer = MessageBuffer::new();
     loop {
         while iface.poll(now(), &mut device, &mut sockets) {
-            let mut socket = sockets.get_mut::<tcp::Socket>(sock_handle);
+            let socket = sockets.get_mut::<tcp::Socket>(sock_handle);
             if socket.can_recv() {
                 socket
                     .recv(|data| {
@@ -192,7 +192,7 @@ pub fn main(mut env: Environ) {
         }
 
         match mainloop.next(&mut buffer) {
-            Event::Message { ch, ctx, m } => {
+            Event::Message { ch: _ch, ctx, m } => {
                 match (ctx, m) {
                     (Context::Autopilot, Message::NewclientRequest(m)) => {
                         info!("got new client: {:?}", m.handle());

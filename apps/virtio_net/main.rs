@@ -243,11 +243,7 @@ pub fn main(mut env: Environ) {
                         break;
                     }
 
-                    info!("got interrupt!: status={:?}", status.0);
-                    transport.ack_interrupt(status);
-
                     while let Some(VirtqUsedChain { descs, total_len }) = receiveq.pop_used() {
-                        trace!("interrupt: total_len={}", total_len);
                         debug_assert!(descs.len() == 1);
                         let mut remaining = total_len;
                         for desc in descs {
@@ -270,12 +266,7 @@ pub fn main(mut env: Environ) {
                                 )
                             };
 
-                            trace!(
-                                "received {} bytes (header_len={}) {:02x?}",
-                                data.len(),
-                                header_len,
-                                &data[0..14]
-                            );
+                            trace!("received {} bytes", data.len());
                             if let Some(tcpip_ch) = &tcpip_ch {
                                 // FIXME:
                                 let mut tmpbuf = [0; 1514];
@@ -284,7 +275,6 @@ pub fn main(mut env: Environ) {
                                 let rx = ethernet_device::Rx {
                                     payload: BytesField::new(tmpbuf, data.len() as u16),
                                 };
-                                trace!("forwarding to tcpip...");
                                 if let Err(err) = tcpip_ch.send_with_buffer(&mut buffer, rx) {
                                     warn!("failed to send rx: {:?}", err);
                                 }
@@ -306,6 +296,7 @@ pub fn main(mut env: Environ) {
                     }
 
                     receiveq.notify(&mut *transport);
+                    transport.ack_interrupt(status);
                     interrupt.ack().unwrap();
                 }
             }
