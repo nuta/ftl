@@ -175,9 +175,7 @@ pub fn main(mut env: Environ) {
 
     let mut buffer = MessageBuffer::new();
     loop {
-        let ready = iface.poll(now(), &mut device, &mut sockets);
-        trace!("polled: ready={}", ready);
-        if ready {
+        while iface.poll(now(), &mut device, &mut sockets) {
             let mut socket = sockets.get_mut::<tcp::Socket>(sock_handle);
             if socket.can_recv() {
                 socket
@@ -190,9 +188,6 @@ pub fn main(mut env: Environ) {
                 socket
                     .send_slice(b"HTTP/1.1 200 OK\r\nContent-Length: 12\r\n\r\nHello, world!")
                     .unwrap();
-                iface.poll(now(), &mut device, &mut sockets);
-            } else {
-                warn!("cannot recv");
             }
         }
 

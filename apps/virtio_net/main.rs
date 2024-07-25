@@ -237,71 +237,77 @@ pub fn main(mut env: Environ) {
                 ctx: _ctx,
                 interrupt,
             } => {
-                let status = transport.read_isr_status();
-                info!("got interrupt!: status={:?}", status.0);
-                transport.ack_interrupt(status);
-
-                while let Some(VirtqUsedChain { descs, total_len }) = receiveq.pop_used() {
-                    trace!("interrupt: total_len={}", total_len);
-                    debug_assert!(descs.len() == 1);
-                    let mut remaining = total_len;
-                    for desc in descs {
-                        let VirtqDescBuffer::WritableFromDevice { paddr, len } = desc else {
-                            panic!("unexpected desc");
-                        };
-
-                        let read_len = core::cmp::min(len, remaining);
-                        remaining -= read_len;
-
-                        let buffer_index = receiveq_buffers
-                            .paddr_to_index(paddr)
-                            .expect("invalid paddr");
-                        let vaddr = receiveq_buffers.vaddr(buffer_index);
-                        let header_len = size_of::<VirtioNetModernHeader>();
-                        let data = unsafe {
-                            core::slice::from_raw_parts(
-                                vaddr.as_ptr::<u8>().add(header_len),
-                                read_len,
-                            )
-                        };
-
-                        trace!(
-                            "received {} bytes (header_len={}) {:02x?}",
-                            data.len(),
-                            header_len,
-                            &data[0..14]
-                        );
-                        if let Some(tcpip_ch) = &tcpip_ch {
-                            // FIXME:
-                            let mut tmpbuf = [0; 1514];
-                            tmpbuf[..data.len()].copy_from_slice(&data);
-
-                            let rx = ethernet_device::Rx {
-                                payload: BytesField::new(tmpbuf, data.len() as u16),
-                            };
-                            trace!("forwarding to tcpip...");
-                            if let Err(err) = tcpip_ch.send_with_buffer(&mut buffer, rx) {
-                                warn!("failed to send rx: {:?}", err);
-                            }
-                        } else {
-                            warn!("no tcpip ch, droppping packet...");
-                        }
-
-                        receiveq_buffers.push_free(buffer_index);
+                loop {
+                    let status = transport.read_isr_status();
+                    if !status.queue_intr() {
+                        break;
                     }
+
+                    info!("got interrupt!: status={:?}", status.0);
+                    transport.ack_interrupt(status);
+
+                    while let Some(VirtqUsedChain { descs, total_len }) = receiveq.pop_used() {
+                        trace!("interrupt: total_len={}", total_len);
+                        debug_assert!(descs.len() == 1);
+                        let mut remaining = total_len;
+                        for desc in descs {
+                            let VirtqDescBuffer::WritableFromDevice { paddr, len } = desc else {
+                                panic!("unexpected desc");
+                            };
+
+                            let read_len = core::cmp::min(len, remaining);
+                            remaining -= read_len;
+
+                            let buffer_index = receiveq_buffers
+                                .paddr_to_index(paddr)
+                                .expect("invalid paddr");
+                            let vaddr = receiveq_buffers.vaddr(buffer_index);
+                            let header_len = size_of::<VirtioNetModernHeader>();
+                            let data = unsafe {
+                                core::slice::from_raw_parts(
+                                    vaddr.as_ptr::<u8>().add(header_len),
+                                    read_len,
+                                )
+                            };
+
+                            trace!(
+                                "received {} bytes (header_len={}) {:02x?}",
+                                data.len(),
+                                header_len,
+                                &data[0..14]
+                            );
+                            if let Some(tcpip_ch) = &tcpip_ch {
+                                // FIXME:
+                                let mut tmpbuf = [0; 1514];
+                                tmpbuf[..data.len()].copy_from_slice(&data);
+
+                                let rx = ethernet_device::Rx {
+                                    payload: BytesField::new(tmpbuf, data.len() as u16),
+                                };
+                                trace!("forwarding to tcpip...");
+                                if let Err(err) = tcpip_ch.send_with_buffer(&mut buffer, rx) {
+                                    warn!("failed to send rx: {:?}", err);
+                                }
+                            } else {
+                                warn!("no tcpip ch, droppping packet...");
+                            }
+
+                            receiveq_buffers.push_free(buffer_index);
+                        }
+                    }
+
+                    while let Some(buffer_index) = receiveq_buffers.pop_free() {
+                        let chain = &[VirtqDescBuffer::WritableFromDevice {
+                            paddr: receiveq_buffers.paddr(buffer_index),
+                            len: dma_buf_len,
+                        }];
+
+                        receiveq.enqueue(chain);
+                    }
+
+                    receiveq.notify(&mut *transport);
+                    interrupt.ack().unwrap();
                 }
-
-                while let Some(buffer_index) = receiveq_buffers.pop_free() {
-                    let chain = &[VirtqDescBuffer::WritableFromDevice {
-                        paddr: receiveq_buffers.paddr(buffer_index),
-                        len: dma_buf_len,
-                    }];
-
-                    receiveq.enqueue(chain);
-                }
-
-                receiveq.notify(&mut *transport);
-                interrupt.ack().unwrap();
             }
             _ => {
                 warn!("unhandled event");
