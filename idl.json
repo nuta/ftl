@@ -78,6 +78,30 @@
                     ]
                 }
             ]
+        },
+        {
+            "name": "tcpip",
+            "oneways": [
+                {
+                    "name": "tcp_accepted",
+                    "fields": [
+                        {
+                            "name": "sock",
+                            "type": "handle"
+                        }
+                    ]
+                },
+                {
+                    "name": "tcp_received",
+                    "fields": [
+                        {
+                            "name": "data",
+                            "type": "bytes",
+                            "capacity": 4096
+                        }
+                    ]
+                }
+            ]
         }
     ]
 }

@@ -492,4 +492,159 @@ pub mod protocols {
             }
         }
     }
+
+    pub mod tcpip {
+        use super::*;
+
+        #[repr(C)]
+        pub struct TcpAccepted {
+            pub sock: HandleOwnership,
+        }
+
+        #[repr(C)]
+        struct InlinedPartTcpAccepted {}
+
+        // TODO: static_assert for size
+
+        impl MessageSerialize for TcpAccepted {
+            const MSGINFO: MessageInfo = MessageInfo::from_raw(
+                (7 << 14) | (1 << 12) | ::core::mem::size_of::<TcpAccepted>() as isize,
+            );
+
+            fn serialize(self, buffer: &mut MessageBuffer) {
+                // The actual serialization is done in this const fn. This is to
+                // ensure the serialization can be done with const operations.
+                const fn do_serialize(this: TcpAccepted, buffer: &mut MessageBuffer) {
+                    let object = InlinedPartTcpAccepted {};
+
+                    let dst = buffer as *mut _ as *mut InlinedPartTcpAccepted;
+                    let src = &object as *const _ as *const InlinedPartTcpAccepted;
+
+                    unsafe {
+                        core::ptr::copy_nonoverlapping::<InlinedPartTcpAccepted>(src, dst, 1);
+                    }
+
+                    // FIXME: Support multiple handles.
+                    debug_assert!(
+                        MessageInfo::from_raw(TcpAccepted::MSGINFO.as_raw()).num_handles() <= 1
+                    );
+
+                    buffer.handles[0] = this.sock.0;
+
+                    // Don't call destructors on handles transferred to this buffer.
+                    core::mem::forget(this);
+                }
+
+                do_serialize(self, buffer)
+            }
+        }
+
+        impl MessageDeserialize for TcpAccepted {
+            type Reader<'a> = TcpAcceptedReader<'a>;
+
+            fn deserialize<'a>(
+                buffer: &'a MessageBuffer,
+                msginfo: MessageInfo,
+            ) -> Option<TcpAcceptedReader<'a>> {
+                if msginfo == Self::MSGINFO {
+                    Some(TcpAcceptedReader { buffer })
+                } else {
+                    None
+                }
+            }
+        }
+
+        pub struct TcpAcceptedReader<'a> {
+            #[allow(dead_code)]
+            buffer: &'a MessageBuffer,
+        }
+
+        impl<'a> TcpAcceptedReader<'a> {
+            #[allow(dead_code)]
+            fn as_ref(&self, buffer: &'a MessageBuffer) -> &'a InlinedPartTcpAccepted {
+                unsafe { &*(buffer as *const _ as *const InlinedPartTcpAccepted) }
+            }
+
+            pub fn sock(&self) -> ftl_types::handle::HandleId {
+                // TODO: return OwnedHandle
+                // FIXME: Support multiple handles.
+                self.buffer.handles[0]
+            }
+        }
+
+        #[repr(C)]
+        pub struct TcpReceived {
+            pub data: ftl_types::idl::BytesField<4096>,
+        }
+
+        #[repr(C)]
+        struct InlinedPartTcpReceived {
+            pub data: ftl_types::idl::BytesField<4096>,
+        }
+
+        // TODO: static_assert for size
+
+        impl MessageSerialize for TcpReceived {
+            const MSGINFO: MessageInfo = MessageInfo::from_raw(
+                (8 << 14) | (0 << 12) | ::core::mem::size_of::<TcpReceived>() as isize,
+            );
+
+            fn serialize(self, buffer: &mut MessageBuffer) {
+                // The actual serialization is done in this const fn. This is to
+                // ensure the serialization can be done with const operations.
+                const fn do_serialize(this: TcpReceived, buffer: &mut MessageBuffer) {
+                    let object = InlinedPartTcpReceived { data: this.data };
+
+                    let dst = buffer as *mut _ as *mut InlinedPartTcpReceived;
+                    let src = &object as *const _ as *const InlinedPartTcpReceived;
+
+                    unsafe {
+                        core::ptr::copy_nonoverlapping::<InlinedPartTcpReceived>(src, dst, 1);
+                    }
+
+                    // FIXME: Support multiple handles.
+                    debug_assert!(
+                        MessageInfo::from_raw(TcpReceived::MSGINFO.as_raw()).num_handles() <= 1
+                    );
+
+                    // Don't call destructors on handles transferred to this buffer.
+                    core::mem::forget(this);
+                }
+
+                do_serialize(self, buffer)
+            }
+        }
+
+        impl MessageDeserialize for TcpReceived {
+            type Reader<'a> = TcpReceivedReader<'a>;
+
+            fn deserialize<'a>(
+                buffer: &'a MessageBuffer,
+                msginfo: MessageInfo,
+            ) -> Option<TcpReceivedReader<'a>> {
+                if msginfo == Self::MSGINFO {
+                    Some(TcpReceivedReader { buffer })
+                } else {
+                    None
+                }
+            }
+        }
+
+        pub struct TcpReceivedReader<'a> {
+            #[allow(dead_code)]
+            buffer: &'a MessageBuffer,
+        }
+
+        impl<'a> TcpReceivedReader<'a> {
+            #[allow(dead_code)]
+            fn as_ref(&self, buffer: &'a MessageBuffer) -> &'a InlinedPartTcpReceived {
+                unsafe { &*(buffer as *const _ as *const InlinedPartTcpReceived) }
+            }
+
+            pub fn data(&self) -> ftl_types::idl::BytesField<4096> {
+                let m = self.as_ref(self.buffer);
+                m.data
+            }
+        }
+    }
 }

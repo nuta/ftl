@@ -6,7 +6,7 @@ RELEASE ?=            # "1" to build release version
 V       ?=            # "1" to enable verbose output
 
 # Note: Don't forget to update boot.spec.json as well!
-APPS    ?= apps/tcpip apps/virtio_net
+APPS    ?= apps/tcpip apps/virtio_net apps/http_server
 
 # Disable builtin implicit rules and variables.
 MAKEFLAGS += --no-builtin-rules --no-builtin-variables

@@ -423,6 +423,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "http_server"
+version = "0.0.0"
+dependencies = [
+ "ftl_api",
+ "ftl_api_autogen",
+]
+
+[[package]]
 name = "is_terminal_polyfill"
 version = "1.70.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
