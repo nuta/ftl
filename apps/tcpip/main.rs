@@ -128,6 +128,71 @@ impl log::Log for Logger {
     }
 }
 
+struct Server<'a> {
+    smol_sockets: SocketSet<'a>,
+    device: DeviceImpl,
+    iface: Interface,
+    sockets: SocketSet<'a>,
+}
+
+impl<'a> Server<'a> {
+    pub fn new(driver_ch: Channel, hwaddr: HardwareAddress) -> Server<'a> {
+        let config = Config::new(hwaddr.into());
+        let mut device = DeviceImpl::new(driver_ch);
+        let mut iface = Interface::new(config, &mut device, now());
+        let mut sockets = SocketSet::new(Vec::with_capacity(16));
+
+        // FIXME:
+        iface.update_ip_addrs(|ip_addrs| {
+            ip_addrs
+                .push(IpCidr::new(IpAddress::v4(10, 0, 2, 15), 24))
+                .unwrap();
+        });
+
+        Server {
+            smol_sockets: SocketSet::new(Vec::new()),
+            device,
+            iface,
+            sockets,
+        }
+    }
+
+    pub fn poll(&mut self) {
+        while self.iface.poll(now(), &mut self.device, &mut self.sockets) {
+            // let socket = self.sockets.get_mut::<tcp::Socket>(sock_handle);
+            // if socket.can_recv() {
+            //     socket
+            //         .recv(|data| {
+            //             info!("{}", core::str::from_utf8(data).unwrap_or("(invalid utf8)"));
+            //             (data.len(), ())
+            //         })
+            //         .unwrap();
+
+            //     socket
+            //         .send_slice(b"HTTP/1.1 200 OK\r\nContent-Length: 12\r\n\r\nHello, world!")
+            //         .unwrap();
+            // }
+        }
+    }
+
+    pub fn tcp_listen(&mut self, port: u16) {
+        let rx_buf = tcp::SocketBuffer::new(vec![0; 8192]);
+        let tx_buf = tcp::SocketBuffer::new(vec![0; 8192]);
+        let mut sock = tcp::Socket::new(rx_buf, tx_buf);
+        sock.listen(IpListenEndpoint {
+            addr: None,
+            port,
+        })
+        .unwrap();
+
+        let handle = self.smol_sockets.add(sock);
+    }
+
+    pub fn receive_pkt(&mut self, pkt: &[u8]) {
+        self.device.receive_pkt(pkt);
+    }
+}
+
 #[ftl_api::main]
 pub fn main(mut env: Environ) {
     info!("starting...");
@@ -145,10 +210,7 @@ pub fn main(mut env: Environ) {
     let driver_ch_cloned = Channel::from_handle(OwnedHandle::from_raw(driver_ch.handle().id()));
 
     let mac = HardwareAddress::Ethernet(EthernetAddress([0x52, 0x54, 0x00, 0x12, 0x34, 0x56])); // FIXME:
-    let config = Config::new(mac.into());
-    let mut device = DeviceImpl::new(driver_ch_cloned);
-    let mut iface = Interface::new(config, &mut device, now());
-    let mut sockets = SocketSet::new(Vec::with_capacity(16));
+    let mut server = Server::new(driver_ch_cloned, mac);
 
     let mut mainloop = Mainloop::<Context, Message>::new().unwrap();
     mainloop
@@ -156,41 +218,9 @@ pub fn main(mut env: Environ) {
         .unwrap();
     mainloop.add_channel(driver_ch, Context::Driver).unwrap();
 
-    iface.update_ip_addrs(|ip_addrs| {
-        // FIXME:
-        ip_addrs
-            .push(IpCidr::new(IpAddress::v4(10, 0, 2, 15), 24))
-            .unwrap();
-    });
-
-    let rx_buf = tcp::SocketBuffer::new(vec![0; 8192]);
-    let tx_buf = tcp::SocketBuffer::new(vec![0; 8192]);
-    let mut sock = tcp::Socket::new(rx_buf, tx_buf);
-    sock.listen(IpListenEndpoint {
-        addr: None,
-        port: 1234,
-    })
-    .unwrap();
-    let sock_handle = sockets.add(sock);
-
     let mut buffer = MessageBuffer::new();
     loop {
-        while iface.poll(now(), &mut device, &mut sockets) {
-            let socket = sockets.get_mut::<tcp::Socket>(sock_handle);
-            if socket.can_recv() {
-                socket
-                    .recv(|data| {
-                        info!("{}", core::str::from_utf8(data).unwrap_or("(invalid utf8)"));
-                        (data.len(), ())
-                    })
-                    .unwrap();
-
-                socket
-                    .send_slice(b"HTTP/1.1 200 OK\r\nContent-Length: 12\r\n\r\nHello, world!")
-                    .unwrap();
-            }
-        }
-
+        server.poll();
         match mainloop.next(&mut buffer) {
             Event::Message { ch: _ch, ctx, m } => {
                 match (ctx, m) {
@@ -199,15 +229,14 @@ pub fn main(mut env: Environ) {
                         let new_ch = Channel::from_handle(OwnedHandle::from_raw(m.handle()));
                         mainloop.add_channel(new_ch, Context::Client).unwrap();
                     }
-                    (Context::Client {  }, Message::ListenRequest(m)) => {
-                    }
+                    (Context::Client {}, Message::ListenRequest(m)) => {}
                     (Context::Driver, Message::Rx(m)) => {
                         trace!(
                             "received {} bytes: {:02x?}",
                             m.payload().len(),
                             &m.payload().as_slice()[0..14]
                         );
-                        device.receive_pkt(m.payload().as_slice());
+                        server.receive_pkt(m.payload().as_slice());
                     }
                     _ => {
                         // TODO: dump message with fmt::Debug
