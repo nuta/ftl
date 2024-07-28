@@ -99,6 +99,16 @@
             ],
             "oneways": [
                 {
+                    "name": "tcp_send",
+                    "fields": [
+                        {
+                            "type": "bytes",
+                            "name": "data",
+                            "capacity": 4096
+                        }
+                    ]
+                },
+                {
                     "name": "tcp_accepted",
                     "fields": [
                         {

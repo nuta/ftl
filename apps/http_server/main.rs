@@ -7,10 +7,12 @@ use ftl_api::handle::OwnedHandle;
 use ftl_api::mainloop::Event;
 use ftl_api::mainloop::Mainloop;
 use ftl_api::prelude::*;
+use ftl_api::types::idl::BytesField;
 use ftl_api::types::message::MessageBuffer;
 use ftl_api_autogen::apps::http_server::Environ;
 use ftl_api_autogen::apps::http_server::Message;
 use ftl_api_autogen::protocols::tcpip::ListenRequest;
+use ftl_api_autogen::protocols::tcpip::TcpSend;
 
 #[derive(Debug)]
 struct Client {
@@ -24,7 +26,7 @@ impl Client {
         }
     }
 
-    pub fn receive(&mut self, data: &[u8]) {
+    pub fn receive<'a, F>(&mut self, data: &'a [u8], f: F) where F: FnOnce(&httparse::Request<'a, 'a>) {
         self.buffered.extend_from_slice(&data);
 
         if let Some(index) = self.buffered.windows(4).position(|w| w == b"\r\n\r\n") {
@@ -86,7 +88,17 @@ pub fn main(mut env: Environ) {
                             .unwrap();
                     }
                     (Context::TcpSock(client), Message::TcpReceived(m)) => {
-                        client.receive(m.data().as_slice());
+                        client.receive(m.data().as_slice(), |req| {
+                            // FIXME:
+                            let resp = &b"HTTP/1.1 200 OK\r\nContent-Length: 12\r\n\r\nHello, world!"[..];
+                            let mut data = [0; 4096];
+                            data[..resp.len()].copy_from_slice(resp);
+                            let mut data = BytesField::new(data, resp.len() as u16);
+
+                            ch.send_with_buffer(&mut buffer, TcpSend {
+                                data,
+                            }).unwrap();
+                        });
                     }
                     (_, m) => {
                         warn!("unexpected message: {:?}", m);

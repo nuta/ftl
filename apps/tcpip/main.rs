@@ -199,8 +199,8 @@ pub fn main(mut env: Environ) {
                         let new_ch = Channel::from_handle(OwnedHandle::from_raw(m.handle()));
                         mainloop.add_channel(new_ch, Context::Client).unwrap();
                     }
-                    // (Context::Client { counter }, _) => {
-                    // }
+                    (Context::Client {  }, Message::ListenRequest(m)) => {
+                    }
                     (Context::Driver, Message::Rx(m)) => {
                         trace!(
                             "received {} bytes: {:02x?}",
