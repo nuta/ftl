@@ -10,6 +10,7 @@ use ftl_api::prelude::*;
 use ftl_api::types::message::MessageBuffer;
 use ftl_api_autogen::apps::http_server::Environ;
 use ftl_api_autogen::apps::http_server::Message;
+use ftl_api_autogen::protocols::tcpip::ListenRequest;
 
 #[derive(Debug)]
 struct Client {
@@ -25,6 +26,7 @@ impl Client {
 
     pub fn receive(&mut self, data: &[u8]) {
         self.buffered.extend_from_slice(&data);
+
         if let Some(index) = self.buffered.windows(4).position(|w| w == b"\r\n\r\n") {
             let request_bytes = &self.buffered[..index + 4];
 
@@ -33,7 +35,6 @@ impl Client {
             match request.parse(request_bytes) {
                 Ok(httparse::Status::Complete(len)) => {
                     trace!("parsed request: {:?}", request);
-                    self.state = State::Body;
                     self.buffered = Vec::new();
                 }
                 Ok(httparse::Status::Partial) => {
@@ -58,9 +59,15 @@ enum Context {
 
 #[ftl_api::main]
 pub fn main(mut env: Environ) {
+    let mut buffer = MessageBuffer::new();
+
     info!("starting");
     let tcpip_ch = env.depends.tcpip.take().unwrap();
-    let mut buffer = MessageBuffer::new();
+
+    tcpip_ch.send_with_buffer(&mut buffer, ListenRequest {
+        port: 80,
+    }).unwrap();
+
     let mut mainloop = Mainloop::<Context, Message>::new().unwrap();
     mainloop
         .add_channel(env.autopilot_ch.take().unwrap(), Context::Autopilot)

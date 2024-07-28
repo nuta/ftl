@@ -81,6 +81,22 @@
         },
         {
             "name": "tcpip",
+            "rpcs": [
+                {
+                    "name": "listen",
+                    "request": {
+                        "fields": [
+                            {
+                                "name": "port",
+                                "type": "int16"
+                            }
+                        ]
+                    },
+                    "response": {
+                        "fields": []
+                    }
+                }
+            ],
             "oneways": [
                 {
                     "name": "tcp_accepted",

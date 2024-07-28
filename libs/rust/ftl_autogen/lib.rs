@@ -646,5 +646,146 @@ pub mod protocols {
                 m.data
             }
         }
+
+        #[repr(C)]
+        pub struct ListenRequest {
+            pub port: i16,
+        }
+
+        #[repr(C)]
+        struct InlinedPartListenRequest {
+            pub port: i16,
+        }
+
+        // TODO: static_assert for size
+
+        impl MessageSerialize for ListenRequest {
+            const MSGINFO: MessageInfo = MessageInfo::from_raw(
+                (9 << 14) | (0 << 12) | ::core::mem::size_of::<ListenRequest>() as isize,
+            );
+
+            fn serialize(self, buffer: &mut MessageBuffer) {
+                // The actual serialization is done in this const fn. This is to
+                // ensure the serialization can be done with const operations.
+                const fn do_serialize(this: ListenRequest, buffer: &mut MessageBuffer) {
+                    let object = InlinedPartListenRequest { port: this.port };
+
+                    let dst = buffer as *mut _ as *mut InlinedPartListenRequest;
+                    let src = &object as *const _ as *const InlinedPartListenRequest;
+
+                    unsafe {
+                        core::ptr::copy_nonoverlapping::<InlinedPartListenRequest>(src, dst, 1);
+                    }
+
+                    // FIXME: Support multiple handles.
+                    debug_assert!(
+                        MessageInfo::from_raw(ListenRequest::MSGINFO.as_raw()).num_handles() <= 1
+                    );
+
+                    // Don't call destructors on handles transferred to this buffer.
+                    core::mem::forget(this);
+                }
+
+                do_serialize(self, buffer)
+            }
+        }
+
+        impl MessageDeserialize for ListenRequest {
+            type Reader<'a> = ListenRequestReader<'a>;
+
+            fn deserialize<'a>(
+                buffer: &'a MessageBuffer,
+                msginfo: MessageInfo,
+            ) -> Option<ListenRequestReader<'a>> {
+                if msginfo == Self::MSGINFO {
+                    Some(ListenRequestReader { buffer })
+                } else {
+                    None
+                }
+            }
+        }
+
+        pub struct ListenRequestReader<'a> {
+            #[allow(dead_code)]
+            buffer: &'a MessageBuffer,
+        }
+
+        impl<'a> ListenRequestReader<'a> {
+            #[allow(dead_code)]
+            fn as_ref(&self, buffer: &'a MessageBuffer) -> &'a InlinedPartListenRequest {
+                unsafe { &*(buffer as *const _ as *const InlinedPartListenRequest) }
+            }
+
+            pub fn port(&self) -> i16 {
+                let m = self.as_ref(self.buffer);
+                m.port
+            }
+        }
+
+        #[repr(C)]
+        pub struct ListenReply {}
+
+        #[repr(C)]
+        struct InlinedPartListenReply {}
+
+        // TODO: static_assert for size
+
+        impl MessageSerialize for ListenReply {
+            const MSGINFO: MessageInfo = MessageInfo::from_raw(
+                (10 << 14) | (0 << 12) | ::core::mem::size_of::<ListenReply>() as isize,
+            );
+
+            fn serialize(self, buffer: &mut MessageBuffer) {
+                // The actual serialization is done in this const fn. This is to
+                // ensure the serialization can be done with const operations.
+                const fn do_serialize(this: ListenReply, buffer: &mut MessageBuffer) {
+                    let object = InlinedPartListenReply {};
+
+                    let dst = buffer as *mut _ as *mut InlinedPartListenReply;
+                    let src = &object as *const _ as *const InlinedPartListenReply;
+
+                    unsafe {
+                        core::ptr::copy_nonoverlapping::<InlinedPartListenReply>(src, dst, 1);
+                    }
+
+                    // FIXME: Support multiple handles.
+                    debug_assert!(
+                        MessageInfo::from_raw(ListenReply::MSGINFO.as_raw()).num_handles() <= 1
+                    );
+
+                    // Don't call destructors on handles transferred to this buffer.
+                    core::mem::forget(this);
+                }
+
+                do_serialize(self, buffer)
+            }
+        }
+
+        impl MessageDeserialize for ListenReply {
+            type Reader<'a> = ListenReplyReader<'a>;
+
+            fn deserialize<'a>(
+                buffer: &'a MessageBuffer,
+                msginfo: MessageInfo,
+            ) -> Option<ListenReplyReader<'a>> {
+                if msginfo == Self::MSGINFO {
+                    Some(ListenReplyReader { buffer })
+                } else {
+                    None
+                }
+            }
+        }
+
+        pub struct ListenReplyReader<'a> {
+            #[allow(dead_code)]
+            buffer: &'a MessageBuffer,
+        }
+
+        impl<'a> ListenReplyReader<'a> {
+            #[allow(dead_code)]
+            fn as_ref(&self, buffer: &'a MessageBuffer) -> &'a InlinedPartListenReply {
+                unsafe { &*(buffer as *const _ as *const InlinedPartListenReply) }
+            }
+        }
     }
 }

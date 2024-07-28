@@ -71,6 +71,8 @@ pub mod apps {
             Rx(ftl_autogen::protocols::ethernet_device::RxReader<'a>),
             TcpAccepted(ftl_autogen::protocols::tcpip::TcpAcceptedReader<'a>),
             TcpReceived(ftl_autogen::protocols::tcpip::TcpReceivedReader<'a>),
+            ListenRequest(ftl_autogen::protocols::tcpip::ListenRequestReader<'a>),
+            ListenReply(ftl_autogen::protocols::tcpip::ListenReplyReader<'a>),
         }
 
         impl<'a> ::core::fmt::Debug for Message<'a> {
@@ -84,6 +86,8 @@ pub mod apps {
                     Self::Rx(_) => write!(f, "Rx"),
                     Self::TcpAccepted(_) => write!(f, "TcpAccepted"),
                     Self::TcpReceived(_) => write!(f, "TcpReceived"),
+                    Self::ListenRequest(_) => write!(f, "ListenRequest"),
+                    Self::ListenReply(_) => write!(f, "ListenReply"),
                 }
             }
         }
@@ -155,6 +159,20 @@ pub mod apps {
 
                         let reader = M::deserialize(buffer, msginfo)?;
                         Some(Message::TcpReceived(reader))
+                    }
+
+                    ftl_autogen::protocols::tcpip::ListenRequest::MSGINFO => {
+                        use ftl_autogen::protocols::tcpip::ListenRequest as M;
+
+                        let reader = M::deserialize(buffer, msginfo)?;
+                        Some(Message::ListenRequest(reader))
+                    }
+
+                    ftl_autogen::protocols::tcpip::ListenReply::MSGINFO => {
+                        use ftl_autogen::protocols::tcpip::ListenReply as M;
+
+                        let reader = M::deserialize(buffer, msginfo)?;
+                        Some(Message::ListenReply(reader))
                     }
 
                     _ => None,
@@ -221,6 +239,8 @@ pub mod apps {
             Rx(ftl_autogen::protocols::ethernet_device::RxReader<'a>),
             TcpAccepted(ftl_autogen::protocols::tcpip::TcpAcceptedReader<'a>),
             TcpReceived(ftl_autogen::protocols::tcpip::TcpReceivedReader<'a>),
+            ListenRequest(ftl_autogen::protocols::tcpip::ListenRequestReader<'a>),
+            ListenReply(ftl_autogen::protocols::tcpip::ListenReplyReader<'a>),
         }
 
         impl<'a> ::core::fmt::Debug for Message<'a> {
@@ -234,6 +254,8 @@ pub mod apps {
                     Self::Rx(_) => write!(f, "Rx"),
                     Self::TcpAccepted(_) => write!(f, "TcpAccepted"),
                     Self::TcpReceived(_) => write!(f, "TcpReceived"),
+                    Self::ListenRequest(_) => write!(f, "ListenRequest"),
+                    Self::ListenReply(_) => write!(f, "ListenReply"),
                 }
             }
         }
@@ -305,6 +327,20 @@ pub mod apps {
 
                         let reader = M::deserialize(buffer, msginfo)?;
                         Some(Message::TcpReceived(reader))
+                    }
+
+                    ftl_autogen::protocols::tcpip::ListenRequest::MSGINFO => {
+                        use ftl_autogen::protocols::tcpip::ListenRequest as M;
+
+                        let reader = M::deserialize(buffer, msginfo)?;
+                        Some(Message::ListenRequest(reader))
+                    }
+
+                    ftl_autogen::protocols::tcpip::ListenReply::MSGINFO => {
+                        use ftl_autogen::protocols::tcpip::ListenReply as M;
+
+                        let reader = M::deserialize(buffer, msginfo)?;
+                        Some(Message::ListenReply(reader))
                     }
 
                     _ => None,
@@ -379,6 +415,8 @@ pub mod apps {
             Rx(ftl_autogen::protocols::ethernet_device::RxReader<'a>),
             TcpAccepted(ftl_autogen::protocols::tcpip::TcpAcceptedReader<'a>),
             TcpReceived(ftl_autogen::protocols::tcpip::TcpReceivedReader<'a>),
+            ListenRequest(ftl_autogen::protocols::tcpip::ListenRequestReader<'a>),
+            ListenReply(ftl_autogen::protocols::tcpip::ListenReplyReader<'a>),
         }
 
         impl<'a> ::core::fmt::Debug for Message<'a> {
@@ -392,6 +430,8 @@ pub mod apps {
                     Self::Rx(_) => write!(f, "Rx"),
                     Self::TcpAccepted(_) => write!(f, "TcpAccepted"),
                     Self::TcpReceived(_) => write!(f, "TcpReceived"),
+                    Self::ListenRequest(_) => write!(f, "ListenRequest"),
+                    Self::ListenReply(_) => write!(f, "ListenReply"),
                 }
             }
         }
@@ -463,6 +503,20 @@ pub mod apps {
 
                         let reader = M::deserialize(buffer, msginfo)?;
                         Some(Message::TcpReceived(reader))
+                    }
+
+                    ftl_autogen::protocols::tcpip::ListenRequest::MSGINFO => {
+                        use ftl_autogen::protocols::tcpip::ListenRequest as M;
+
+                        let reader = M::deserialize(buffer, msginfo)?;
+                        Some(Message::ListenRequest(reader))
+                    }
+
+                    ftl_autogen::protocols::tcpip::ListenReply::MSGINFO => {
+                        use ftl_autogen::protocols::tcpip::ListenReply as M;
+
+                        let reader = M::deserialize(buffer, msginfo)?;
+                        Some(Message::ListenReply(reader))
                     }
 
                     _ => None,
