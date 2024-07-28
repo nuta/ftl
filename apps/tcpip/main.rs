@@ -179,11 +179,7 @@ impl<'a> Server<'a> {
         let rx_buf = tcp::SocketBuffer::new(vec![0; 8192]);
         let tx_buf = tcp::SocketBuffer::new(vec![0; 8192]);
         let mut sock = tcp::Socket::new(rx_buf, tx_buf);
-        sock.listen(IpListenEndpoint {
-            addr: None,
-            port,
-        })
-        .unwrap();
+        sock.listen(IpListenEndpoint { addr: None, port }).unwrap();
 
         let handle = self.smol_sockets.add(sock);
     }
