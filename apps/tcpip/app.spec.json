@@ -9,6 +9,6 @@
                 "protocol": "ethernet_device"
             }
         ],
-        "provides": []
+        "provides": ["tcpip"]
     }
 }
