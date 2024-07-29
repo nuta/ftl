@@ -174,6 +174,7 @@ impl<'a> Server<'a> {
             .poll(now(), &mut self.device, &mut self.smol_sockets)
         {
             let mut closed_sockets = Vec::new();
+            let mut new_sockets = Vec::new();
             for (handle, sock) in self.sockets.iter_mut() {
                 let smol_sock = self.smol_sockets.get_mut::<tcp::Socket>(sock.smol_handle);
                 let mut close = false;
@@ -209,6 +210,30 @@ impl<'a> Server<'a> {
                                 },
                             )
                             .unwrap();
+
+                        let new_listen_sock_handle = self.smol_sockets.add(tcp::Socket::new(
+                            tcp::SocketBuffer::new(vec![0; 8192]),
+                            tcp::SocketBuffer::new(vec![0; 8192]),
+                        ));
+                        let new_listen_sock = self
+                            .smol_sockets
+                            .get_mut::<tcp::Socket>(new_listen_sock_handle);
+                        new_listen_sock
+                            .listen(IpListenEndpoint {
+                                addr: None,
+                                port: 80, /* FIXME: */
+                            })
+                            .unwrap();
+                        new_sockets.push(Socket {
+                            smol_handle: new_listen_sock_handle,
+                            // FIXME:
+                            state: State::Listening {
+                                ctrl_ch: Channel::from_handle(OwnedHandle::from_raw(
+                                    ctrl_ch.handle().id(),
+                                )),
+                            },
+                        });
+
                         sock.state = State::Established { ch: ch2 };
                     }
                     State::Listening { .. } => {
@@ -232,8 +257,7 @@ impl<'a> Server<'a> {
                     State::Established { .. } if !smol_sock.is_open() => {
                         close = true;
                     }
-                    _ => {
-                    }
+                    _ => {}
                 }
 
                 if close {
@@ -245,6 +269,10 @@ impl<'a> Server<'a> {
 
             for handle in closed_sockets {
                 self.sockets.remove(&handle);
+            }
+
+            for socket in new_sockets {
+                self.sockets.insert(socket.smol_handle, socket);
             }
         }
     }
