@@ -34,9 +34,7 @@ enum Context {
     Autopilot,
     Driver,
     CtrlSocket,
-    DataSocket {
-        handle: SocketHandle,
-    },
+    DataSocket { handle: SocketHandle },
 }
 
 struct RxTokenImpl(Vec<u8>);
@@ -166,7 +164,11 @@ impl<'a> Server<'a> {
         }
     }
 
-    pub fn poll(&mut self, msgbuffer: &mut MessageBuffer, mainloop: &mut Mainloop<Context, Message>) {
+    pub fn poll(
+        &mut self,
+        msgbuffer: &mut MessageBuffer,
+        mainloop: &mut Mainloop<Context, Message>,
+    ) {
         while self
             .iface
             .poll(now(), &mut self.device, &mut self.smol_sockets)
@@ -194,10 +196,16 @@ impl<'a> Server<'a> {
                             .unwrap();
 
                         // FIXME:
-                        let ch2_cloned = Channel::from_handle(OwnedHandle::from_raw(ch2.handle().id()));
+                        let ch2_cloned =
+                            Channel::from_handle(OwnedHandle::from_raw(ch2.handle().id()));
 
                         mainloop
-                            .add_channel(ch2_cloned, Context::DataSocket { handle: sock.smol_handle })
+                            .add_channel(
+                                ch2_cloned,
+                                Context::DataSocket {
+                                    handle: sock.smol_handle,
+                                },
+                            )
                             .unwrap();
                         sock.state = State::Established { ch: ch2 };
                     }
