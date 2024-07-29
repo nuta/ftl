@@ -497,81 +497,6 @@ pub mod protocols {
         use super::*;
 
         #[repr(C)]
-        pub struct TcpSend {
-            pub data: ftl_types::idl::BytesField<4096>,
-        }
-
-        #[repr(C)]
-        struct InlinedPartTcpSend {
-            pub data: ftl_types::idl::BytesField<4096>,
-        }
-
-        // TODO: static_assert for size
-
-        impl MessageSerialize for TcpSend {
-            const MSGINFO: MessageInfo = MessageInfo::from_raw(
-                (7 << 14) | (0 << 12) | ::core::mem::size_of::<TcpSend>() as isize,
-            );
-
-            fn serialize(self, buffer: &mut MessageBuffer) {
-                // The actual serialization is done in this const fn. This is to
-                // ensure the serialization can be done with const operations.
-                const fn do_serialize(this: TcpSend, buffer: &mut MessageBuffer) {
-                    let object = InlinedPartTcpSend { data: this.data };
-
-                    let dst = buffer as *mut _ as *mut InlinedPartTcpSend;
-                    let src = &object as *const _ as *const InlinedPartTcpSend;
-
-                    unsafe {
-                        core::ptr::copy_nonoverlapping::<InlinedPartTcpSend>(src, dst, 1);
-                    }
-
-                    // FIXME: Support multiple handles.
-                    debug_assert!(
-                        MessageInfo::from_raw(TcpSend::MSGINFO.as_raw()).num_handles() <= 1
-                    );
-
-                    // Don't call destructors on handles transferred to this buffer.
-                    core::mem::forget(this);
-                }
-
-                do_serialize(self, buffer)
-            }
-        }
-
-        impl MessageDeserialize for TcpSend {
-            type Reader<'a> = TcpSendReader<'a>;
-
-            fn deserialize<'a>(
-                buffer: &'a MessageBuffer,
-                msginfo: MessageInfo,
-            ) -> Option<TcpSendReader<'a>> {
-                if msginfo == Self::MSGINFO {
-                    Some(TcpSendReader { buffer })
-                } else {
-                    None
-                }
-            }
-        }
-
-        pub struct TcpSendReader<'a> {
-            #[allow(dead_code)]
-            buffer: &'a MessageBuffer,
-        }
-
-        impl<'a> TcpSendReader<'a> {
-            #[allow(dead_code)]
-            fn as_ref(&self, buffer: &'a MessageBuffer) -> &'a InlinedPartTcpSend {
-                unsafe { &*(buffer as *const _ as *const InlinedPartTcpSend) }
-            }
-
-            pub fn data(&self) -> ftl_types::idl::BytesField<4096> {
-                let m = self.as_ref(self.buffer);
-                m.data
-            }
-        }
-
-        #[repr(C)]
         pub struct TcpAccepted {
             pub sock: HandleOwnership,
         }
@@ -583,7 +508,7 @@ pub mod protocols {
 
         impl MessageSerialize for TcpAccepted {
             const MSGINFO: MessageInfo = MessageInfo::from_raw(
-                (8 << 14) | (1 << 12) | ::core::mem::size_of::<TcpAccepted>() as isize,
+                (7 << 14) | (1 << 12) | ::core::mem::size_of::<TcpAccepted>() as isize,
             );
 
             fn serialize(self, buffer: &mut MessageBuffer) {
@@ -661,7 +586,7 @@ pub mod protocols {
 
         impl MessageSerialize for TcpReceived {
             const MSGINFO: MessageInfo = MessageInfo::from_raw(
-                (9 << 14) | (0 << 12) | ::core::mem::size_of::<TcpReceived>() as isize,
+                (8 << 14) | (0 << 12) | ::core::mem::size_of::<TcpReceived>() as isize,
             );
 
             fn serialize(self, buffer: &mut MessageBuffer) {
@@ -723,38 +648,39 @@ pub mod protocols {
         }
 
         #[repr(C)]
-        pub struct ListenRequest {
-            pub port: i16,
+        pub struct TcpListenRequest {
+            pub port: u16,
         }
 
         #[repr(C)]
-        struct InlinedPartListenRequest {
-            pub port: i16,
+        struct InlinedPartTcpListenRequest {
+            pub port: u16,
         }
 
         // TODO: static_assert for size
 
-        impl MessageSerialize for ListenRequest {
+        impl MessageSerialize for TcpListenRequest {
             const MSGINFO: MessageInfo = MessageInfo::from_raw(
-                (10 << 14) | (0 << 12) | ::core::mem::size_of::<ListenRequest>() as isize,
+                (9 << 14) | (0 << 12) | ::core::mem::size_of::<TcpListenRequest>() as isize,
             );
 
             fn serialize(self, buffer: &mut MessageBuffer) {
                 // The actual serialization is done in this const fn. This is to
                 // ensure the serialization can be done with const operations.
-                const fn do_serialize(this: ListenRequest, buffer: &mut MessageBuffer) {
-                    let object = InlinedPartListenRequest { port: this.port };
+                const fn do_serialize(this: TcpListenRequest, buffer: &mut MessageBuffer) {
+                    let object = InlinedPartTcpListenRequest { port: this.port };
 
-                    let dst = buffer as *mut _ as *mut InlinedPartListenRequest;
-                    let src = &object as *const _ as *const InlinedPartListenRequest;
+                    let dst = buffer as *mut _ as *mut InlinedPartTcpListenRequest;
+                    let src = &object as *const _ as *const InlinedPartTcpListenRequest;
 
                     unsafe {
-                        core::ptr::copy_nonoverlapping::<InlinedPartListenRequest>(src, dst, 1);
+                        core::ptr::copy_nonoverlapping::<InlinedPartTcpListenRequest>(src, dst, 1);
                     }
 
                     // FIXME: Support multiple handles.
                     debug_assert!(
-                        MessageInfo::from_raw(ListenRequest::MSGINFO.as_raw()).num_handles() <= 1
+                        MessageInfo::from_raw(TcpListenRequest::MSGINFO.as_raw()).num_handles()
+                            <= 1
                     );
 
                     // Don't call destructors on handles transferred to this buffer.
@@ -765,67 +691,67 @@ pub mod protocols {
             }
         }
 
-        impl MessageDeserialize for ListenRequest {
-            type Reader<'a> = ListenRequestReader<'a>;
+        impl MessageDeserialize for TcpListenRequest {
+            type Reader<'a> = TcpListenRequestReader<'a>;
 
             fn deserialize<'a>(
                 buffer: &'a MessageBuffer,
                 msginfo: MessageInfo,
-            ) -> Option<ListenRequestReader<'a>> {
+            ) -> Option<TcpListenRequestReader<'a>> {
                 if msginfo == Self::MSGINFO {
-                    Some(ListenRequestReader { buffer })
+                    Some(TcpListenRequestReader { buffer })
                 } else {
                     None
                 }
             }
         }
 
-        pub struct ListenRequestReader<'a> {
+        pub struct TcpListenRequestReader<'a> {
             #[allow(dead_code)]
             buffer: &'a MessageBuffer,
         }
 
-        impl<'a> ListenRequestReader<'a> {
+        impl<'a> TcpListenRequestReader<'a> {
             #[allow(dead_code)]
-            fn as_ref(&self, buffer: &'a MessageBuffer) -> &'a InlinedPartListenRequest {
-                unsafe { &*(buffer as *const _ as *const InlinedPartListenRequest) }
+            fn as_ref(&self, buffer: &'a MessageBuffer) -> &'a InlinedPartTcpListenRequest {
+                unsafe { &*(buffer as *const _ as *const InlinedPartTcpListenRequest) }
             }
 
-            pub fn port(&self) -> i16 {
+            pub fn port(&self) -> u16 {
                 let m = self.as_ref(self.buffer);
                 m.port
             }
         }
 
         #[repr(C)]
-        pub struct ListenReply {}
+        pub struct TcpListenReply {}
 
         #[repr(C)]
-        struct InlinedPartListenReply {}
+        struct InlinedPartTcpListenReply {}
 
         // TODO: static_assert for size
 
-        impl MessageSerialize for ListenReply {
+        impl MessageSerialize for TcpListenReply {
             const MSGINFO: MessageInfo = MessageInfo::from_raw(
-                (11 << 14) | (0 << 12) | ::core::mem::size_of::<ListenReply>() as isize,
+                (10 << 14) | (0 << 12) | ::core::mem::size_of::<TcpListenReply>() as isize,
             );
 
             fn serialize(self, buffer: &mut MessageBuffer) {
                 // The actual serialization is done in this const fn. This is to
                 // ensure the serialization can be done with const operations.
-                const fn do_serialize(this: ListenReply, buffer: &mut MessageBuffer) {
-                    let object = InlinedPartListenReply {};
+                const fn do_serialize(this: TcpListenReply, buffer: &mut MessageBuffer) {
+                    let object = InlinedPartTcpListenReply {};
 
-                    let dst = buffer as *mut _ as *mut InlinedPartListenReply;
-                    let src = &object as *const _ as *const InlinedPartListenReply;
+                    let dst = buffer as *mut _ as *mut InlinedPartTcpListenReply;
+                    let src = &object as *const _ as *const InlinedPartTcpListenReply;
 
                     unsafe {
-                        core::ptr::copy_nonoverlapping::<InlinedPartListenReply>(src, dst, 1);
+                        core::ptr::copy_nonoverlapping::<InlinedPartTcpListenReply>(src, dst, 1);
                     }
 
                     // FIXME: Support multiple handles.
                     debug_assert!(
-                        MessageInfo::from_raw(ListenReply::MSGINFO.as_raw()).num_handles() <= 1
+                        MessageInfo::from_raw(TcpListenReply::MSGINFO.as_raw()).num_handles() <= 1
                     );
 
                     // Don't call destructors on handles transferred to this buffer.
@@ -836,30 +762,171 @@ pub mod protocols {
             }
         }
 
-        impl MessageDeserialize for ListenReply {
-            type Reader<'a> = ListenReplyReader<'a>;
+        impl MessageDeserialize for TcpListenReply {
+            type Reader<'a> = TcpListenReplyReader<'a>;
 
             fn deserialize<'a>(
                 buffer: &'a MessageBuffer,
                 msginfo: MessageInfo,
-            ) -> Option<ListenReplyReader<'a>> {
+            ) -> Option<TcpListenReplyReader<'a>> {
                 if msginfo == Self::MSGINFO {
-                    Some(ListenReplyReader { buffer })
+                    Some(TcpListenReplyReader { buffer })
                 } else {
                     None
                 }
             }
         }
 
-        pub struct ListenReplyReader<'a> {
+        pub struct TcpListenReplyReader<'a> {
             #[allow(dead_code)]
             buffer: &'a MessageBuffer,
         }
 
-        impl<'a> ListenReplyReader<'a> {
+        impl<'a> TcpListenReplyReader<'a> {
             #[allow(dead_code)]
-            fn as_ref(&self, buffer: &'a MessageBuffer) -> &'a InlinedPartListenReply {
-                unsafe { &*(buffer as *const _ as *const InlinedPartListenReply) }
+            fn as_ref(&self, buffer: &'a MessageBuffer) -> &'a InlinedPartTcpListenReply {
+                unsafe { &*(buffer as *const _ as *const InlinedPartTcpListenReply) }
+            }
+        }
+
+        #[repr(C)]
+        pub struct TcpSendRequest {
+            pub data: ftl_types::idl::BytesField<4096>,
+        }
+
+        #[repr(C)]
+        struct InlinedPartTcpSendRequest {
+            pub data: ftl_types::idl::BytesField<4096>,
+        }
+
+        // TODO: static_assert for size
+
+        impl MessageSerialize for TcpSendRequest {
+            const MSGINFO: MessageInfo = MessageInfo::from_raw(
+                (11 << 14) | (0 << 12) | ::core::mem::size_of::<TcpSendRequest>() as isize,
+            );
+
+            fn serialize(self, buffer: &mut MessageBuffer) {
+                // The actual serialization is done in this const fn. This is to
+                // ensure the serialization can be done with const operations.
+                const fn do_serialize(this: TcpSendRequest, buffer: &mut MessageBuffer) {
+                    let object = InlinedPartTcpSendRequest { data: this.data };
+
+                    let dst = buffer as *mut _ as *mut InlinedPartTcpSendRequest;
+                    let src = &object as *const _ as *const InlinedPartTcpSendRequest;
+
+                    unsafe {
+                        core::ptr::copy_nonoverlapping::<InlinedPartTcpSendRequest>(src, dst, 1);
+                    }
+
+                    // FIXME: Support multiple handles.
+                    debug_assert!(
+                        MessageInfo::from_raw(TcpSendRequest::MSGINFO.as_raw()).num_handles() <= 1
+                    );
+
+                    // Don't call destructors on handles transferred to this buffer.
+                    core::mem::forget(this);
+                }
+
+                do_serialize(self, buffer)
+            }
+        }
+
+        impl MessageDeserialize for TcpSendRequest {
+            type Reader<'a> = TcpSendRequestReader<'a>;
+
+            fn deserialize<'a>(
+                buffer: &'a MessageBuffer,
+                msginfo: MessageInfo,
+            ) -> Option<TcpSendRequestReader<'a>> {
+                if msginfo == Self::MSGINFO {
+                    Some(TcpSendRequestReader { buffer })
+                } else {
+                    None
+                }
+            }
+        }
+
+        pub struct TcpSendRequestReader<'a> {
+            #[allow(dead_code)]
+            buffer: &'a MessageBuffer,
+        }
+
+        impl<'a> TcpSendRequestReader<'a> {
+            #[allow(dead_code)]
+            fn as_ref(&self, buffer: &'a MessageBuffer) -> &'a InlinedPartTcpSendRequest {
+                unsafe { &*(buffer as *const _ as *const InlinedPartTcpSendRequest) }
+            }
+
+            pub fn data(&self) -> ftl_types::idl::BytesField<4096> {
+                let m = self.as_ref(self.buffer);
+                m.data
+            }
+        }
+
+        #[repr(C)]
+        pub struct TcpSendReply {}
+
+        #[repr(C)]
+        struct InlinedPartTcpSendReply {}
+
+        // TODO: static_assert for size
+
+        impl MessageSerialize for TcpSendReply {
+            const MSGINFO: MessageInfo = MessageInfo::from_raw(
+                (12 << 14) | (0 << 12) | ::core::mem::size_of::<TcpSendReply>() as isize,
+            );
+
+            fn serialize(self, buffer: &mut MessageBuffer) {
+                // The actual serialization is done in this const fn. This is to
+                // ensure the serialization can be done with const operations.
+                const fn do_serialize(this: TcpSendReply, buffer: &mut MessageBuffer) {
+                    let object = InlinedPartTcpSendReply {};
+
+                    let dst = buffer as *mut _ as *mut InlinedPartTcpSendReply;
+                    let src = &object as *const _ as *const InlinedPartTcpSendReply;
+
+                    unsafe {
+                        core::ptr::copy_nonoverlapping::<InlinedPartTcpSendReply>(src, dst, 1);
+                    }
+
+                    // FIXME: Support multiple handles.
+                    debug_assert!(
+                        MessageInfo::from_raw(TcpSendReply::MSGINFO.as_raw()).num_handles() <= 1
+                    );
+
+                    // Don't call destructors on handles transferred to this buffer.
+                    core::mem::forget(this);
+                }
+
+                do_serialize(self, buffer)
+            }
+        }
+
+        impl MessageDeserialize for TcpSendReply {
+            type Reader<'a> = TcpSendReplyReader<'a>;
+
+            fn deserialize<'a>(
+                buffer: &'a MessageBuffer,
+                msginfo: MessageInfo,
+            ) -> Option<TcpSendReplyReader<'a>> {
+                if msginfo == Self::MSGINFO {
+                    Some(TcpSendReplyReader { buffer })
+                } else {
+                    None
+                }
+            }
+        }
+
+        pub struct TcpSendReplyReader<'a> {
+            #[allow(dead_code)]
+            buffer: &'a MessageBuffer,
+        }
+
+        impl<'a> TcpSendReplyReader<'a> {
+            #[allow(dead_code)]
+            fn as_ref(&self, buffer: &'a MessageBuffer) -> &'a InlinedPartTcpSendReply {
+                unsafe { &*(buffer as *const _ as *const InlinedPartTcpSendReply) }
             }
         }
     }

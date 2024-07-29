@@ -9,7 +9,6 @@ use ftl_api::mainloop::Event;
 use ftl_api::mainloop::Mainloop;
 use ftl_api::prelude::*;
 use ftl_api::types::error::FtlError;
-use ftl_api::types::handle::HandleId;
 use ftl_api::types::idl::BytesField;
 use ftl_api::types::message::HandleOwnership;
 use ftl_api::types::message::MessageBuffer;
@@ -34,7 +33,10 @@ use smoltcp::wire::IpListenEndpoint;
 enum Context {
     Autopilot,
     Driver,
-    Client,
+    CtrlSocket,
+    DataSocket {
+        handle: SocketHandle,
+    },
 }
 
 struct RxTokenImpl(Vec<u8>);
@@ -139,7 +141,7 @@ struct Server<'a> {
     smol_sockets: SocketSet<'a>,
     device: DeviceImpl,
     iface: Interface,
-    sockets: HashMap<HandleId, Socket>,
+    sockets: HashMap<SocketHandle, Socket>,
 }
 
 impl<'a> Server<'a> {
@@ -164,24 +166,11 @@ impl<'a> Server<'a> {
         }
     }
 
-    pub fn poll(&mut self, msgbuffer: &mut MessageBuffer) {
+    pub fn poll(&mut self, msgbuffer: &mut MessageBuffer, mainloop: &mut Mainloop<Context, Message>) {
         while self
             .iface
             .poll(now(), &mut self.device, &mut self.smol_sockets)
         {
-            // let socket = self.sockets.get_mut::<tcp::Socket>(sock_handle);
-            // if socket.can_recv() {
-            //     socket
-            //         .recv(|data| {
-            //             info!("{}", core::str::from_utf8(data).unwrap_or("(invalid utf8)"));
-            //             (data.len(), ())
-            //         })
-            //         .unwrap();
-
-            //     socket
-            //         .send_slice(b"HTTP/1.1 200 OK\r\nContent-Length: 12\r\n\r\nHello, world!")
-            //         .unwrap();
-            // }
             let mut closed_sockets = Vec::new();
             for (handle, sock) in self.sockets.iter_mut() {
                 let smol_sock = self.smol_sockets.get_mut::<tcp::Socket>(sock.smol_handle);
@@ -204,6 +193,12 @@ impl<'a> Server<'a> {
                             )
                             .unwrap();
 
+                        // FIXME:
+                        let ch2_cloned = Channel::from_handle(OwnedHandle::from_raw(ch2.handle().id()));
+
+                        mainloop
+                            .add_channel(ch2_cloned, Context::DataSocket { handle: sock.smol_handle })
+                            .unwrap();
                         sock.state = State::Established { ch: ch2 };
                     }
                     State::Established { ch } if smol_sock.can_recv() => {
@@ -250,7 +245,7 @@ impl<'a> Server<'a> {
 
         let handle = self.smol_sockets.add(sock);
         self.sockets.insert(
-            ctrl_ch.handle().id(),
+            handle,
             Socket {
                 smol_handle: handle,
                 state: State::Listening { ctrl_ch },
@@ -258,7 +253,7 @@ impl<'a> Server<'a> {
         );
     }
 
-    pub fn tcp_send(&mut self, handle: HandleId, data: &[u8]) -> Result<(), FtlError> {
+    pub fn tcp_send(&mut self, handle: SocketHandle, data: &[u8]) -> Result<(), FtlError> {
         let socket = self
             .sockets
             .get_mut(&handle)
@@ -316,16 +311,23 @@ pub fn main(mut env: Environ) {
 
     let mut buffer = MessageBuffer::new();
     loop {
-        server.poll(&mut buffer);
+        server.poll(&mut buffer, &mut mainloop);
         match mainloop.next(&mut buffer) {
-            Event::Message { ch: _ch, ctx, m } => {
+            Event::Message { ch, ctx, m } => {
                 match (ctx, m) {
                     (Context::Autopilot, Message::NewclientRequest(m)) => {
                         info!("got new client: {:?}", m.handle());
                         let new_ch = Channel::from_handle(OwnedHandle::from_raw(m.handle()));
-                        mainloop.add_channel(new_ch, Context::Client).unwrap();
+                        mainloop.add_channel(new_ch, Context::CtrlSocket).unwrap();
                     }
-                    (Context::Client {}, Message::ListenRequest(_m)) => {}
+                    (Context::CtrlSocket, Message::TcpListenRequest(m)) => {
+                        // FIXME:
+                        let ctrl_ch = Channel::from_handle(OwnedHandle::from_raw(ch.handle().id()));
+                        server.tcp_listen(ctrl_ch, m.port());
+                    }
+                    (Context::DataSocket { handle }, Message::TcpSendRequest(m)) => {
+                        server.tcp_send(*handle, m.data().as_slice()).unwrap();
+                    }
                     (Context::Driver, Message::Rx(m)) => {
                         trace!(
                             "received {} bytes: {:02x?}",

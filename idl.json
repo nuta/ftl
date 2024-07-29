@@ -83,12 +83,27 @@
             "name": "tcpip",
             "rpcs": [
                 {
-                    "name": "listen",
+                    "name": "tcp_listen",
                     "request": {
                         "fields": [
                             {
                                 "name": "port",
-                                "type": "int16"
+                                "type": "uint16"
+                            }
+                        ]
+                    },
+                    "response": {
+                        "fields": []
+                    }
+                },
+                {
+                    "name": "tcp_send",
+                    "request": {
+                        "fields": [
+                            {
+                                "type": "bytes",
+                                "name": "data",
+                                "capacity": 4096
                             }
                         ]
                     },
@@ -98,16 +113,6 @@
                 }
             ],
             "oneways": [
-                {
-                    "name": "tcp_send",
-                    "fields": [
-                        {
-                            "type": "bytes",
-                            "name": "data",
-                            "capacity": 4096
-                        }
-                    ]
-                },
                 {
                     "name": "tcp_accepted",
                     "fields": [

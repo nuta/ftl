@@ -11,8 +11,8 @@ use ftl_api::types::idl::BytesField;
 use ftl_api::types::message::MessageBuffer;
 use ftl_api_autogen::apps::http_server::Environ;
 use ftl_api_autogen::apps::http_server::Message;
-use ftl_api_autogen::protocols::tcpip::ListenRequest;
-use ftl_api_autogen::protocols::tcpip::TcpSend;
+use ftl_api_autogen::protocols::tcpip::TcpListenRequest;
+use ftl_api_autogen::protocols::tcpip::TcpSendRequest;
 
 #[derive(Debug)]
 struct Client {
@@ -70,7 +70,7 @@ pub fn main(mut env: Environ) {
     let tcpip_ch = env.depends.tcpip.take().unwrap();
 
     tcpip_ch
-        .send_with_buffer(&mut buffer, ListenRequest { port: 80 })
+        .send_with_buffer(&mut buffer, TcpListenRequest { port: 80 })
         .unwrap();
 
     let mut mainloop = Mainloop::<Context, Message>::new().unwrap();
@@ -101,7 +101,7 @@ pub fn main(mut env: Environ) {
                             data[..resp.len()].copy_from_slice(resp);
                             let data = BytesField::new(data, resp.len() as u16);
 
-                            ch.send_with_buffer(&mut buffer, TcpSend { data }).unwrap();
+                            ch.send_with_buffer(&mut buffer, TcpSendRequest { data }).unwrap();
                         });
                     }
                     (_, m) => {
