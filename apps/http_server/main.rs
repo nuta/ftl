@@ -97,7 +97,7 @@ pub fn main(mut env: Environ) {
                             // FIXME:
                             let resp =
                                 &b"HTTP/1.1 200 OK\r\nContent-Length: 12\r\n\r\nHello, world!"[..];
-                            let mut data = [0; 4096];
+                            let mut data = [0; 2048];
                             data[..resp.len()].copy_from_slice(resp);
                             let data = BytesField::new(data, resp.len() as u16);
 

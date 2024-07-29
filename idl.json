@@ -103,7 +103,7 @@
                             {
                                 "type": "bytes",
                                 "name": "data",
-                                "capacity": 4096
+                                "capacity": 2048
                             }
                         ]
                     },
@@ -128,7 +128,7 @@
                         {
                             "name": "data",
                             "type": "bytes",
-                            "capacity": 4096
+                            "capacity": 2048
                         }
                     ]
                 }

@@ -180,6 +180,8 @@ impl<'a> Server<'a> {
                 match &mut sock.state {
                     State::Listening { .. } if smol_sock.is_active() => {}
                     State::Listening { ctrl_ch } if smol_sock.is_listening() => {
+                        info!("established");
+
                         // Still waiting for a new connection.
                         let (ch1, ch2) = Channel::create().unwrap();
 
@@ -209,9 +211,13 @@ impl<'a> Server<'a> {
                             .unwrap();
                         sock.state = State::Established { ch: ch2 };
                     }
+                    State::Listening { .. } => {
+                        // Inactive, closed, or unknown state. Close the socket.
+                        close = true;
+                    }
                     State::Established { ch } if smol_sock.can_recv() => {
                         loop {
-                            let mut buf = [0; 4096];
+                            let mut buf = [0; 2048];
                             let len = smol_sock.recv_slice(&mut buf).unwrap();
                             if len == 0 {
                                 break;
@@ -227,8 +233,6 @@ impl<'a> Server<'a> {
                         close = true;
                     }
                     _ => {
-                        // Inactive, closed, or unknown state. Close the socket.
-                        close = true;
                     }
                 }
 
@@ -251,6 +255,7 @@ impl<'a> Server<'a> {
         let mut sock = tcp::Socket::new(rx_buf, tx_buf);
         sock.listen(IpListenEndpoint { addr: None, port }).unwrap();
 
+        info!("listening on port {}", port);
         let handle = self.smol_sockets.add(sock);
         self.sockets.insert(
             handle,
