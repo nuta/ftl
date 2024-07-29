@@ -17,6 +17,7 @@ use ftl_api_autogen::apps::tcpip::Environ;
 use ftl_api_autogen::apps::tcpip::Message;
 use ftl_api_autogen::protocols::ethernet_device;
 use ftl_api_autogen::protocols::tcpip::TcpAccepted;
+use ftl_api_autogen::protocols::tcpip::TcpReceived;
 use smoltcp::iface::Config;
 use smoltcp::iface::Interface;
 use smoltcp::iface::SocketHandle;
@@ -181,9 +182,9 @@ impl<'a> Server<'a> {
             let mut closed_sockets = Vec::new();
             for (handle, sock) in self.sockets.iter_mut() {
                 let smol_sock = self.smol_sockets.get_mut::<tcp::Socket>(sock.smol_handle);
+                let mut close = false;
                 match &mut sock.state {
                     State::Listening { ..} if smol_sock.is_active() => {
-
                     }
                     State::Listening { ctrl_ch } if smol_sock.is_listening() => {
                         // Still waiting for a new connection.
@@ -196,14 +197,32 @@ impl<'a> Server<'a> {
 
                         sock.state = State::Established { ch: ch2 };
                     }
-                    State::Established { ch } => {
+                    State::Established { ch } if smol_sock.can_recv() => {
+                        loop {
+                            let mut buf = [0; 4096];
+                            let len = smol_sock.recv_slice(&mut buf).unwrap();
+                            if len == 0 {
+                                break;
+                            }
+
+                            let data = BytesField::new(buf, len.try_into().unwrap());
+                            // FIXME: Backpressure
+                            ch.send_with_buffer(msgbuffer, TcpReceived { data }).unwrap();
+                        }
+                    }
+                    State::Established { .. } if !smol_sock.is_open() => {
+                        close = true;
                     }
                     _ => {
                         // Inactive, closed, or unknown state. Close the socket.
-                        warn!("closing socket");
-                        closed_sockets.push(*handle);
-                        self.smol_sockets.remove(sock.smol_handle);
+                        close = true;
                     }
+                }
+
+                if close {
+                    warn!("closing socket");
+                    closed_sockets.push(*handle);
+                    self.smol_sockets.remove(sock.smol_handle);
                 }
             }
 
