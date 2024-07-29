@@ -165,7 +165,10 @@ impl<'a> Server<'a> {
     }
 
     pub fn poll(&mut self, msgbuffer: &mut MessageBuffer) {
-        while self.iface.poll(now(), &mut self.device, &mut self.smol_sockets) {
+        while self
+            .iface
+            .poll(now(), &mut self.device, &mut self.smol_sockets)
+        {
             // let socket = self.sockets.get_mut::<tcp::Socket>(sock_handle);
             // if socket.can_recv() {
             //     socket
@@ -184,8 +187,7 @@ impl<'a> Server<'a> {
                 let smol_sock = self.smol_sockets.get_mut::<tcp::Socket>(sock.smol_handle);
                 let mut close = false;
                 match &mut sock.state {
-                    State::Listening { ..} if smol_sock.is_active() => {
-                    }
+                    State::Listening { .. } if smol_sock.is_active() => {}
                     State::Listening { ctrl_ch } if smol_sock.is_listening() => {
                         // Still waiting for a new connection.
                         let (ch1, ch2) = Channel::create().unwrap();
@@ -193,7 +195,14 @@ impl<'a> Server<'a> {
                         // FIXME:
                         let ch1_handle = ch1.handle().id();
                         core::mem::forget(ch1);
-                        ctrl_ch.send_with_buffer(msgbuffer, TcpAccepted { sock: HandleOwnership(ch1_handle) }).unwrap();
+                        ctrl_ch
+                            .send_with_buffer(
+                                msgbuffer,
+                                TcpAccepted {
+                                    sock: HandleOwnership(ch1_handle),
+                                },
+                            )
+                            .unwrap();
 
                         sock.state = State::Established { ch: ch2 };
                     }
@@ -207,7 +216,8 @@ impl<'a> Server<'a> {
 
                             let data = BytesField::new(buf, len.try_into().unwrap());
                             // FIXME: Backpressure
-                            ch.send_with_buffer(msgbuffer, TcpReceived { data }).unwrap();
+                            ch.send_with_buffer(msgbuffer, TcpReceived { data })
+                                .unwrap();
                         }
                     }
                     State::Established { .. } if !smol_sock.is_open() => {
@@ -243,21 +253,24 @@ impl<'a> Server<'a> {
             ctrl_ch.handle().id(),
             Socket {
                 smol_handle: handle,
-                state: State::Listening {
-                    ctrl_ch,
-                },
-
+                state: State::Listening { ctrl_ch },
             },
         );
     }
 
     pub fn tcp_send(&mut self, handle: HandleId, data: &[u8]) -> Result<(), FtlError> {
-        let socket = self.sockets.get_mut(&handle).ok_or(FtlError::HandleNotFound)?;
+        let socket = self
+            .sockets
+            .get_mut(&handle)
+            .ok_or(FtlError::HandleNotFound)?;
         if !matches!(socket.state, State::Established { .. }) {
             return Err(FtlError::InvalidState);
         }
 
-        self.smol_sockets.get_mut::<tcp::Socket>(socket.smol_handle).send_slice(data).unwrap();
+        self.smol_sockets
+            .get_mut::<tcp::Socket>(socket.smol_handle)
+            .send_slice(data)
+            .unwrap();
         Ok(())
     }
 
@@ -267,12 +280,8 @@ impl<'a> Server<'a> {
 }
 
 enum State {
-    Listening {
-        ctrl_ch: Channel,
-    },
-    Established {
-        ch: Channel,
-    },
+    Listening { ctrl_ch: Channel },
+    Established { ch: Channel },
 }
 
 struct Socket {
