@@ -38,7 +38,7 @@ impl Client {
             let mut headers = [httparse::EMPTY_HEADER; 32];
             let mut request = httparse::Request::new(&mut headers);
             match request.parse(request_bytes) {
-                Ok(httparse::Status::Complete(len)) => {
+                Ok(httparse::Status::Complete(_len)) => {
                     f(&request);
                     self.buffered = Vec::new();
                 }

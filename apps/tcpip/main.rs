@@ -2,18 +2,24 @@
 #![no_main]
 
 use ftl_api::channel::Channel;
+use ftl_api::collections::HashMap;
 use ftl_api::collections::VecDeque;
 use ftl_api::handle::OwnedHandle;
 use ftl_api::mainloop::Event;
 use ftl_api::mainloop::Mainloop;
 use ftl_api::prelude::*;
+use ftl_api::types::error::FtlError;
+use ftl_api::types::handle::HandleId;
 use ftl_api::types::idl::BytesField;
+use ftl_api::types::message::HandleOwnership;
 use ftl_api::types::message::MessageBuffer;
 use ftl_api_autogen::apps::tcpip::Environ;
 use ftl_api_autogen::apps::tcpip::Message;
 use ftl_api_autogen::protocols::ethernet_device;
+use ftl_api_autogen::protocols::tcpip::TcpAccepted;
 use smoltcp::iface::Config;
 use smoltcp::iface::Interface;
+use smoltcp::iface::SocketHandle;
 use smoltcp::iface::SocketSet;
 use smoltcp::phy::DeviceCapabilities;
 use smoltcp::socket::tcp;
@@ -132,7 +138,7 @@ struct Server<'a> {
     smol_sockets: SocketSet<'a>,
     device: DeviceImpl,
     iface: Interface,
-    sockets: SocketSet<'a>,
+    sockets: HashMap<HandleId, Socket>,
 }
 
 impl<'a> Server<'a> {
@@ -140,7 +146,7 @@ impl<'a> Server<'a> {
         let config = Config::new(hwaddr.into());
         let mut device = DeviceImpl::new(driver_ch);
         let mut iface = Interface::new(config, &mut device, now());
-        let mut sockets = SocketSet::new(Vec::with_capacity(16));
+        let smol_sockets = SocketSet::new(Vec::with_capacity(16));
 
         // FIXME:
         iface.update_ip_addrs(|ip_addrs| {
@@ -150,15 +156,15 @@ impl<'a> Server<'a> {
         });
 
         Server {
-            smol_sockets: SocketSet::new(Vec::new()),
             device,
             iface,
-            sockets,
+            smol_sockets,
+            sockets: HashMap::new(),
         }
     }
 
-    pub fn poll(&mut self) {
-        while self.iface.poll(now(), &mut self.device, &mut self.sockets) {
+    pub fn poll(&mut self, msgbuffer: &mut MessageBuffer) {
+        while self.iface.poll(now(), &mut self.device, &mut self.smol_sockets) {
             // let socket = self.sockets.get_mut::<tcp::Socket>(sock_handle);
             // if socket.can_recv() {
             //     socket
@@ -172,21 +178,87 @@ impl<'a> Server<'a> {
             //         .send_slice(b"HTTP/1.1 200 OK\r\nContent-Length: 12\r\n\r\nHello, world!")
             //         .unwrap();
             // }
+            let mut closed_sockets = Vec::new();
+            for (handle, sock) in self.sockets.iter_mut() {
+                let smol_sock = self.smol_sockets.get_mut::<tcp::Socket>(sock.smol_handle);
+                match &mut sock.state {
+                    State::Listening { ..} if smol_sock.is_active() => {
+
+                    }
+                    State::Listening { ctrl_ch } if smol_sock.is_listening() => {
+                        // Still waiting for a new connection.
+                        let (ch1, ch2) = Channel::create().unwrap();
+
+                        // FIXME:
+                        let ch1_handle = ch1.handle().id();
+                        core::mem::forget(ch1);
+                        ctrl_ch.send_with_buffer(msgbuffer, TcpAccepted { sock: HandleOwnership(ch1_handle) }).unwrap();
+
+                        sock.state = State::Established { ch: ch2 };
+                    }
+                    State::Established { ch } => {
+                    }
+                    _ => {
+                        // Inactive, closed, or unknown state. Close the socket.
+                        warn!("closing socket");
+                        closed_sockets.push(*handle);
+                        self.smol_sockets.remove(sock.smol_handle);
+                    }
+                }
+            }
+
+            for handle in closed_sockets {
+                self.sockets.remove(&handle);
+            }
         }
     }
 
-    pub fn tcp_listen(&mut self, port: u16) {
+    pub fn tcp_listen(&mut self, ctrl_ch: Channel, port: u16) {
         let rx_buf = tcp::SocketBuffer::new(vec![0; 8192]);
         let tx_buf = tcp::SocketBuffer::new(vec![0; 8192]);
         let mut sock = tcp::Socket::new(rx_buf, tx_buf);
         sock.listen(IpListenEndpoint { addr: None, port }).unwrap();
 
         let handle = self.smol_sockets.add(sock);
+        self.sockets.insert(
+            ctrl_ch.handle().id(),
+            Socket {
+                smol_handle: handle,
+                state: State::Listening {
+                    ctrl_ch,
+                },
+
+            },
+        );
+    }
+
+    pub fn tcp_send(&mut self, handle: HandleId, data: &[u8]) -> Result<(), FtlError> {
+        let socket = self.sockets.get_mut(&handle).ok_or(FtlError::HandleNotFound)?;
+        if !matches!(socket.state, State::Established { .. }) {
+            return Err(FtlError::InvalidState);
+        }
+
+        self.smol_sockets.get_mut::<tcp::Socket>(socket.smol_handle).send_slice(data).unwrap();
+        Ok(())
     }
 
     pub fn receive_pkt(&mut self, pkt: &[u8]) {
         self.device.receive_pkt(pkt);
     }
+}
+
+enum State {
+    Listening {
+        ctrl_ch: Channel,
+    },
+    Established {
+        ch: Channel,
+    },
+}
+
+struct Socket {
+    smol_handle: SocketHandle,
+    state: State,
 }
 
 #[ftl_api::main]
@@ -216,7 +288,7 @@ pub fn main(mut env: Environ) {
 
     let mut buffer = MessageBuffer::new();
     loop {
-        server.poll();
+        server.poll(&mut buffer);
         match mainloop.next(&mut buffer) {
             Event::Message { ch: _ch, ctx, m } => {
                 match (ctx, m) {
@@ -225,7 +297,7 @@ pub fn main(mut env: Environ) {
                         let new_ch = Channel::from_handle(OwnedHandle::from_raw(m.handle()));
                         mainloop.add_channel(new_ch, Context::Client).unwrap();
                     }
-                    (Context::Client {}, Message::ListenRequest(m)) => {}
+                    (Context::Client {}, Message::ListenRequest(_m)) => {}
                     (Context::Driver, Message::Rx(m)) => {
                         trace!(
                             "received {} bytes: {:02x?}",
