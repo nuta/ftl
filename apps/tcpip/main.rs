@@ -173,20 +173,14 @@ impl<'a> Server<'a> {
         .iface
         .poll(now(), &mut self.device, &mut self.smol_sockets)
         {
-            info!("polling sockets {} ------------------------------------", self.sockets.len());
             let mut closed_sockets = Vec::new();
             let mut new_sockets = Vec::new();
             for (handle, sock) in self.sockets.iter_mut() {
                 let smol_sock = self.smol_sockets.get_mut::<tcp::Socket>(sock.smol_handle);
-                info!("sock {:?}: {:?}", handle, smol_sock.state());
-
                 let mut close = false;
                 match (&mut sock.state, smol_sock.state()) {
                     (State::Listening { .. }, tcp::State::Listen | tcp::State::SynReceived) => {}
                     (State::Listening { ctrl_ch }, tcp::State::Established) => {
-                        info!("established");
-
-                        // Still waiting for a new connection.
                         let (ch1, ch2) = Channel::create().unwrap();
 
                         // FIXME:
@@ -272,7 +266,6 @@ impl<'a> Server<'a> {
                 }
             }
 
-            info!("delete {}, add {}", closed_sockets.len(), new_sockets.len());
             for handle in closed_sockets {
                 self.sockets.remove(&handle);
             }
