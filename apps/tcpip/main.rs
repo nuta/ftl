@@ -170,17 +170,20 @@ impl<'a> Server<'a> {
         mainloop: &mut Mainloop<Context, Message>,
     ) {
         while self
-            .iface
-            .poll(now(), &mut self.device, &mut self.smol_sockets)
+        .iface
+        .poll(now(), &mut self.device, &mut self.smol_sockets)
         {
+            info!("polling sockets {} ------------------------------------", self.sockets.len());
             let mut closed_sockets = Vec::new();
             let mut new_sockets = Vec::new();
             for (handle, sock) in self.sockets.iter_mut() {
                 let smol_sock = self.smol_sockets.get_mut::<tcp::Socket>(sock.smol_handle);
+                info!("sock {:?}: {:?}", handle, smol_sock.state());
+
                 let mut close = false;
-                match &mut sock.state {
-                    State::Listening { .. } if smol_sock.is_active() => {}
-                    State::Listening { ctrl_ch } if smol_sock.is_listening() => {
+                match (&mut sock.state, smol_sock.state()) {
+                    (State::Listening { .. }, tcp::State::Listen | tcp::State::SynReceived) => {}
+                    (State::Listening { ctrl_ch }, tcp::State::Established) => {
                         info!("established");
 
                         // Still waiting for a new connection.
@@ -236,11 +239,11 @@ impl<'a> Server<'a> {
 
                         sock.state = State::Established { ch: ch2 };
                     }
-                    State::Listening { .. } => {
+                    (State::Listening { .. }, _) => {
                         // Inactive, closed, or unknown state. Close the socket.
                         close = true;
                     }
-                    State::Established { ch } if smol_sock.can_recv() => {
+                    (State::Established { ch }, _) if smol_sock.can_recv() => {
                         loop {
                             let mut buf = [0; 2048];
                             let len = smol_sock.recv_slice(&mut buf).unwrap();
@@ -254,10 +257,12 @@ impl<'a> Server<'a> {
                                 .unwrap();
                         }
                     }
-                    State::Established { .. } if !smol_sock.is_open() => {
+                    (State::Established { .. }, tcp::State::Established) => {
+                        // Do nothing.
+                    }
+                    (State::Established { .. }, _) => {
                         close = true;
                     }
-                    _ => {}
                 }
 
                 if close {
@@ -267,6 +272,7 @@ impl<'a> Server<'a> {
                 }
             }
 
+            info!("delete {}, add {}", closed_sockets.len(), new_sockets.len());
             for handle in closed_sockets {
                 self.sockets.remove(&handle);
             }
