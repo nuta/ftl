@@ -8,6 +8,7 @@ use ftl_types::poll::PollEvent;
 use hashbrown::HashMap;
 
 use crate::channel::Channel;
+use crate::channel::ChannelReceiver;
 use crate::channel::RecvError;
 use crate::interrupt::Interrupt;
 use crate::poll::Poll;
@@ -19,6 +20,7 @@ pub enum Error {
     PollWait(FtlError),
     ChannelRecv(RecvError),
     ChannelAlreadyAdded(Channel),
+    ChannelReceiverAlreadyAdded(ChannelReceiver),
     InterruptAlreadyAdded(Interrupt),
 }
 
@@ -38,6 +40,7 @@ pub enum Event<'a, 'b, St, M: MessageDeserialize> {
 
 enum Object {
     Channel(Channel),
+    ChannelReceiver(ChannelReceiver),
     Interrupt(Interrupt),
 }
 
@@ -72,6 +75,25 @@ impl<Ctx, AllM: MessageDeserialize> Mainloop<Ctx, AllM> {
         let entry = Entry {
             ctx: state,
             object: Object::Channel(ch),
+        };
+
+        self.objects.insert(handle_id, entry);
+        self.poll
+            .add(handle_id, PollEvent::READABLE)
+            .map_err(Error::PollAdd)?;
+
+        Ok(())
+    }
+
+    pub fn add_channel_receiver(&mut self, receiver: ChannelReceiver, state: Ctx) -> Result<(), Error> {
+        let handle_id = receiver.handle().id();
+        if self.objects.contains_key(&handle_id) {
+            return Err(Error::ChannelReceiverAlreadyAdded(receiver));
+        }
+
+        let entry = Entry {
+            ctx: state,
+            object: Object::ChannelReceiver(receiver),
         };
 
         self.objects.insert(handle_id, entry);
@@ -121,6 +143,19 @@ impl<Ctx, AllM: MessageDeserialize> Mainloop<Ctx, AllM> {
 
                     return Event::Message {
                         ch,
+                        ctx: &mut entry.ctx,
+                        m,
+                    };
+                }
+                Object::ChannelReceiver(ch) => {
+                    let m = match ch.recv_with_buffer::<AllM>(msgbuffer) {
+                        Ok(m) => m,
+                        Err(err) => return Event::Error(Error::ChannelRecv(err)),
+                    };
+
+                    return Event::Message {
+                        // TODO:
+                        ch: todo!(),
                         ctx: &mut entry.ctx,
                         m,
                     };
