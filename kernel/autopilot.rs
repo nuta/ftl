@@ -15,7 +15,6 @@ use ftl_types::spec::Depend;
 use ftl_types::spec::Spec;
 use hashbrown::HashMap;
 
-use crate::app_loader::AppLoader;
 use crate::bootfs::Bootfs;
 use crate::channel::Channel;
 use crate::cpuvar::current_thread;
@@ -23,6 +22,7 @@ use crate::device_tree;
 use crate::device_tree::DeviceTree;
 use crate::handle::Handle;
 use crate::ref_counted::SharedRef;
+use crate::userboot::AppLoader;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct AppName(String);

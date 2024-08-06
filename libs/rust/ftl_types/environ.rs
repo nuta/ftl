@@ -23,3 +23,8 @@ impl fmt::Debug for Device {
             .finish()
     }
 }
+
+#[derive(PartialEq, Eq, Deserialize, Serialize)]
+pub enum EnvEntry {
+    Channel {},
+}

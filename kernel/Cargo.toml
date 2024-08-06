@@ -20,3 +20,6 @@ fdt-rs = { workspace = true }
 
 # TODO: Remove this dependency
 spin = { workspace = true }
+
+[build-dependencies]
+minijinja = { workspace = true }

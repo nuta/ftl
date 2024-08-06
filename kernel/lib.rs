@@ -12,9 +12,7 @@ mod print;
 pub mod boot;
 pub mod cpuvar;
 
-mod app_loader;
 mod arch;
-mod autopilot;
 mod bootfs;
 mod channel;
 mod device_tree;
@@ -32,4 +30,5 @@ mod sleep;
 mod spinlock;
 mod syscall;
 mod thread;
+mod userboot;
 mod utils;

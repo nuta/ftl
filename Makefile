@@ -96,7 +96,7 @@ disk.img:
 	$(PROGRESS) "GEN" "$(@)"
 	dd if=/dev/zero of=$(@) bs=1M count=8
 
-ftl.elf: $(sources) libs/rust/ftl_autogen/lib.rs Makefile build/bootfs.bin
+ftl.elf: $(sources) libs/rust/ftl_autogen/lib.rs Makefile build/apps/startup.bin
 	$(PROGRESS) "CARGO" "boot/$(ARCH)"
 	RUSTFLAGS="$(RUSTFLAGS)" CARGO_TARGET_DIR="build/cargo" $(CARGO) build $(CARGOFLAGS) \
 		--target boot/$(ARCH)/$(ARCH)-$(MACHINE).json \
@@ -104,6 +104,11 @@ ftl.elf: $(sources) libs/rust/ftl_autogen/lib.rs Makefile build/bootfs.bin
 	cp build/cargo/$(ARCH)-$(MACHINE)/$(BUILD)/boot_$(ARCH) $(@)
 
 ftl.pe: ftl.elf
+	$(PROGRESS) "OBJCOPY" $(@)
+	$(OBJCOPY) -O binary --strip-all $< $(@)
+
+build/apps/startup.elf: build/bootfs.bin
+build/apps/startup.bin: build/apps/startup.elf
 	$(PROGRESS) "OBJCOPY" $(@)
 	$(OBJCOPY) -O binary --strip-all $< $(@)
 
