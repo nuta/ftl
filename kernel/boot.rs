@@ -1,8 +1,4 @@
-use core::arch::global_asm;
-
 use ftl_inlinedvec::InlinedVec;
-use ftl_types::spec::Spec;
-use ftl_types::spec::SpecFile;
 use ftl_utils::byte_size::ByteSize;
 
 use crate::arch;
@@ -46,6 +42,6 @@ pub fn boot(cpu_id: CpuId, bootinfo: BootInfo) -> ! {
         debug!("bootfs: file: {}", file.name);
     }
 
-    userboot::load(&bootfs);
+    userboot::load();
     arch::idle();
 }

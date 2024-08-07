@@ -1,5 +1,4 @@
-use core::any::Any;
-
+use alloc::format;
 use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
@@ -8,23 +7,20 @@ use ftl_autogen::protocols::autopilot::NewclientRequest;
 use ftl_elf::Elf;
 use ftl_elf::PhdrType;
 use ftl_elf::ET_DYN;
-use ftl_types::environ::Device;
-use ftl_types::handle::HandleId;
 use ftl_types::handle::HandleRights;
 use ftl_types::message::MessageBuffer;
 use ftl_types::message::MessageSerialize;
 use ftl_types::message::MovedHandle;
 use ftl_types::syscall::VsyscallPage;
 use ftl_utils::alignment::align_up;
+use hashbrown::hash_map;
 use hashbrown::HashMap;
 
 use crate::arch::PAGE_SIZE;
-use crate::bootfs::Bootfs;
 use crate::channel::Channel;
 use crate::folio::Folio;
 use crate::handle::AnyHandle;
 use crate::handle::Handle;
-use crate::handle::HandleTable;
 use crate::memory::AllocPagesError;
 use crate::memory::AllocatedPages;
 use crate::process::kernel_process;
@@ -81,17 +77,17 @@ pub enum Error {
 //             );
 //         }
 
-//         let environ_json = serde_json::to_string(&serde_json::json!({
+//         let env_str = serde_json::to_string(&serde_json::json!({
 //             "autopilot_ch": autopilot_ch_id.as_i32(),
 //             "depends": depends_map
 //         }))
 //         .unwrap();
 
 //         // Copy into a folio.
-//         let mut environ_pages = AllocatedPages::alloc(align_up(environ_json.len(), PAGE_SIZE))
+//         let mut environ_pages = AllocatedPages::alloc(align_up(env_str.len(), PAGE_SIZE))
 //             .expect("failed to allocate folio");
-//         environ_pages.as_slice_mut()[..environ_json.len()].copy_from_slice(environ_json.as_bytes());
-//         let args = (environ_pages.as_ptr() as usize, environ_json.len());
+//         environ_pages.as_slice_mut()[..env_str.len()].copy_from_slice(env_str.as_bytes());
+//         let args = (environ_pages.as_ptr() as usize, env_str.len());
 
 //         // Move the ownership of the folio to the process.
 //         handles
@@ -266,6 +262,7 @@ impl<'a> ElfLoader<'a> {
 
     fn relocate_rela_dyn(&mut self) -> Result<(), Error> {
         use core::mem::size_of;
+
         use ftl_elf::Rela;
 
         let rela_dyn = self.get_shdr_by_name(".rela.dyn").ok_or(Error::NoRelaDyn)?;
@@ -300,19 +297,48 @@ impl<'a> ElfLoader<'a> {
         Ok(())
     }
 
-    pub fn load_into_memory(&mut self) -> Result<(), Error> {
+    pub fn load_into_memory(mut self) -> Result<(usize, AllocatedPages), Error> {
         self.load_segments();
         self.relocate_rela_dyn()?;
-        Ok(())
+        Ok((self.entry_addr(), self.memory))
     }
 }
 
-struct Loader {
-    server_chs: HashMap<&'static str, SharedRef<Channel>>,
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+struct AppName(&'static str);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+struct ServiceName(&'static str);
+
+#[derive(Debug)]
+enum WantedHandle {
+    Channel(ServiceName),
 }
 
-impl Loader {
-    fn get_server_ch(&mut self, service_name: &'static str) -> AnyHandle {
+struct AppTemplate {
+    name: AppName,
+    provides: &'static [ServiceName],
+    elf_file: &'static [u8],
+    env: HashMap<&'static str, &'static str>,
+    handles: Vec<WantedHandle>,
+}
+
+struct Userboot {
+    service_to_app_name: HashMap<ServiceName, AppName>,
+    our_chs: HashMap<AppName, SharedRef<Channel>>,
+    their_chs: HashMap<AppName, SharedRef<Channel>>,
+}
+
+impl Userboot {
+    pub fn new() -> Userboot {
+        Userboot {
+            service_to_app_name: HashMap::new(),
+            our_chs: HashMap::new(),
+            their_chs: HashMap::new(),
+        }
+    }
+
+    fn get_server_ch(&mut self, service_name: &ServiceName) -> AnyHandle {
         let (ch1, ch2) = Channel::new().unwrap();
         let handle_id = kernel_process()
             .handles()
@@ -326,8 +352,10 @@ impl Loader {
         })
         .serialize(&mut msgbuffer);
 
-        self.server_chs
-            .get(service_name)
+        let app_name = self.service_to_app_name.get(service_name).unwrap();
+
+        self.our_chs
+            .get(app_name)
             .unwrap()
             .send(NewclientRequest::MSGINFO, &msgbuffer)
             .unwrap();
@@ -335,23 +363,115 @@ impl Loader {
         Handle::new(ch2.into(), HandleRights::NONE).into()
     }
 
-    fn load_app(
+    fn create_process(
         &mut self,
-        elf_file: &[u8],
-        env: HashMap<&'static str, &'static str>,
+        name: &AppName,
+        entry_addr: usize,
+        memory: AllocatedPages,
+        env: &HashMap<&'static str, &'static str>,
         handles: Vec<AnyHandle>,
-    ) -> Result<(), Error> {
+    ) {
+        let entry = unsafe { core::mem::transmute(entry_addr) };
+        let proc = SharedRef::new(Process::create());
 
+        let mut handle_table = proc.handles().lock();
+        let autopilot_ch = self.their_chs.remove(name).unwrap();
+        let autopilot_ch_handle = Handle::new(autopilot_ch, HandleRights::NONE);
+        let autopilot_ch_id = handle_table.add(autopilot_ch_handle).unwrap();
+
+        let mut env_str = String::new();
+        for (key, value) in env {
+            env_str = format!("{}={}\n", key, value);
+        }
+        let mut environ_pages = AllocatedPages::alloc(align_up(env_str.len(), PAGE_SIZE))
+            .expect("failed to allocate folio");
+        environ_pages.as_slice_mut()[..env_str.len()].copy_from_slice(env_str.as_bytes());
+
+        let vsyscall_buffer = AllocatedPages::alloc(PAGE_SIZE).unwrap();
+        let vsyscall_ptr = vsyscall_buffer.as_ptr() as *mut VsyscallPage;
+        unsafe {
+            vsyscall_ptr.write(VsyscallPage {
+                entry: syscall_entry,
+                environ_ptr: environ_pages.as_ptr(),
+                environ_len: env_str.len(),
+            });
+        }
+
+        let thread = Thread::spawn_kernel(proc.clone(), entry, vsyscall_ptr as usize);
+
+        // Copy into a folio.
+        let mut environ_pages = AllocatedPages::alloc(align_up(env_str.len(), PAGE_SIZE))
+            .expect("failed to allocate folio");
+        environ_pages.as_slice_mut()[..env_str.len()].copy_from_slice(env_str.as_bytes());
+
+        handle_table
+            .add(Handle::new(thread, HandleRights::NONE))
+            .unwrap();
+        handle_table
+            .add(Handle::new(
+                SharedRef::new(Folio::from_allocated_pages(memory)),
+                HandleRights::NONE,
+            ))
+            .unwrap();
+        handle_table
+            .add(Handle::new(
+                SharedRef::new(Folio::from_allocated_pages(vsyscall_buffer)),
+                HandleRights::NONE,
+            ))
+            .unwrap();
+        handle_table
+            .add(Handle::new(
+                SharedRef::new(Folio::from_allocated_pages(environ_pages)),
+                HandleRights::NONE,
+            ))
+            .unwrap();
+    }
+
+    fn load_app(&mut self, template: &AppTemplate) -> Result<(), Error> {
+        let elf_loader = ElfLoader::parse(template.elf_file)?;
+        let (entry_addr, memory) = elf_loader.load_into_memory()?;
+
+        let mut handles = Vec::with_capacity(template.handles.len());
+        for wanted_handle in &template.handles {
+            match wanted_handle {
+                WantedHandle::Channel(service_name) => {
+                    let ch = self.get_server_ch(&service_name);
+                    handles.push(ch);
+                }
+            }
+        }
+
+        self.create_process(&template.name, entry_addr, memory, &template.env, handles);
         Ok(())
     }
 
-    pub fn load(&mut self, bootfs: &Bootfs) {
-        self.load_app(
-            include_bytes!("../build/apps/ethernet_device.elf"),
-            hash_map! {
-                "dep:ethernet_device" => "ch:1",
+    pub fn load(&mut self) {
+        let templates = &[AppTemplate {
+            name: AppName("tcpip"),
+            provides: &[ServiceName("tcpip")],
+            elf_file: include_bytes!("../build/apps/tcpip.elf"),
+            env: hash_map! {
+              "dep:ethernet_device" => "ch:1",
             },
-            vec![self.get_server_ch("ethernet_device")],
-        );
+            handles: vec![WantedHandle::Channel(ServiceName("ethernet_device"))],
+        }];
+
+        for t in templates {
+            let (ch0, ch1) = Channel::new().unwrap();
+            self.our_chs.insert(t.name, ch0);
+            self.their_chs.insert(t.name, ch1);
+
+            for service in t.provides {
+                self.service_to_app_name.insert(*service, t.name);
+            }
+        }
+
+        for t in templates {
+            self.load_app(&t).unwrap();
+        }
     }
+}
+
+pub fn load() {
+    Userboot::new().load();
 }
