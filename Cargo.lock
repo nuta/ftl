@@ -266,6 +266,7 @@ dependencies = [
  "ftl_utils",
  "hashbrown",
  "linked_list_allocator",
+ "serde_json",
  "spin",
 ]
 
