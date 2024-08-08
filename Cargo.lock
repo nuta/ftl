@@ -368,6 +368,7 @@ version = "0.0.0"
 dependencies = [
  "ftl_utils",
  "serde",
+ "serde_json",
 ]
 
 [[package]]

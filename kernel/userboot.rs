@@ -7,13 +7,15 @@ use ftl_autogen::protocols::autopilot::NewclientRequest;
 use ftl_elf::Elf;
 use ftl_elf::PhdrType;
 use ftl_elf::ET_DYN;
+use ftl_types::environ::EnvType;
+use ftl_types::environ::EnvironSerializer;
+use ftl_types::handle::HandleId;
 use ftl_types::handle::HandleRights;
 use ftl_types::message::MessageBuffer;
 use ftl_types::message::MessageSerialize;
 use ftl_types::message::MovedHandle;
 use ftl_types::syscall::VsyscallPage;
 use ftl_utils::alignment::align_up;
-use hashbrown::hash_map;
 use hashbrown::HashMap;
 
 use crate::arch::PAGE_SIZE;
@@ -150,19 +152,6 @@ pub enum Error {
 //         Ok(proc)
 //     }
 // }
-
-macro_rules! hash_map {
-    ($($key:expr => $value:expr,)*) => {{
-        hash_map!($($key => $value),*)
-    }};
-    ($($key:expr => $value:expr),*) => {{
-        let mut map = ::hashbrown::HashMap::new();
-        $(
-            map.insert($key, $value);
-        )*
-        map
-    }};
-}
 
 struct ElfLoader<'a> {
     elf_file: &'a [u8],
@@ -319,7 +308,6 @@ struct AppTemplate {
     name: AppName,
     provides: &'static [ServiceName],
     elf_file: &'static [u8],
-    env: HashMap<&'static str, &'static str>,
     handles: Vec<WantedHandle>,
 }
 
@@ -368,8 +356,8 @@ impl Userboot {
         name: &AppName,
         entry_addr: usize,
         memory: AllocatedPages,
-        env: &HashMap<&'static str, &'static str>,
-        handles: Vec<AnyHandle>,
+        env: EnvironSerializer,
+      mut  handles: Vec<AnyHandle>,
     ) {
         let entry = unsafe { core::mem::transmute(entry_addr) };
         let proc = SharedRef::new(Process::create());
@@ -379,10 +367,7 @@ impl Userboot {
         let autopilot_ch_handle = Handle::new(autopilot_ch, HandleRights::NONE);
         let autopilot_ch_id = handle_table.add(autopilot_ch_handle).unwrap();
 
-        let mut env_str = String::new();
-        for (key, value) in env {
-            env_str = format!("{}={}\n", key, value);
-        }
+        let env_str = env.finish();
         let mut environ_pages = AllocatedPages::alloc(align_up(env_str.len(), PAGE_SIZE))
             .expect("failed to allocate folio");
         environ_pages.as_slice_mut()[..env_str.len()].copy_from_slice(env_str.as_bytes());
@@ -403,6 +388,13 @@ impl Userboot {
         let mut environ_pages = AllocatedPages::alloc(align_up(env_str.len(), PAGE_SIZE))
             .expect("failed to allocate folio");
         environ_pages.as_slice_mut()[..env_str.len()].copy_from_slice(env_str.as_bytes());
+
+        let mut i = 0;
+        for handle in handles {
+            let handle_id = handle_table.add(handle).unwrap();
+            debug_assert_eq!(handle_id.as_i32(), i + 1);
+            i += 1;
+        }
 
         handle_table
             .add(Handle::new(thread, HandleRights::NONE))
@@ -431,17 +423,21 @@ impl Userboot {
         let elf_loader = ElfLoader::parse(template.elf_file)?;
         let (entry_addr, memory) = elf_loader.load_into_memory()?;
 
+        let mut env = EnvironSerializer::new();
         let mut handles = Vec::with_capacity(template.handles.len());
-        for wanted_handle in &template.handles {
-            match wanted_handle {
+        for (i, wanted_handle) in template.handles.iter().enumerate() {
+            let handle_id = HandleId::from_raw((i + 1).try_into().unwrap());
+            let handle = match wanted_handle {
                 WantedHandle::Channel(service_name) => {
-                    let ch = self.get_server_ch(&service_name);
-                    handles.push(ch);
+                    env.push_channel(&service_name.0, handle_id);
+                    self.get_server_ch(&service_name)
                 }
-            }
+            };
+
+            handles.push(handle);
         }
 
-        self.create_process(&template.name, entry_addr, memory, &template.env, handles);
+        self.create_process(&template.name, entry_addr, memory, env, handles);
         Ok(())
     }
 
@@ -450,9 +446,6 @@ impl Userboot {
             name: AppName("tcpip"),
             provides: &[ServiceName("tcpip")],
             elf_file: include_bytes!("../build/apps/tcpip.elf"),
-            env: hash_map! {
-              "dep:ethernet_device" => "ch:1",
-            },
             handles: vec![WantedHandle::Channel(ServiceName("ethernet_device"))],
         }];
 
