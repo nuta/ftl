@@ -9,6 +9,8 @@ use crate::memory;
 use crate::process;
 use crate::userboot;
 
+include!(concat!(env!("OUT_DIR"), "/autogen.rs"));
+
 /// A free region of memory available for software.
 #[derive(Debug)]
 pub struct FreeMem {
@@ -36,6 +38,6 @@ pub fn boot(cpu_id: CpuId, bootinfo: BootInfo) -> ! {
     process::init();
     cpuvar::percpu_init(cpu_id);
 
-    userboot::load(&device_tree);
+    userboot::load(&STARTUP_APPS, &device_tree);
     arch::idle();
 }

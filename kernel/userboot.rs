@@ -40,168 +40,29 @@ pub enum Error {
     NoRelaDyn,
 }
 
-struct ElfLoader<'a> {
-    elf_file: &'a [u8],
-    elf: Elf<'a>,
-    memory: AllocatedPages,
-}
-
-impl<'a> ElfLoader<'a> {
-    pub fn parse(elf_file: &'a [u8]) -> Result<ElfLoader, Error> {
-        let elf = Elf::parse(elf_file).map_err(Error::ParseElf)?;
-
-        // TODO: Check DF_1_PIE flag to make sure it's a PIE, not a shared
-        //       library.
-        if elf.ehdr.e_type != ET_DYN {
-            return Err(Error::NotPIE);
-        }
-
-        let load_iter = elf
-            .phdrs
-            .iter()
-            .filter(|phdr| phdr.p_type == PhdrType::Load);
-
-        let lowest_addr = load_iter
-            .clone()
-            .map(|phdr| phdr.p_vaddr as usize)
-            .min()
-            .ok_or(Error::NoPhdrs)?;
-        let highest_addr = load_iter
-            .map(|phdr| (phdr.p_vaddr + phdr.p_memsz) as usize)
-            .max()
-            .ok_or(Error::NoPhdrs)?;
-
-        let elf_len = align_up(highest_addr - lowest_addr, PAGE_SIZE);
-        let memory = AllocatedPages::alloc(elf_len).map_err(Error::AllocBuffer)?;
-
-        Ok(ElfLoader {
-            elf_file,
-            elf,
-            memory,
-        })
-    }
-
-    fn base_addr(&self) -> usize {
-        self.memory.as_ptr() as usize
-    }
-
-    fn entry_addr(&self) -> usize {
-        self.base_addr() + (self.elf.ehdr.e_entry as usize)
-    }
-
-    fn load_segments(&mut self) {
-        let memory = self.memory.as_slice_mut();
-        for phdr in self.elf.phdrs {
-            if phdr.p_type != ftl_elf::PhdrType::Load {
-                continue;
-            }
-            let mem_offset = phdr.p_vaddr as usize;
-            let file_offset = phdr.p_offset as usize;
-            let file_copy_len = phdr.p_filesz as usize;
-            memory[mem_offset..mem_offset + file_copy_len]
-                .copy_from_slice(&self.elf_file[file_offset..file_offset + file_copy_len]);
-            let zeroed_len = phdr.p_memsz as usize - phdr.p_filesz as usize;
-            memory[mem_offset + file_copy_len..mem_offset + file_copy_len + zeroed_len].fill(0);
-        }
-    }
-
-    fn get_shdr_by_name(&self, name: &str) -> Option<&ftl_elf::Shdr> {
-        fn get_cstr(buffer: &[u8], offset: usize) -> Option<&str> {
-            let mut len = 0;
-            while let Some(&ch) = buffer.get(offset + len) {
-                if ch == 0 {
-                    return core::str::from_utf8(&buffer[offset..offset + len]).ok();
-                }
-                len += 1;
-            }
-            None
-        }
-
-        let shstrtab_section = self.elf.shdrs.get(self.elf.ehdr.e_shstrndx as usize)?;
-        let shstrtab = unsafe {
-            core::slice::from_raw_parts(
-                self.elf_file
-                    .as_ptr()
-                    .add(shstrtab_section.sh_offset as usize),
-                shstrtab_section.sh_size as usize,
-            )
-        };
-
-        self.elf.shdrs.iter().find(|shdr| {
-            if let Some(sh_name) = get_cstr(shstrtab, shdr.sh_name as usize) {
-                sh_name == name
-            } else {
-                false
-            }
-        })
-    }
-
-    fn relocate_rela_dyn(&mut self) -> Result<(), Error> {
-        use core::mem::size_of;
-
-        use ftl_elf::Rela;
-
-        let rela_dyn = self.get_shdr_by_name(".rela.dyn").ok_or(Error::NoRelaDyn)?;
-        let rela_entries = unsafe {
-            assert!(
-                rela_dyn.sh_size as usize % size_of::<Rela>() == 0,
-                "misaligned .rela_dyn size"
-            );
-
-            core::slice::from_raw_parts(
-                self.elf_file.as_ptr().add(rela_dyn.sh_offset as usize) as *const Rela,
-                (rela_dyn.sh_size as usize) / size_of::<Rela>(),
-            )
-        };
-
-        for rela in rela_entries {
-            match rela.r_info {
-                #[cfg(target_arch = "riscv64")]
-                ftl_elf::R_RISCV_RELATIVE => unsafe {
-                    let ptr = (self.base_addr() + rela.r_offset as usize) as *mut i64;
-                    *ptr += (self.base_addr() as i64) + rela.r_addend;
-                },
-                #[cfg(target_arch = "aarch64")]
-                ftl_elf::R_AARCH64_RELATIVE => unsafe {
-                    let ptr = (self.base_addr() + rela.r_offset as usize) as *mut i64;
-                    *ptr += (self.base_addr() as i64) + rela.r_addend;
-                },
-                _ => panic!("unsupported relocation type: {}", rela.r_info),
-            }
-        }
-
-        Ok(())
-    }
-
-    pub fn load_into_memory(mut self) -> Result<(usize, AllocatedPages), Error> {
-        self.load_segments();
-        self.relocate_rela_dyn()?;
-        Ok((self.entry_addr(), self.memory))
-    }
-}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct AppName(pub &'static str);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-struct AppName(&'static str);
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-struct ServiceName(&'static str);
+pub struct ServiceName(pub &'static str);
 
 #[derive(Debug)]
-enum WantedHandle {
-    Channel(ServiceName),
+pub enum WantedHandle {
+    Service(ServiceName),
 }
 
 #[derive(Debug)]
-enum WantedDevice {
+pub enum WantedDevice {
     DeviceTreeCompatible(&'static str),
 }
 
-struct AppTemplate {
-    name: AppName,
-    provides: &'static [ServiceName],
-    elf_file: &'static [u8],
-    handles: &'static [WantedHandle],
-    devices: &'static [WantedDevice],
+#[derive(Debug)]
+pub struct AppTemplate {
+    pub name: AppName,
+    pub provides: &'static [ServiceName],
+    pub elf_file: &'static [u8],
+    pub handles: &'static [WantedHandle],
+    pub devices: &'static [WantedDevice],
 }
 
 struct Userboot<'a> {
@@ -356,7 +217,7 @@ impl<'a> Userboot<'a> {
         for (i, wanted_handle) in template.handles.iter().enumerate() {
             let handle_id = HandleId::from_raw((i + 1).try_into().unwrap());
             let handle = match wanted_handle {
-                WantedHandle::Channel(service_name) => {
+                WantedHandle::Service(service_name) => {
                     env.push_channel(&format!("dep:{}", service_name.0), handle_id);
                     self.get_server_ch(&service_name)
                 }
@@ -374,41 +235,7 @@ impl<'a> Userboot<'a> {
         Ok(())
     }
 
-    pub fn load(&mut self) {
-        macro_rules! aligned_include_bytes {
-            ($file:expr, $align:expr) => {{
-                #[repr(C, align($align))]
-                struct Aligned<T: ?Sized>(T);
-
-                const ALIGNED: &Aligned<[u8]> = &Aligned(*include_bytes!($file));
-                &ALIGNED.0
-            }};
-        }
-
-        let templates = &[
-            AppTemplate {
-                name: AppName("http_server"),
-                provides: &[ServiceName("http_server")],
-                elf_file: aligned_include_bytes!("../build/apps/http_server.elf", 4096),
-                handles: &[WantedHandle::Channel(ServiceName("tcpip"))],
-                devices: &[],
-            },
-            AppTemplate {
-                name: AppName("tcpip"),
-                provides: &[ServiceName("tcpip")],
-                elf_file: aligned_include_bytes!("../build/apps/tcpip.elf", 4096),
-                handles: &[WantedHandle::Channel(ServiceName("ethernet_device"))],
-                devices: &[],
-            },
-            AppTemplate {
-                name: AppName("virtio_net"),
-                provides: &[ServiceName("ethernet_device")],
-                elf_file: aligned_include_bytes!("../build/apps/virtio_net.elf", 4096),
-                handles: &[],
-                devices: &[WantedDevice::DeviceTreeCompatible("virtio,mmio")],
-            },
-        ];
-
+    pub fn load(&mut self, templates: &[AppTemplate]) {
         for t in templates {
             let (ch0, ch1) = Channel::new().unwrap();
             self.our_chs.insert(t.name, ch0);
@@ -425,6 +252,146 @@ impl<'a> Userboot<'a> {
     }
 }
 
-pub fn load(device_tree: &DeviceTree) {
-    Userboot::new(device_tree).load();
+pub fn load(templates: &[AppTemplate], device_tree: &DeviceTree) {
+    Userboot::new(device_tree).load(templates);
+}
+
+struct ElfLoader<'a> {
+    elf_file: &'a [u8],
+    elf: Elf<'a>,
+    memory: AllocatedPages,
+}
+
+impl<'a> ElfLoader<'a> {
+    pub fn parse(elf_file: &'a [u8]) -> Result<ElfLoader, Error> {
+        let elf = Elf::parse(elf_file).map_err(Error::ParseElf)?;
+
+        // TODO: Check DF_1_PIE flag to make sure it's a PIE, not a shared
+        //       library.
+        if elf.ehdr.e_type != ET_DYN {
+            return Err(Error::NotPIE);
+        }
+
+        let load_iter = elf
+            .phdrs
+            .iter()
+            .filter(|phdr| phdr.p_type == PhdrType::Load);
+
+        let lowest_addr = load_iter
+            .clone()
+            .map(|phdr| phdr.p_vaddr as usize)
+            .min()
+            .ok_or(Error::NoPhdrs)?;
+        let highest_addr = load_iter
+            .map(|phdr| (phdr.p_vaddr + phdr.p_memsz) as usize)
+            .max()
+            .ok_or(Error::NoPhdrs)?;
+
+        let elf_len = align_up(highest_addr - lowest_addr, PAGE_SIZE);
+        let memory = AllocatedPages::alloc(elf_len).map_err(Error::AllocBuffer)?;
+
+        Ok(ElfLoader {
+            elf_file,
+            elf,
+            memory,
+        })
+    }
+
+    fn base_addr(&self) -> usize {
+        self.memory.as_ptr() as usize
+    }
+
+    fn entry_addr(&self) -> usize {
+        self.base_addr() + (self.elf.ehdr.e_entry as usize)
+    }
+
+    fn load_segments(&mut self) {
+        let memory = self.memory.as_slice_mut();
+        for phdr in self.elf.phdrs {
+            if phdr.p_type != ftl_elf::PhdrType::Load {
+                continue;
+            }
+            let mem_offset = phdr.p_vaddr as usize;
+            let file_offset = phdr.p_offset as usize;
+            let file_copy_len = phdr.p_filesz as usize;
+            memory[mem_offset..mem_offset + file_copy_len]
+                .copy_from_slice(&self.elf_file[file_offset..file_offset + file_copy_len]);
+            let zeroed_len = phdr.p_memsz as usize - phdr.p_filesz as usize;
+            memory[mem_offset + file_copy_len..mem_offset + file_copy_len + zeroed_len].fill(0);
+        }
+    }
+
+    fn get_shdr_by_name(&self, name: &str) -> Option<&ftl_elf::Shdr> {
+        fn get_cstr(buffer: &[u8], offset: usize) -> Option<&str> {
+            let mut len = 0;
+            while let Some(&ch) = buffer.get(offset + len) {
+                if ch == 0 {
+                    return core::str::from_utf8(&buffer[offset..offset + len]).ok();
+                }
+                len += 1;
+            }
+            None
+        }
+
+        let shstrtab_section = self.elf.shdrs.get(self.elf.ehdr.e_shstrndx as usize)?;
+        let shstrtab = unsafe {
+            core::slice::from_raw_parts(
+                self.elf_file
+                    .as_ptr()
+                    .add(shstrtab_section.sh_offset as usize),
+                shstrtab_section.sh_size as usize,
+            )
+        };
+
+        self.elf.shdrs.iter().find(|shdr| {
+            if let Some(sh_name) = get_cstr(shstrtab, shdr.sh_name as usize) {
+                sh_name == name
+            } else {
+                false
+            }
+        })
+    }
+
+    fn relocate_rela_dyn(&mut self) -> Result<(), Error> {
+        use core::mem::size_of;
+
+        use ftl_elf::Rela;
+
+        let rela_dyn = self.get_shdr_by_name(".rela.dyn").ok_or(Error::NoRelaDyn)?;
+        let rela_entries = unsafe {
+            assert!(
+                rela_dyn.sh_size as usize % size_of::<Rela>() == 0,
+                "misaligned .rela_dyn size"
+            );
+
+            core::slice::from_raw_parts(
+                self.elf_file.as_ptr().add(rela_dyn.sh_offset as usize) as *const Rela,
+                (rela_dyn.sh_size as usize) / size_of::<Rela>(),
+            )
+        };
+
+        for rela in rela_entries {
+            match rela.r_info {
+                #[cfg(target_arch = "riscv64")]
+                ftl_elf::R_RISCV_RELATIVE => unsafe {
+                    let ptr = (self.base_addr() + rela.r_offset as usize) as *mut i64;
+                    *ptr += (self.base_addr() as i64) + rela.r_addend;
+                },
+                #[cfg(target_arch = "aarch64")]
+                ftl_elf::R_AARCH64_RELATIVE => unsafe {
+                    let ptr = (self.base_addr() + rela.r_offset as usize) as *mut i64;
+                    *ptr += (self.base_addr() as i64) + rela.r_addend;
+                },
+                _ => panic!("unsupported relocation type: {}", rela.r_info),
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn load_into_memory(mut self) -> Result<(usize, AllocatedPages), Error> {
+        self.load_segments();
+        self.relocate_rela_dyn()?;
+        Ok((self.entry_addr(), self.memory))
+    }
 }

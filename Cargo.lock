@@ -309,6 +309,7 @@ dependencies = [
 name = "ftl_kernel"
 version = "0.0.0"
 dependencies = [
+ "anyhow",
  "fdt-rs",
  "ftl_autogen",
  "ftl_bump_allocator",
