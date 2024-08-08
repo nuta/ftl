@@ -2,7 +2,6 @@ use ftl_inlinedvec::InlinedVec;
 use ftl_utils::byte_size::ByteSize;
 
 use crate::arch;
-use crate::bootfs::Bootfs;
 use crate::cpuvar;
 use crate::cpuvar::CpuId;
 use crate::device_tree::DeviceTree;
@@ -36,11 +35,6 @@ pub fn boot(cpu_id: CpuId, bootinfo: BootInfo) -> ! {
     arch::init(&device_tree);
     process::init();
     cpuvar::percpu_init(cpu_id);
-
-    let bootfs = Bootfs::load();
-    for file in bootfs.files() {
-        debug!("bootfs: file: {}", file.name);
-    }
 
     userboot::load(&device_tree);
     arch::idle();

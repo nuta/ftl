@@ -13,7 +13,6 @@ pub mod boot;
 pub mod cpuvar;
 
 mod arch;
-mod bootfs;
 mod channel;
 mod device_tree;
 mod folio;

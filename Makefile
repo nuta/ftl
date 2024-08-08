@@ -96,7 +96,7 @@ disk.img:
 	$(PROGRESS) "GEN" "$(@)"
 	dd if=/dev/zero of=$(@) bs=1M count=8
 
-ftl.elf: $(sources) libs/rust/ftl_autogen/lib.rs Makefile build/apps/startup.bin
+ftl.elf: $(sources) $(app_elfs) Makefile libs/rust/ftl_autogen/lib.rs Makefile
 	$(PROGRESS) "CARGO" "boot/$(ARCH)"
 	RUSTFLAGS="$(RUSTFLAGS)" CARGO_TARGET_DIR="build/cargo" $(CARGO) build $(CARGOFLAGS) \
 		--target boot/$(ARCH)/$(ARCH)-$(MACHINE).json \
@@ -106,25 +106,6 @@ ftl.elf: $(sources) libs/rust/ftl_autogen/lib.rs Makefile build/apps/startup.bin
 ftl.pe: ftl.elf
 	$(PROGRESS) "OBJCOPY" $(@)
 	$(OBJCOPY) -O binary --strip-all $< $(@)
-
-build/apps/startup.elf: build/bootfs.bin
-build/apps/startup.bin: build/apps/startup.elf
-	$(PROGRESS) "OBJCOPY" $(@)
-	$(OBJCOPY) -O binary --strip-all $< $(@)
-
-build/bootfs.bin: build/ftl_mkbootfs $(app_elfs) Makefile
-	rm -rf build/bootfs
-	mkdir -p build/bootfs
-	mkdir -p build/bootfs/cfg
-	cp boot.spec.json build/bootfs/cfg/boot.spec.json
-	for app_elf in $(app_elfs); do \
-		app_name=$$(basename $${app_elf%.elf}); \
-		mkdir -p build/bootfs/apps/$${app_name}; \
-		cp $${app_elf}.stripped build/bootfs/apps/$${app_name}/app.elf; \
-		cp apps/$${app_name}/app.spec.json build/bootfs/apps/$${app_name}/app.spec.json; \
-	done
-	$(PROGRESS) "MKBOOTFS" "$(@)"
-	./build/ftl_mkbootfs -o $(@) build/bootfs
 
 # TODO: Can't add "-C link-args=-Map=$(@:.elf=.map)" to RUSTFLAGS because rustc considers it as
 #       a change in compiler flags. Indeed it is, but it doesn't affect the output binary.
@@ -150,16 +131,6 @@ build/ftl_idlc: $(shell find tools/idlc libs/rust/ftl_types -name '*.rs') $(shel
 			$(if $(RELEASE),--release,) \
 			--manifest-path tools/idlc/Cargo.toml
 	mv build/cargo/$(BUILD)/ftl_idlc $(@)
-
-build/ftl_mkbootfs: $(shell find tools/mkbootfs -name '*.rs')
-	mkdir -p $(@D)
-	$(PROGRESS) "CARGO" "tools/mkbootfs"
-	RUSTFLAGS="$(RUSTFLAGS)" \
-	CARGO_TARGET_DIR="build/cargo" \
-		$(CARGO) build \
-			$(if $(RELEASE),--release,) \
-			--manifest-path tools/mkbootfs/Cargo.toml
-	mv build/cargo/$(BUILD)/ftl_mkbootfs $(@)
 
 libs/rust/ftl_autogen/lib.rs: idl.json build/ftl_idlc $(shell find $(APPS) -name '*.spec.json') Makefile
 	mkdir -p build
