@@ -42,6 +42,6 @@ pub fn boot(cpu_id: CpuId, bootinfo: BootInfo) -> ! {
         debug!("bootfs: file: {}", file.name);
     }
 
-    userboot::load();
+    userboot::load(&device_tree);
     arch::idle();
 }

@@ -45,7 +45,10 @@ impl EnvironSerializer {
         self.0
     }
 
-    pub fn push<V>(&mut self, key: &str, env_type: EnvType, value: V) where V: fmt::Display {
+    pub fn push<V>(&mut self, key: &str, env_type: EnvType, value: V)
+    where
+        V: fmt::Display,
+    {
         use core::fmt::Write;
 
         debug_assert!(!key.contains('='));
@@ -85,7 +88,9 @@ impl<'a> EnvironDeserializer<'a> {
     pub fn pop(&mut self) -> Option<(&'a str, EnvType, &'a str)> {
         let line = self.lines.next()?;
         let (key, value_with_prefix) = line.split_once('=').expect("malformed environ");
-        let (prefix, value) = value_with_prefix.split_once(':').expect("malformed environ");
+        let (prefix, value) = value_with_prefix
+            .split_once(':')
+            .expect("malformed environ");
 
         let env_type = match prefix {
             "ch" => EnvType::Channel,

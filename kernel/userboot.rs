@@ -1,13 +1,10 @@
-use alloc::format;
-use alloc::string::String;
-use alloc::vec;
+use alloc::string::ToString;
 use alloc::vec::Vec;
 
 use ftl_autogen::protocols::autopilot::NewclientRequest;
 use ftl_elf::Elf;
 use ftl_elf::PhdrType;
 use ftl_elf::ET_DYN;
-use ftl_types::environ::EnvType;
 use ftl_types::environ::EnvironSerializer;
 use ftl_types::handle::HandleId;
 use ftl_types::handle::HandleRights;
@@ -20,6 +17,7 @@ use hashbrown::HashMap;
 
 use crate::arch::PAGE_SIZE;
 use crate::channel::Channel;
+use crate::device_tree::DeviceTree;
 use crate::folio::Folio;
 use crate::handle::AnyHandle;
 use crate::handle::Handle;
@@ -52,7 +50,7 @@ pub enum Error {
 
 //     fn install_handles_and_environ(
 //         &mut self,
-//         autopilot_ch_id: HandleId,
+//         bootstrap_ch_id: HandleId,
 //         handles: &mut HandleTable,
 //         depends: Vec<(String, AnyHandle)>,
 //         devices: Vec<(String, Vec<Device>)>,
@@ -80,7 +78,7 @@ pub enum Error {
 //         }
 
 //         let env_str = serde_json::to_string(&serde_json::json!({
-//             "autopilot_ch": autopilot_ch_id.as_i32(),
+//             "bootstrap_ch": bootstrap_ch_id.as_i32(),
 //             "depends": depends_map
 //         }))
 //         .unwrap();
@@ -104,7 +102,7 @@ pub enum Error {
 
 //     pub fn load(
 //         mut self,
-//         autopilot_ch: Handle<Channel>,
+//         bootstrap_ch: Handle<Channel>,
 //         depends: Vec<(String, AnyHandle)>,
 //         devices: Vec<(String, Vec<ftl_types::environ::Device>)>,
 //     ) -> Result<SharedRef<Process>, Error> {
@@ -115,10 +113,10 @@ pub enum Error {
 //         let proc = SharedRef::new(Process::create());
 
 //         let mut handles = proc.handles().lock();
-//         let autopilot_ch_id = handles.add(autopilot_ch).unwrap();
+//         let bootstrap_ch_id = handles.add(bootstrap_ch).unwrap();
 
 //         let (environ_ptr, environ_len) =
-//             self.install_handles_and_environ(autopilot_ch_id, &mut *handles, depends, devices);
+//             self.install_handles_and_environ(bootstrap_ch_id, &mut *handles, depends, devices);
 
 //         let vsyscall_buffer = AllocatedPages::alloc(PAGE_SIZE).unwrap();
 //         let vsyscall_ptr = vsyscall_buffer.as_ptr() as *mut VsyscallPage;
@@ -313,19 +311,21 @@ struct AppTemplate {
     name: AppName,
     provides: &'static [ServiceName],
     elf_file: &'static [u8],
-    handles: Vec<WantedHandle>,
-    devices: Vec<WantedDevice>,
+    handles: &'static [WantedHandle],
+    devices: &'static [WantedDevice],
 }
 
-struct Userboot {
+struct Userboot<'a> {
+    device_tree: &'a DeviceTree,
     service_to_app_name: HashMap<ServiceName, AppName>,
     our_chs: HashMap<AppName, SharedRef<Channel>>,
     their_chs: HashMap<AppName, SharedRef<Channel>>,
 }
 
-impl Userboot {
-    pub fn new() -> Userboot {
+impl<'a> Userboot<'a> {
+    pub fn new(device_tree: &DeviceTree) -> Userboot {
         Userboot {
+            device_tree,
             service_to_app_name: HashMap::new(),
             our_chs: HashMap::new(),
             their_chs: HashMap::new(),
@@ -357,21 +357,61 @@ impl Userboot {
         Handle::new(ch2.into(), HandleRights::NONE).into()
     }
 
+    fn get_devices(&mut self, compat: &str) -> Vec<ftl_types::environ::Device> {
+        let mut devices = Vec::new();
+        for device in self.device_tree.devices() {
+            if device.compatible == compat {
+                let interrupts = match &device.interrupts {
+                    Some(interrupts) => {
+                        let mut vec = Vec::new();
+                        for interrupt in interrupts.iter() {
+                            vec.push(*interrupt);
+                        }
+                        Some(vec)
+                    }
+                    None => None,
+                };
+
+                devices.push(ftl_types::environ::Device {
+                    name: device.name.to_string(),
+                    compatible: device.compatible.to_string(),
+                    reg: device.reg,
+                    interrupts,
+                });
+            }
+        }
+
+        if devices.is_empty() {
+            panic!("no device found for {}", compat);
+        }
+
+        devices
+    }
+
     fn create_process(
         &mut self,
         name: &AppName,
         entry_addr: usize,
         memory: AllocatedPages,
-        env: EnvironSerializer,
-      mut  handles: Vec<AnyHandle>,
+        mut env: EnvironSerializer,
+        handles: Vec<AnyHandle>,
     ) {
         let entry = unsafe { core::mem::transmute(entry_addr) };
         let proc = SharedRef::new(Process::create());
 
         let mut handle_table = proc.handles().lock();
-        let autopilot_ch = self.their_chs.remove(name).unwrap();
-        let autopilot_ch_handle = Handle::new(autopilot_ch, HandleRights::NONE);
-        let autopilot_ch_id = handle_table.add(autopilot_ch_handle).unwrap();
+        let mut i = 0;
+        for handle in handles {
+            let handle_id = handle_table.add(handle).unwrap();
+            debug_assert_eq!(handle_id.as_i32(), i + 1);
+            i += 1;
+        }
+
+        let bootstrap_ch = self.their_chs.remove(name).unwrap();
+        let bootstrap_ch_handle = Handle::new(bootstrap_ch, HandleRights::NONE);
+        let bootstrap_ch_id = handle_table.add(bootstrap_ch_handle).unwrap();
+
+        env.push_channel("bootstrap", bootstrap_ch_id);
 
         let env_str = env.finish();
         let mut environ_pages = AllocatedPages::alloc(align_up(env_str.len(), PAGE_SIZE))
@@ -394,13 +434,6 @@ impl Userboot {
         let mut environ_pages = AllocatedPages::alloc(align_up(env_str.len(), PAGE_SIZE))
             .expect("failed to allocate folio");
         environ_pages.as_slice_mut()[..env_str.len()].copy_from_slice(env_str.as_bytes());
-
-        let mut i = 0;
-        for handle in handles {
-            let handle_id = handle_table.add(handle).unwrap();
-            debug_assert_eq!(handle_id.as_i32(), i + 1);
-            i += 1;
-        }
 
         handle_table
             .add(Handle::new(thread, HandleRights::NONE))
@@ -443,6 +476,11 @@ impl Userboot {
             handles.push(handle);
         }
 
+        for wanted_device in template.devices {
+            let WantedDevice::DeviceTreeCompatible(compat) = wanted_device;
+            env.push_devices(&compat, &self.get_devices(compat));
+        }
+
         self.create_process(&template.name, entry_addr, memory, env, handles);
         Ok(())
     }
@@ -452,10 +490,8 @@ impl Userboot {
             name: AppName("tcpip"),
             provides: &[ServiceName("tcpip")],
             elf_file: include_bytes!("../build/apps/tcpip.elf"),
-            handles: vec![WantedHandle::Channel(ServiceName("ethernet_device"))],
-            devices: vec![
-                WantedDevice::DeviceTreeCompatible("virtio,mmio"),
-            ],
+            handles: &[WantedHandle::Channel(ServiceName("ethernet_device"))],
+            devices: &[WantedDevice::DeviceTreeCompatible("virtio,mmio")],
         }];
 
         for t in templates {
@@ -474,6 +510,6 @@ impl Userboot {
     }
 }
 
-pub fn load() {
-    Userboot::new().load();
+pub fn load(device_tree: &DeviceTree) {
+    Userboot::new(device_tree).load();
 }
