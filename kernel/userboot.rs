@@ -304,11 +304,17 @@ enum WantedHandle {
     Channel(ServiceName),
 }
 
+#[derive(Debug)]
+enum WantedDevice {
+    DeviceTreeCompatible(&'static str),
+}
+
 struct AppTemplate {
     name: AppName,
     provides: &'static [ServiceName],
     elf_file: &'static [u8],
     handles: Vec<WantedHandle>,
+    devices: Vec<WantedDevice>,
 }
 
 struct Userboot {
@@ -447,6 +453,9 @@ impl Userboot {
             provides: &[ServiceName("tcpip")],
             elf_file: include_bytes!("../build/apps/tcpip.elf"),
             handles: vec![WantedHandle::Channel(ServiceName("ethernet_device"))],
+            devices: vec![
+                WantedDevice::DeviceTreeCompatible("virtio,mmio"),
+            ],
         }];
 
         for t in templates {
