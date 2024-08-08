@@ -57,7 +57,7 @@ impl Client {
 
 #[derive(Debug)]
 enum Context {
-    Bootstrap,
+    Startup,
     // TCP/IP control channel.
     Ctrl,
     // TCP/IP data channel. Represents each TCP connection.
@@ -73,8 +73,8 @@ pub fn main(mut env: Environ) {
     let mut mainloop = Mainloop::<Context, Message>::new().unwrap();
     mainloop
         .add_channel(
-            env.take_channel("dep:bootstrap").unwrap(),
-            Context::Bootstrap,
+            env.take_channel("dep:startup").unwrap(),
+            Context::Startup,
         )
         .unwrap();
     mainloop.add_channel(tcpip_ch, Context::Ctrl).unwrap();

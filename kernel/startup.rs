@@ -157,11 +157,11 @@ impl<'a> StartupAppLoader<'a> {
             i += 1;
         }
 
-        let bootstrap_ch = self.their_chs.remove(name).unwrap();
-        let bootstrap_ch_handle = Handle::new(bootstrap_ch, HandleRights::NONE);
-        let bootstrap_ch_id = handle_table.add(bootstrap_ch_handle).unwrap();
+        let startup_ch = self.their_chs.remove(name).unwrap();
+        let startup_ch_handle = Handle::new(startup_ch, HandleRights::NONE);
+        let startup_ch_id = handle_table.add(startup_ch_handle).unwrap();
 
-        env.push_channel("dep:bootstrap", bootstrap_ch_id);
+        env.push_channel("dep:startup", startup_ch_id);
 
         let env_str = env.finish();
         let mut environ_pages = AllocatedPages::alloc(align_up(env_str.len(), PAGE_SIZE))

@@ -30,7 +30,7 @@ use smoltcp::wire::IpListenEndpoint;
 
 #[derive(Debug)]
 enum Context {
-    Bootstrap,
+    Startup,
     Driver,
     CtrlSocket,
     DataSocket(SocketHandle),
@@ -333,7 +333,7 @@ pub fn main(mut env: Environ) {
     });
 
     let driver_ch = env.take_channel("dep:ethernet_device").unwrap();
-    let bootstrap_ch = env.take_channel("dep:bootstrap").unwrap();
+    let startup_ch = env.take_channel("dep:startup").unwrap();
     let (driver_sender, driver_receiver) = driver_ch.split();
 
     let mac = HardwareAddress::Ethernet(EthernetAddress([0x52, 0x54, 0x00, 0x12, 0x34, 0x56])); // FIXME:
@@ -341,7 +341,7 @@ pub fn main(mut env: Environ) {
 
     let mut mainloop = Mainloop::<Context, Message>::new().unwrap();
     mainloop
-        .add_channel(bootstrap_ch, Context::Bootstrap)
+        .add_channel(startup_ch, Context::Startup)
         .unwrap();
     mainloop
         .add_channel_receiver(driver_receiver, driver_sender, Context::Driver)
@@ -350,7 +350,7 @@ pub fn main(mut env: Environ) {
     loop {
         server.poll(&mut mainloop);
         match mainloop.next() {
-            Event::Message(Context::Bootstrap, Message::NewclientRequest(mut m), _) => {
+            Event::Message(Context::Startup, Message::NewclientRequest(mut m), _) => {
                 info!("new autopilot msg...");
                 let new_ch = m.handle().unwrap();
                 info!("got new client: {:?}", new_ch);
