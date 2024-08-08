@@ -486,13 +486,22 @@ impl<'a> Userboot<'a> {
     }
 
     pub fn load(&mut self) {
-        let templates = &[AppTemplate {
-            name: AppName("tcpip"),
-            provides: &[ServiceName("tcpip")],
-            elf_file: include_bytes!("../build/apps/tcpip.elf"),
-            handles: &[WantedHandle::Channel(ServiceName("ethernet_device"))],
-            devices: &[WantedDevice::DeviceTreeCompatible("virtio,mmio")],
-        }];
+        let templates = &[
+            AppTemplate {
+                name: AppName("tcpip"),
+                provides: &[ServiceName("tcpip")],
+                elf_file: include_bytes!("../build/apps/tcpip.elf"),
+                handles: &[WantedHandle::Channel(ServiceName("ethernet_device"))],
+                devices: &[],
+            },
+            AppTemplate {
+                name: AppName("virtio_net"),
+                provides: &[ServiceName("ethernet_device")],
+                elf_file: include_bytes!("../build/apps/virtio_net.elf"),
+                handles: &[],
+                devices: &[WantedDevice::DeviceTreeCompatible("virtio,mmio")],
+            },
+        ];
 
         for t in templates {
             let (ch0, ch1) = Channel::new().unwrap();
