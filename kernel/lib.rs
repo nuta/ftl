@@ -27,7 +27,7 @@ mod scheduler;
 mod signal;
 mod sleep;
 mod spinlock;
+mod startup;
 mod syscall;
 mod thread;
-mod userboot;
 mod utils;

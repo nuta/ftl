@@ -27,8 +27,10 @@ const AUTOGEN_TEMPLATE: &str = r#"
         } };
     }
 
-    use crate::userboot::{AppTemplate, AppName, ServiceName, WantedHandle, WantedDevice};
-    const STARTUP_APPS: &[crate::userboot::AppTemplate] = &[
+    const STARTUP_APPS: &[crate::startup::AppTemplate] = {
+        use crate::startup::{AppTemplate, AppName, ServiceName, WantedHandle, WantedDevice};
+
+        &[
         {% for name, app in startup_apps %}
             AppTemplate {
                 name: AppName("{{ name }}"),
@@ -56,7 +58,8 @@ const AUTOGEN_TEMPLATE: &str = r#"
                 ],
             },
         {% endfor %}
-    ];
+        ]
+    };
 "#;
 
 fn main() {
