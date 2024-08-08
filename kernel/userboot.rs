@@ -1,3 +1,4 @@
+use alloc::format;
 use alloc::string::ToString;
 use alloc::vec::Vec;
 
@@ -411,7 +412,7 @@ impl<'a> Userboot<'a> {
         let bootstrap_ch_handle = Handle::new(bootstrap_ch, HandleRights::NONE);
         let bootstrap_ch_id = handle_table.add(bootstrap_ch_handle).unwrap();
 
-        env.push_channel("bootstrap", bootstrap_ch_id);
+        env.push_channel("dep:bootstrap", bootstrap_ch_id);
 
         let env_str = env.finish();
         let mut environ_pages = AllocatedPages::alloc(align_up(env_str.len(), PAGE_SIZE))
@@ -468,7 +469,7 @@ impl<'a> Userboot<'a> {
             let handle_id = HandleId::from_raw((i + 1).try_into().unwrap());
             let handle = match wanted_handle {
                 WantedHandle::Channel(service_name) => {
-                    env.push_channel(&service_name.0, handle_id);
+                    env.push_channel(&format!("dep:{}", service_name.0), handle_id);
                     self.get_server_ch(&service_name)
                 }
             };
@@ -486,18 +487,35 @@ impl<'a> Userboot<'a> {
     }
 
     pub fn load(&mut self) {
+        macro_rules! aligned_include_bytes {
+            ($file:expr, $align:expr) => {{
+                #[repr(C, align($align))]
+                struct Aligned<T: ?Sized>(T);
+
+                const ALIGNED: &Aligned<[u8]> = &Aligned(*include_bytes!($file));
+                &ALIGNED.0
+            }};
+        }
+
         let templates = &[
+            AppTemplate {
+                name: AppName("http_server"),
+                provides: &[ServiceName("http_server")],
+                elf_file: aligned_include_bytes!("../build/apps/http_server.elf", 4096),
+                handles: &[WantedHandle::Channel(ServiceName("tcpip"))],
+                devices: &[],
+            },
             AppTemplate {
                 name: AppName("tcpip"),
                 provides: &[ServiceName("tcpip")],
-                elf_file: include_bytes!("../build/apps/tcpip.elf"),
+                elf_file: aligned_include_bytes!("../build/apps/tcpip.elf", 4096),
                 handles: &[WantedHandle::Channel(ServiceName("ethernet_device"))],
                 devices: &[],
             },
             AppTemplate {
                 name: AppName("virtio_net"),
                 provides: &[ServiceName("ethernet_device")],
-                elf_file: include_bytes!("../build/apps/virtio_net.elf"),
+                elf_file: aligned_include_bytes!("../build/apps/virtio_net.elf", 4096),
                 handles: &[],
                 devices: &[WantedDevice::DeviceTreeCompatible("virtio,mmio")],
             },
