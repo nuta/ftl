@@ -7,7 +7,7 @@ use crate::cpuvar::CpuId;
 use crate::device_tree::DeviceTree;
 use crate::memory;
 use crate::process;
-use crate::userboot;
+use crate::startup;
 
 include!(concat!(env!("OUT_DIR"), "/autogen.rs"));
 
@@ -38,6 +38,6 @@ pub fn boot(cpu_id: CpuId, bootinfo: BootInfo) -> ! {
     process::init();
     cpuvar::percpu_init(cpu_id);
 
-    userboot::load(&STARTUP_APPS, &device_tree);
+    startup::load_startup_apps(&STARTUP_APPS, &device_tree);
     arch::idle();
 }

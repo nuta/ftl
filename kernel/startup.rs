@@ -65,16 +65,16 @@ pub struct AppTemplate {
     pub devices: &'static [WantedDevice],
 }
 
-struct Userboot<'a> {
+struct StartupAppLoader<'a> {
     device_tree: &'a DeviceTree,
     service_to_app_name: HashMap<ServiceName, AppName>,
     our_chs: HashMap<AppName, SharedRef<Channel>>,
     their_chs: HashMap<AppName, SharedRef<Channel>>,
 }
 
-impl<'a> Userboot<'a> {
-    pub fn new(device_tree: &DeviceTree) -> Userboot {
-        Userboot {
+impl<'a> StartupAppLoader<'a> {
+    pub fn new(device_tree: &DeviceTree) -> StartupAppLoader {
+        StartupAppLoader {
             device_tree,
             service_to_app_name: HashMap::new(),
             our_chs: HashMap::new(),
@@ -252,8 +252,8 @@ impl<'a> Userboot<'a> {
     }
 }
 
-pub fn load(templates: &[AppTemplate], device_tree: &DeviceTree) {
-    Userboot::new(device_tree).load(templates);
+pub fn load_startup_apps(templates: &[AppTemplate], device_tree: &DeviceTree) {
+    StartupAppLoader::new(device_tree).load(templates);
 }
 
 struct ElfLoader<'a> {
