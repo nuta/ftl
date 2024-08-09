@@ -14,6 +14,7 @@ use crate::poll::Poll;
 use crate::ref_counted::SharedRef;
 use crate::signal::Signal;
 use crate::thread::Thread;
+use crate::vmspace::VmSpace;
 
 /// Handle, a reference-counted pointer to a kernel object with allowed
 /// operations on it, aka *"capability"*.
@@ -52,6 +53,7 @@ pub enum AnyHandle {
     Poll(Handle<Poll>),
     Signal(Handle<Signal>),
     Interrupt(Handle<Interrupt>),
+    VmSpace(Handle<VmSpace>),
 }
 
 impl AnyHandle {
@@ -89,6 +91,13 @@ impl AnyHandle {
             _ => Err(FtlError::UnexpectedHandleType),
         }
     }
+
+    pub fn as_vmspace(&self) -> Result<&Handle<VmSpace>, FtlError> {
+        match self {
+            AnyHandle::VmSpace(ref vmspace) => Ok(vmspace),
+            _ => Err(FtlError::UnexpectedHandleType),
+        }
+    }
 }
 
 impl fmt::Debug for AnyHandle {
@@ -101,6 +110,7 @@ impl fmt::Debug for AnyHandle {
             AnyHandle::Poll(_) => write!(f, "Poll"),
             AnyHandle::Signal(_) => write!(f, "Signal"),
             AnyHandle::Interrupt(_) => write!(f, "Interrupt"),
+            AnyHandle::VmSpace(_) => write!(f, "VmSpace"),
         }
     }
 }
