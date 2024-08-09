@@ -85,6 +85,18 @@ fn folio_create(len: usize) -> Result<HandleId, FtlError> {
     Ok(handle_id)
 }
 
+fn folio_create_fixed(paddr: PAddr, len: usize) -> Result<HandleId, FtlError> {
+    let folio = Folio::alloc_fixed(paddr, len)?;
+    let handle = Handle::new(SharedRef::new(folio), HandleRights::NONE);
+    let handle_id = current_thread()
+        .process()
+        .handles()
+        .lock()
+        .add(AnyHandle::Folio(handle))?;
+
+    Ok(handle_id)
+}
+
 fn folio_paddr(handle: HandleId) -> Result<PAddr, FtlError> {
     let folio: Handle<Folio> = {
         current_thread()
@@ -225,10 +237,8 @@ fn vmspace_map(
     let (vmspace, folio) = {
         let current = current_thread();
         let handles = current.process().handles().lock();
-
         let vmspace = handles.get_owned(handle_id)?.as_vmspace()?.clone();
         let folio = handles.get_owned(folio)?.as_folio()?.clone();
-
         (vmspace, folio)
     };
 
@@ -271,6 +281,12 @@ pub fn syscall_entry(
         }
         _ if n == SyscallNumber::FolioCreate as isize => {
             let handle_id = folio_create(a0 as usize)?;
+            Ok(handle_id.as_isize())
+        }
+        _ if n == SyscallNumber::FolioCreateFixed as isize => {
+            let paddr = PAddr::new(a0 as usize).ok_or(FtlError::InvalidArg)?;
+            let len = a1 as usize;
+            let handle_id = folio_create_fixed(paddr, len)?;
             Ok(handle_id.as_isize())
         }
         _ if n == SyscallNumber::FolioPAddr as isize => {

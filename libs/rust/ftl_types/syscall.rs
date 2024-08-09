@@ -13,6 +13,7 @@ pub enum SyscallNumber {
     PollWait = 8,
     PollAdd = 9,
     FolioCreate = 10,
+    FolioCreateFixed = 11,
     FolioPAddr = 12,
     SignalCreate = 14,
     SignalUpdate = 15,

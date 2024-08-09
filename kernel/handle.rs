@@ -145,6 +145,12 @@ impl Into<AnyHandle> for Handle<Signal> {
     }
 }
 
+impl Into<AnyHandle> for Handle<VmSpace> {
+    fn into(self) -> AnyHandle {
+        AnyHandle::VmSpace(self)
+    }
+}
+
 /// The number of maximum handles per process.
 ///
 /// The current 64K limit has no particular reason, but it should be low
@@ -196,5 +202,13 @@ impl HandleTable {
     pub fn remove(&mut self, id: HandleId) -> Result<AnyHandle, FtlError> {
         let handle = self.handles.remove(&id).ok_or(FtlError::HandleNotFound)?;
         Ok(handle)
+    }
+}
+
+impl fmt::Debug for HandleTable {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_map()
+            .entries(self.handles.iter().map(|(k, v)| (k.as_i32(), v)))
+            .finish()
     }
 }

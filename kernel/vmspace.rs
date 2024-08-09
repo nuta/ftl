@@ -5,9 +5,9 @@ use ftl_types::vmspace::PageProtect;
 use crate::arch::paddr2vaddr;
 use crate::folio::Folio;
 use crate::handle::Handle;
-use crate::ref_counted::SharedRef;
+use crate::ref_counted::StaticRef;
 
-pub static KERNEL_VMSPACE: SharedRef<VmSpace> = SharedRef::new(VmSpace::kernel_space());
+pub static KERNEL_VMSPACE: StaticRef<VmSpace> = StaticRef::new(VmSpace::kernel_space());
 
 pub struct VmSpace {
     kernel_space: bool,
@@ -24,6 +24,8 @@ impl VmSpace {
         folio: Handle<Folio>,
         _prot: PageProtect,
     ) -> Result<VAddr, FtlError> {
+        // FIXME: Keep the ownership of folio.
+
         if len != folio.len() {
             return Err(FtlError::InvalidArg);
         }

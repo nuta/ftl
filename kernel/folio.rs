@@ -9,7 +9,7 @@ use crate::memory::AllocatedPages;
 pub struct Folio {
     paddr: PAddr,
     len: usize,
-    pages: Option<AllocatedPages>,
+    _pages: Option<AllocatedPages>,
 }
 
 impl Folio {
@@ -18,7 +18,7 @@ impl Folio {
         Ok(Self {
             paddr: vaddr2paddr(VAddr::new(pages.as_ptr() as usize).unwrap()).unwrap(),
             len,
-            pages: Some(pages),
+            _pages: Some(pages),
         })
     }
 
@@ -26,15 +26,15 @@ impl Folio {
         Ok(Self {
             paddr: vaddr2paddr(VAddr::new(pages.as_ptr() as usize).unwrap()).unwrap(),
             len: pages.len(),
-            pages: Some(pages),
+            _pages: Some(pages),
         })
     }
 
-    pub fn alloc_mmio(paddr: PAddr, len: usize) -> Result<Folio, FtlError> {
+    pub fn alloc_fixed(paddr: PAddr, len: usize) -> Result<Folio, FtlError> {
         Ok(Self {
             paddr,
             len,
-            pages: None,
+            _pages: None,
         })
     }
 

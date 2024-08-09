@@ -1,3 +1,4 @@
+use ftl_types::address::PAddr;
 use ftl_types::address::VAddr;
 use ftl_types::error::FtlError;
 use ftl_types::handle::HandleId;
@@ -88,6 +89,16 @@ pub fn print(s: &[u8]) -> Result<(), FtlError> {
 
 pub fn folio_create(len: usize) -> Result<HandleId, FtlError> {
     let ret = syscall1(SyscallNumber::FolioCreate, len as isize)?;
+    let handle_id = HandleId::from_raw_isize_truncated(ret);
+    Ok(handle_id)
+}
+
+pub fn folio_create_fixed(paddr: PAddr, len: usize) -> Result<HandleId, FtlError> {
+    let ret = syscall2(
+        SyscallNumber::FolioCreateFixed,
+        paddr.as_usize() as isize,
+        len as isize,
+    )?;
     let handle_id = HandleId::from_raw_isize_truncated(ret);
     Ok(handle_id)
 }
