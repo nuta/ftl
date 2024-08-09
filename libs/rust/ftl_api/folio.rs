@@ -7,13 +7,13 @@ use ftl_types::error::FtlError;
 use crate::handle::OwnedHandle;
 use crate::syscall;
 
-pub struct Folio {
+struct Folio {
     handle: OwnedHandle,
     vaddr: VAddr,
 }
 
 impl Folio {
-    pub fn create(len: usize) -> Result<Folio, FtlError> {
+    fn create(len: usize) -> Result<Folio, FtlError> {
         let handle = syscall::folio_create(len)?;
         let vaddr = syscall::folio_vaddr(handle)?;
         Ok(Folio {
@@ -22,11 +22,11 @@ impl Folio {
         })
     }
 
-    pub fn handle(&self) -> &OwnedHandle {
+    fn handle(&self) -> &OwnedHandle {
         &self.handle
     }
 
-    pub fn vaddr(&self) -> VAddr {
+    fn vaddr(&self) -> VAddr {
         self.vaddr
     }
 }
@@ -34,14 +34,6 @@ impl Folio {
 pub struct MmioFolio {
     folio: Folio,
     paddr: PAddr,
-}
-
-impl Deref for MmioFolio {
-    type Target = Folio;
-
-    fn deref(&self) -> &Self::Target {
-        &self.folio
-    }
 }
 
 impl MmioFolio {
@@ -69,6 +61,10 @@ impl MmioFolio {
             },
             paddr: PAddr::new(paddr).ok_or(FtlError::InvalidSyscallReturnValue)?,
         })
+    }
+
+    pub fn vaddr(&self) -> VAddr {
+        self.folio.vaddr()
     }
 
     pub fn paddr(&self) -> PAddr {
