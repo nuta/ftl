@@ -190,19 +190,19 @@ impl<'a> StartupAppLoader<'a> {
             .unwrap();
         handle_table
             .add(Handle::new(
-                SharedRef::new(Folio::from_allocated_pages(memory)),
+                SharedRef::new(Folio::from_allocated_pages(memory).unwrap()),
                 HandleRights::NONE,
             ))
             .unwrap();
         handle_table
             .add(Handle::new(
-                SharedRef::new(Folio::from_allocated_pages(vsyscall_buffer)),
+                SharedRef::new(Folio::from_allocated_pages(vsyscall_buffer).unwrap()),
                 HandleRights::NONE,
             ))
             .unwrap();
         handle_table
             .add(Handle::new(
-                SharedRef::new(Folio::from_allocated_pages(environ_pages)),
+                SharedRef::new(Folio::from_allocated_pages(environ_pages).unwrap()),
                 HandleRights::NONE,
             ))
             .unwrap();

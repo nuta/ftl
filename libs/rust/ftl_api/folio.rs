@@ -38,7 +38,12 @@ pub struct MmioFolio {
 impl MmioFolio {
     pub fn create(len: usize) -> Result<MmioFolio, FtlError> {
         let handle = syscall::folio_create(len)?;
-        let vaddr = syscall::vmspace_map(handle, len, handle, PageProtect::READABLE | PageProtect::WRITABLE)?;
+        let vaddr = syscall::vmspace_map(
+            handle,
+            len,
+            handle,
+            PageProtect::READABLE | PageProtect::WRITABLE,
+        )?;
         let paddr = syscall::folio_paddr(handle)?;
         Ok(MmioFolio {
             folio: Folio {
@@ -51,7 +56,12 @@ impl MmioFolio {
 
     pub fn create_pinned(paddr: PAddr, len: usize) -> Result<MmioFolio, FtlError> {
         let handle = syscall::folio_create(len)?;
-        let vaddr = syscall::vmspace_map(handle, len, handle, PageProtect::READABLE | PageProtect::WRITABLE)?;
+        let vaddr = syscall::vmspace_map(
+            handle,
+            len,
+            handle,
+            PageProtect::READABLE | PageProtect::WRITABLE,
+        )?;
         let paddr = syscall::folio_paddr(handle)?;
         Ok(MmioFolio {
             folio: Folio {

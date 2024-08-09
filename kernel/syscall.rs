@@ -224,7 +224,7 @@ fn vmspace_map(
 ) -> Result<VAddr, FtlError> {
     let (vmspace, folio) = {
         let current = current_thread();
-        let mut handles = current.process().handles().lock();
+        let handles = current.process().handles().lock();
 
         let vmspace = handles.get_owned(handle_id)?.as_vmspace()?.clone();
         let folio = handles.get_owned(folio)?.as_folio()?.clone();

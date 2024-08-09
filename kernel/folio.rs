@@ -22,6 +22,14 @@ impl Folio {
         })
     }
 
+    pub fn from_allocated_pages(pages: AllocatedPages) -> Result<Folio, FtlError> {
+        Ok(Self {
+            paddr: vaddr2paddr(VAddr::new(pages.as_ptr() as usize).unwrap()).unwrap(),
+            len: pages.len(),
+            pages: Some(pages),
+        })
+    }
+
     pub fn alloc_mmio(paddr: PAddr, len: usize) -> Result<Folio, FtlError> {
         Ok(Self {
             paddr,
