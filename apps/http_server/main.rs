@@ -68,12 +68,12 @@ enum Context {
 pub fn main(mut env: Environ) {
     info!("starting");
     let tcpip_ch = env.take_channel("dep:tcpip").unwrap();
+    let startup_ch = env.take_channel("dep:startup").unwrap();
+
     tcpip_ch.send(TcpListenRequest { port: 80 }).unwrap();
 
     let mut mainloop = Mainloop::<Context, Message>::new().unwrap();
-    mainloop
-        .add_channel(env.take_channel("dep:startup").unwrap(), Context::Startup)
-        .unwrap();
+    mainloop.add_channel(startup_ch, Context::Startup).unwrap();
     mainloop.add_channel(tcpip_ch, Context::Ctrl).unwrap();
 
     loop {
