@@ -1,5 +1,10 @@
 #![no_std]
 #![no_main]
+#![feature(const_mut_refs)]
+#![feature(const_intrinsic_copy)]
+#![feature(const_ptr_write)]
+
+include!(concat!(env!("OUT_DIR"), "/autogen.rs"));
 
 use ftl_api::channel::Channel;
 use ftl_api::channel::ChannelSender;
@@ -10,11 +15,11 @@ use ftl_api::mainloop::Event;
 use ftl_api::mainloop::Mainloop;
 use ftl_api::prelude::*;
 use ftl_api::types::error::FtlError;
-use ftl_api_autogen::apps::tcpip::Message;
-use ftl_api_autogen::protocols::ethernet_device;
-use ftl_api_autogen::protocols::tcpip::TcpAccepted;
-use ftl_api_autogen::protocols::tcpip::TcpClosed;
-use ftl_api_autogen::protocols::tcpip::TcpReceived;
+use ftl_autogen2_generated::Message;
+use ftl_autogen2_generated::protocols::ethernet_device;
+use ftl_autogen2_generated::protocols::tcpip::TcpAccepted;
+use ftl_autogen2_generated::protocols::tcpip::TcpClosed;
+use ftl_autogen2_generated::protocols::tcpip::TcpReceived;
 use smoltcp::iface::Config;
 use smoltcp::iface::Interface;
 use smoltcp::iface::SocketHandle;

@@ -275,7 +275,6 @@ name = "ftl_autogen2"
 version = "0.0.0"
 dependencies = [
  "anyhow",
- "clap",
  "ftl_types",
  "minijinja",
  "serde",
@@ -705,6 +704,7 @@ version = "0.0.0"
 dependencies = [
  "ftl_api",
  "ftl_api_autogen",
+ "ftl_autogen2",
  "log",
  "smoltcp",
 ]
