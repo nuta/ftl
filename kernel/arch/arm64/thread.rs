@@ -130,6 +130,7 @@ pub struct Context {
 
 pub struct Thread {
     pub(super) context: Context,
+    vmspace: Option<VmSpace>,
     #[allow(dead_code)]
     stack_folio: Option<Handle<Folio>>,
 }
@@ -137,12 +138,13 @@ pub struct Thread {
 impl Thread {
     pub fn new_idle() -> Thread {
         Thread {
+            vmspace: None,
             context: Default::default(),
             stack_folio: None,
         }
     }
 
-    pub fn new_kernel(vmspace: &SharedRef<VmSpace>, pc: usize, arg: usize) -> Thread {
+    pub fn new_kernel(vmspace: SharedRef<VmSpace>, pc: usize, arg: usize) -> Thread {
         let stack_size = 64 * 1024;
         let stack_folio = Handle::new(
             SharedRef::new(Folio::alloc(stack_size).unwrap()),
@@ -158,6 +160,7 @@ impl Thread {
 
         let sp = stack_vaddr.as_usize() + stack_size;
         Thread {
+            vmspace: Some(vmspace),
             context: Context {
                 lr: kernel_entry as usize,
                 sp,
@@ -170,6 +173,10 @@ impl Thread {
     }
 
     pub fn resume(&self) -> ! {
+        if let Some(vmspace) = self.vmspace.as_ref() {
+            todo!("switch");
+        }
+
         resume(&self.context as *const _ as *mut _);
     }
 }

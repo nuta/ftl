@@ -66,7 +66,7 @@ impl Thread {
 
     pub fn spawn_kernel(
         process: SharedRef<Process>,
-        vmspace: &SharedRef<VmSpace>,
+        vmspace: SharedRef<VmSpace>,
         pc: fn(usize),
         arg: usize,
     ) -> SharedRef<Thread> {

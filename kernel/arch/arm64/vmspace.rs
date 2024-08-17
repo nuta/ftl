@@ -65,6 +65,7 @@ pub struct VmSpace {
 impl VmSpace {
     pub fn new() -> Result<VmSpace, FtlError> {
         let l0_table = Folio::alloc(size_of::<Table>())?;
+        todo!("map kernel space");
         Ok(Self { l0_table })
     }
 

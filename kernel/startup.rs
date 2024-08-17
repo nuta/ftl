@@ -199,7 +199,7 @@ impl<'a> StartupAppLoader<'a> {
 
         let thread = Thread::spawn_kernel(
             proc.clone(),
-            &self.vmspace,
+            self.vmspace.clone(),
             entry,
             vsyscall_buffer_ptr.as_usize(),
         );
