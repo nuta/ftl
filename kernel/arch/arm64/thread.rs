@@ -130,7 +130,7 @@ pub struct Context {
 
 pub struct Thread {
     pub(super) context: Context,
-    vmspace: Option<VmSpace>,
+    vmspace: Option<SharedRef<VmSpace>>,
     #[allow(dead_code)]
     stack_folio: Option<Handle<Folio>>,
 }
