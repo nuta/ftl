@@ -8,6 +8,7 @@ mod backtrace;
 mod cpuvar;
 mod gic_v2;
 mod thread;
+mod vmspace;
 
 global_asm!(include_str!("interrupt.S"));
 
