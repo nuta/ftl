@@ -328,10 +328,12 @@ impl<'a> ElfLoader<'a> {
             let mem_size = phdr.p_memsz as usize;
             let file_size = phdr.p_filesz as usize;
 
+            println!("phdr: mem_offset={:x}, mem_size={:x}", mem_offset, mem_size);
+
             let mut offset = 0;
             while offset < mem_size {
-                let vaddr = VAddr::new(self.base_vaddr + mem_offset).unwrap();
-                let paddr = self.elf_paddr.add(file_offset);
+                let vaddr = VAddr::new(self.base_vaddr + mem_offset + offset).unwrap();
+                let paddr = self.elf_paddr.add(file_offset + offset);
                 vmspace
                     .map_fixed(
                         vaddr,

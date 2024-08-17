@@ -69,6 +69,7 @@ impl VmSpace {
     }
 
     pub fn map(&mut self, vaddr: VAddr, paddr: PAddr, len: usize) -> Result<(), FtlError> {
+        trace!("map: {:08x} -> {:08x}", vaddr.as_usize(), paddr.as_usize());
         assert!(is_aligned(vaddr.as_usize(), PAGE_SIZE));
         assert!(is_aligned(paddr.as_usize(), PAGE_SIZE));
         assert!(is_aligned(len, PAGE_SIZE));
