@@ -1,3 +1,4 @@
+use core::arch;
 use core::mem;
 use core::num::NonZeroUsize;
 
@@ -74,7 +75,17 @@ impl VmSpace {
 
         // We only support mapping a single 4KB page for now.
         assert_eq!(len, PAGE_SIZE);
-        self.map_4kb(vaddr, paddr)
+        self.map_4kb(vaddr, paddr)?;
+
+        unsafe {
+            arch::asm!("dsb ish");
+            arch::asm!("isb");
+            arch::asm!("tlbi vmalle1is");
+            arch::asm!("dsb ish");
+            arch::asm!("isb");
+        }
+
+        Ok(())
     }
 
     fn paddr2table(&mut self, paddr: PAddr) -> Result<&mut Table, FtlError> {

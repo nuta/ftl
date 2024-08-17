@@ -21,6 +21,7 @@ pub use gic_v2::ack_interrupt;
 pub use gic_v2::create_interrupt;
 pub use thread::yield_cpu;
 pub use thread::Thread;
+pub use vmspace::VmSpace;
 
 use crate::device_tree::DeviceTree;
 

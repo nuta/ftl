@@ -9,7 +9,7 @@ use crate::folio::Folio;
 use crate::handle::Handle;
 use crate::ref_counted::SharedRef;
 use crate::scheduler::GLOBAL_SCHEDULER;
-use crate::vmspace::KERNEL_VMSPACE;
+use crate::vmspace::VmSpace;
 
 /// The entry point of kernel threads.
 #[no_mangle]
@@ -142,14 +142,14 @@ impl Thread {
         }
     }
 
-    pub fn new_kernel(pc: usize, arg: usize) -> Thread {
+    pub fn new_kernel(vmspace: &SharedRef<VmSpace>, pc: usize, arg: usize) -> Thread {
         let stack_size = 64 * 1024;
         let stack_folio = Handle::new(
             SharedRef::new(Folio::alloc(stack_size).unwrap()),
             HandleRights::NONE,
         );
-        let stack_vaddr = KERNEL_VMSPACE
-            .map(
+        let stack_vaddr = vmspace
+            .map_anywhere(
                 stack_size,
                 stack_folio.clone(),
                 PageProtect::READABLE | PageProtect::WRITABLE,
