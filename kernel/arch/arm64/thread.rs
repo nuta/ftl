@@ -174,7 +174,14 @@ impl Thread {
 
     pub fn resume(&self) -> ! {
         if let Some(vmspace) = self.vmspace.as_ref() {
-            todo!("switch");
+            debug!("Switching to vmspace {:x}", vmspace.arch().ttbr0);
+            unsafe {
+                asm!(
+                    "msr ttbr0_el1, {}",
+                    in(reg) vmspace.arch().ttbr0,
+                );
+            }
+            debug!("Switched to vmspace {:x}", vmspace.arch().ttbr0);
         }
 
         resume(&self.context as *const _ as *mut _);

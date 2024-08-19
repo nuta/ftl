@@ -10,6 +10,7 @@ use ftl_utils::alignment::is_aligned;
 use crate::arch::paddr2vaddr;
 use crate::arch::PAGE_SIZE;
 use crate::folio::Folio;
+use crate::spinlock::SpinLock;
 
 const ENTRIES_PER_TABLE: usize = 512;
 const ENTRY_AF: u64 = 1 << 10;
@@ -35,7 +36,7 @@ impl Entry {
     }
 
     pub fn paddr(&self) -> PAddr {
-        let raw = self.0 & 0x0000_ffff_ffff_f000;
+        let raw = self.0 & 0x000_ffff_ffff_f000;
 
         // Entry::table_entry() guarantees we never map to 0.
         let nonzero = unsafe { NonZeroUsize::new_unchecked(raw as usize) };
@@ -58,19 +59,34 @@ impl Table {
     }
 }
 
-pub struct VmSpace {
+struct PageTable {
     l0_table: Folio,
 }
 
-impl VmSpace {
-    pub fn new() -> Result<VmSpace, FtlError> {
+impl PageTable {
+    pub fn new() -> Result<PageTable, FtlError> {
         let l0_table = Folio::alloc(size_of::<Table>())?;
-        todo!("map kernel space");
-        Ok(Self { l0_table })
+        Ok(PageTable { l0_table })
+    }
+
+    pub fn map_kernel_space(&mut self) -> Result<(), FtlError> {
+        self.map_range(VAddr::new(0x8000000).unwrap(), PAddr::new(0x8000000).unwrap(), 0x2000)?;
+        self.map_range(VAddr::new(0x9000000).unwrap(), PAddr::new(0x9000000).unwrap(), 0x1000)?;
+        self.map_range(VAddr::new(0x40100000).unwrap(), PAddr::new(0x40100000).unwrap(), 0x1200000)?;
+        Ok(())
+    }
+
+    pub fn map_range(&mut self, vaddr: VAddr, paddr: PAddr, len: usize) -> Result<(), FtlError> {
+        for offset in (0..len).step_by(PAGE_SIZE) {
+            let vaddr = vaddr.add(offset);
+            let paddr = paddr.add(offset);
+            self.map(vaddr, paddr, PAGE_SIZE)?;
+        }
+        Ok(())
     }
 
     pub fn map(&mut self, vaddr: VAddr, paddr: PAddr, len: usize) -> Result<(), FtlError> {
-        trace!("map: {:08x} -> {:08x}", vaddr.as_usize(), paddr.as_usize());
+        // trace!("map: {:08x} -> {:08x}", vaddr.as_usize(), paddr.as_usize());
         assert!(is_aligned(vaddr.as_usize(), PAGE_SIZE));
         assert!(is_aligned(paddr.as_usize(), PAGE_SIZE));
         assert!(is_aligned(len, PAGE_SIZE));
@@ -124,5 +140,27 @@ impl VmSpace {
 
         *entry = Entry::table_entry(paddr, ENTRY_AP_READWRITE_USER);
         Ok(())
+    }
+}
+
+pub struct VmSpace {
+    table: SpinLock<PageTable>,
+    pub(super) ttbr0: u64,
+}
+
+impl VmSpace {
+    pub fn new() -> Result<VmSpace, FtlError> {
+        let mut table = PageTable::new()?;
+        table.map_kernel_space()?;
+
+        let ttbr0 = table.l0_table.paddr().as_usize() as u64;
+        Ok(VmSpace {
+            ttbr0,
+            table: SpinLock::new(table),
+        })
+    }
+
+    pub fn map(& self, vaddr: VAddr, paddr: PAddr, len: usize) -> Result<(), FtlError> {
+        self.table.lock().map(vaddr, paddr, len)
     }
 }

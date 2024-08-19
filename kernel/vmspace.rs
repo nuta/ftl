@@ -13,11 +13,11 @@ use crate::spinlock::SpinLock;
 
 struct Mutable {
     folios: Vec<Handle<Folio>>,
-    arch: arch::VmSpace,
 }
 
 pub struct VmSpace {
     kernel_space: bool,
+    arch: arch::VmSpace,
     mutable: SpinLock<Mutable>,
 }
 
@@ -25,13 +25,17 @@ impl VmSpace {
     pub fn kernel_space() -> Result<VmSpace, FtlError> {
         let arch = arch::VmSpace::new()?;
         let mutable = SpinLock::new(Mutable {
-            arch,
             folios: Vec::new(),
         });
         Ok(VmSpace {
             kernel_space: true,
+            arch,
             mutable,
         })
+    }
+
+    pub fn arch(&self) -> &arch::VmSpace {
+        &self.arch
     }
 
     pub fn map_fixed(
@@ -41,7 +45,7 @@ impl VmSpace {
         len: usize,
         _prot: PageProtect,
     ) -> Result<(), FtlError> {
-        self.mutable.lock().arch.map(vaddr, paddr, len)?;
+        self.arch.map(vaddr, paddr, len)?;
         Ok(())
     }
 
