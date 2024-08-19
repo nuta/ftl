@@ -122,9 +122,9 @@ impl<E: Endianess, T: Copy> MmioReg<E, ReadOnly, T> {
         self.do_read(folio)
     }
 
-    pub fn read_with_offset(&self, folio: &mut MmioFolio, offset: usize) -> T {
-        self.do_read_with_offset(folio, offset)
-    }
+    // pub fn read_with_offset(&self, folio: &mut MmioFolio, offset: usize) -> T {
+    //     self.do_read_with_offset(folio, offset)
+    // }
 }
 
 impl<E: Endianess, T: Copy> MmioReg<E, WriteOnly, T> {
@@ -134,9 +134,9 @@ impl<E: Endianess, T: Copy> MmioReg<E, WriteOnly, T> {
 }
 
 impl<E: Endianess, T: Copy> MmioReg<E, ReadWrite, T> {
-    pub fn read(&self, folio: &mut MmioFolio) -> T {
-        self.do_read(folio)
-    }
+    // pub fn read(&self, folio: &mut MmioFolio) -> T {
+    //     self.do_read(folio)
+    // }
 
     pub fn read_with_offset(&self, folio: &mut MmioFolio, offset: usize) -> T {
         self.do_read_with_offset(folio, offset)

@@ -69,7 +69,16 @@ pub fn console_write(bytes: &[u8]) {
 
 #[no_mangle]
 extern "C" fn arm64_handle_exception() {
-    panic!("unhandled exception");
+    let esr: u64;
+    let far: u64;
+    let elr: u64;
+    unsafe {
+        asm!("mrs {}, esr_el1", out(reg) esr);
+        asm!("mrs {}, far_el1", out(reg) far);
+        asm!("mrs {}, elr_el1", out(reg) elr);
+    }
+
+    panic!("unhandled exception: esr={:x}, far={:x}, elr={:x}", esr, far, elr);
 }
 
 #[no_mangle]

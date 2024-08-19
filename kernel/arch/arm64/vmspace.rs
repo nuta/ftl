@@ -22,10 +22,6 @@ const ENTRY_TYPE_TABLE: u64 = 0b11;
 struct Entry(u64);
 
 impl Entry {
-    pub fn invald_entry() -> Self {
-        Self(0)
-    }
-
     pub fn table_entry(paddr: PAddr, flags: u64) -> Self {
         assert!(is_aligned(paddr.as_usize(), PAGE_SIZE));
         Self(paddr.as_usize() as u64 | flags | ENTRY_AF | ENTRY_TYPE_TABLE)
@@ -49,10 +45,6 @@ impl Entry {
 struct Table([Entry; ENTRIES_PER_TABLE]);
 
 impl Table {
-    pub fn invalid() -> Self {
-        Self([Entry::invald_entry(); ENTRIES_PER_TABLE])
-    }
-
     pub fn get_mut_by_vaddr(&mut self, vaddr: VAddr, level: usize) -> &mut Entry {
         let index = (vaddr.as_usize() >> (12 + 9 * level)) & 0x1ff;
         &mut self.0[index]
@@ -122,6 +114,8 @@ impl PageTable {
                 // Allocate a new table.
                 let new_table = Folio::alloc(size_of::<Table>())?;
                 *entry = Entry::table_entry(new_table.paddr(), 0);
+
+                // TODO: Initialize the new table with zeros.
 
                 // This vmspace object owns the allocated folio.
                 // TODO: deallocate on Drop
