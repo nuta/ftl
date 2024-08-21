@@ -42,6 +42,7 @@ pub fn idle() -> ! {
     loop {
         yield_cpu(); // FIXME:
         unsafe {
+            asm!("csrci sstatus, 1 << 1"); // SIE
             asm!("wfi");
         }
     }
