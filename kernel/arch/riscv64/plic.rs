@@ -48,7 +48,7 @@ struct Plic {
 }
 
 impl Plic {
-    pub fn init_device(cpu_id: CpuId,mut folio: MmioFolio) -> Plic {
+    pub fn init_device(cpu_id: CpuId, mut folio: MmioFolio) -> Plic {
         // Enable all interrupts by setting the threshold to 0.
         //
         // Note: Don't use cpuvar() here because it's not initialized yet.
@@ -109,6 +109,8 @@ pub fn init(cpu_id: CpuId, device_tree: &DeviceTree) {
         .unwrap()
         .reg as usize;
     let folio = Folio::alloc_fixed(PAddr::new(plic_paddr).unwrap(), PLIC_SIZE).unwrap();
-    PLIC.lock()
-        .replace(Plic::init_device(cpu_id, MmioFolio::from_folio(folio).unwrap()));
+    PLIC.lock().replace(Plic::init_device(
+        cpu_id,
+        MmioFolio::from_folio(folio).unwrap(),
+    ));
 }

@@ -17,13 +17,12 @@ use csr::TrapMode;
 use ftl_types::address::PAddr;
 use ftl_types::address::VAddr;
 use ftl_types::error::FtlError;
+pub use plic::ack_interrupt;
+pub use plic::create_interrupt;
 pub use thread::yield_cpu;
 pub use thread::Thread;
-pub use plic::create_interrupt;
-pub use plic::ack_interrupt;
 
 use crate::cpuvar::CpuId;
-
 
 pub const PAGE_SIZE: usize = 4096;
 pub const NUM_CPUS_MAX: usize = 8;
@@ -42,7 +41,7 @@ pub fn idle() -> ! {
     loop {
         yield_cpu(); // FIXME:
         unsafe {
-            asm!("csrci sstatus, 1 << 1"); // SIE
+            asm!("csrsi sstatus, 1 << 1"); // SIE
             asm!("wfi");
         }
     }
@@ -68,6 +67,13 @@ pub fn init(cpu_id: CpuId, device_tree: &crate::device_tree::DeviceTree) {
     }
 
     unsafe {
+        let mut sstatus: u64;
+        asm!("csrr {}, sstatus", out(reg) sstatus);
+        sstatus |= (1 << 1); // SSIE: supervisor-level software interrupts
+        sstatus |= (1 << 5); // STIE: supervisor-level timer interrupts
+        sstatus |= (1 << 9); // SEIE: supervisor-level external interrupts
+        asm!("csrw sstatus, {}", in(reg) sstatus);
+
         write_stvec(switch_to_kernel as *const () as usize, TrapMode::Direct);
 
         // riscv::register::sie::set_sext();
