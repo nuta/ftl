@@ -22,6 +22,8 @@ pub use thread::Thread;
 pub use plic::create_interrupt;
 pub use plic::ack_interrupt;
 
+use crate::cpuvar::CpuId;
+
 
 pub const PAGE_SIZE: usize = 4096;
 pub const NUM_CPUS_MAX: usize = 8;
@@ -59,7 +61,7 @@ pub fn console_write(bytes: &[u8]) {
     }
 }
 
-pub fn init(device_tree: &crate::device_tree::DeviceTree) {
+pub fn init(cpu_id: CpuId, device_tree: &crate::device_tree::DeviceTree) {
     extern "C" {
         fn switch_to_kernel();
     }
@@ -71,5 +73,5 @@ pub fn init(device_tree: &crate::device_tree::DeviceTree) {
         // write_sie(read_sie() | 1 << 9); // Supervisor External Interrupt Enable
     }
 
-    plic::init(device_tree);
+    plic::init(cpu_id, device_tree);
 }
