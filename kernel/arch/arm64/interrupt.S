@@ -123,10 +123,6 @@ interrupt_common:
     ldp  x5,  x6,  [sp], #16
     ldp  x3,  x4,  [sp], #16
     ldp  x1,  x2,  [sp], #16
-.global breakme
-breakme:
-    eret
-
     restore_context
 
 exception_common:

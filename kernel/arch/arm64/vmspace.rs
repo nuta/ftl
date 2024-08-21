@@ -62,17 +62,17 @@ impl PageTable {
     }
 
     pub fn map_kernel_space(&mut self) -> Result<(), FtlError> {
-        self.map_range(VAddr::new(0x8000000).unwrap(), PAddr::new(0x8000000).unwrap(), 0x2000)?;
-        self.map_range(VAddr::new(0x9000000).unwrap(), PAddr::new(0x9000000).unwrap(), 0x1000)?;
-        self.map_range(VAddr::new(0x40100000).unwrap(), PAddr::new(0x40100000).unwrap(), 0x1200000)?;
+        self.map_range(VAddr::new(0x0800_0000).unwrap(), PAddr::new(0x0800_0000).unwrap(), 0x2000)?;
+        self.map_range(VAddr::new(0x0900_0000).unwrap(), PAddr::new(0x0900_0000).unwrap(), 0x1000)?;
+        self.map_range(VAddr::new(0x4010_0000).unwrap(), PAddr::new(0x4010_0000).unwrap(), 0x1200000)?;
         Ok(())
     }
 
     pub fn map_range(&mut self, vaddr: VAddr, paddr: PAddr, len: usize) -> Result<(), FtlError> {
+        assert!(is_aligned(len, PAGE_SIZE));
+
         for offset in (0..len).step_by(PAGE_SIZE) {
-            let vaddr = vaddr.add(offset);
-            let paddr = paddr.add(offset);
-            self.map(vaddr, paddr, PAGE_SIZE)?;
+            self.map(vaddr.add(offset), paddr.add(offset), PAGE_SIZE)?;
         }
         Ok(())
     }
@@ -87,6 +87,7 @@ impl PageTable {
         assert_eq!(len, PAGE_SIZE);
         self.map_4kb(vaddr, paddr)?;
 
+        // FIXME:
         unsafe {
             arch::asm!("dsb ish");
             arch::asm!("isb");
@@ -107,8 +108,9 @@ impl PageTable {
         assert!(is_aligned(vaddr.as_usize(), PAGE_SIZE));
         assert!(is_aligned(paddr.as_usize(), PAGE_SIZE));
 
+        println!("map_4kb: {:08x} -> {:08x}", vaddr.as_usize(), paddr.as_usize());
         let mut table = self.paddr2table(self.l0_table.paddr())?;
-        for level in 0..3 {
+        for level in (1..=3).rev() {
             let entry = table.get_mut_by_vaddr(vaddr, level);
             if entry.is_invalid() {
                 // Allocate a new table.
@@ -127,7 +129,7 @@ impl PageTable {
             table = self.paddr2table(next_table_paddr)?;
         }
 
-        let entry = table.get_mut_by_vaddr(vaddr, 3);
+        let entry = table.get_mut_by_vaddr(vaddr, 0);
         if !entry.is_invalid() {
             return Err(FtlError::AlreadyMapped);
         }
