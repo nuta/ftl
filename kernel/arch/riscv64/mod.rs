@@ -4,6 +4,7 @@ mod backtrace;
 mod cpuvar;
 mod csr;
 mod interrupt;
+mod plic;
 mod sbi;
 mod thread;
 
@@ -16,12 +17,11 @@ use csr::TrapMode;
 use ftl_types::address::PAddr;
 use ftl_types::address::VAddr;
 use ftl_types::error::FtlError;
-use ftl_types::interrupt::Irq;
 pub use thread::yield_cpu;
 pub use thread::Thread;
+pub use plic::create_interrupt;
+pub use plic::ack_interrupt;
 
-use crate::interrupt::Interrupt;
-use crate::ref_counted::SharedRef;
 
 pub const PAGE_SIZE: usize = 4096;
 pub const NUM_CPUS_MAX: usize = 8;
@@ -45,14 +45,6 @@ pub fn idle() -> ! {
     }
 }
 
-pub fn ack_interrupt(irq: Irq) -> Result<(), FtlError> {
-    todo!()
-}
-
-pub fn create_interrupt(interrupt: &SharedRef<Interrupt>) -> Result<(), FtlError> {
-    todo!()
-}
-
 pub fn halt() -> ! {
     loop {
         unsafe {
@@ -73,10 +65,7 @@ pub fn init(device_tree: &crate::device_tree::DeviceTree) {
     }
 
     unsafe {
-        write_stvec(
-            switch_to_kernel as *const () as usize,
-            TrapMode::Direct,
-        );
+        write_stvec(switch_to_kernel as *const () as usize, TrapMode::Direct);
 
         // riscv::register::sie::set_sext();
         // write_sie(read_sie() | 1 << 9); // Supervisor External Interrupt Enable

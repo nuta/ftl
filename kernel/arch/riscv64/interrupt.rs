@@ -1,4 +1,5 @@
-use core::arch::{asm, global_asm};
+use core::arch::asm;
+use core::arch::global_asm;
 
 global_asm!(include_str!("interrupt.S"));
 
