@@ -1,24 +1,8 @@
-use core::arch::asm;
+use core::arch::{asm, global_asm};
 
-// The interrupt/exception/system call handler entry point. `stvec` is set to
-// this address.
-//
-// This function address must be aligned to 4 bytes not to accidentally set
-// MODE field in stvec.
-#[naked]
-#[repr(align(4))] // handle address in stvec must be aligned
-pub unsafe extern "C" fn switch_to_kernel() -> ! {
-    asm!(
-        // tp points to the current thread's context
-        r#"
-        call {interrupt_handler}
-        "#
-        ,
-        interrupt_handler = sym interrupt_handler,
-        options(noreturn),
-    )
-}
+global_asm!(include_str!("interrupt.S"));
 
+#[no_mangle]
 extern "C" fn interrupt_handler() -> ! {
     let scause: u64;
     let sepc: u64;
