@@ -70,4 +70,6 @@ pub fn init(device_tree: &crate::device_tree::DeviceTree) {
         // riscv::register::sie::set_sext();
         // write_sie(read_sie() | 1 << 9); // Supervisor External Interrupt Enable
     }
+
+    plic::init(device_tree);
 }

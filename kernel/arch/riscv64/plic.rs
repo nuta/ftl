@@ -102,11 +102,11 @@ pub fn handle_interrupt() {
 }
 
 pub fn init(device_tree: &DeviceTree) {
-    let gicd_paddr: usize = device_tree
-        .find_device_by_id("arm,cortex-a15-gic")
+    let plic_paddr: usize = device_tree
+        .find_device_by_id("sifive,plic-1.0.0")
         .unwrap()
         .reg as usize;
-    let folio = Folio::alloc_fixed(PAddr::new(gicd_paddr).unwrap(), PLIC_SIZE).unwrap();
+    let folio = Folio::alloc_fixed(PAddr::new(plic_paddr).unwrap(), PLIC_SIZE).unwrap();
     PLIC.lock()
         .replace(Plic::init_device(MmioFolio::from_folio(folio).unwrap()));
 }
