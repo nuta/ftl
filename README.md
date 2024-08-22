@@ -31,12 +31,13 @@ TODO: nice drawining of the architecture
 - 64-bit Arm support (partially)
 - Virtio device support (virtio-net only for now)
 - TCP/IP stack based on [smoltcp](https://github.com/smoltcp-rs/smoltcp)
-- Intuitive Rust API
-- Auto-generate IPC stubs and startup code from declarative YAML files
+- Intuitive Rust API for apps, OS servers, and device drivers
+- Auto-generated IPC stubs and startup code from declarative YAML files
 
-- MMU/Usermode-based isolation (planned - so-called "process" isolation)
+- MMU/Usermode-based isolation (so-called traditional "process" isolation, planned)
+- x86_64 support (once the kernel API stabilizes, planned)
 - Shell (planned)
-- File system support (planned - *"SQLite3 as a file system"*)
+- File system support (planned)
 - JavaScript API (planned)
 - WebAssembly support (planned)
 - Linux compatibility layer using the genuine Linux kernel (planned)
@@ -58,13 +59,7 @@ cd ftl
 make run
 ```
 
-That's it! Follow the following steps to learn more about FTL.
-
-## Directory Structure
-
-| Path | Description |
-| --- | --- |
-
+That's it! You're now running FTL on QEMU and you're ready to start hacking.
 
 ## License
 
