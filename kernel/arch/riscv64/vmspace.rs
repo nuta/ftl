@@ -1,4 +1,3 @@
-use core::arch;
 use core::mem;
 use core::num::NonZeroUsize;
 

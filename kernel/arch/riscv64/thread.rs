@@ -169,8 +169,10 @@ impl Thread {
     }
 
     pub fn new_kernel(vmspace: SharedRef<VmSpace>, pc: usize, arg: usize) -> Thread {
+        let stack_size = KERNEL_STACK_SIZE.in_bytes();
+
         let stack_folio = Handle::new(
-            SharedRef::new(Folio::alloc(KERNEL_STACK_SIZE.in_bytes()).unwrap()),
+            SharedRef::new(Folio::alloc(stack_size).unwrap()),
             HandleRights::NONE,
         );
         let stack_vaddr = vmspace
@@ -199,7 +201,9 @@ impl Thread {
 
     pub fn resume(&self) -> ! {
         if let Some(vmspace) = self.vmspace.as_ref() {
-            todo!()
+            unsafe {
+                asm!("csrw satp, {}", in(reg) vmspace.arch().satp);
+            }
         }
 
         resume(&self.context as *const _ as *mut _);
