@@ -169,10 +169,8 @@ impl Thread {
     }
 
     pub fn new_kernel(vmspace: SharedRef<VmSpace>, pc: usize, arg: usize) -> Thread {
-        let stack_size = 64 * 1024;
-
         let stack_folio = Handle::new(
-            SharedRef::new(Folio::alloc(stack_size).unwrap()),
+            SharedRef::new(Folio::alloc(KERNEL_STACK_SIZE.in_bytes()).unwrap()),
             HandleRights::NONE,
         );
         let stack_vaddr = vmspace
