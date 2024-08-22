@@ -39,5 +39,7 @@ pub fn boot(cpu_id: CpuId, bootinfo: BootInfo) -> ! {
     cpuvar::percpu_init(cpu_id);
 
     startup::load_startup_apps(&STARTUP_APPS, &device_tree);
+
+    trace!("entering userspace");
     arch::idle();
 }

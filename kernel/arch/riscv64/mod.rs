@@ -8,6 +8,7 @@ mod interrupt;
 mod plic;
 mod sbi;
 mod thread;
+mod vmspace;
 
 pub use backtrace::backtrace;
 pub use cpuvar::cpuvar;
@@ -22,6 +23,7 @@ pub use plic::ack_interrupt;
 pub use plic::create_interrupt;
 pub use thread::yield_cpu;
 pub use thread::Thread;
+pub use vmspace::VmSpace;
 
 use crate::cpuvar::CpuId;
 
@@ -38,7 +40,8 @@ pub fn vaddr2paddr(vaddr: VAddr) -> Result<PAddr, FtlError> {
     Ok(PAddr::from_nonzero(vaddr.as_nonzero()))
 }
 
-global_asm!(r#"
+global_asm!(
+    r#"
 .text
 .global do_idle, __wfi_point
 do_idle:
@@ -48,7 +51,8 @@ __wfi_point:
     wfi
     csrci sstatus, 1 << 1
     ret
-"#);
+"#
+);
 
 extern "C" {
     fn do_idle();

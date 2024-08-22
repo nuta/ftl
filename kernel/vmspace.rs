@@ -1,16 +1,15 @@
 use alloc::vec::Vec;
 
+use ftl_types::address::PAddr;
 use ftl_types::address::VAddr;
 use ftl_types::error::FtlError;
 use ftl_types::vmspace::PageProtect;
 
 use crate::arch::paddr2vaddr;
+use crate::arch::{self};
 use crate::folio::Folio;
 use crate::handle::Handle;
-use crate::ref_counted::StaticRef;
 use crate::spinlock::SpinLock;
-
-pub static KERNEL_VMSPACE: StaticRef<VmSpace> = StaticRef::new(VmSpace::kernel_space());
 
 struct Mutable {
     folios: Vec<Handle<Folio>>,
@@ -18,18 +17,37 @@ struct Mutable {
 
 pub struct VmSpace {
     kernel_space: bool,
+    arch: arch::VmSpace,
     mutable: SpinLock<Mutable>,
 }
 
 impl VmSpace {
-    pub const fn kernel_space() -> VmSpace {
-        VmSpace {
+    pub fn kernel_space() -> Result<VmSpace, FtlError> {
+        let arch = arch::VmSpace::new()?;
+        let mutable = SpinLock::new(Mutable { folios: Vec::new() });
+        Ok(VmSpace {
             kernel_space: true,
-            mutable: SpinLock::new(Mutable { folios: Vec::new() }),
-        }
+            arch,
+            mutable,
+        })
     }
 
-    pub fn map(
+    pub fn arch(&self) -> &arch::VmSpace {
+        &self.arch
+    }
+
+    pub fn map_fixed(
+        &self,
+        vaddr: VAddr,
+        paddr: PAddr,
+        len: usize,
+        _prot: PageProtect,
+    ) -> Result<(), FtlError> {
+        self.arch.map(vaddr, paddr, len)?;
+        Ok(())
+    }
+
+    pub fn map_anywhere(
         &self,
         len: usize,
         folio: Handle<Folio>,
