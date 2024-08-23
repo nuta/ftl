@@ -333,22 +333,33 @@ impl<'a> ElfLoader<'a> {
             let mut offset = 0;
             while offset < mem_size {
                 let vaddr = VAddr::new(self.base_vaddr + mem_offset + offset).unwrap();
-                let paddr = self.elf_paddr.add(file_offset + offset);
-                vmspace
-                    .map_fixed(
-                        vaddr,
-                        paddr,
-                        PAGE_SIZE,
-                        PageProtect::READABLE | PageProtect::WRITABLE | PageProtect::EXECUTABLE,
-                    )
-                    .unwrap();
 
-                if offset > file_size {
-                    // FIXME:
-                    // let slice_offset = offset - file_size;
-                    // let slice = unsafe {
-                    //     core::slice::from_raw_parts_mut(vaddr.add(slice_offset).as_mut_ptr(), )
-                    // }
+                let file_part_len =  core::cmp::min(file_size.saturating_sub(offset), PAGE_SIZE);
+                let zero_part_len = PAGE_SIZE - file_part_len;
+
+                let paddr = if file_part_len > 0 {
+                    assert_eq!(file_part_len, PAGE_SIZE);
+                    self.elf_paddr.add(file_offset + offset)
+                } else {
+                    // FIXME: track this ownership
+                    Folio::alloc(PAGE_SIZE).unwrap().paddr()
+                };
+
+                vmspace
+                .map_fixed(
+                    vaddr,
+                    paddr,
+                    PAGE_SIZE,
+                    PageProtect::READABLE | PageProtect::WRITABLE | PageProtect::EXECUTABLE,
+                )
+                .unwrap();
+
+                if zero_part_len > 0 {
+                    let slice: &mut [u8] = unsafe {
+                        core::slice::from_raw_parts_mut(vaddr.add(file_part_len).as_mut_ptr(), zero_part_len)
+                    };
+
+                    slice.fill(0);
                 }
 
                 offset += PAGE_SIZE;
@@ -425,8 +436,8 @@ impl<'a> ElfLoader<'a> {
     }
 
     pub fn load_into_memory(mut self, vmspace: &VmSpace) -> Result<usize, Error> {
-        self.map_segments(vmspace);
         vmspace.switch();
+        self.map_segments(vmspace);
         self.relocate_rela_dyn()?;
         Ok(self.entry_addr())
     }

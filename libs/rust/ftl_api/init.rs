@@ -38,8 +38,11 @@ pub unsafe fn init_internal(vsyscall_page: *const VsyscallPage) -> Environ {
     //         address.
     let vsyscall = unsafe { &*vsyscall_page };
 
+    let s = b"\n*** Hello frm ftl_api::init_internal ***\n";
+    (vsyscall.entry)(1,  s.as_ptr() as isize, s.len() as isize, 0, 0, 0, 0);
     set_vsyscall(vsyscall);
     allocator::init();
+
     let mut env = parse_environ(vsyscall);
 
     let vmspace = env.take_vmspace("vmspace").unwrap();
