@@ -76,7 +76,7 @@ struct StartupAppLoader<'a> {
     our_chs: HashMap<AppName, SharedRef<Channel>>,
     their_chs: HashMap<AppName, SharedRef<Channel>>,
     vmspace: SharedRef<VmSpace>,
-    next_base_addr: usize,
+    next_base_vaddr: usize,
 }
 
 impl<'a> StartupAppLoader<'a> {
@@ -88,7 +88,7 @@ impl<'a> StartupAppLoader<'a> {
             our_chs: HashMap::new(),
             their_chs: HashMap::new(),
             vmspace,
-            next_base_addr: 0x100000,
+            next_base_vaddr: 0x100000, // FIXME:
         }
     }
 
@@ -221,9 +221,9 @@ impl<'a> StartupAppLoader<'a> {
     }
 
     fn load_app(&mut self, template: &AppTemplate) -> Result<(), Error> {
-        let base_addr = self.next_base_addr;
-        let elf_loader = ElfLoader::parse(template.elf_file, base_addr)?;
-        self.next_base_addr += elf_loader.vmspace_len;
+        let base_vaddr = self.next_base_vaddr;
+        let elf_loader = ElfLoader::parse(template.elf_file, base_vaddr)?;
+        self.next_base_vaddr += elf_loader.vmspace_len;
         let entry_addr = elf_loader.load_into_memory(&self.vmspace)?;
 
         let mut env = EnvironSerializer::new();
@@ -279,7 +279,7 @@ struct ElfLoader<'a> {
 }
 
 impl<'a> ElfLoader<'a> {
-    pub fn parse(elf_file: &'static [u8], base_addr: usize) -> Result<ElfLoader, Error> {
+    pub fn parse(elf_file: &'static [u8], base_vaddr: usize) -> Result<ElfLoader, Error> {
         let elf = Elf::parse(elf_file).map_err(Error::ParseElf)?;
 
         // TODO: Check DF_1_PIE flag to make sure it's a PIE, not a shared
@@ -309,7 +309,7 @@ impl<'a> ElfLoader<'a> {
             elf_file,
             elf_paddr: vaddr2paddr(VAddr::new(elf_file.as_ptr() as usize).unwrap()).unwrap(),
             elf,
-            base_vaddr: base_addr,
+            base_vaddr,
             vmspace_len,
         })
     }
@@ -318,7 +318,7 @@ impl<'a> ElfLoader<'a> {
         self.base_vaddr + (self.elf.ehdr.e_entry as usize)
     }
 
-    fn load_segments(&mut self, vmspace: &VmSpace) {
+    fn map_segments(&mut self, vmspace: &VmSpace) {
         for phdr in self.elf.phdrs {
             if phdr.p_type != ftl_elf::PhdrType::Load {
                 continue;
@@ -425,7 +425,8 @@ impl<'a> ElfLoader<'a> {
     }
 
     pub fn load_into_memory(mut self, vmspace: &VmSpace) -> Result<usize, Error> {
-        self.load_segments(vmspace);
+        self.map_segments(vmspace);
+        vmspace.switch();
         self.relocate_rela_dyn()?;
         Ok(self.entry_addr())
     }

@@ -65,4 +65,8 @@ impl VmSpace {
 
         unimplemented!("userspace support")
     }
+
+    pub fn switch(&self) {
+        self.arch.switch();
+    }
 }

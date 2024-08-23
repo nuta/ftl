@@ -201,9 +201,7 @@ impl Thread {
 
     pub fn resume(&self) -> ! {
         if let Some(vmspace) = self.vmspace.as_ref() {
-            unsafe {
-                asm!("csrw satp, {}", in(reg) vmspace.arch().satp);
-            }
+            vmspace.switch();
         }
 
         resume(&self.context as *const _ as *mut _);

@@ -1,3 +1,4 @@
+use core::arch::asm;
 use core::mem;
 use core::num::NonZeroUsize;
 
@@ -12,28 +13,39 @@ use crate::folio::Folio;
 use crate::spinlock::SpinLock;
 
 const ENTRIES_PER_TABLE: usize = 512;
-const ENTRY_AF: u64 = 1 << 10;
-const ENTRY_AP_READWRITE_USER: u64 = 0b01 << 6;
-const ENTRY_TYPE_TABLE: u64 = 0b11;
+const PPN_SHIFT: usize = 12;
+
+const PTE_V: u64 = 1 << 0;
+const PTE_R: u64 = 1 << 1;
+const PTE_W: u64 = 1 << 2;
+const PTE_X: u64 = 1 << 3;
+const PTE_PPN_SHIFT: usize = 10;
+
+const SATP_MODE_SV48: u64 = 9 << 60;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(transparent)]
 struct Entry(u64);
 
 impl Entry {
-    pub fn table_entry(paddr: PAddr, flags: u64) -> Self {
+    pub fn new(paddr: PAddr, flags: u64) -> Self {
         assert!(is_aligned(paddr.as_usize(), PAGE_SIZE));
-        Self(paddr.as_usize() as u64 | flags | ENTRY_AF | ENTRY_TYPE_TABLE)
+
+        let ppn = paddr.as_usize() as u64 >> PPN_SHIFT;
+        Self(ppn << PTE_PPN_SHIFT | flags)
     }
 
     pub fn is_invalid(&self) -> bool {
-        self.0 & 1 == 0
+        self.0 & PTE_V == 0
+    }
+
+    pub fn ppn(&self) -> u64 {
+        self.0 >> PTE_PPN_SHIFT
     }
 
     pub fn paddr(&self) -> PAddr {
-        let raw = self.0 & 0x000_ffff_ffff_f000;
-
-        // Entry::table_entry() guarantees we never map to 0.
+        let raw = self.ppn() << PPN_SHIFT;
+        // FIXME: this is actually unsafe
         let nonzero = unsafe { NonZeroUsize::new_unchecked(raw as usize) };
 
         PAddr::from_nonzero(nonzero)
@@ -62,24 +74,31 @@ impl PageTable {
 
     pub fn map_kernel_space(&mut self) -> Result<(), FtlError> {
         self.map_range(
-            VAddr::new(0x0800_0000).unwrap(),
-            PAddr::new(0x0800_0000).unwrap(),
-            0x2000,
+            VAddr::new(0x8020_0000).unwrap(),
+            PAddr::new(0x8020_0000).unwrap(),
+            0x8ff00000 - 0x8020_0000,
         )?;
         self.map_range(
-            VAddr::new(0x0900_0000).unwrap(),
-            PAddr::new(0x0900_0000).unwrap(),
+            VAddr::new(0xc000000).unwrap(),
+            PAddr::new(0xc000000).unwrap(),
+            0x400000,
+        )?;
+        // UART
+        self.map_range(
+            VAddr::new(0x1000_0000).unwrap(),
+            PAddr::new(0x1000_0000).unwrap(),
             0x1000,
         )?;
+        // Virtio
         self.map_range(
-            VAddr::new(0x4010_0000).unwrap(),
-            PAddr::new(0x4010_0000).unwrap(),
-            0x1200000,
+            VAddr::new(0x10001000).unwrap(),
+            PAddr::new(0x10001000).unwrap(),
+            0x1000,
         )?;
         Ok(())
     }
 
-    pub fn map_range(&mut self, vaddr: VAddr, paddr: PAddr, len: usize) -> Result<(), FtlError> {
+    pub fn  map_range(&mut self, vaddr: VAddr, paddr: PAddr, len: usize) -> Result<(), FtlError> {
         assert!(is_aligned(len, PAGE_SIZE));
 
         for offset in (0..len).step_by(PAGE_SIZE) {
@@ -112,18 +131,18 @@ impl PageTable {
         assert!(is_aligned(vaddr.as_usize(), PAGE_SIZE));
         assert!(is_aligned(paddr.as_usize(), PAGE_SIZE));
 
-        println!(
-            "map_4kb: {:08x} -> {:08x}",
-            vaddr.as_usize(),
-            paddr.as_usize()
-        );
+        // println!(
+        //     "map_4kb: {:08x} -> {:08x}",
+        //     vaddr.as_usize(),
+        //     paddr.as_usize()
+        // );
         let mut table = self.paddr2table(self.l0_table.paddr())?;
         for level in (1..=3).rev() {
             let entry = table.get_mut_by_vaddr(vaddr, level);
             if entry.is_invalid() {
                 // Allocate a new table.
                 let new_table = Folio::alloc(size_of::<Table>())?;
-                *entry = Entry::table_entry(new_table.paddr(), 0);
+                *entry = Entry::new(new_table.paddr(), PTE_V);
 
                 // TODO: Initialize the new table with zeros.
 
@@ -142,14 +161,14 @@ impl PageTable {
             return Err(FtlError::AlreadyMapped);
         }
 
-        *entry = Entry::table_entry(paddr, ENTRY_AP_READWRITE_USER);
+        *entry = Entry::new(paddr, PTE_X | PTE_W | PTE_R | PTE_V);
         Ok(())
     }
 }
 
 pub struct VmSpace {
     table: SpinLock<PageTable>,
-    pub(super) satp: u64,
+    satp: u64,
 }
 
 impl VmSpace {
@@ -157,7 +176,8 @@ impl VmSpace {
         let mut table = PageTable::new()?;
         table.map_kernel_space()?;
 
-        let satp = table.l0_table.paddr().as_usize() as u64;
+        let table_paddr = table.l0_table.paddr().as_usize() as u64;
+        let satp = SATP_MODE_SV48 | (table_paddr >> PPN_SHIFT);
         Ok(VmSpace {
             satp,
             table: SpinLock::new(table),
@@ -166,5 +186,21 @@ impl VmSpace {
 
     pub fn map(&self, vaddr: VAddr, paddr: PAddr, len: usize) -> Result<(), FtlError> {
         self.table.lock().map(vaddr, paddr, len)
+    }
+
+    pub fn switch(&self) {
+        unsafe {
+            // Do sfeence.vma before and even before switching the page
+            // table to ensure all changes prior to this switch are visible.
+            //
+            // (The RISC-V Instruction Set Manual Volume II, Version 1.10, p. 58)
+            info!("switching to vmspace: {:x?}", self.satp);
+            asm!("
+                sfence.vma
+                csrw satp, {}
+                sfence.vma
+            ", in(reg) self.satp);
+            info!("switched to vmspace: {:x?}", self.satp);
+        }
     }
 }
