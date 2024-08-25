@@ -323,6 +323,7 @@ impl<'a> ElfLoader<'a> {
             if phdr.p_type != ftl_elf::PhdrType::Load {
                 continue;
             }
+
             let mem_offset = phdr.p_vaddr as usize;
             let file_offset = phdr.p_offset as usize;
             let mem_size = phdr.p_memsz as usize;
