@@ -328,8 +328,6 @@ impl<'a> ElfLoader<'a> {
             let mem_size = phdr.p_memsz as usize;
             let file_size = phdr.p_filesz as usize;
 
-            println!("phdr: mem_offset={:x}, mem_size={:x}", mem_offset, mem_size);
-
             let mut offset = 0;
             while offset < mem_size {
                 let vaddr = VAddr::new(self.base_vaddr + mem_offset + offset).unwrap();
@@ -338,13 +336,15 @@ impl<'a> ElfLoader<'a> {
                 let zero_part_len = PAGE_SIZE - file_part_len;
 
                 let paddr = if file_part_len > 0 {
-                    assert_eq!(file_part_len, PAGE_SIZE);
                     self.elf_paddr.add(file_offset + offset)
                 } else {
                     // FIXME: track this ownership
                     Folio::alloc(PAGE_SIZE).unwrap().paddr()
                 };
 
+                // TODO: Make sure we won't start the same app more than once
+                //       because we map the same physical page, even in writable
+                //       pages like .data section.
                 vmspace
                 .map_fixed(
                     vaddr,

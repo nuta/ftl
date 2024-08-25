@@ -5,7 +5,6 @@ use ftl_types::address::VAddr;
 use ftl_types::error::FtlError;
 use ftl_types::vmspace::PageProtect;
 
-use crate::arch::paddr2vaddr;
 use crate::arch::{self};
 use crate::folio::Folio;
 use crate::handle::Handle;
@@ -16,7 +15,6 @@ struct Mutable {
 }
 
 pub struct VmSpace {
-    kernel_space: bool,
     arch: arch::VmSpace,
     mutable: SpinLock<Mutable>,
 }
@@ -26,7 +24,6 @@ impl VmSpace {
         let arch = arch::VmSpace::new()?;
         let mutable = SpinLock::new(Mutable { folios: Vec::new() });
         Ok(VmSpace {
-            kernel_space: true,
             arch,
             mutable,
         })
@@ -43,7 +40,7 @@ impl VmSpace {
         len: usize,
         _prot: PageProtect,
     ) -> Result<(), FtlError> {
-        self.arch.map(vaddr, paddr, len)?;
+        self.arch.map_fixed(vaddr, paddr, len)?;
         Ok(())
     }
 
@@ -57,13 +54,13 @@ impl VmSpace {
             return Err(FtlError::InvalidArg);
         }
 
-        if self.kernel_space {
-            let vaddr = paddr2vaddr(folio.paddr())?;
-            self.mutable.lock().folios.push(folio);
-            return Ok(vaddr);
-        }
+        let paddr = folio.paddr();
 
-        unimplemented!("userspace support")
+        // FIXME: Track folio's ownership to page table
+        let mut mutable = self.mutable.lock();
+        mutable.folios.push(folio);
+
+        self.arch.map_anywhere(paddr, len)
     }
 
     pub fn switch(&self) {

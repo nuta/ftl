@@ -113,9 +113,9 @@ impl PageTable {
         assert!(is_aligned(paddr.as_usize(), PAGE_SIZE));
         assert!(is_aligned(len, PAGE_SIZE));
 
-        // We only support mapping a single 4KB page for now.
-        assert_eq!(len, PAGE_SIZE);
-        self.map_4kb(vaddr, paddr)?;
+        for offset in (0..len).step_by(PAGE_SIZE) {
+            self.map_4kb(vaddr.add(offset), paddr.add(offset))?;
+        }
 
         // FIXME: Invalidate TLB
 
@@ -166,8 +166,13 @@ impl PageTable {
     }
 }
 
+struct Mutable {
+    table: PageTable,
+    next_free_vaddr: VAddr,
+}
+
 pub struct VmSpace {
-    table: SpinLock<PageTable>,
+    mutable: SpinLock<Mutable>,
     satp: u64,
 }
 
@@ -180,12 +185,26 @@ impl VmSpace {
         let satp = SATP_MODE_SV48 | (table_paddr >> PPN_SHIFT);
         Ok(VmSpace {
             satp,
-            table: SpinLock::new(table),
+            mutable: SpinLock::new(Mutable {
+                table,
+                next_free_vaddr: VAddr::new(0x4000_0000).unwrap(), // FIXME:
+            }),
         })
     }
 
-    pub fn map(&self, vaddr: VAddr, paddr: PAddr, len: usize) -> Result<(), FtlError> {
-        self.table.lock().map(vaddr, paddr, len)
+    pub fn map_fixed(&self, vaddr: VAddr, paddr: PAddr, len: usize) -> Result<(), FtlError> {
+        self.mutable.lock().table.map(vaddr, paddr, len)
+    }
+
+    pub fn map_anywhere(&self, paddr: PAddr, len: usize) -> Result<VAddr, FtlError> {
+        assert!(is_aligned(len, PAGE_SIZE));
+
+        let mut mutable = self.mutable.lock();
+        let vaddr = mutable.next_free_vaddr;
+        mutable.next_free_vaddr = mutable.next_free_vaddr.add(len);
+
+        mutable.table.map(vaddr, paddr, len)?;
+        Ok(vaddr)
     }
 
     pub fn switch(&self) {
@@ -194,13 +213,11 @@ impl VmSpace {
             // table to ensure all changes prior to this switch are visible.
             //
             // (The RISC-V Instruction Set Manual Volume II, Version 1.10, p. 58)
-            info!("switching to vmspace: {:x?}", self.satp);
             asm!("
                 sfence.vma
                 csrw satp, {}
                 sfence.vma
             ", in(reg) self.satp);
-            info!("switched to vmspace: {:x?}", self.satp);
         }
     }
 }

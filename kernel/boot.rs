@@ -40,6 +40,5 @@ pub fn boot(cpu_id: CpuId, bootinfo: BootInfo) -> ! {
 
     startup::load_startup_apps(&STARTUP_APPS, &device_tree);
 
-    trace!("entering userspace");
     arch::idle();
 }

@@ -83,7 +83,6 @@ pub extern "C" fn yield_cpu() {
 
 /// Resumes a thread.
 fn resume(next: *mut Context) -> ! {
-    trace!("resume: ra={:x}", unsafe { (*next).ra });
     unsafe {
         asm!(
             r#"
