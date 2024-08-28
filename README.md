@@ -14,6 +14,19 @@ It has been said that microkernels are not practical due to performance overhead
 
 # Getting Started
 
+> [!NOTE]
+> Prerequisites: You need to install Cargo ([rustup](https://rustup.rs/)) and QEMU.
+>
+> ```
+> brew install qemu             # macOS
+> sudo apt install qemu-system  # Ubuntu
+>
+> rustup target add TODO:
+> rustup component add rust-src TODO:
+> ```
+
 ```
-git clone https://github.com/
+git clone https://github.com/nuta/ftl
+cd ftl
+make run
 ```
