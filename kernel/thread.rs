@@ -3,7 +3,9 @@ use core::sync::atomic::AtomicIsize;
 use core::sync::atomic::Ordering;
 
 use crate::arch;
+use crate::channel::Channel;
 use crate::cpuvar::current_thread;
+use crate::poll::Poll;
 use crate::process::kernel_process;
 use crate::process::Process;
 use crate::ref_counted::SharedRef;
@@ -39,6 +41,7 @@ impl ThreadId {
 #[derive(Debug)]
 pub enum Continuation {
     ChannelRecv(SharedRef<Channel>),
+    PollWait(SharedRef<Poll>),
 }
 
 #[derive(Debug)]
@@ -113,14 +116,6 @@ impl Thread {
         self.arch.resume();
     }
 
-    pub fn set_blocked(self: &SharedRef<Thread>) {
-        // oops!("{}: set_blocked", self.id.0);
-        let mut mutable = self.mutable.lock();
-        debug_assert!(matches!(mutable.state, State::Runnable));
-
-        mutable.state = State::Blocked;
-    }
-
     pub fn block_current(continuation: Continuation) -> ! {
         let thread = current_thread();
         let mut mutable = thread.mutable.lock();
@@ -132,7 +127,7 @@ impl Thread {
 
     pub fn set_runnable(self: &SharedRef<Thread>) {
         let mut mutable = self.mutable.lock();
-        debug_assert!(matches!(mutable.state, State::Blocked));
+        debug_assert!(matches!(mutable.state, State::Blocked(_)));
 
         mutable.state = State::Runnable;
         GLOBAL_SCHEDULER.push(self.clone());

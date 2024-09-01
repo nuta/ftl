@@ -25,7 +25,6 @@ mod process;
 mod ref_counted;
 mod scheduler;
 mod signal;
-mod sleep;
 mod spinlock;
 mod startup;
 mod syscall;

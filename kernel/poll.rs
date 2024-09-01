@@ -1,3 +1,4 @@
+use core::fmt;
 use core::sync::atomic::AtomicU8;
 use core::sync::atomic::Ordering;
 
@@ -8,12 +9,11 @@ use hashbrown::HashMap;
 
 use crate::handle::AnyHandle;
 use crate::ref_counted::SharedRef;
-use crate::sleep::SleepCallbackResult;
-use crate::sleep::SleepPoint;
 use crate::spinlock::SpinLock;
+use crate::thread::Continuation;
+use crate::thread::Thread;
 
 pub struct Poller {
-    sleep_point: SharedRef<SleepPoint>,
     handle_id: HandleId,
     interests: PollEvent,
     ready: AtomicU8,
@@ -27,7 +27,7 @@ impl Poller {
         }
 
         self.ready.fetch_or(intersects.as_raw(), Ordering::SeqCst); // TODO: correct ordering
-        self.sleep_point.wake_all();
+        todo!("wakre up the thread");
     }
 }
 
@@ -39,14 +39,12 @@ impl Drop for Poller {
 
 pub struct Poll {
     entries: SpinLock<HashMap<HandleId, SharedRef<Poller>>>,
-    sleep_point: SharedRef<SleepPoint>,
 }
 
 impl Poll {
     pub fn new() -> SharedRef<Poll> {
         let poll = Poll {
             entries: SpinLock::new(HashMap::new()),
-            sleep_point: SharedRef::new(SleepPoint::new()),
         };
 
         SharedRef::new(poll)
@@ -54,7 +52,6 @@ impl Poll {
 
     pub fn add(&self, object: &AnyHandle, object_id: HandleId, interests: PollEvent) {
         let poller = SharedRef::new(Poller {
-            sleep_point: self.sleep_point.clone(),
             handle_id: object_id,
             interests,
             ready: AtomicU8::new(0),
@@ -75,8 +72,9 @@ impl Poll {
         self.entries.lock().insert(object_id, poller);
     }
 
-    pub fn wait(&self) -> Result<(PollEvent, HandleId), FtlError> {
-        self.sleep_point.sleep_loop(&self.entries, |entries| {
+    pub fn wait(self: SharedRef<Poll>) -> Result<(PollEvent, HandleId), FtlError> {
+        {
+            let mut entries = self.entries.lock();
             for entry in entries.values() {
                 let raw_ready = entry.ready.swap(0, Ordering::SeqCst); // TODO: correct ordering
                 let ready = PollEvent::from_raw(raw_ready);
@@ -89,10 +87,16 @@ impl Poll {
                     entries.remove(&handle_id);
                 }
 
-                return SleepCallbackResult::Ready(Ok((ready, handle_id)));
+                return Ok((ready, handle_id));
             }
+        }
 
-            SleepCallbackResult::Sleep
-        })
+        Thread::block_current(Continuation::PollWait(self));
+    }
+}
+
+impl fmt::Debug for Poll {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Poll")
     }
 }
