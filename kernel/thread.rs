@@ -3,6 +3,7 @@ use core::sync::atomic::AtomicIsize;
 use core::sync::atomic::Ordering;
 
 use crate::arch;
+use crate::cpuvar::current_thread;
 use crate::process::kernel_process;
 use crate::process::Process;
 use crate::ref_counted::SharedRef;
@@ -35,10 +36,15 @@ impl ThreadId {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Debug)]
+pub enum Continuation {
+    ChannelRecv(SharedRef<Channel>),
+}
+
+#[derive(Debug)]
 enum State {
     Runnable,
-    Blocked,
+    Blocked(Continuation),
 }
 
 struct Mutable {
@@ -113,6 +119,15 @@ impl Thread {
         debug_assert!(matches!(mutable.state, State::Runnable));
 
         mutable.state = State::Blocked;
+    }
+
+    pub fn block_current(continuation: Continuation) -> ! {
+        let thread = current_thread();
+        let mut mutable = thread.mutable.lock();
+        mutable.state = State::Blocked(continuation);
+
+        arch::yield_cpu();
+        todo!()
     }
 
     pub fn set_runnable(self: &SharedRef<Thread>) {

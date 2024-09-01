@@ -15,6 +15,8 @@ use crate::ref_counted::SharedRef;
 use crate::sleep::SleepCallbackResult;
 use crate::sleep::SleepPoint;
 use crate::spinlock::SpinLock;
+use crate::thread::Continuation;
+use crate::thread::Thread;
 
 struct MessageEntry {
     msginfo: MessageInfo,
@@ -162,22 +164,17 @@ impl Channel {
         Ok(Some(msginfo))
     }
 
-    pub fn recv(&self, msgbuffer: &mut MessageBuffer) -> Result<MessageInfo, FtlError> {
-        let entry = self.sleep_point.sleep_loop(&self.mutable, |mutable| {
-            if let Some(entry) = mutable.queue.pop_front() {
-                if !mutable.queue.is_empty() {
-                    for poller in &mutable.pollers {
-                        poller.set_ready(PollEvent::READABLE);
-                    }
-                }
-
-                return SleepCallbackResult::Ready(entry);
+    pub fn recv(self: &SharedRef<Channel>, msgbuffer: &mut MessageBuffer) -> Result<MessageInfo, FtlError> {
+        match self.try_recv(msgbuffer) {
+            Ok(ret) => {
+                return ret;
             }
-
-            SleepCallbackResult::Sleep
-        });
-
-        let msginfo = do_recv(msgbuffer, entry)?;
-        Ok(msginfo)
+            Err(FtlError::WouldBlock) => {
+                Thread::block_current(Continuation::ChannelRecv(self));
+            }
+            Err(err) => {
+                return Err(err);
+            }
+        }
     }
 }
