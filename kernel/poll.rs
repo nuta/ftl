@@ -9,14 +9,14 @@ use hashbrown::HashMap;
 
 use crate::handle::AnyHandle;
 use crate::ref_counted::SharedRef;
-use crate::sleep::SleepCallbackResult;
-use crate::sleep::SleepPoint;
+use crate::wait_queue::SleepCallbackResult;
+use crate::wait_queue::WaitQueue;
 use crate::spinlock::SpinLock;
 use crate::thread::Continuation;
 use crate::thread::Thread;
 
 pub struct Poller {
-    sleep_point: SharedRef<SleepPoint>,
+    sleep_point: SharedRef<WaitQueue>,
     handle_id: HandleId,
     interests: PollEvent,
     ready: AtomicU8,
@@ -42,14 +42,14 @@ impl Drop for Poller {
 
 pub struct Poll {
     entries: SpinLock<HashMap<HandleId, SharedRef<Poller>>>,
-    sleep_point: SharedRef<SleepPoint>,
+    sleep_point: SharedRef<WaitQueue>,
 }
 
 impl Poll {
     pub fn new() -> SharedRef<Poll> {
         let poll = Poll {
             entries: SpinLock::new(HashMap::new()),
-            sleep_point: SharedRef::new(SleepPoint::new()),
+            sleep_point: SharedRef::new(WaitQueue::new()),
         };
 
         SharedRef::new(poll)

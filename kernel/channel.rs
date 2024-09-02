@@ -13,8 +13,8 @@ use crate::cpuvar::current_thread;
 use crate::handle::AnyHandle;
 use crate::poll::Poller;
 use crate::ref_counted::SharedRef;
-use crate::sleep::SleepCallbackResult;
-use crate::sleep::SleepPoint;
+use crate::wait_queue::SleepCallbackResult;
+use crate::wait_queue::WaitQueue;
 use crate::spinlock::SpinLock;
 use crate::thread::Continuation;
 use crate::thread::Thread;
@@ -33,13 +33,13 @@ struct Mutable {
 
 pub struct Channel {
     mutable: SpinLock<Mutable>,
-    sleep_point: SleepPoint,
+    sleep_point: WaitQueue,
 }
 
 impl Channel {
     pub fn new() -> Result<(SharedRef<Channel>, SharedRef<Channel>), FtlError> {
         let ch0 = SharedRef::new(Channel {
-            sleep_point: SleepPoint::new(),
+            sleep_point: WaitQueue::new(),
             mutable: SpinLock::new(Mutable {
                 peer: None,
                 queue: VecDeque::new(),
@@ -47,7 +47,7 @@ impl Channel {
             }),
         });
         let ch1 = SharedRef::new(Channel {
-            sleep_point: SleepPoint::new(),
+            sleep_point: WaitQueue::new(),
             mutable: SpinLock::new(Mutable {
                 peer: None,
                 queue: VecDeque::new(),

@@ -6,7 +6,7 @@ use ftl_types::signal::SignalBits;
 
 use crate::poll::Poller;
 use crate::ref_counted::SharedRef;
-use crate::sleep::SleepPoint;
+use crate::wait_queue::WaitQueue;
 use crate::spinlock::SpinLock;
 
 struct Mutable {
@@ -16,13 +16,13 @@ struct Mutable {
 
 pub struct Signal {
     mutable: SpinLock<Mutable>,
-    sleep_point: SleepPoint,
+    sleep_point: WaitQueue,
 }
 
 impl Signal {
     pub fn new() -> Result<SharedRef<Signal>, FtlError> {
         let signal = Signal {
-            sleep_point: SleepPoint::new(),
+            sleep_point: WaitQueue::new(),
             mutable: SpinLock::new(Mutable {
                 pollers: Vec::new(),
                 pending: SignalBits::empty(),
