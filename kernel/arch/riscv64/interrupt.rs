@@ -1,6 +1,7 @@
 use core::arch::asm;
 use core::arch::global_asm;
 
+use super::switch::return_to_user;
 use super::plic;
 use super::switch::__wfi_point;
 
@@ -43,7 +44,7 @@ struct Frame {
 }
 
 #[no_mangle]
-extern "C" fn interrupt_handler(frame: *mut Frame) {
+extern "C" fn interrupt_handler(frame: *mut Frame) -> ! {
     let scause: u64;
     let sepc: u64;
     let stval: u64;
@@ -86,6 +87,11 @@ extern "C" fn interrupt_handler(frame: *mut Frame) {
         _ => "unknown",
     };
 
+    trace!(
+        "interrupt: {} (scause={:#x}), sepc: {:#x}, stval: {:#x}",
+        scause_str, scause, sepc, stval
+    );
+
     unsafe {
         if sepc == &__wfi_point as *const _ as u64 {
             // Skip WFI instruction.
@@ -95,11 +101,7 @@ extern "C" fn interrupt_handler(frame: *mut Frame) {
 
     if (is_intr, code) == (true, 9) {
         plic::handle_interrupt();
-        return;
     }
 
-    panic!(
-        "interrupt_handler: {} (scause={:#x}), sepc: {:#x}, stval: {:#x}",
-        scause_str, scause, sepc, stval
-    );
+    return_to_user();
 }

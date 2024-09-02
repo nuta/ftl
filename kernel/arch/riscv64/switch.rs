@@ -51,6 +51,7 @@ pub fn return_to_user() -> ! {
         let next = match GLOBAL_SCHEDULER.schedule(thread_to_enqueue) {
             Some(next) => next,
             None => {
+                drop(current_thread);
                 idle();
             }
         };
@@ -71,6 +72,8 @@ pub fn return_to_user() -> ! {
                 continue;
             }
             ContinuationResult::ReturnToUser => {
+                drop(current_thread);
+
                 // No continuation to run that is, the thread is not blocked. Resume the user.
                 restore_kernel_context(context);
             }

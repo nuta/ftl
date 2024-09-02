@@ -178,6 +178,9 @@ impl Thread {
         let mut mutable = thread.mutable.lock();
         mutable.state = State::Blocked(continuation);
 
+        drop(mutable);
+        drop(thread);
+
         arch::return_to_user();
     }
 

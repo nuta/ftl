@@ -87,7 +87,7 @@ impl Thread {
             context: Context {
                 ra: pc as usize,
                 sp,
-                s0: arg,
+                s1: arg,
                 ..Default::default()
             },
         }
