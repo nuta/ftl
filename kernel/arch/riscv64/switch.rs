@@ -1,0 +1,109 @@
+use core::arch::asm;
+use core::arch::global_asm;
+use core::mem::offset_of;
+
+use super::thread::Context;
+use crate::scheduler::GLOBAL_SCHEDULER;
+
+global_asm!(
+    r#"
+.text
+.global do_idle, __wfi_point
+do_idle:
+    fence
+    csrsi sstatus, 1 << 1
+__wfi_point:
+    wfi
+    csrci sstatus, 1 << 1
+    ret
+"#
+);
+
+extern "C" {
+    fn do_idle();
+    pub static __wfi_point: u8;
+}
+
+fn idle() -> ! {
+    loop {
+        unsafe {
+            asm!("wfi");
+        }
+    }
+}
+
+pub fn return_to_user() -> ! {
+    let cpuvar = crate::arch::cpuvar();
+    let mut current_thread = cpuvar.current_thread.borrow_mut();
+
+    // Preemptive scheduling: push the current thread back to the
+    // runqueue if it's still runnable.
+    let thread_to_enqueue = if current_thread.is_runnable() && !current_thread.is_idle_thread() {
+        Some(current_thread.clone())
+    } else {
+        None
+    };
+
+    // Get the next thread to run. If the runqueue is empty, run the
+    // idle thread.
+    let next = match GLOBAL_SCHEDULER.schedule(thread_to_enqueue) {
+        Some(next) => next,
+        None => {
+            idle();
+        }
+    };
+
+    *current_thread = next.clone();
+    if let Some(vmspace) = next.arch().vmspace.as_ref() {
+        vmspace.switch();
+    }
+
+    let context: *const Context = &next.arch().context as *const _ as *mut _;
+    restore_kernel_context(context);
+}
+
+fn restore_kernel_context(context: *const Context) -> ! {
+    unsafe {
+        asm!(
+            r#"
+                // Update CpuVar.arch.context
+                mv a0, {context}
+                sd a0, {context_offset}(tp)
+
+                ld ra, {ra_offset}(a0)
+                ld sp, {sp_offset}(a0)
+                ld s0, {s0_offset}(a0)
+                ld s1, {s1_offset}(a0)
+                ld s2, {s2_offset}(a0)
+                ld s3, {s3_offset}(a0)
+                ld s4, {s4_offset}(a0)
+                ld s5, {s5_offset}(a0)
+                ld s6, {s6_offset}(a0)
+                ld s7, {s7_offset}(a0)
+                ld s8, {s8_offset}(a0)
+                ld s9, {s9_offset}(a0)
+                ld s10, {s10_offset}(a0)
+                ld s11, {s11_offset}(a0)
+
+                ret
+            "#,
+            context = in (reg) context as usize,
+            context_offset = const offset_of!(crate::arch::CpuVar, context),
+            ra_offset = const offset_of!(Context, ra),
+            sp_offset = const offset_of!(Context, sp),
+            s0_offset = const offset_of!(Context, s0),
+            s1_offset = const offset_of!(Context, s1),
+            s2_offset = const offset_of!(Context, s2),
+            s3_offset = const offset_of!(Context, s3),
+            s4_offset = const offset_of!(Context, s4),
+            s5_offset = const offset_of!(Context, s5),
+            s6_offset = const offset_of!(Context, s6),
+            s7_offset = const offset_of!(Context, s7),
+            s8_offset = const offset_of!(Context, s8),
+            s9_offset = const offset_of!(Context, s9),
+            s10_offset = const offset_of!(Context, s10),
+            s11_offset = const offset_of!(Context, s11),
+            options(noreturn)
+        )
+    }
+}

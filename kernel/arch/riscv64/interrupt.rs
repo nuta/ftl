@@ -1,8 +1,8 @@
 use core::arch::asm;
 use core::arch::global_asm;
 
-use crate::arch::__wfi_point;
-use crate::arch::riscv64::plic;
+use super::plic;
+use super::switch::__wfi_point;
 
 global_asm!(include_str!("interrupt.S"));
 

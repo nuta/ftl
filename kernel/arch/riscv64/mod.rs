@@ -1,5 +1,4 @@
 use core::arch::asm;
-use core::arch::global_asm;
 
 use csr::write_stvec;
 use csr::TrapMode;
@@ -15,6 +14,7 @@ mod csr;
 mod interrupt;
 mod plic;
 mod sbi;
+mod switch;
 mod thread;
 mod vmspace;
 
@@ -24,11 +24,11 @@ pub use cpuvar::set_cpuvar;
 pub use cpuvar::CpuVar;
 pub use plic::ack_interrupt;
 pub use plic::create_interrupt;
+pub use switch::return_to_user;
 pub use thread::Thread;
 pub use vmspace::VmSpace;
 pub use vmspace::USERSPACE_END;
 pub use vmspace::USERSPACE_START;
-pub use thread::return_to_user;
 
 pub const PAGE_SIZE: usize = 4096;
 pub const NUM_CPUS_MAX: usize = 8;
@@ -41,25 +41,6 @@ pub fn paddr2vaddr(paddr: PAddr) -> Result<VAddr, FtlError> {
 pub fn vaddr2paddr(vaddr: VAddr) -> Result<PAddr, FtlError> {
     // Identical mapping.
     Ok(PAddr::new(vaddr.as_usize()))
-}
-
-global_asm!(
-    r#"
-.text
-.global do_idle, __wfi_point
-do_idle:
-    fence
-    csrsi sstatus, 1 << 1
-__wfi_point:
-    wfi
-    csrci sstatus, 1 << 1
-    ret
-"#
-);
-
-extern "C" {
-    fn do_idle();
-    pub static __wfi_point: u8;
 }
 
 pub fn halt() -> ! {

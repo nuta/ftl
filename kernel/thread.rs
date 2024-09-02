@@ -118,7 +118,6 @@ impl Thread {
         mutable.state = State::Blocked(continuation);
 
         arch::return_to_user();
-        todo!()
     }
 
     pub fn switch() -> ! {
