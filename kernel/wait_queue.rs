@@ -21,8 +21,8 @@ impl WaitQueue {
     }
 
     pub fn wake_all(&mut self) {
-        for waiter in self.queue.drain(..) {
-            waiter.set_runnable();
+        for thread in self.queue.drain(..) {
+            Thread::push_to_runqueue(thread);
         }
     }
 }

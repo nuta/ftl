@@ -2,6 +2,8 @@ use core::num::NonZeroIsize;
 use core::sync::atomic::AtomicIsize;
 use core::sync::atomic::Ordering;
 
+use ftl_types::error::FtlError;
+
 use crate::arch;
 use crate::channel::Channel;
 use crate::cpuvar::current_thread;
@@ -11,6 +13,7 @@ use crate::process::Process;
 use crate::ref_counted::SharedRef;
 use crate::scheduler::GLOBAL_SCHEDULER;
 use crate::spinlock::SpinLock;
+use crate::syscall::UAddr;
 use crate::vmspace::VmSpace;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -40,8 +43,19 @@ impl ThreadId {
 
 #[derive(Debug)]
 pub enum Continuation {
-    ChannelRecv(SharedRef<Channel>),
-    PollWait(SharedRef<Poll>),
+    ChannelRecv {
+        channel: SharedRef<Channel>,
+        msgbuffer: UAddr,
+    },
+    PollWait {
+        poll: SharedRef<Poll>,
+    },
+}
+
+pub enum ContinuationResult {
+    ReturnToUser,
+    ReturnToUserWith { ret: isize },
+    Yield,
 }
 
 #[derive(Debug)]
@@ -112,6 +126,53 @@ impl Thread {
         &self.arch
     }
 
+    pub fn set_runnable(&self) {
+        let mut mutable = self.mutable.lock();
+        mutable.state = State::Runnable;
+    }
+
+    pub fn run_continuation(&self) -> ContinuationResult {
+        let mut mutable = self.mutable.lock();
+        let continuation = match &mut mutable.state {
+            State::Blocked(continuation) => continuation,
+            State::Runnable => {
+                return ContinuationResult::ReturnToUser;
+            }
+        };
+
+        match continuation {
+            Continuation::ChannelRecv { channel, msgbuffer } => {
+                match channel.recv(*msgbuffer, false) {
+                    Err(FtlError::WouldBlock) => ContinuationResult::Yield,
+                    Ok(msginfo) => {
+                        mutable.state = State::Runnable;
+                        ContinuationResult::ReturnToUserWith {
+                            ret: msginfo.as_raw(),
+                        }
+                    }
+                    Err(e) => {
+                        mutable.state = State::Runnable;
+                        ContinuationResult::ReturnToUserWith { ret: e as isize }
+                    }
+                }
+            }
+            Continuation::PollWait { poll } => {
+                match poll.wait(false) {
+                    Err(FtlError::WouldBlock) => ContinuationResult::Yield,
+                    Ok((event, handle_id)) => {
+                        mutable.state = State::Runnable;
+                        todo!("PollWait");
+                        ContinuationResult::ReturnToUserWith { ret: 0 }
+                    }
+                    Err(e) => {
+                        mutable.state = State::Runnable;
+                        ContinuationResult::ReturnToUserWith { ret: e as isize }
+                    }
+                }
+            }
+        }
+    }
+
     pub fn block_current(continuation: Continuation) -> ! {
         let thread = current_thread();
         let mut mutable = thread.mutable.lock();
@@ -124,11 +185,7 @@ impl Thread {
         arch::return_to_user();
     }
 
-    pub fn set_runnable(self: &SharedRef<Thread>) {
-        let mut mutable = self.mutable.lock();
-        debug_assert!(matches!(mutable.state, State::Blocked(_)));
-
-        mutable.state = State::Runnable;
-        GLOBAL_SCHEDULER.push(self.clone());
+    pub fn push_to_runqueue(this: SharedRef<Thread>) {
+        GLOBAL_SCHEDULER.push(this);
     }
 }

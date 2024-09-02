@@ -14,6 +14,7 @@ use crate::handle::AnyHandle;
 use crate::poll::Poller;
 use crate::ref_counted::SharedRef;
 use crate::spinlock::SpinLock;
+use crate::syscall::UAddr;
 use crate::thread::Continuation;
 use crate::thread::Thread;
 use crate::wait_queue::WaitQueue;
@@ -130,7 +131,7 @@ impl Channel {
 
     pub fn recv(
         self: &SharedRef<Channel>,
-        msgbuffer: &mut MessageBuffer,
+        msgbuffer: UAddr,
         blocking: bool,
     ) -> Result<MessageInfo, FtlError> {
         let mut entry = {
@@ -140,7 +141,10 @@ impl Channel {
                 None => {
                     if blocking {
                         mutable.wait_queue.listen();
-                        Thread::block_current(Continuation::ChannelRecv(self.clone()));
+                        Thread::block_current(Continuation::ChannelRecv {
+                            channel: self.clone(),
+                            msgbuffer,
+                        });
                     }
 
                     return Err(FtlError::WouldBlock);
@@ -155,6 +159,8 @@ impl Channel {
 
             entry
         };
+
+        let msgbuffer: &mut MessageBuffer = unsafe { msgbuffer.as_mut_super_unsafe() };
 
         // Install handles into the current (receiver) process.
         let current_thread = current_thread();

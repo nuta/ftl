@@ -4,6 +4,7 @@ use core::mem::offset_of;
 
 use super::thread::Context;
 use crate::scheduler::GLOBAL_SCHEDULER;
+use crate::thread::ContinuationResult;
 
 global_asm!(
     r#"
@@ -33,33 +34,54 @@ fn idle() -> ! {
 }
 
 pub fn return_to_user() -> ! {
-    let cpuvar = crate::arch::cpuvar();
-    let mut current_thread = cpuvar.current_thread.borrow_mut();
+    loop {
+        let mut current_thread = super::cpuvar().current_thread.borrow_mut();
 
-    // Preemptive scheduling: push the current thread back to the
-    // runqueue if it's still runnable.
-    let thread_to_enqueue = if current_thread.is_runnable() && !current_thread.is_idle_thread() {
-        Some(current_thread.clone())
-    } else {
-        None
-    };
+        // Preemptive scheduling: push the current thread back to the
+        // runqueue if it's still runnable.
+        let thread_to_enqueue = if current_thread.is_runnable() && !current_thread.is_idle_thread()
+        {
+            Some(current_thread.clone())
+        } else {
+            None
+        };
 
-    // Get the next thread to run. If the runqueue is empty, run the
-    // idle thread.
-    let next = match GLOBAL_SCHEDULER.schedule(thread_to_enqueue) {
-        Some(next) => next,
-        None => {
-            idle();
+        // Get the next thread to run. If the runqueue is empty, run the
+        // idle thread.
+        let next = match GLOBAL_SCHEDULER.schedule(thread_to_enqueue) {
+            Some(next) => next,
+            None => {
+                idle();
+            }
+        };
+
+        // Make the next thread the current thread.
+        *current_thread = next;
+
+        // Switch to the new thread's address space.
+        if let Some(vmspace) = current_thread.arch().vmspace.as_ref() {
+            vmspace.switch();
         }
-    };
 
-    *current_thread = next.clone();
-    if let Some(vmspace) = next.arch().vmspace.as_ref() {
-        vmspace.switch();
+        // Run the next thread.
+        let context: *mut Context = &current_thread.arch().context as *const _ as *mut _;
+        match current_thread.run_continuation() {
+            ContinuationResult::Yield => {
+                // The thread is blocked. Yield the CPU.
+                continue;
+            }
+            ContinuationResult::ReturnToUser => {
+                // No continuation to run that is, the thread is not blocked. Resume the user.
+                restore_kernel_context(context);
+            }
+            ContinuationResult::ReturnToUserWith { ret } => {
+                // FIXME:
+                unsafe {
+                    (*context).a0 = ret as usize;
+                }
+            }
+        }
     }
-
-    let context: *const Context = &next.arch().context as *const _ as *mut _;
-    restore_kernel_context(context);
 }
 
 fn restore_kernel_context(context: *const Context) -> ! {

@@ -86,7 +86,7 @@ impl Poll {
         mutable.entries.insert(object_id, poller);
     }
 
-    pub fn wait(self: SharedRef<Poll>) -> Result<(PollEvent, HandleId), FtlError> {
+    pub fn wait(self: &SharedRef<Poll>, blocking: bool) -> Result<(PollEvent, HandleId), FtlError> {
         {
             let mut mutable = self.mutable.lock();
             for entry in mutable.entries.values() {
@@ -105,7 +105,11 @@ impl Poll {
             }
         }
 
-        Thread::block_current(Continuation::PollWait(self));
+        if blocking {
+            Thread::block_current(Continuation::PollWait { poll: self.clone() });
+        }
+
+        Err(FtlError::WouldBlock)
     }
 }
 
