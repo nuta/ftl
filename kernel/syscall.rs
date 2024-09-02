@@ -63,7 +63,7 @@ fn channel_recv(handle: HandleId, msgbuffer: &mut MessageBuffer) -> Result<Messa
             .clone()
     };
 
-    ch.recv(msgbuffer)
+    Handle::into_shared_ref(ch).recv(msgbuffer)
 }
 
 fn channel_try_recv(
@@ -80,11 +80,7 @@ fn channel_try_recv(
             .clone()
     };
 
-    match ch.try_recv(msgbuffer) {
-        Ok(Some(msginfo)) => Ok(msginfo),
-        Ok(None) => Err(FtlError::WouldBlock),
-        Err(e) => Err(e),
-    }
+    ch.try_recv(msgbuffer)
 }
 
 fn folio_create(len: usize) -> Result<HandleId, FtlError> {
@@ -162,7 +158,7 @@ fn poll_wait(handle_id: HandleId) -> Result<PollSyscallResult, FtlError> {
             .clone()
     };
 
-    let (ev, ready_handle_id) = poll.wait()?;
+    let (ev, ready_handle_id) = Handle::into_shared_ref(poll).wait()?;
     Ok(PollSyscallResult::new(ev, ready_handle_id))
 }
 

@@ -14,26 +14,6 @@ use crate::vmspace::VmSpace;
 
 const KERNEL_STACK_SIZE: ByteSize = ByteSize::from_kib(64);
 
-/// The entry point of kernel threads.
-#[no_mangle]
-#[naked]
-extern "C" fn kernel_entry() -> ! {
-    unsafe {
-        asm!(
-            r#"
-                mv ra, s1    // The desired entry point for the thread.
-                mv a0, s2    // The argument for the thread.
-                ret
-            "#,
-            options(noreturn)
-        )
-    }
-}
-
-fn switch_to_next() {
-    GLOBAL_SCHEDULER.yield_cpu();
-}
-
 /// # Why `#[naked]`?
 ///
 /// - To get the correct return address from ra. #[naked] prevents inlining.
@@ -81,8 +61,36 @@ pub extern "C" fn yield_cpu() {
     }
 }
 
-/// Resumes a thread.
-fn resume(next: *mut Context) -> ! {
+pub fn switch_to_next(next: *mut Context) -> ! {
+    let cpuvar = cpuvar();
+    let mut current_thread = cpuvar.current_thread.borrow_mut();
+
+    // Preemptive scheduling: push the current thread back to the
+    // runqueue if it's still runnable.
+    let thread_to_enqueue = if current_thread.is_runnable() && !current_thread.is_idle_thread() {
+        Some(current_thread.clone())
+    } else {
+        None
+    };
+
+    // Get the next thread to run. If the runqueue is empty, run the
+    // idle thread.
+    let next = match GLOBAL_SCHEDULER.schedule(thread_to_enqueue) {
+        Some(next) => next,
+        None => {
+            super::idle();
+        }
+    };
+
+    *current_thread = next.clone();
+    if let Some(vmspace) = next.arch().vmspace.as_ref() {
+        vmspace.switch();
+    }
+
+    resume_thread(&next.arch().context as *const _ as *mut _);
+}
+
+fn resume_thread(next: *mut Context) -> ! {
     unsafe {
         asm!(
             r#"
@@ -154,7 +162,7 @@ pub struct Context {
 
 pub struct Thread {
     pub(super) context: Context,
-    vmspace: Option<SharedRef<VmSpace>>,
+    pub(super) vmspace: Option<SharedRef<VmSpace>>,
     #[allow(dead_code)]
     stack_folio: Option<Handle<Folio>>,
 }
@@ -197,13 +205,5 @@ impl Thread {
                 ..Default::default()
             },
         }
-    }
-
-    pub fn resume(&self) -> ! {
-        if let Some(vmspace) = self.vmspace.as_ref() {
-            vmspace.switch();
-        }
-
-        resume(&self.context as *const _ as *mut _);
     }
 }

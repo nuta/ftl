@@ -1,5 +1,6 @@
 use alloc::collections::VecDeque;
 use alloc::vec::Vec;
+use core::fmt;
 
 use ftl_inlinedvec::InlinedVec;
 use ftl_types::error::FtlError;
@@ -15,6 +16,8 @@ use crate::ref_counted::SharedRef;
 use crate::sleep::SleepCallbackResult;
 use crate::sleep::SleepPoint;
 use crate::spinlock::SpinLock;
+use crate::thread::Continuation;
+use crate::thread::Thread;
 
 struct MessageEntry {
     msginfo: MessageInfo,
@@ -31,25 +34,6 @@ struct Mutable {
 pub struct Channel {
     mutable: SpinLock<Mutable>,
     sleep_point: SleepPoint,
-}
-
-fn do_recv(
-    msgbuffer: &mut MessageBuffer,
-    mut entry: MessageEntry,
-) -> Result<MessageInfo, FtlError> {
-    // Install handles into the current (receiver) process.
-    let current_thread = current_thread();
-    let mut handle_table = current_thread.process().handles().lock();
-    for (i, any_handle) in entry.handles.drain(..).enumerate() {
-        // TODO: Define the expected behavior when it fails to add a handle.
-        msgbuffer.handles[i] = handle_table.add(any_handle)?;
-    }
-
-    // Copy message data into the buffer.
-    let data_len = entry.msginfo.data_len();
-    msgbuffer.data[0..data_len].copy_from_slice(&entry.data[0..data_len]);
-
-    Ok(entry.msginfo)
 }
 
 impl Channel {
@@ -145,8 +129,8 @@ impl Channel {
         Ok(())
     }
 
-    pub fn try_recv(&self, msgbuffer: &mut MessageBuffer) -> Result<Option<MessageInfo>, FtlError> {
-        let entry = {
+    pub fn try_recv(&self, msgbuffer: &mut MessageBuffer) -> Result<MessageInfo, FtlError> {
+        let mut entry = {
             let mut mutable = self.mutable.lock();
             let entry = mutable.queue.pop_front().ok_or(FtlError::WouldBlock)?;
             if !mutable.queue.is_empty() {
@@ -158,26 +142,41 @@ impl Channel {
             entry
         };
 
-        let msginfo = do_recv(msgbuffer, entry)?;
-        Ok(Some(msginfo))
+        // Install handles into the current (receiver) process.
+        let current_thread = current_thread();
+        let mut handle_table = current_thread.process().handles().lock();
+        for (i, any_handle) in entry.handles.drain(..).enumerate() {
+            // TODO: Define the expected behavior when it fails to add a handle.
+            msgbuffer.handles[i] = handle_table.add(any_handle)?;
+        }
+
+        // Copy message data into the buffer.
+        let data_len = entry.msginfo.data_len();
+        msgbuffer.data[0..data_len].copy_from_slice(&entry.data[0..data_len]);
+
+        Ok(entry.msginfo)
     }
 
-    pub fn recv(&self, msgbuffer: &mut MessageBuffer) -> Result<MessageInfo, FtlError> {
-        let entry = self.sleep_point.sleep_loop(&self.mutable, |mutable| {
-            if let Some(entry) = mutable.queue.pop_front() {
-                if !mutable.queue.is_empty() {
-                    for poller in &mutable.pollers {
-                        poller.set_ready(PollEvent::READABLE);
-                    }
-                }
-
-                return SleepCallbackResult::Ready(entry);
+    pub fn recv(
+        self: SharedRef<Channel>,
+        msgbuffer: &mut MessageBuffer,
+    ) -> Result<MessageInfo, FtlError> {
+        match self.try_recv(msgbuffer) {
+            Ok(ret) => {
+                return Ok(ret);
             }
+            Err(FtlError::WouldBlock) => {
+                Thread::block_current(Continuation::ChannelRecv(self));
+            }
+            Err(err) => {
+                return Err(err);
+            }
+        }
+    }
+}
 
-            SleepCallbackResult::Sleep
-        });
-
-        let msginfo = do_recv(msgbuffer, entry)?;
-        Ok(msginfo)
+impl fmt::Debug for Channel {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Channel")
     }
 }

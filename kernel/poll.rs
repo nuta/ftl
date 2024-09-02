@@ -1,3 +1,4 @@
+use core::fmt;
 use core::sync::atomic::AtomicU8;
 use core::sync::atomic::Ordering;
 
@@ -11,6 +12,8 @@ use crate::ref_counted::SharedRef;
 use crate::sleep::SleepCallbackResult;
 use crate::sleep::SleepPoint;
 use crate::spinlock::SpinLock;
+use crate::thread::Continuation;
+use crate::thread::Thread;
 
 pub struct Poller {
     sleep_point: SharedRef<SleepPoint>,
@@ -75,8 +78,9 @@ impl Poll {
         self.entries.lock().insert(object_id, poller);
     }
 
-    pub fn wait(&self) -> Result<(PollEvent, HandleId), FtlError> {
-        self.sleep_point.sleep_loop(&self.entries, |entries| {
+    pub fn wait(self: SharedRef<Poll>) -> Result<(PollEvent, HandleId), FtlError> {
+        {
+            let mut entries = self.entries.lock();
             for entry in entries.values() {
                 let raw_ready = entry.ready.swap(0, Ordering::SeqCst); // TODO: correct ordering
                 let ready = PollEvent::from_raw(raw_ready);
@@ -89,10 +93,16 @@ impl Poll {
                     entries.remove(&handle_id);
                 }
 
-                return SleepCallbackResult::Ready(Ok((ready, handle_id)));
+                return Ok((ready, handle_id));
             }
+        }
 
-            SleepCallbackResult::Sleep
-        })
+        Thread::block_current(Continuation::PollWait(self));
+    }
+}
+
+impl fmt::Debug for Poll {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Poll")
     }
 }

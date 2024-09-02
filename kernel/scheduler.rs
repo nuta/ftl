@@ -22,28 +22,12 @@ impl Scheduler {
         self.runqueue.lock().push_back(new_thread);
     }
 
-    pub fn yield_cpu(&self) {
-        let next = {
-            let cpuvar = cpuvar();
-            let mut current_thread = cpuvar.current_thread.borrow_mut();
-            let mut runqueue = self.runqueue.lock();
-
-            // Preemptive scheduling: push the current thread back to the
-            // runqueue if it's still runnable.
-            if current_thread.is_runnable() && !current_thread.is_idle_thread() {
-                runqueue.push_back(current_thread.clone());
-            }
-
-            // Get the next thread to run. If the runqueue is empty, run the
-            // idle thread.
-            let next = runqueue
-                .pop_front()
-                .unwrap_or_else(|| cpuvar.idle_thread.clone());
-
-            *current_thread = next.clone();
-            next
-        };
-
-        next.resume();
+    pub fn schedule(
+        &self,
+        thread_to_enqueue: Option<SharedRef<Thread>>,
+    ) -> Option<SharedRef<Thread>> {
+        let mut runqueue = self.runqueue.lock();
+        runqueue.push_back(current_thread.clone());
+        runqueue.lock().pop_front()
     }
 }
