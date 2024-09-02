@@ -63,7 +63,7 @@ fn channel_recv(handle: HandleId, msgbuffer: &mut MessageBuffer) -> Result<Messa
             .clone()
     };
 
-    Handle::into_shared_ref(ch).recv(msgbuffer)
+    Handle::into_shared_ref(ch).recv(msgbuffer, true)
 }
 
 fn channel_try_recv(
@@ -80,7 +80,7 @@ fn channel_try_recv(
             .clone()
     };
 
-    ch.try_recv(msgbuffer)
+    Handle::into_shared_ref(ch).recv(msgbuffer, false)
 }
 
 fn folio_create(len: usize) -> Result<HandleId, FtlError> {

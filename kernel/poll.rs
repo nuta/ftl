@@ -9,14 +9,13 @@ use hashbrown::HashMap;
 
 use crate::handle::AnyHandle;
 use crate::ref_counted::SharedRef;
-use crate::wait_queue::SleepCallbackResult;
-use crate::wait_queue::WaitQueue;
 use crate::spinlock::SpinLock;
 use crate::thread::Continuation;
 use crate::thread::Thread;
+use crate::wait_queue::WaitQueue;
 
 pub struct Poller {
-    sleep_point: SharedRef<WaitQueue>,
+    mutable: SharedRef<SpinLock<Mutable>>,
     handle_id: HandleId,
     interests: PollEvent,
     ready: AtomicU8,
@@ -30,7 +29,9 @@ impl Poller {
         }
 
         self.ready.fetch_or(intersects.as_raw(), Ordering::SeqCst); // TODO: correct ordering
-        self.sleep_point.wake_all();
+
+        let mut mutable = self.mutable.lock();
+        mutable.wait_queue.wake_all();
     }
 }
 
@@ -40,16 +41,22 @@ impl Drop for Poller {
     }
 }
 
+struct Mutable {
+    entries: HashMap<HandleId, SharedRef<Poller>>,
+    wait_queue: WaitQueue,
+}
+
 pub struct Poll {
-    entries: SpinLock<HashMap<HandleId, SharedRef<Poller>>>,
-    sleep_point: SharedRef<WaitQueue>,
+    mutable: SharedRef<SpinLock<Mutable>>,
 }
 
 impl Poll {
     pub fn new() -> SharedRef<Poll> {
         let poll = Poll {
-            entries: SpinLock::new(HashMap::new()),
-            sleep_point: SharedRef::new(WaitQueue::new()),
+            mutable: SharedRef::new(SpinLock::new(Mutable {
+                entries: HashMap::new(),
+                wait_queue: WaitQueue::new(),
+            })),
         };
 
         SharedRef::new(poll)
@@ -57,7 +64,7 @@ impl Poll {
 
     pub fn add(&self, object: &AnyHandle, object_id: HandleId, interests: PollEvent) {
         let poller = SharedRef::new(Poller {
-            sleep_point: self.sleep_point.clone(),
+            mutable: self.mutable.clone(),
             handle_id: object_id,
             interests,
             ready: AtomicU8::new(0),
@@ -75,13 +82,14 @@ impl Poll {
             }
         }
 
-        self.entries.lock().insert(object_id, poller);
+        let mut mutable = self.mutable.lock();
+        mutable.entries.insert(object_id, poller);
     }
 
     pub fn wait(self: SharedRef<Poll>) -> Result<(PollEvent, HandleId), FtlError> {
         {
-            let mut entries = self.entries.lock();
-            for entry in entries.values() {
+            let mut mutable = self.mutable.lock();
+            for entry in mutable.entries.values() {
                 let raw_ready = entry.ready.swap(0, Ordering::SeqCst); // TODO: correct ordering
                 let ready = PollEvent::from_raw(raw_ready);
                 if ready.is_empty() {
@@ -90,7 +98,7 @@ impl Poll {
 
                 let handle_id = entry.handle_id;
                 if ready.contains(PollEvent::CLOSED) {
-                    entries.remove(&handle_id);
+                    mutable.entries.remove(&handle_id);
                 }
 
                 return Ok((ready, handle_id));

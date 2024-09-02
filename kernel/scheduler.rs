@@ -1,6 +1,5 @@
 use alloc::collections::VecDeque;
 
-use crate::arch::cpuvar;
 use crate::ref_counted::SharedRef;
 use crate::spinlock::SpinLock;
 use crate::thread::Thread;
@@ -27,7 +26,11 @@ impl Scheduler {
         thread_to_enqueue: Option<SharedRef<Thread>>,
     ) -> Option<SharedRef<Thread>> {
         let mut runqueue = self.runqueue.lock();
-        runqueue.push_back(current_thread.clone());
-        runqueue.lock().pop_front()
+
+        if let Some(thread) = thread_to_enqueue {
+            runqueue.push_back(thread);
+        }
+
+        runqueue.pop_front()
     }
 }

@@ -1,30 +1,27 @@
-use alloc::vec::Vec;
+use alloc::collections::VecDeque;
 
-use crate::arch;
 use crate::cpuvar::current_thread;
 use crate::ref_counted::SharedRef;
-use crate::spinlock::SpinLock;
-use crate::spinlock::SpinLockGuard;
 use crate::thread::Thread;
 
 pub struct WaitQueue {
-    queue: SpinLock<Vec<SharedRef<Thread>>>,
+    queue: VecDeque<SharedRef<Thread>>,
 }
 
 impl WaitQueue {
     pub const fn new() -> WaitQueue {
         WaitQueue {
-            queue: SpinLock::new(Vec::new()),
+            queue: VecDeque::new(),
         }
     }
 
-    pub fn listen(&self) {
+    pub fn listen(&mut self) {
         let thread = current_thread();
-        self.queue.lock().push(thread);
+        self.queue.push_back(thread.clone());
     }
 
-    pub fn wake_all(&self) {
-        for waiter in self.queue.lock().drain(..) {
+    pub fn wake_all(&mut self) {
+        for waiter in self.queue.drain(..) {
             waiter.set_runnable();
         }
     }

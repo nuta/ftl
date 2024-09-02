@@ -117,8 +117,12 @@ impl Thread {
         let mut mutable = thread.mutable.lock();
         mutable.state = State::Blocked(continuation);
 
-        arch::yield_cpu();
+        arch::return_to_user();
         todo!()
+    }
+
+    pub fn switch() -> ! {
+        arch::return_to_user();
     }
 
     pub fn set_runnable(self: &SharedRef<Thread>) {

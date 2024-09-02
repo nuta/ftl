@@ -14,55 +14,16 @@ use crate::vmspace::VmSpace;
 
 const KERNEL_STACK_SIZE: ByteSize = ByteSize::from_kib(64);
 
-/// # Why `#[naked]`?
-///
-/// - To get the correct return address from ra. #[naked] prevents inlining.
-/// - To eliminate the needless prologue.
-#[naked]
-pub extern "C" fn yield_cpu() {
-    unsafe {
-        asm!(
-            r#"
-                ld a0, {context_offset}(tp)
-                sd ra, {ra_offset}(a0)
-                sd sp, {sp_offset}(a0)
-                sd fp, {fp_offset}(a0)
-                sd s1, {s1_offset}(a0)
-                sd s2, {s2_offset}(a0)
-                sd s3, {s3_offset}(a0)
-                sd s4, {s4_offset}(a0)
-                sd s5, {s5_offset}(a0)
-                sd s6, {s6_offset}(a0)
-                sd s7, {s7_offset}(a0)
-                sd s8, {s8_offset}(a0)
-                sd s9, {s9_offset}(a0)
-                sd s10, {s10_offset}(a0)
-                sd s11, {s11_offset}(a0)
-                j {switch_to_next}
-            "#,
-            context_offset = const offset_of!(CpuVar, context),
-            ra_offset = const offset_of!(Context, ra),
-            sp_offset = const offset_of!(Context, sp),
-            fp_offset = const offset_of!(Context, fp),
-            s1_offset = const offset_of!(Context, s1),
-            s2_offset = const offset_of!(Context, s2),
-            s3_offset = const offset_of!(Context, s3),
-            s4_offset = const offset_of!(Context, s4),
-            s5_offset = const offset_of!(Context, s5),
-            s6_offset = const offset_of!(Context, s6),
-            s7_offset = const offset_of!(Context, s7),
-            s8_offset = const offset_of!(Context, s8),
-            s9_offset = const offset_of!(Context, s9),
-            s10_offset = const offset_of!(Context, s10),
-            s11_offset = const offset_of!(Context, s11),
-            switch_to_next = sym switch_to_next,
-            options(noreturn)
-        )
+fn idle () -> ! {
+    loop {
+        unsafe {
+            asm!("wfi");
+        }
     }
 }
 
-pub fn switch_to_next(next: *mut Context) -> ! {
-    let cpuvar = cpuvar();
+pub fn return_to_user() -> ! {
+    let cpuvar = crate::arch::cpuvar();
     let mut current_thread = cpuvar.current_thread.borrow_mut();
 
     // Preemptive scheduling: push the current thread back to the
@@ -78,7 +39,7 @@ pub fn switch_to_next(next: *mut Context) -> ! {
     let next = match GLOBAL_SCHEDULER.schedule(thread_to_enqueue) {
         Some(next) => next,
         None => {
-            super::idle();
+            idle();
         }
     };
 
@@ -87,10 +48,7 @@ pub fn switch_to_next(next: *mut Context) -> ! {
         vmspace.switch();
     }
 
-    resume_thread(&next.arch().context as *const _ as *mut _);
-}
-
-fn resume_thread(next: *mut Context) -> ! {
+    let context: *const Context = &next.arch().context as *const _ as *mut _;
     unsafe {
         asm!(
             r#"

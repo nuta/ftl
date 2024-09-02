@@ -13,11 +13,10 @@ use crate::cpuvar::current_thread;
 use crate::handle::AnyHandle;
 use crate::poll::Poller;
 use crate::ref_counted::SharedRef;
-use crate::wait_queue::SleepCallbackResult;
-use crate::wait_queue::WaitQueue;
 use crate::spinlock::SpinLock;
 use crate::thread::Continuation;
 use crate::thread::Thread;
+use crate::wait_queue::WaitQueue;
 
 struct MessageEntry {
     msginfo: MessageInfo,
@@ -29,29 +28,29 @@ struct Mutable {
     peer: Option<SharedRef<Channel>>,
     queue: VecDeque<MessageEntry>,
     pollers: Vec<SharedRef<Poller>>,
+    wait_queue: WaitQueue,
 }
 
 pub struct Channel {
     mutable: SpinLock<Mutable>,
-    sleep_point: WaitQueue,
 }
 
 impl Channel {
     pub fn new() -> Result<(SharedRef<Channel>, SharedRef<Channel>), FtlError> {
         let ch0 = SharedRef::new(Channel {
-            sleep_point: WaitQueue::new(),
             mutable: SpinLock::new(Mutable {
                 peer: None,
                 queue: VecDeque::new(),
                 pollers: Vec::new(),
+                wait_queue: WaitQueue::new(),
             }),
         });
         let ch1 = SharedRef::new(Channel {
-            sleep_point: WaitQueue::new(),
             mutable: SpinLock::new(Mutable {
                 peer: None,
                 queue: VecDeque::new(),
                 pollers: Vec::new(),
+                wait_queue: WaitQueue::new(),
             }),
         });
 
@@ -120,7 +119,7 @@ impl Channel {
         let peer_ch = mutable.peer.as_ref().ok_or(FtlError::NoPeer)?;
         let mut peer_mutable = peer_ch.mutable.lock();
         peer_mutable.queue.push_back(entry);
-        peer_ch.sleep_point.wake_all();
+        peer_mutable.wait_queue.wake_all();
 
         for poller in &peer_mutable.pollers {
             poller.set_ready(PollEvent::READABLE);
@@ -129,10 +128,25 @@ impl Channel {
         Ok(())
     }
 
-    pub fn try_recv(&self, msgbuffer: &mut MessageBuffer) -> Result<MessageInfo, FtlError> {
+    pub fn recv(
+        self: &SharedRef<Channel>,
+        msgbuffer: &mut MessageBuffer,
+        blocking: bool,
+    ) -> Result<MessageInfo, FtlError> {
         let mut entry = {
             let mut mutable = self.mutable.lock();
-            let entry = mutable.queue.pop_front().ok_or(FtlError::WouldBlock)?;
+            let entry = match mutable.queue.pop_front() {
+                Some(entry) => entry,
+                None => {
+                    if blocking {
+                        mutable.wait_queue.listen();
+                        Thread::block_current(Continuation::ChannelRecv(self.clone()));
+                    }
+
+                    return Err(FtlError::WouldBlock);
+                }
+            };
+
             if !mutable.queue.is_empty() {
                 for poller in &mutable.pollers {
                     poller.set_ready(PollEvent::READABLE);
@@ -155,23 +169,6 @@ impl Channel {
         msgbuffer.data[0..data_len].copy_from_slice(&entry.data[0..data_len]);
 
         Ok(entry.msginfo)
-    }
-
-    pub fn recv(
-        self: SharedRef<Channel>,
-        msgbuffer: &mut MessageBuffer,
-    ) -> Result<MessageInfo, FtlError> {
-        match self.try_recv(msgbuffer) {
-            Ok(ret) => {
-                return Ok(ret);
-            }
-            Err(FtlError::WouldBlock) => {
-                Thread::block_current(Continuation::ChannelRecv(self));
-            }
-            Err(err) => {
-                return Err(err);
-            }
-        }
     }
 }
 
