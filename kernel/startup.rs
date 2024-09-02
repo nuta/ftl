@@ -198,7 +198,6 @@ impl<'a> StartupAppLoader<'a> {
                 });
         }
 
-        trace!("pc: {:x}", entry_addr);
         let thread = Thread::spawn_kernel(
             proc.clone(),
             self.vmspace.clone(),

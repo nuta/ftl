@@ -83,10 +83,13 @@ impl Thread {
 
         // TODO: Set sstatus manually.
         // TODO: Enable interrupts.
-        let sstatus: usize;
+        let mut sstatus: usize;
         unsafe {
             core::arch::asm!("csrr {}, sstatus", out(reg) sstatus);
         }
+
+        // Set SPP to 1.
+        sstatus |= 1 << 8;
 
         let sp = stack_vaddr.as_usize() + stack_size;
         Thread {

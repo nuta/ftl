@@ -62,6 +62,8 @@ pub fn return_to_user() -> ! {
         // Switch to the new thread's address space.
         if let Some(vmspace) = current_thread.arch().vmspace.as_ref() {
             vmspace.switch();
+        } else {
+            panic!("did not switch satp");
         }
 
         // Run the next thread.
