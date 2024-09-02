@@ -91,10 +91,7 @@ fn restore_kernel_context(context: *const Context) -> ! {
     unsafe {
         asm!(
             r#"
-                // Update CpuVar.arch.context
-                mv a0, {context}
-                sd a0, {context_offset}(tp)
-
+                sd a0, {context_offset}(tp) // Update CpuVar.arch.context
                 ld ra, {ra_offset}(a0)
                 ld sp, {sp_offset}(a0)
                 ld s0, {s0_offset}(a0)
@@ -112,7 +109,7 @@ fn restore_kernel_context(context: *const Context) -> ! {
 
                 ret
             "#,
-            context = in (reg) context as usize,
+            in ("a0") context as usize,
             context_offset = const offset_of!(crate::arch::CpuVar, context),
             ra_offset = const offset_of!(Context, ra),
             sp_offset = const offset_of!(Context, sp),
