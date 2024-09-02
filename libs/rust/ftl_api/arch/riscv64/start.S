@@ -6,6 +6,8 @@ start:
     mv ra, zero
     mv fp, zero
     la sp, __stack_top
+
+    mv a0, s0
     call ftl_app_main
 
     // Reachable if main returns.

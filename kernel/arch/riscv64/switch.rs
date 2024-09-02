@@ -28,7 +28,7 @@ extern "C" {
 fn idle() -> ! {
     loop {
         unsafe {
-            asm!("wfi");
+            do_idle();
         }
     }
 }
