@@ -2,6 +2,7 @@ use core::num::NonZeroIsize;
 use core::sync::atomic::AtomicIsize;
 use core::sync::atomic::Ordering;
 
+use ftl_types::address::VAddr;
 use ftl_types::error::FtlError;
 
 use crate::arch;
@@ -90,7 +91,7 @@ impl Thread {
     pub fn spawn_kernel(
         process: SharedRef<Process>,
         vmspace: SharedRef<VmSpace>,
-        pc: fn(usize),
+        pc: usize,
         arg: usize,
     ) -> SharedRef<Thread> {
         let thread = SharedRef::new(Thread {

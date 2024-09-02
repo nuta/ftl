@@ -157,7 +157,6 @@ impl<'a> StartupAppLoader<'a> {
         mut env: EnvironSerializer,
         handles: Vec<AnyHandle>,
     ) {
-        let entry = unsafe { core::mem::transmute(entry_addr) };
         let proc = SharedRef::new(Process::create());
 
         let mut handle_table = proc.handles().lock();
@@ -199,10 +198,11 @@ impl<'a> StartupAppLoader<'a> {
                 });
         }
 
+        trace!("pc: {:x}", entry_addr);
         let thread = Thread::spawn_kernel(
             proc.clone(),
             self.vmspace.clone(),
-            entry,
+            entry_addr,
             vsyscall_buffer_ptr.as_usize(),
         );
         handle_table
