@@ -16,6 +16,7 @@ const KERNEL_STACK_SIZE: ByteSize = ByteSize::from_kib(64);
 #[repr(C)]
 pub struct Context {
     pub pc: usize,
+    pub sstatus: usize,
     pub ra: usize,
     pub sp: usize,
     pub gp: usize,
@@ -80,14 +81,22 @@ impl Thread {
             )
             .unwrap();
 
+        // TODO: Set sstatus manually.
+        // TODO: Enable interrupts.
+        let sstatus: usize;
+        unsafe {
+            core::arch::asm!("csrr {}, sstatus", out(reg) sstatus);
+        }
+
         let sp = stack_vaddr.as_usize() + stack_size;
         Thread {
             stack_folio: Some(stack_folio),
             vmspace: Some(vmspace),
             context: Context {
-                ra: pc as usize,
+                pc: pc as usize,
+                sstatus: sstatus,
                 sp,
-                s1: arg,
+                a0: arg,
                 ..Default::default()
             },
         }

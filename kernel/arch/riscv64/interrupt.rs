@@ -87,7 +87,7 @@ extern "C" fn interrupt_handler(frame: *mut Frame) -> ! {
         _ => "unknown",
     };
 
-    trace!(
+    panic!(
         "interrupt: {} (scause={:#x}), sepc: {:#x}, stval: {:#x}",
         scause_str, scause, sepc, stval
     );
