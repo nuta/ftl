@@ -183,6 +183,7 @@ pub unsafe extern "C" fn kernel_syscall_entry(
     _a3: isize,
     _a4: isize,
     _a5: isize,
+    _a6: isize,
 ) -> isize {
     unsafe {
         asm!(
@@ -206,8 +207,8 @@ pub unsafe extern "C" fn kernel_syscall_entry(
                 sd ra, {sepc_offset}(t0)
 
                 // TODO: Do we need to save sstatus?
-                csrr a1, sstatus
-                sd a1, {sstatus_offset}(a0)
+                csrr t1, sstatus
+                sd t1, {sstatus_offset}(t0)
 
                 mv s0, t0
                 call {syscall_handler}
