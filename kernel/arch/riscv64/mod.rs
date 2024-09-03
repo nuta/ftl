@@ -25,8 +25,8 @@ pub use cpuvar::set_cpuvar;
 pub use cpuvar::CpuVar;
 pub use plic::ack_interrupt;
 pub use plic::create_interrupt;
-pub use switch::return_to_user;
 pub use switch::kernel_syscall_entry;
+pub use switch::return_to_user;
 pub use thread::Thread;
 pub use vmspace::VmSpace;
 pub use vmspace::USERSPACE_END;
@@ -69,7 +69,6 @@ pub fn init(cpu_id: CpuId, device_tree: &crate::device_tree::DeviceTree) {
         asm!("csrw sie, {}", in(reg) sie);
 
         write_stvec(switch_to_kernel as *const () as usize, TrapMode::Direct);
-
 
         // TODO: Make sure cpuvar is already initialized.
         asm!("csrw sscratch, tp");

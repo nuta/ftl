@@ -40,9 +40,7 @@ pub fn syscall(
     }
 
     if a0 < 0 {
-        unsafe {
-            Err(core::mem::transmute::<isize, FtlError>(a0))
-        }
+        unsafe { Err(core::mem::transmute::<isize, FtlError>(a0)) }
     } else {
         Ok(a0)
     }

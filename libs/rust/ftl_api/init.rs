@@ -1,8 +1,9 @@
 use ftl_types::handle::HandleId;
 use ftl_types::syscall::VsyscallPage;
 
-use crate::{allocator, syscall};
+use crate::allocator;
 use crate::environ::Environ;
+use crate::syscall;
 use crate::vmspace::VmSpace;
 
 // TODO: Avoid Mutex.

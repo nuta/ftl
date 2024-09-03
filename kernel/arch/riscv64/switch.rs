@@ -2,8 +2,8 @@ use core::arch::asm;
 use core::arch::global_asm;
 use core::mem::offset_of;
 
-use super::thread::Context;
 use super::interrupt::interrupt_handler;
+use super::thread::Context;
 use crate::scheduler::GLOBAL_SCHEDULER;
 use crate::thread::ContinuationResult;
 
@@ -53,9 +53,12 @@ pub fn return_to_user() -> ! {
             Some(next) => next,
             None => {
                 drop(current_thread);
+                warn!("idle");
                 idle();
             }
         };
+
+        trace!("return_to_user: next thread: {}", next.id().as_isize());
 
         // Make the next thread the current thread.
         *current_thread = next;
@@ -72,6 +75,7 @@ pub fn return_to_user() -> ! {
         match current_thread.run_continuation() {
             ContinuationResult::Yield => {
                 // The thread is blocked. Yield the CPU.
+                warn!("thread {} is still blocked", current_thread.id().as_isize());
                 continue;
             }
             ContinuationResult::ReturnToUser => {
@@ -85,6 +89,10 @@ pub fn return_to_user() -> ! {
                 unsafe {
                     (*context).a0 = ret as usize;
                 }
+
+                trace!("restore with ret: {}", ret);
+                drop(current_thread);
+                restore_kernel_context(context);
             }
         }
     }

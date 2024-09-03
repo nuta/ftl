@@ -87,25 +87,25 @@ impl Poll {
     }
 
     pub fn wait(self: &SharedRef<Poll>, blocking: bool) -> Result<(PollEvent, HandleId), FtlError> {
-        {
-            let mut mutable = self.mutable.lock();
-            for entry in mutable.entries.values() {
-                let raw_ready = entry.ready.swap(0, Ordering::SeqCst); // TODO: correct ordering
-                let ready = PollEvent::from_raw(raw_ready);
-                if ready.is_empty() {
-                    continue;
-                }
-
-                let handle_id = entry.handle_id;
-                if ready.contains(PollEvent::CLOSED) {
-                    mutable.entries.remove(&handle_id);
-                }
-
-                return Ok((ready, handle_id));
+        let mut mutable = self.mutable.lock();
+        for entry in mutable.entries.values() {
+            let raw_ready = entry.ready.swap(0, Ordering::SeqCst); // TODO: correct ordering
+            let ready = PollEvent::from_raw(raw_ready);
+            if ready.is_empty() {
+                continue;
             }
+
+            let handle_id = entry.handle_id;
+            if ready.contains(PollEvent::CLOSED) {
+                mutable.entries.remove(&handle_id);
+            }
+
+            return Ok((ready, handle_id));
         }
 
         if blocking {
+            mutable.wait_queue.listen();
+            drop(mutable);
             Thread::block_current(Continuation::PollWait { poll: self.clone() });
         }
 
