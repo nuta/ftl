@@ -91,6 +91,17 @@ pub fn return_to_user() -> ! {
             ContinuationResult::ReturnToUser => {
                 drop(current_thread);
 
+                let sstatus: u64;
+                unsafe {
+                    asm!("csrr {}, sstatus", out(reg) sstatus);
+                }
+
+                // FIXME: FIXME:
+                unsafe {
+                    unsafe { (*context).sstatus &= !(1 << 1) };
+                    // unsafe { (*context).sstatus &= !(1 << 8) };
+                }
+
                 // No continuation to run that is, the thread is not blocked. Resume the user.
                 restore_kernel_context(context);
             }
