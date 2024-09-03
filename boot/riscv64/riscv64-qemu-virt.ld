@@ -12,6 +12,8 @@ SECTIONS {
            latest Rust nightly. This is a quick workaround. */
         . = ALIGN(4);
         *(.text.switch_to_kernel);
+        . = ALIGN(4);
+        *(.text.idle_entry);
 
         *(.text .text.*);
     }

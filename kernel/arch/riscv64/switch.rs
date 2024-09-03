@@ -1,35 +1,40 @@
 use core::arch::asm;
-use core::arch::global_asm;
 use core::mem::offset_of;
 
+use super::csr::{write_stvec, StvecMode};
 use super::interrupt::interrupt_handler;
 use super::thread::Context;
 use crate::scheduler::GLOBAL_SCHEDULER;
 use crate::thread::ContinuationResult;
 
-global_asm!(
-    r#"
-.text
-.global do_idle, __wfi_point
-do_idle:
-    fence
-    csrsi sstatus, 1 << 1
-__wfi_point:
-    wfi
-    csrci sstatus, 1 << 1
-    ret
-"#
-);
+#[link_section = ".text.idle_entry"]
+#[naked]
+unsafe extern "C" fn idle_entry() -> ! {
+    asm!(
+        r#"
+            j {resume_from_idle}
+        "#,
+        resume_from_idle = sym resume_from_idle,
+        options(noreturn)
+    );
+}
 
-extern "C" {
-    fn do_idle();
-    pub static __wfi_point: u8;
+fn resume_from_idle() {
+    unsafe {
+        write_stvec(switch_to_kernel as *const () as usize, StvecMode::Direct);
+    }
+
+    return_to_user();
 }
 
 fn idle() -> ! {
+    unsafe {
+        write_stvec(idle_entry as *const () as usize, StvecMode::Direct);
+    }
+
     loop {
         unsafe {
-            do_idle();
+            asm!("wfi");
         }
     }
 }
@@ -90,7 +95,6 @@ pub fn return_to_user() -> ! {
                     (*context).a0 = ret as usize;
                 }
 
-                trace!("restore with ret: {}", ret);
                 drop(current_thread);
                 restore_kernel_context(context);
             }

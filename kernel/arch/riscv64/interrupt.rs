@@ -1,7 +1,6 @@
 use core::arch::asm;
 
 use super::plic;
-use super::switch::__wfi_point;
 use super::switch::return_to_user;
 use crate::arch::cpuvar;
 use crate::syscall::syscall_handler;
@@ -58,13 +57,6 @@ pub extern "C" fn interrupt_handler() -> ! {
         sepc,
         stval
     );
-
-    unsafe {
-        if sepc == &__wfi_point as *const _ as u64 {
-            // Skip WFI instruction.
-            (*cpuvar.arch.context).sepc += 4;
-        }
-    }
 
     if (is_intr, code) == (true, 9) {
         plic::handle_interrupt();

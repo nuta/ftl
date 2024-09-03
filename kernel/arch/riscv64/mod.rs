@@ -1,7 +1,7 @@
 use core::arch::asm;
 
 use csr::write_stvec;
-use csr::TrapMode;
+use csr::StvecMode;
 use ftl_types::address::PAddr;
 use ftl_types::address::VAddr;
 use ftl_types::error::FtlError;
@@ -68,7 +68,7 @@ pub fn init(cpu_id: CpuId, device_tree: &crate::device_tree::DeviceTree) {
         sie |= 1 << 9; // SEIE: supervisor-level external interrupts
         asm!("csrw sie, {}", in(reg) sie);
 
-        write_stvec(switch_to_kernel as *const () as usize, TrapMode::Direct);
+        write_stvec(switch_to_kernel as *const () as usize, StvecMode::Direct);
 
         // TODO: Make sure cpuvar is already initialized.
         asm!("csrw sscratch, tp");
