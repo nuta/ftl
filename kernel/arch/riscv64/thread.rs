@@ -15,7 +15,7 @@ const KERNEL_STACK_SIZE: ByteSize = ByteSize::from_kib(64);
 #[derive(Debug, Default)]
 #[repr(C)]
 pub struct Context {
-    pub pc: usize,
+    pub sepc: usize,
     pub sstatus: usize,
     pub ra: usize,
     pub sp: usize,
@@ -96,7 +96,7 @@ impl Thread {
             stack_folio: Some(stack_folio),
             vmspace: Some(vmspace),
             context: Context {
-                pc: pc as usize,
+                sepc: pc as usize,
                 sstatus: sstatus,
                 sp,
                 a0: arg,

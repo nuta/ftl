@@ -2,7 +2,6 @@ use core::num::NonZeroIsize;
 use core::sync::atomic::AtomicIsize;
 use core::sync::atomic::Ordering;
 
-use ftl_types::address::VAddr;
 use ftl_types::error::FtlError;
 
 use crate::arch;
