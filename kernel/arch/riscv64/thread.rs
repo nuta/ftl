@@ -13,7 +13,7 @@ const KERNEL_STACK_SIZE: ByteSize = ByteSize::from_kib(64);
 
 /// Context of a thread.
 #[derive(Debug, Default)]
-#[repr(C)]
+#[repr(C, packed)]
 pub struct Context {
     pub sepc: usize,
     pub sstatus: usize,
