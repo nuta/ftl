@@ -208,6 +208,8 @@ pub unsafe extern "C" fn kernel_syscall_entry(
 
                 // TODO: Do we need to save sstatus?
                 csrr t1, sstatus
+                // Set SPP to 1
+                ori t1, t1, 1 << 8
                 sd t1, {sstatus_offset}(t0)
 
                 mv s0, t0

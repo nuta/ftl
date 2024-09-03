@@ -15,7 +15,6 @@ use ftl_types::handle::HandleRights;
 use ftl_types::message::MessageBuffer;
 use ftl_types::message::MessageSerialize;
 use ftl_types::message::MovedHandle;
-use ftl_types::syscall::VsyscallEntry;
 use ftl_types::syscall::VsyscallPage;
 use ftl_types::vmspace::PageProtect;
 use ftl_utils::alignment::align_up;
