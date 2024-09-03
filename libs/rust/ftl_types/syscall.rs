@@ -1,5 +1,3 @@
-use crate::error::FtlError;
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(isize)]
 pub enum SyscallNumber {
@@ -26,7 +24,6 @@ pub enum SyscallNumber {
 
 #[repr(C)]
 pub struct VsyscallPage {
-    pub entry: fn(isize, isize, isize, isize, isize, isize, isize) -> Result<isize, FtlError>,
     pub environ_ptr: *const u8,
     pub environ_len: usize,
 }

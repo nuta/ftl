@@ -33,7 +33,6 @@ use crate::handle::Handle;
 use crate::process::kernel_process;
 use crate::process::Process;
 use crate::ref_counted::SharedRef;
-use crate::syscall::syscall_entry;
 use crate::thread::Thread;
 use crate::vmspace::VmSpace;
 
@@ -192,7 +191,6 @@ impl<'a> StartupAppLoader<'a> {
             vsyscall_buffer_ptr
                 .as_mut_ptr::<VsyscallPage>()
                 .write(VsyscallPage {
-                    entry: syscall_entry,
                     environ_ptr: environ_pages_vaddr.as_mut_ptr(),
                     environ_len: env_str.len(),
                 });

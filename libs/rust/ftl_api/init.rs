@@ -3,7 +3,6 @@ use ftl_types::syscall::VsyscallPage;
 
 use crate::allocator;
 use crate::environ::Environ;
-use crate::syscall::set_vsyscall;
 use crate::vmspace::VmSpace;
 
 // TODO: Avoid Mutex.
@@ -38,7 +37,6 @@ pub unsafe fn init_internal(vsyscall_page: *const VsyscallPage) -> Environ {
     //         address.
     let vsyscall = unsafe { &*vsyscall_page };
 
-    set_vsyscall(vsyscall);
     allocator::init();
 
     let mut env = parse_environ(vsyscall);

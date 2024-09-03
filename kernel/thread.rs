@@ -3,6 +3,7 @@ use core::sync::atomic::AtomicIsize;
 use core::sync::atomic::Ordering;
 
 use ftl_types::error::FtlError;
+use ftl_types::poll::PollSyscallResult;
 
 use crate::arch;
 use crate::channel::Channel;
@@ -160,9 +161,9 @@ impl Thread {
                 match poll.wait(false) {
                     Err(FtlError::WouldBlock) => ContinuationResult::Yield,
                     Ok((event, handle_id)) => {
+                        let ret = PollSyscallResult::new(event, handle_id);
                         mutable.state = State::Runnable;
-                        todo!("PollWait");
-                        ContinuationResult::ReturnToUserWith { ret: 0 }
+                        ContinuationResult::ReturnToUserWith { ret: ret.as_raw() }
                     }
                     Err(e) => {
                         mutable.state = State::Runnable;

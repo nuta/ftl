@@ -1,6 +1,7 @@
 use core::arch::asm;
 
 use crate::arch::cpuvar;
+use crate::syscall::syscall_handler;
 
 use super::switch::return_to_user;
 use super::plic;
@@ -51,7 +52,7 @@ pub extern "C" fn interrupt_handler() -> ! {
 
     let sepc = unsafe { (*cpuvar.arch.context).sepc } as u64;
 
-    panic!(
+    trace!(
         "interrupt: {} (scause={:#x}), sepc: {:#x}, stval: {:#x}",
         scause_str, scause, sepc, stval
     );
@@ -65,6 +66,21 @@ pub extern "C" fn interrupt_handler() -> ! {
 
     if (is_intr, code) == (true, 9) {
         plic::handle_interrupt();
+    }
+
+    if (is_intr, code)== (false, 9) {
+        let a0 =  unsafe { (*cpuvar.arch.context).a0 } as isize;
+        let a1 =  unsafe { (*cpuvar.arch.context).a1 } as isize;
+        let a2 =  unsafe { (*cpuvar.arch.context).a2 } as isize;
+        let a3 =  unsafe { (*cpuvar.arch.context).a3 } as isize;
+        let a4 =  unsafe { (*cpuvar.arch.context).a4 } as isize;
+        let a5 =  unsafe { (*cpuvar.arch.context).a5 } as isize;
+        let a6 =  unsafe { (*cpuvar.arch.context).a6 } as isize;
+        let ret = syscall_handler(a6, a0, a1, a2, a3, a4, a5);
+        unsafe {
+            (*cpuvar.arch.context).a0 = ret as usize;
+        }
+
     }
 
     return_to_user();

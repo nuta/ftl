@@ -269,7 +269,7 @@ fn vmspace_map(
     vmspace.map_anywhere(len, folio, prot)
 }
 
-pub fn syscall_entry(
+fn handle_syscall(
     n: isize,
     a0: isize,
     a1: isize,
@@ -400,5 +400,20 @@ pub fn syscall_entry(
 
             Err(FtlError::UnknownSyscall)
         }
+    }
+}
+
+pub fn syscall_handler(
+    n: isize,
+    a0: isize,
+    a1: isize,
+    a2: isize,
+    a3: isize,
+    a4: isize,
+    a5: isize,
+) -> isize {
+    match handle_syscall(n, a0, a1, a2, a3, a4, a5) {
+        Ok(isize) => isize,
+        Err(err) => err as isize,
     }
 }
