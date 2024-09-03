@@ -4,6 +4,7 @@ use core::mem::offset_of;
 use super::csr::{write_stvec, StvecMode};
 use super::interrupt::interrupt_handler;
 use super::thread::Context;
+use crate::arch::cpuvar;
 use crate::scheduler::GLOBAL_SCHEDULER;
 use crate::thread::ContinuationResult;
 
@@ -19,17 +20,21 @@ unsafe extern "C" fn idle_entry() -> ! {
     );
 }
 
-fn resume_from_idle() {
+fn resume_from_idle() -> ! {
     unsafe {
         write_stvec(switch_to_kernel as *const () as usize, StvecMode::Direct);
     }
 
-    return_to_user();
+    interrupt_handler();
 }
 
 fn idle() -> ! {
     unsafe {
         write_stvec(idle_entry as *const () as usize, StvecMode::Direct);
+        asm!(r#"
+            fence
+            csrsi sstatus, 1 << 1
+        "#);
     }
 
     loop {
@@ -68,7 +73,7 @@ pub fn return_to_user() -> ! {
         // Make the next thread the current thread.
         *current_thread = next;
 
-        // Switch to the new thread's address space.
+        // Switch to the new thread's address space.sstatus,a1
         if let Some(vmspace) = current_thread.arch().vmspace.as_ref() {
             vmspace.switch();
         } else {
@@ -94,6 +99,30 @@ pub fn return_to_user() -> ! {
                 unsafe {
                     (*context).a0 = ret as usize;
                 }
+
+                let tp: u64;
+                unsafe {
+                    asm!("mv {}, tp", out(reg) tp);
+                }
+
+                let sstatus: u64;
+                unsafe {
+                    asm!("csrr {}, sstatus", out(reg) sstatus);
+                }
+
+                // FIXME: FIXME:
+                unsafe {
+                    unsafe { (*context).sstatus &= !(1 << 1) };
+                    // unsafe { (*context).sstatus &= !(1 << 8) };
+                }
+
+                let cotenxt = cpuvar().arch.context as usize;
+                warn!("tp = {:x}, context = {:x}, sstatus.SIE = {:x} (from {:x})",
+                    tp,
+                    cotenxt,
+                    unsafe { (*context).sstatus },
+                    sstatus,
+                );
 
                 drop(current_thread);
                 restore_kernel_context(context);
@@ -223,6 +252,9 @@ pub unsafe extern "C" fn kernel_syscall_entry(
                 // Set SPP to 1
                 ori t1, t1, 1 << 8
                 sd t1, {sstatus_offset}(t0)
+
+                // Clear the interrupt enable bit in sstatus
+                csrci sstatus, 1 << 1
 
                 mv s0, t0
                 call {syscall_handler}
