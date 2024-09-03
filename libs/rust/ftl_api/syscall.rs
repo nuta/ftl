@@ -9,6 +9,8 @@ use ftl_types::poll::PollEvent;
 use ftl_types::poll::PollSyscallResult;
 use ftl_types::signal::SignalBits;
 use ftl_types::syscall::SyscallNumber;
+use ftl_types::syscall::VsyscallEntry;
+use ftl_types::syscall::VsyscallPage;
 use ftl_types::vmspace::PageProtect;
 
 #[cfg(target_arch = "riscv64")]
@@ -25,14 +27,15 @@ pub fn syscall(
 
     unsafe {
         asm!(
-            "ecall",
+            "jalr a7",
             inout("a0") a0,
             in("a1") a1,
             in("a2") a2,
             in("a3") a3,
             in("a4") a4,
             in("a5") a5,
-            in("a6") n as isize
+            in("a6") n as isize,
+            in("a7") VSYSCALL_ENTRY
         );
     }
 
@@ -241,4 +244,12 @@ pub fn interrupt_create(irq: Irq) -> Result<HandleId, FtlError> {
 pub fn interrupt_ack(handle: HandleId) -> Result<(), FtlError> {
     syscall1(SyscallNumber::InterruptAck, handle.as_isize())?;
     Ok(())
+}
+
+static mut VSYSCALL_ENTRY: *const VsyscallEntry = core::ptr::null();
+
+pub fn set_vsyscall(vsyscall: &VsyscallPage) {
+    unsafe {
+        VSYSCALL_ENTRY = vsyscall.entry;
+    }
 }

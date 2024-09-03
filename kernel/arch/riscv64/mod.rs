@@ -26,6 +26,7 @@ pub use cpuvar::CpuVar;
 pub use plic::ack_interrupt;
 pub use plic::create_interrupt;
 pub use switch::return_to_user;
+pub use switch::kernel_syscall_entry;
 pub use thread::Thread;
 pub use vmspace::VmSpace;
 pub use vmspace::USERSPACE_END;

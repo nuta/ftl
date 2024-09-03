@@ -6,6 +6,6 @@ use ftl_api::prelude::*;
 
 #[ftl_api::main]
 pub fn main(_env: Environ) {
-    println!("Hello World from hello app!");
+    info!("Hello World from hello app!");
     loop {}
 }

@@ -22,8 +22,11 @@ pub enum SyscallNumber {
     ChannelTryRecv = 20,
 }
 
+pub type VsyscallEntry = extern "C" fn(isize, isize, isize, isize, isize, isize, isize) -> isize;
+
 #[repr(C)]
 pub struct VsyscallPage {
+    pub entry: *const VsyscallEntry,
     pub environ_ptr: *const u8,
     pub environ_len: usize,
 }

@@ -1,7 +1,7 @@
 use ftl_types::handle::HandleId;
 use ftl_types::syscall::VsyscallPage;
 
-use crate::allocator;
+use crate::{allocator, syscall};
 use crate::environ::Environ;
 use crate::vmspace::VmSpace;
 
@@ -37,6 +37,7 @@ pub unsafe fn init_internal(vsyscall_page: *const VsyscallPage) -> Environ {
     //         address.
     let vsyscall = unsafe { &*vsyscall_page };
 
+    syscall::set_vsyscall(vsyscall);
     allocator::init();
 
     let mut env = parse_environ(vsyscall);

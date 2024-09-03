@@ -66,9 +66,7 @@ pub extern "C" fn interrupt_handler() -> ! {
 
     if (is_intr, code) == (true, 9) {
         plic::handle_interrupt();
-    }
-
-    if (is_intr, code)== (false, 9) {
+    } else     if (is_intr, code)== (false, 9) {
         let a0 =  unsafe { (*cpuvar.arch.context).a0 } as isize;
         let a1 =  unsafe { (*cpuvar.arch.context).a1 } as isize;
         let a2 =  unsafe { (*cpuvar.arch.context).a2 } as isize;
@@ -80,7 +78,8 @@ pub extern "C" fn interrupt_handler() -> ! {
         unsafe {
             (*cpuvar.arch.context).a0 = ret as usize;
         }
-
+    } else {
+        panic!("unhandled intrrupt");
     }
 
     return_to_user();

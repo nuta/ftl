@@ -15,11 +15,13 @@ use ftl_types::handle::HandleRights;
 use ftl_types::message::MessageBuffer;
 use ftl_types::message::MessageSerialize;
 use ftl_types::message::MovedHandle;
+use ftl_types::syscall::VsyscallEntry;
 use ftl_types::syscall::VsyscallPage;
 use ftl_types::vmspace::PageProtect;
 use ftl_utils::alignment::align_up;
 use hashbrown::HashMap;
 
+use crate::arch;
 use crate::arch::paddr2vaddr;
 use crate::arch::vaddr2paddr;
 use crate::arch::PAGE_SIZE;
@@ -191,6 +193,7 @@ impl<'a> StartupAppLoader<'a> {
             vsyscall_buffer_ptr
                 .as_mut_ptr::<VsyscallPage>()
                 .write(VsyscallPage {
+                    entry: arch::kernel_syscall_entry as *const _,
                     environ_ptr: environ_pages_vaddr.as_mut_ptr(),
                     environ_len: env_str.len(),
                 });

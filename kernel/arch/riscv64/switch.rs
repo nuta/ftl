@@ -175,6 +175,70 @@ fn restore_kernel_context(context: *const Context) -> ! {
     }
 }
 
+#[naked]
+pub unsafe extern "C" fn kernel_syscall_entry(
+    _a0: isize,
+    _a1: isize,
+    _a2: isize,
+    _a3: isize,
+    _a4: isize,
+    _a5: isize,
+) -> isize {
+    unsafe {
+        asm!(
+            r#"
+                ld t0, {context_offset}(tp) // Load CpuVar.arch.context
+
+                sd sp, {sp_offset}(t0)
+                sd gp, {gp_offset}(t0)
+                sd s0, {s0_offset}(t0)
+                sd s1, {s1_offset}(t0)
+                sd s2, {s2_offset}(t0)
+                sd s3, {s3_offset}(t0)
+                sd s4, {s4_offset}(t0)
+                sd s5, {s5_offset}(t0)
+                sd s6, {s6_offset}(t0)
+                sd s7, {s7_offset}(t0)
+                sd s8, {s8_offset}(t0)
+                sd s9, {s9_offset}(t0)
+                sd s10, {s10_offset}(t0)
+                sd s11, {s11_offset}(t0)
+                sd ra, {sepc_offset}(t0)
+
+                // TODO: Do we need to save sstatus?
+                csrr a1, sstatus
+                sd a1, {sstatus_offset}(a0)
+
+                mv s0, t0
+                call {syscall_handler}
+                sd a0, {a0_offset}(s0)
+                call {return_to_user}
+            "#,
+            context_offset = const offset_of!(crate::arch::CpuVar, context),
+            sepc_offset = const offset_of!(Context, sepc),
+            sstatus_offset = const offset_of!(Context, sstatus),
+            sp_offset = const offset_of!(Context, sp),
+            gp_offset = const offset_of!(Context, gp),
+            a0_offset = const offset_of!(Context, a0),
+            s0_offset = const offset_of!(Context, s0),
+            s1_offset = const offset_of!(Context, s1),
+            s2_offset = const offset_of!(Context, s2),
+            s3_offset = const offset_of!(Context, s3),
+            s4_offset = const offset_of!(Context, s4),
+            s5_offset = const offset_of!(Context, s5),
+            s6_offset = const offset_of!(Context, s6),
+            s7_offset = const offset_of!(Context, s7),
+            s8_offset = const offset_of!(Context, s8),
+            s9_offset = const offset_of!(Context, s9),
+            s10_offset = const offset_of!(Context, s10),
+            s11_offset = const offset_of!(Context, s11),
+            syscall_handler = sym crate::syscall::syscall_handler,
+            return_to_user = sym return_to_user,
+            options(noreturn)
+        )
+    }
+}
+
 #[link_section = ".text.switch_to_kernel"]
 #[naked]
 pub unsafe extern "C" fn switch_to_kernel() -> ! {
