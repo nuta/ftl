@@ -69,10 +69,13 @@ pub fn return_to_user() -> ! {
 }
 
 fn restore_kernel_context(context: *mut Context) -> ! {
-    // FIXME: FIXME:
+    // Update sstatus for in-kernel apps.
+    //
+    // FIXME: Avoid updating sstatus here, and instead update it properly in
+    //        kernel entry points.
     unsafe {
-        (*context).sstatus |= 1 << 8; // SPP
-        (*context).sstatus &= !(1 << 1); // No interrupts
+        // Go back to the kernel mode via sret.
+        (*context).sstatus |= 1 << 8;
     };
 
     unsafe {
