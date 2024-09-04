@@ -1,10 +1,10 @@
 use core::arch::asm;
 use core::mem::offset_of;
 
-use super::csr::{write_stvec, StvecMode};
+use super::csr::write_stvec;
+use super::csr::StvecMode;
 use super::interrupt::interrupt_handler;
 use super::thread::Context;
-use crate::arch::cpuvar;
 use crate::scheduler::GLOBAL_SCHEDULER;
 use crate::thread::ContinuationResult;
 
@@ -29,12 +29,16 @@ fn resume_from_idle() -> ! {
 }
 
 fn idle() -> ! {
+    trace!("idle");
+
     unsafe {
         write_stvec(idle_entry as *const () as usize, StvecMode::Direct);
-        asm!(r#"
-            fence
-            csrsi sstatus, 1 << 1
-        "#);
+
+        // Memory fence to ensure writes so far become visible to other cores,
+        // before entering WFI.
+        asm!("fence");
+        // Enable interrupts.
+        asm!("csrsi sstatus, 1 << 1");
     }
 
     loop {
@@ -63,12 +67,9 @@ pub fn return_to_user() -> ! {
             Some(next) => next,
             None => {
                 drop(current_thread);
-                warn!("idle");
                 idle();
             }
         };
-
-        trace!("return_to_user: next thread: {}", next.id().as_isize());
 
         // Make the next thread the current thread.
         *current_thread = next;
@@ -82,25 +83,21 @@ pub fn return_to_user() -> ! {
 
         // Run the next thread.
         let context: *mut Context = &current_thread.arch().context as *const _ as *mut _;
-        match current_thread.run_continuation() {
+        let result = current_thread.run_continuation();
+        drop(current_thread);
+
+        match result {
             ContinuationResult::Yield => {
                 // The thread is blocked. Yield the CPU.
-                warn!("thread {} is still blocked", current_thread.id().as_isize());
+                warn!("thread is still blocked");
                 continue;
             }
             ContinuationResult::ReturnToUser => {
-                drop(current_thread);
-
-                let sstatus: u64;
-                unsafe {
-                    asm!("csrr {}, sstatus", out(reg) sstatus);
-                }
-
                 // FIXME: FIXME:
                 unsafe {
-                    unsafe { (*context).sstatus &= !(1 << 1) };
-                    // unsafe { (*context).sstatus &= !(1 << 8) };
-                }
+                    (*context).sstatus |= 1 << 8; // SPP
+                    (*context).sstatus &= !(1 << 1); // No interrupts
+                };
 
                 // No continuation to run that is, the thread is not blocked. Resume the user.
                 restore_kernel_context(context);
@@ -111,31 +108,12 @@ pub fn return_to_user() -> ! {
                     (*context).a0 = ret as usize;
                 }
 
-                let tp: u64;
-                unsafe {
-                    asm!("mv {}, tp", out(reg) tp);
-                }
-
-                let sstatus: u64;
-                unsafe {
-                    asm!("csrr {}, sstatus", out(reg) sstatus);
-                }
-
                 // FIXME: FIXME:
                 unsafe {
-                    unsafe { (*context).sstatus &= !(1 << 1) };
-                    // unsafe { (*context).sstatus &= !(1 << 8) };
-                }
+                    (*context).sstatus |= 1 << 8; // SPP
+                    (*context).sstatus &= !(1 << 1); // No interrupts
+                };
 
-                let cotenxt = cpuvar().arch.context as usize;
-                warn!("tp = {:x}, context = {:x}, sstatus.SIE = {:x} (from {:x})",
-                    tp,
-                    cotenxt,
-                    unsafe { (*context).sstatus },
-                    sstatus,
-                );
-
-                drop(current_thread);
                 restore_kernel_context(context);
             }
         }
@@ -154,10 +132,10 @@ fn restore_kernel_context(context: *const Context) -> ! {
                 csrw sstatus, a1
 
                 // Restore general-purpose registers except tp.
-                // FIXME: restore tp too
                 ld ra, {ra_offset}(a0)
                 ld sp, {sp_offset}(a0)
                 ld gp, {gp_offset}(a0)
+                ld tp, {tp_offset}(a0)
                 ld t0, {t0_offset}(a0)
                 ld t1, {t1_offset}(a0)
                 ld t2, {t2_offset}(a0)
@@ -195,6 +173,7 @@ fn restore_kernel_context(context: *const Context) -> ! {
             ra_offset = const offset_of!(Context, ra),
             sp_offset = const offset_of!(Context, sp),
             gp_offset = const offset_of!(Context, gp),
+            tp_offset = const offset_of!(Context, tp),
             t0_offset = const offset_of!(Context, t0),
             t1_offset = const offset_of!(Context, t1),
             t2_offset = const offset_of!(Context, t2),
@@ -240,6 +219,10 @@ pub unsafe extern "C" fn kernel_syscall_entry(
     unsafe {
         asm!(
             r#"
+                // Disable interrupts in kernel.
+                csrci sstatus, 1 << 1
+
+                csrrw tp, sscratch, tp
                 ld t0, {context_offset}(tp) // Load CpuVar.arch.context
 
                 sd sp, {sp_offset}(t0)
@@ -258,14 +241,11 @@ pub unsafe extern "C" fn kernel_syscall_entry(
                 sd s11, {s11_offset}(t0)
                 sd ra, {sepc_offset}(t0)
 
-                // TODO: Do we need to save sstatus?
                 csrr t1, sstatus
-                // Set SPP to 1
-                ori t1, t1, 1 << 8
                 sd t1, {sstatus_offset}(t0)
 
-                // Clear the interrupt enable bit in sstatus
-                csrci sstatus, 1 << 1
+                csrrw t1, sscratch, tp
+                sd t1, {tp_offset}(t0)
 
                 mv s0, t0
                 call {syscall_handler}
@@ -277,6 +257,7 @@ pub unsafe extern "C" fn kernel_syscall_entry(
             sstatus_offset = const offset_of!(Context, sstatus),
             sp_offset = const offset_of!(Context, sp),
             gp_offset = const offset_of!(Context, gp),
+            tp_offset = const offset_of!(Context, tp),
             a0_offset = const offset_of!(Context, a0),
             s0_offset = const offset_of!(Context, s0),
             s1_offset = const offset_of!(Context, s1),
@@ -342,7 +323,7 @@ pub unsafe extern "C" fn switch_to_kernel() -> ! {
                 csrr a1, sstatus
                 sd a1, {sstatus_offset}(a0)
 
-                csrr a1, sscratch
+                csrrw a1, sscratch, tp
                 sd a1, {tp_offset}(a0)
 
                 ld a1, {s0_scratch_offset}(tp)

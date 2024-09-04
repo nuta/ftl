@@ -21,11 +21,6 @@ pub struct Context {
     pub sp: usize,
     pub gp: usize,
     pub tp: usize,
-    pub t0: usize,
-    pub t1: usize,
-    pub t2: usize,
-    pub s0: usize,
-    pub s1: usize,
     pub a0: usize,
     pub a1: usize,
     pub a2: usize,
@@ -34,6 +29,8 @@ pub struct Context {
     pub a5: usize,
     pub a6: usize,
     pub a7: usize,
+    pub s0: usize,
+    pub s1: usize,
     pub s2: usize,
     pub s3: usize,
     pub s4: usize,
@@ -44,6 +41,9 @@ pub struct Context {
     pub s9: usize,
     pub s10: usize,
     pub s11: usize,
+    pub t0: usize,
+    pub t1: usize,
+    pub t2: usize,
     pub t3: usize,
     pub t4: usize,
     pub t5: usize,
@@ -81,8 +81,6 @@ impl Thread {
             )
             .unwrap();
 
-        // TODO: Set sstatus manually.
-        // TODO: Enable interrupts.
         let mut sstatus: usize;
         unsafe {
             core::arch::asm!("csrr {}, sstatus", out(reg) sstatus);
@@ -97,7 +95,7 @@ impl Thread {
             vmspace: Some(vmspace),
             context: Context {
                 sepc: pc as usize,
-                sstatus: sstatus,
+                sstatus,
                 sp,
                 a0: arg,
                 ..Default::default()
