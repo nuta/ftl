@@ -12,6 +12,7 @@ use crate::cpuvar::CpuId;
 mod backtrace;
 mod cpuvar;
 mod csr;
+mod idle;
 mod interrupt;
 mod plic;
 mod sbi;
@@ -72,9 +73,6 @@ pub fn init(cpu_id: CpuId, device_tree: &crate::device_tree::DeviceTree) {
 
         // TODO: Make sure cpuvar is already initialized.
         asm!("csrw sscratch, tp");
-
-        // riscv::register::sie::set_sext();
-        // write_sie(read_sie() | 1 << 9); // Supervisor External Interrupt Enable
     }
 
     plic::init(cpu_id, device_tree);
