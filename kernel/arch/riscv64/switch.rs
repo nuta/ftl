@@ -52,13 +52,8 @@ pub fn return_to_user() -> ! {
                 continue;
             }
             ContinuationResult::ReturnToUser => {
-                // FIXME: FIXME:
-                unsafe {
-                    (*context).sstatus |= 1 << 8; // SPP
-                    (*context).sstatus &= !(1 << 1); // No interrupts
-                };
-
-                // No continuation to run that is, the thread is not blocked. Resume the user.
+                // No continuation to run that is, the thread is not blocked.
+                // Resume the user.
                 restore_kernel_context(context);
             }
             ContinuationResult::ReturnToUserWith { ret } => {
@@ -67,19 +62,19 @@ pub fn return_to_user() -> ! {
                     (*context).a0 = ret as usize;
                 }
 
-                // FIXME: FIXME:
-                unsafe {
-                    (*context).sstatus |= 1 << 8; // SPP
-                    (*context).sstatus &= !(1 << 1); // No interrupts
-                };
-
                 restore_kernel_context(context);
             }
         }
     }
 }
 
-fn restore_kernel_context(context: *const Context) -> ! {
+fn restore_kernel_context(context: *mut Context) -> ! {
+    // FIXME: FIXME:
+    unsafe {
+        (*context).sstatus |= 1 << 8; // SPP
+        (*context).sstatus &= !(1 << 1); // No interrupts
+    };
+
     unsafe {
         asm!(
             r#"
