@@ -10,9 +10,9 @@ It has been said that microkernels are not practical due to performance overhead
 
 FTL aims to be:
 
-- **Simple:** Easy to understand and develop, even for non-experts.
-- **Pratical:** Aim to be a general-purpose operating system, not ending up as a hobby/research project.
-- **Performant:** Don't stick to the beautiful well-isolated architecture.
+- **Simple:** Be easy to understand and develop, even for non-experts.
+- **Practical:** Aim to be a general-purpose operating system, not ending up as a hobby/research project.
+- **Performant:** Don't stick to the beautiful design. Compromise for performance when necessary.
 
 ## Design Principles
 
@@ -20,27 +20,26 @@ To achieve this goal, we have the following design principles:
 
 - Aim to being easy to develop, not achiving a correct and beautiful architecture. Make OS development approachable and fun for everyone.
 - Don't try to achieve the perfect design from the beginning. Imagine how the userspace should look like first, not vice versa - the microkernel is just a runtime for applications.
-- "process" is just one of the many ways to isolate components. Implement recent ways like language-based (Rust/WebAssembly), or Intel/Arm specific mechanisms (Intel PKS) for better performance.
+- The traditional "user-mode" concept is just one of the many ways to isolate components. Implement other faster ways like language-based (e.g. Rust/WebAssembly), or Intel/Arm specific mechanisms (e.g. Intel PKS) for better performance.
 - Implement in [Rust](https://www.rust-lang.org/) with async APIs, without async Rust (`async fn`). Every component has a simple main loop to make the execution flow clear.
 
 TODO: nice drawining of the architecture
 
 ## Features
 
-- 64-bit RISC-V support
-- 64-bit Arm support (partially)
-- Virtio device support (virtio-net only for now)
-- TCP/IP stack based on [smoltcp](https://github.com/smoltcp-rs/smoltcp)
-- Intuitive Rust API for apps, OS servers, and device drivers
-- Auto-generated IPC stubs and startup code from declarative YAML files
+- 64-bit RISC-V support.
+- Virtio device support (virtio-net only for now).
+- TCP/IP stack based on [smoltcp](https://github.com/smoltcp-rs/smoltcp).
+- Intuitive Rust API for apps, OS servers, and device drivers.
+- Auto-generated IPC stubs and startup code from declarative YAML files.
 
-- MMU/Usermode-based isolation (so-called traditional "process" isolation, planned)
-- x86_64 support (once the kernel API stabilizes, planned)
-- Shell (planned)
-- File system support (planned)
-- JavaScript API (planned)
-- WebAssembly support (planned)
-- Linux compatibility layer using the genuine Linux kernel (planned)
+- MMU/usermode-based isolation *(so-called traditional "process" isolation, planned)*.
+- Arm and x86_64 support *(once the kernel API stabilizes, planned)*.
+- Shell *(planned)*.
+- File system support *(planned)*.
+- JavaScript API *(planned)*.
+- WebAssembly-based isolation *(planned)*.
+- Linux compatibility layer using the genuine Linux kernel microVM *(planned)*.
 
 ## Getting Started
 
