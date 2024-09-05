@@ -27,6 +27,10 @@ impl<T> Handle<T> {
     pub const fn new(object: SharedRef<T>, rights: HandleRights) -> Handle<T> {
         Handle { object, rights }
     }
+
+    pub fn into_shared_ref(this: Handle<T>) -> SharedRef<T> {
+        this.object
+    }
 }
 
 impl<T> Clone for Handle<T> {
@@ -46,6 +50,7 @@ impl<T> Deref for Handle<T> {
     }
 }
 
+#[derive(Clone)]
 pub enum AnyHandle {
     Channel(Handle<Channel>),
     Thread(Handle<Thread>),
@@ -57,6 +62,18 @@ pub enum AnyHandle {
 }
 
 impl AnyHandle {
+    pub fn rights(&self) -> HandleRights {
+        match self {
+            AnyHandle::Channel(handle) => handle.rights,
+            AnyHandle::Thread(handle) => handle.rights,
+            AnyHandle::Folio(handle) => handle.rights,
+            AnyHandle::Poll(handle) => handle.rights,
+            AnyHandle::Signal(handle) => handle.rights,
+            AnyHandle::Interrupt(handle) => handle.rights,
+            AnyHandle::VmSpace(handle) => handle.rights,
+        }
+    }
+
     pub fn as_channel(&self) -> Result<&Handle<Channel>, FtlError> {
         match self {
             AnyHandle::Channel(ref channel) => Ok(channel),
@@ -193,14 +210,30 @@ impl HandleTable {
     }
 
     /// Get a handle by ID.
-    pub fn get_owned(&self, id: HandleId) -> Result<&AnyHandle, FtlError> {
+    pub fn get_owned(&self, id: HandleId, rights: HandleRights) -> Result<&AnyHandle, FtlError> {
         let handle = self.handles.get(&id).ok_or(FtlError::HandleNotFound)?;
+
+        if !handle.rights().contains(rights) {
+            warn!(
+                "Handle rights not sufficient: {:?} is not in {:?}",
+                rights,
+                handle.rights()
+            );
+            return Err(FtlError::HandleRightsNotSufficient);
+        }
+
         Ok(handle)
     }
 
     /// Removes a handle out of the table.
     pub fn remove(&mut self, id: HandleId) -> Result<AnyHandle, FtlError> {
         let handle = self.handles.remove(&id).ok_or(FtlError::HandleNotFound)?;
+
+        if !handle.rights().contains(HandleRights::CLOSE) {
+            self.handles.insert(id, handle);
+            return Err(FtlError::HandleRightsNotSufficient);
+        }
+
         Ok(handle)
     }
 }

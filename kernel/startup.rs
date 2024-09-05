@@ -6,6 +6,7 @@ use ftl_autogen::protocols::autopilot::NewclientRequest;
 use ftl_elf::Elf;
 use ftl_elf::PhdrType;
 use ftl_elf::ET_DYN;
+use ftl_types::address::PAddr;
 use ftl_types::address::VAddr;
 use ftl_types::environ::EnvironSerializer;
 use ftl_types::error::FtlError;
@@ -15,11 +16,16 @@ use ftl_types::message::MessageBuffer;
 use ftl_types::message::MessageSerialize;
 use ftl_types::message::MovedHandle;
 use ftl_types::syscall::VsyscallPage;
+use ftl_types::vmspace::PageProtect;
 use ftl_utils::alignment::align_up;
 use hashbrown::HashMap;
 
+use crate::arch;
 use crate::arch::paddr2vaddr;
+use crate::arch::vaddr2paddr;
 use crate::arch::PAGE_SIZE;
+use crate::arch::USERSPACE_END;
+use crate::arch::USERSPACE_START;
 use crate::channel::Channel;
 use crate::device_tree::DeviceTree;
 use crate::folio::Folio;
@@ -28,9 +34,9 @@ use crate::handle::Handle;
 use crate::process::kernel_process;
 use crate::process::Process;
 use crate::ref_counted::SharedRef;
-use crate::syscall::syscall_entry;
 use crate::thread::Thread;
-use crate::vmspace::KERNEL_VMSPACE;
+use crate::uaddr::UAddr;
+use crate::vmspace::VmSpace;
 
 #[derive(Debug)]
 #[allow(dead_code)]
@@ -72,15 +78,20 @@ struct StartupAppLoader<'a> {
     service_to_app_name: HashMap<ServiceName, AppName>,
     our_chs: HashMap<AppName, SharedRef<Channel>>,
     their_chs: HashMap<AppName, SharedRef<Channel>>,
+    vmspace: SharedRef<VmSpace>,
+    next_base_vaddr: VAddr,
 }
 
 impl<'a> StartupAppLoader<'a> {
     pub fn new(device_tree: &DeviceTree) -> StartupAppLoader {
+        let vmspace = SharedRef::new(VmSpace::kernel_space().unwrap());
         StartupAppLoader {
             device_tree,
             service_to_app_name: HashMap::new(),
             our_chs: HashMap::new(),
             their_chs: HashMap::new(),
+            vmspace,
+            next_base_vaddr: USERSPACE_START,
         }
     }
 
@@ -89,7 +100,7 @@ impl<'a> StartupAppLoader<'a> {
         let handle_id = kernel_process()
             .handles()
             .lock()
-            .add(Handle::new(ch1.into(), HandleRights::NONE))
+            .add(Handle::new(ch1.into(), HandleRights::ALL))
             .unwrap();
 
         let mut msgbuffer = MessageBuffer::new();
@@ -103,10 +114,13 @@ impl<'a> StartupAppLoader<'a> {
         self.our_chs
             .get(app_name)
             .unwrap()
-            .send(NewclientRequest::MSGINFO, &msgbuffer)
+            .send(
+                NewclientRequest::MSGINFO,
+                UAddr::from_kernel_ptr(&msgbuffer),
+            )
             .unwrap();
 
-        Handle::new(ch2.into(), HandleRights::NONE).into()
+        Handle::new(ch2.into(), HandleRights::ALL).into()
     }
 
     fn get_devices(&mut self, compat: &str) -> Vec<ftl_types::environ::Device> {
@@ -144,11 +158,9 @@ impl<'a> StartupAppLoader<'a> {
         &mut self,
         name: &AppName,
         entry_addr: usize,
-        memory: Folio,
         mut env: EnvironSerializer,
         handles: Vec<AnyHandle>,
     ) {
-        let entry = unsafe { core::mem::transmute(entry_addr) };
         let proc = SharedRef::new(Process::create());
 
         let mut handle_table = proc.handles().lock();
@@ -160,11 +172,10 @@ impl<'a> StartupAppLoader<'a> {
         }
 
         let startup_ch = self.their_chs.remove(name).unwrap();
-        let startup_ch_handle = Handle::new(startup_ch, HandleRights::NONE);
+        let startup_ch_handle = Handle::new(startup_ch, HandleRights::ALL);
         let startup_ch_id = handle_table.add(startup_ch_handle).unwrap();
 
-        let vmspace = KERNEL_VMSPACE.shared_ref();
-        let vmspace_handle = Handle::new(vmspace, HandleRights::NONE);
+        let vmspace_handle = Handle::new(self.vmspace.clone(), HandleRights::ALL);
         let vmspace_id = handle_table.add(vmspace_handle).unwrap();
 
         env.push_channel("dep:startup", startup_ch_id);
@@ -185,36 +196,62 @@ impl<'a> StartupAppLoader<'a> {
             vsyscall_buffer_ptr
                 .as_mut_ptr::<VsyscallPage>()
                 .write(VsyscallPage {
-                    entry: syscall_entry,
+                    entry: arch::kernel_syscall_entry as *const _,
                     environ_ptr: environ_pages_vaddr.as_mut_ptr(),
                     environ_len: env_str.len(),
                 });
         }
 
-        let thread = Thread::spawn_kernel(proc.clone(), entry, vsyscall_buffer_ptr.as_usize());
-        handle_table
-            .add(Handle::new(thread, HandleRights::NONE))
+        // Allocate stack.
+        const KERNEL_STACK_SIZE: usize = 128 * 1024; // FIXME:
+        let stack_folio = Handle::new(
+            SharedRef::new(Folio::alloc(KERNEL_STACK_SIZE).unwrap()),
+            HandleRights::ALL,
+        );
+        let stack_vaddr = self
+            .vmspace
+            .map_anywhere(
+                KERNEL_STACK_SIZE,
+                stack_folio.clone(),
+                PageProtect::READABLE | PageProtect::WRITABLE,
+            )
             .unwrap();
+        let sp = stack_vaddr.add(KERNEL_STACK_SIZE).as_usize();
+        handle_table.add(stack_folio).unwrap();
+
+        let thread = Thread::spawn_kernel(
+            proc.clone(),
+            self.vmspace.clone(),
+            entry_addr,
+            sp,
+            vsyscall_buffer_ptr.as_usize(),
+        );
         handle_table
-            .add(Handle::new(SharedRef::new(memory), HandleRights::NONE))
+            .add(Handle::new(thread, HandleRights::ALL))
             .unwrap();
         handle_table
             .add(Handle::new(
                 SharedRef::new(vsyscall_buffer),
-                HandleRights::NONE,
+                HandleRights::ALL,
             ))
             .unwrap();
         handle_table
             .add(Handle::new(
                 SharedRef::new(environ_pages),
-                HandleRights::NONE,
+                HandleRights::ALL,
             ))
             .unwrap();
     }
 
     fn load_app(&mut self, template: &AppTemplate) -> Result<(), Error> {
-        let elf_loader = ElfLoader::parse(template.elf_file)?;
-        let (entry_addr, memory) = elf_loader.load_into_memory()?;
+        let base_vaddr = self.next_base_vaddr;
+        let elf_loader = ElfLoader::parse(template.elf_file, base_vaddr)?;
+        self.next_base_vaddr = self.next_base_vaddr.add(elf_loader.vmspace_len);
+        if self.next_base_vaddr > USERSPACE_END {
+            panic!("ran out of virtual address space");
+        }
+
+        let entry_addr = elf_loader.load_into_memory(&self.vmspace)?;
 
         let mut env = EnvironSerializer::new();
         let mut handles = Vec::with_capacity(template.handles.len());
@@ -235,7 +272,7 @@ impl<'a> StartupAppLoader<'a> {
             env.push_devices(&compat, &self.get_devices(compat));
         }
 
-        self.create_process(&template.name, entry_addr, memory, env, handles);
+        self.create_process(&template.name, entry_addr, env, handles);
         Ok(())
     }
 
@@ -263,12 +300,13 @@ pub fn load_startup_apps(templates: &[AppTemplate], device_tree: &DeviceTree) {
 struct ElfLoader<'a> {
     elf_file: &'a [u8],
     elf: Elf<'a>,
-    memory: Folio,
-    memory_vaddr: VAddr,
+    base_vaddr: VAddr,
+    elf_paddr: PAddr,
+    vmspace_len: usize,
 }
 
 impl<'a> ElfLoader<'a> {
-    pub fn parse(elf_file: &'a [u8]) -> Result<ElfLoader, Error> {
+    pub fn parse(elf_file: &'static [u8], base_vaddr: VAddr) -> Result<ElfLoader, Error> {
         let elf = Elf::parse(elf_file).map_err(Error::ParseElf)?;
 
         // TODO: Check DF_1_PIE flag to make sure it's a PIE, not a shared
@@ -292,42 +330,70 @@ impl<'a> ElfLoader<'a> {
             .max()
             .ok_or(Error::NoPhdrs)?;
 
-        let elf_len = align_up(highest_addr - lowest_addr, PAGE_SIZE);
-        let memory = Folio::alloc(elf_len).map_err(Error::AllocFolio)?;
-        let memory_vaddr = paddr2vaddr(memory.paddr()).unwrap();
+        let vmspace_len = align_up(highest_addr - lowest_addr, PAGE_SIZE);
 
         Ok(ElfLoader {
             elf_file,
+            elf_paddr: vaddr2paddr(VAddr::new(elf_file.as_ptr() as usize)).unwrap(),
             elf,
-            memory,
-            memory_vaddr,
+            base_vaddr,
+            vmspace_len,
         })
     }
 
-    fn base_addr(&self) -> usize {
-        self.memory_vaddr.as_mut_ptr() as *mut u8 as usize
-    }
-
     fn entry_addr(&self) -> usize {
-        self.base_addr() + (self.elf.ehdr.e_entry as usize)
+        self.base_vaddr.as_usize() + (self.elf.ehdr.e_entry as usize)
     }
 
-    fn load_segments(&mut self) {
-        let memory = unsafe {
-            core::slice::from_raw_parts_mut(self.memory_vaddr.as_mut_ptr(), self.memory.len())
-        };
-
+    fn map_segments(&mut self, vmspace: &VmSpace) {
         for phdr in self.elf.phdrs {
             if phdr.p_type != ftl_elf::PhdrType::Load {
                 continue;
             }
+
             let mem_offset = phdr.p_vaddr as usize;
             let file_offset = phdr.p_offset as usize;
-            let file_copy_len = phdr.p_filesz as usize;
-            memory[mem_offset..mem_offset + file_copy_len]
-                .copy_from_slice(&self.elf_file[file_offset..file_offset + file_copy_len]);
-            let zeroed_len = phdr.p_memsz as usize - phdr.p_filesz as usize;
-            memory[mem_offset + file_copy_len..mem_offset + file_copy_len + zeroed_len].fill(0);
+            let mem_size = phdr.p_memsz as usize;
+            let file_size = phdr.p_filesz as usize;
+
+            let mut offset = 0;
+            while offset < mem_size {
+                let vaddr = VAddr::new(self.base_vaddr.as_usize() + mem_offset + offset);
+                let file_part_len = core::cmp::min(file_size.saturating_sub(offset), PAGE_SIZE);
+                let zero_part_len = PAGE_SIZE - file_part_len;
+
+                let paddr = if file_part_len > 0 {
+                    self.elf_paddr.add(file_offset + offset)
+                } else {
+                    // FIXME: track this ownership
+                    Folio::alloc(PAGE_SIZE).unwrap().paddr()
+                };
+
+                // TODO: Make sure we won't start the same app more than once
+                //       because we map the same physical page, even in writable
+                //       pages like .data section.
+                vmspace
+                    .map_fixed(
+                        vaddr,
+                        paddr,
+                        PAGE_SIZE,
+                        PageProtect::READABLE | PageProtect::WRITABLE | PageProtect::EXECUTABLE,
+                    )
+                    .unwrap();
+
+                if zero_part_len > 0 {
+                    let slice: &mut [u8] = unsafe {
+                        core::slice::from_raw_parts_mut(
+                            vaddr.add(file_part_len).as_mut_ptr(),
+                            zero_part_len,
+                        )
+                    };
+
+                    slice.fill(0);
+                }
+
+                offset += PAGE_SIZE;
+            }
         }
     }
 
@@ -381,16 +447,12 @@ impl<'a> ElfLoader<'a> {
         };
 
         for rela in rela_entries {
+            let base = self.base_vaddr.as_usize();
             match rela.r_info {
                 #[cfg(target_arch = "riscv64")]
                 ftl_elf::R_RISCV_RELATIVE => unsafe {
-                    let ptr = (self.base_addr() + rela.r_offset as usize) as *mut i64;
-                    *ptr += (self.base_addr() as i64) + rela.r_addend;
-                },
-                #[cfg(target_arch = "aarch64")]
-                ftl_elf::R_AARCH64_RELATIVE => unsafe {
-                    let ptr = (self.base_addr() + rela.r_offset as usize) as *mut i64;
-                    *ptr += (self.base_addr() as i64) + rela.r_addend;
+                    let ptr = (base + rela.r_offset as usize) as *mut i64;
+                    *ptr += (base as i64) + rela.r_addend;
                 },
                 _ => panic!("unsupported relocation type: {}", rela.r_info),
             }
@@ -399,9 +461,10 @@ impl<'a> ElfLoader<'a> {
         Ok(())
     }
 
-    pub fn load_into_memory(mut self) -> Result<(usize, Folio), Error> {
-        self.load_segments();
+    pub fn load_into_memory(mut self, vmspace: &VmSpace) -> Result<usize, Error> {
+        vmspace.switch();
+        self.map_segments(vmspace);
         self.relocate_rela_dyn()?;
-        Ok((self.entry_addr(), self.memory))
+        Ok(self.entry_addr())
     }
 }

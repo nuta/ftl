@@ -6,7 +6,8 @@ start:
     mv ra, zero
     mv fp, zero
     la sp, __stack_top
-    call ftl_app_main
+
+    call start_rust
 
     // Reachable if main returns.
     unimp

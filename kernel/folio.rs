@@ -39,9 +39,14 @@ impl Folio {
         // SAFETY: `len` is not zero as checked above.
         let ptr = unsafe { GLOBAL_ALLOCATOR.alloc(layout) };
 
+        // Fill the allocated memory with zeros.
+        unsafe {
+            core::ptr::write_bytes(ptr, 0, len);
+        }
+
         Ok(Self {
             page_type: PageType::Allocated { layout },
-            paddr: vaddr2paddr(VAddr::new(ptr as usize).unwrap()).unwrap(),
+            paddr: vaddr2paddr(VAddr::new(ptr as usize)).unwrap(),
             len,
         })
     }
@@ -51,10 +56,9 @@ impl Folio {
             return Err(FtlError::InvalidArg);
         }
 
-        // FIXME:
-        // if !is_aligned(paddr.as_usize(), PAGE_SIZE) {
-        //     return Err(FtlError::InvalidArg);
-        // }
+        if !is_aligned(paddr.as_usize(), PAGE_SIZE) {
+            return Err(FtlError::InvalidArg);
+        }
 
         Ok(Self {
             page_type: PageType::Fixed,

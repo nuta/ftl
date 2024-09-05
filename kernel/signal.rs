@@ -6,7 +6,6 @@ use ftl_types::signal::SignalBits;
 
 use crate::poll::Poller;
 use crate::ref_counted::SharedRef;
-use crate::sleep::SleepPoint;
 use crate::spinlock::SpinLock;
 
 struct Mutable {
@@ -16,13 +15,11 @@ struct Mutable {
 
 pub struct Signal {
     mutable: SpinLock<Mutable>,
-    sleep_point: SleepPoint,
 }
 
 impl Signal {
     pub fn new() -> Result<SharedRef<Signal>, FtlError> {
         let signal = Signal {
-            sleep_point: SleepPoint::new(),
             mutable: SpinLock::new(Mutable {
                 pollers: Vec::new(),
                 pending: SignalBits::empty(),
@@ -42,13 +39,14 @@ impl Signal {
         mutable.pollers.push(poller);
     }
 
+    pub fn remove_poller(&self, poller: &SharedRef<Poller>) {
+        let mut mutable = self.mutable.lock();
+        mutable.pollers.retain(|p| !SharedRef::ptr_eq(p, poller));
+    }
+
     pub fn update(&self, value: SignalBits) -> Result<(), FtlError> {
         let mut mutable = self.mutable.lock();
         mutable.pending |= value;
-
-        // TODO: Wake only one thread. Others will see empty value and go back
-        //       to sleep.
-        self.sleep_point.wake_all();
 
         // TODO: EPOLLEXCLUSIVE-like behavior to prevent thundering herd
         for poller in &mutable.pollers {

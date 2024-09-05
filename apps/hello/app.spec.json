@@ -1,8 +1,8 @@
 {
-    "name": "pong",
+    "name": "hello",
     "kind": "app/v0",
     "spec": {
         "depends": [],
-        "provides": ["ping_server"]
+        "provides": []
     }
 }

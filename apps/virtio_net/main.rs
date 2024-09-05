@@ -33,14 +33,13 @@ struct VirtioNetModernHeader {
 
 fn probe(devices: &[Device], device_type: u32) -> Option<(VirtioMmio, Irq)> {
     for device in devices {
-        let base_paddr = PAddr::new(device.reg as usize).unwrap();
+        let base_paddr = PAddr::new(device.reg as usize);
         let mmio = MmioFolio::create_pinned(base_paddr, 0x1000).unwrap();
 
         let mut transport = VirtioMmio::new(mmio);
         match transport.probe() {
             Some(ty) if ty == device_type => {
-                info!("console: IRQs: {:?}", device.interrupts);
-                let irq = Irq::from_raw(device.interrupts.as_ref().unwrap()[1] as usize + 32); // FIXME:
+                let irq = Irq::from_raw(device.interrupts.as_ref().unwrap()[0] as usize);
                 return Some((transport, irq));
             }
             Some(ty) => {
@@ -62,7 +61,7 @@ enum Context {
     Tcpip,
 }
 
-#[ftl_api::main]
+#[no_mangle]
 pub fn main(mut env: Environ) {
     info!("starting");
     let (mut transport, irq) =

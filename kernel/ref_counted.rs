@@ -2,6 +2,7 @@
 
 use alloc::boxed::Box;
 use core::any::Any;
+use core::fmt;
 use core::mem;
 use core::ops::Deref;
 use core::ptr::NonNull;
@@ -124,45 +125,16 @@ impl<T> Deref for SharedRef<T> {
     }
 }
 
+impl<T> fmt::Debug for SharedRef<T>
+where
+    T: fmt::Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("SharedRef")
+            .field(&self.inner().value)
+            .finish()
+    }
+}
+
 unsafe impl<T: Sync> Sync for SharedRef<T> {}
 unsafe impl<T: Send> Send for SharedRef<T> {}
-
-pub struct StaticRef<T> {
-    ref_counted: RefCounted<T>,
-}
-
-impl<T> StaticRef<T> {
-    pub const fn new(value: T) -> Self {
-        Self {
-            ref_counted: RefCounted {
-                // We initialize the counter to 1 as we do in SharedRef::new,
-                // but we don't decrement it in the Drop. This means this object
-                // will never be freed.
-                counter: AtomicUsize::new(1),
-                value,
-            },
-        }
-    }
-
-    pub fn shared_ref(&'static self) -> SharedRef<T> {
-        self.ref_counted.counter.fetch_add(1, Ordering::Relaxed);
-
-        SharedRef {
-            ptr: NonNull::from(&self.ref_counted),
-        }
-    }
-}
-
-impl<T> Deref for StaticRef<T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        &self.ref_counted.value
-    }
-}
-
-impl<T> Drop for StaticRef<T> {
-    fn drop(&mut self) {
-        unreachable!("StaticSharedRef must not be dropped");
-    }
-}

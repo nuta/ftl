@@ -1,31 +1,17 @@
 use core::arch::asm;
 
-// The interrupt/exception/system call handler entry point. `stvec` is set to
-// this address.
-//
-// This function address must be aligned to 4 bytes not to accidentally set
-// MODE field in stvec.
-#[naked]
-#[repr(align(4))] // handle address in stvec must be aligned
-pub unsafe extern "C" fn switch_to_kernel() -> ! {
-    asm!(
-        // tp points to the current thread's context
-        r#"
-        call {interrupt_handler}
-        "#
-        ,
-        interrupt_handler = sym interrupt_handler,
-        options(noreturn),
-    )
-}
+use super::plic;
+use super::switch::return_to_user;
+use crate::arch::cpuvar;
+use crate::syscall::syscall_handler;
 
-extern "C" fn interrupt_handler() -> ! {
+pub extern "C" fn interrupt_handler() -> ! {
+    let cpuvar = cpuvar();
+
     let scause: u64;
-    let sepc: u64;
     let stval: u64;
     unsafe {
         asm!("csrr {}, scause", out(reg) scause);
-        asm!("csrr {}, sepc", out(reg) sepc);
         asm!("csrr {}, stval", out(reg) stval);
     }
 
@@ -62,8 +48,33 @@ extern "C" fn interrupt_handler() -> ! {
         _ => "unknown",
     };
 
-    panic!(
-        "interrupt_handler: {} (scause={:#x}), sepc: {:#x}, stval: {:#x}",
-        scause_str, scause, sepc, stval
+    let sepc = unsafe { (*cpuvar.arch.context).sepc } as u64;
+
+    trace!(
+        "interrupt: {} (scause={:#x}), sepc: {:#x}, stval: {:#x}",
+        scause_str,
+        scause,
+        sepc,
+        stval
     );
+
+    if (is_intr, code) == (true, 9) {
+        plic::handle_interrupt();
+    } else if (is_intr, code) == (false, 9) {
+        let a0 = unsafe { (*cpuvar.arch.context).a0 } as isize;
+        let a1 = unsafe { (*cpuvar.arch.context).a1 } as isize;
+        let a2 = unsafe { (*cpuvar.arch.context).a2 } as isize;
+        let a3 = unsafe { (*cpuvar.arch.context).a3 } as isize;
+        let a4 = unsafe { (*cpuvar.arch.context).a4 } as isize;
+        let a5 = unsafe { (*cpuvar.arch.context).a5 } as isize;
+        let a6 = unsafe { (*cpuvar.arch.context).a6 } as isize;
+        let ret = syscall_handler(a0, a1, a2, a3, a4, a5, a6);
+        unsafe {
+            (*cpuvar.arch.context).a0 = ret as usize;
+        }
+    } else {
+        panic!("unhandled intrrupt");
+    }
+
+    return_to_user();
 }

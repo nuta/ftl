@@ -4,7 +4,6 @@ use ftl_types::error::FtlError;
 use ftl_types::handle::HandleId;
 use ftl_types::handle::HandleRights;
 use ftl_types::interrupt::Irq;
-use ftl_types::message::MessageBuffer;
 use ftl_types::message::MessageInfo;
 use ftl_types::poll::PollEvent;
 use ftl_types::poll::PollSyscallResult;
@@ -21,30 +20,34 @@ use crate::interrupt::Interrupt;
 use crate::poll::Poll;
 use crate::ref_counted::SharedRef;
 use crate::signal::Signal;
+use crate::uaddr::UAddr;
+
+fn print(uaddr: UAddr, len: usize) {
+    // TODO: Avoid copying the entire string into kernel.
+    let bytes = uaddr.read_from_user_to_vec(0, len);
+    let s = core::str::from_utf8(&bytes).unwrap().trim_end();
+    println!("{}", s);
+}
 
 fn channel_create() -> Result<isize, FtlError> {
     let (ch1, ch2) = Channel::new()?;
 
     let current = current_thread();
     let mut handles = current.process().handles().lock();
-    let handle0 = handles.add(Handle::new(ch1, HandleRights::NONE))?;
-    let handle1 = handles.add(Handle::new(ch2, HandleRights::NONE))?;
+    let handle0 = handles.add(Handle::new(ch1, HandleRights::ALL))?;
+    let handle1 = handles.add(Handle::new(ch2, HandleRights::ALL))?;
 
     assert_eq!(handle0.as_isize() + 1, handle1.as_isize());
     Ok(handle0.as_isize())
 }
 
-fn channel_send(
-    handle: HandleId,
-    msginfo: MessageInfo,
-    msgbuffer: &MessageBuffer,
-) -> Result<(), FtlError> {
+fn channel_send(handle: HandleId, msginfo: MessageInfo, msgbuffer: UAddr) -> Result<(), FtlError> {
     let ch: Handle<Channel> = {
         current_thread()
             .process()
             .handles()
             .lock()
-            .get_owned(handle)?
+            .get_owned(handle, HandleRights::WRITE)?
             .as_channel()?
             .clone()
     };
@@ -52,23 +55,37 @@ fn channel_send(
     ch.send(msginfo, msgbuffer)
 }
 
-fn channel_recv(handle: HandleId, msgbuffer: &mut MessageBuffer) -> Result<MessageInfo, FtlError> {
+fn channel_recv(handle: HandleId, msgbuffer: UAddr) -> Result<MessageInfo, FtlError> {
     let ch: Handle<Channel> = {
         current_thread()
             .process()
             .handles()
             .lock()
-            .get_owned(handle)?
+            .get_owned(handle, HandleRights::READ)?
             .as_channel()?
             .clone()
     };
 
-    ch.recv(msgbuffer)
+    Handle::into_shared_ref(ch).recv(msgbuffer, true)
+}
+
+fn channel_try_recv(handle: HandleId, msgbuffer: UAddr) -> Result<MessageInfo, FtlError> {
+    let ch: Handle<Channel> = {
+        current_thread()
+            .process()
+            .handles()
+            .lock()
+            .get_owned(handle, HandleRights::READ)?
+            .as_channel()?
+            .clone()
+    };
+
+    Handle::into_shared_ref(ch).recv(msgbuffer, false)
 }
 
 fn folio_create(len: usize) -> Result<HandleId, FtlError> {
     let folio = Folio::alloc(len)?;
-    let handle = Handle::new(SharedRef::new(folio), HandleRights::NONE);
+    let handle = Handle::new(SharedRef::new(folio), HandleRights::ALL);
     let handle_id = current_thread()
         .process()
         .handles()
@@ -80,7 +97,7 @@ fn folio_create(len: usize) -> Result<HandleId, FtlError> {
 
 fn folio_create_fixed(paddr: PAddr, len: usize) -> Result<HandleId, FtlError> {
     let folio = Folio::alloc_fixed(paddr, len)?;
-    let handle = Handle::new(SharedRef::new(folio), HandleRights::NONE);
+    let handle = Handle::new(SharedRef::new(folio), HandleRights::ALL);
     let handle_id = current_thread()
         .process()
         .handles()
@@ -96,7 +113,7 @@ fn folio_paddr(handle: HandleId) -> Result<PAddr, FtlError> {
             .process()
             .handles()
             .lock()
-            .get_owned(handle)?
+            .get_owned(handle, HandleRights::DRIVER)?
             .as_folio()?
             .clone()
     };
@@ -106,7 +123,7 @@ fn folio_paddr(handle: HandleId) -> Result<PAddr, FtlError> {
 
 fn poll_create() -> Result<HandleId, FtlError> {
     let poll = Poll::new();
-    let handle = Handle::new(poll, HandleRights::NONE);
+    let handle = Handle::new(poll, HandleRights::ALL);
 
     let handle_id = current_thread()
         .process()
@@ -124,9 +141,11 @@ fn poll_add(
 ) -> Result<(), FtlError> {
     let current_thread = current_thread();
     let handles = current_thread.process().handles().lock();
-    let poll = handles.get_owned(poll_handle_id)?.as_poll()?;
-    let object = handles.get_owned(target_handle_id)?;
-    poll.add(object, target_handle_id, interests);
+    let poll = handles
+        .get_owned(poll_handle_id, HandleRights::WRITE)?
+        .as_poll()?;
+    let object = handles.get_owned(target_handle_id, HandleRights::POLL)?;
+    poll.add(object, target_handle_id, interests)?;
     Ok(())
 }
 
@@ -136,18 +155,18 @@ fn poll_wait(handle_id: HandleId) -> Result<PollSyscallResult, FtlError> {
             .process()
             .handles()
             .lock()
-            .get_owned(handle_id)?
+            .get_owned(handle_id, HandleRights::READ | HandleRights::READ)?
             .as_poll()?
             .clone()
     };
 
-    let (ev, ready_handle_id) = poll.wait()?;
+    let (ev, ready_handle_id) = Handle::into_shared_ref(poll).wait(true)?;
     Ok(PollSyscallResult::new(ev, ready_handle_id))
 }
 
 fn signal_create() -> Result<HandleId, FtlError> {
     let signal = Signal::new()?;
-    let handle = Handle::new(signal, HandleRights::NONE);
+    let handle = Handle::new(signal, HandleRights::ALL);
     let handle_id = current_thread()
         .process()
         .handles()
@@ -163,7 +182,7 @@ fn signal_update(handle_id: HandleId, value: SignalBits) -> Result<(), FtlError>
             .process()
             .handles()
             .lock()
-            .get_owned(handle_id)?
+            .get_owned(handle_id, HandleRights::WRITE)?
             .as_signal()?
             .clone()
     };
@@ -177,7 +196,7 @@ fn signal_clear(handle_id: HandleId) -> Result<SignalBits, FtlError> {
             .process()
             .handles()
             .lock()
-            .get_owned(handle_id)?
+            .get_owned(handle_id, HandleRights::WRITE)?
             .as_signal()?
             .clone()
     };
@@ -187,7 +206,7 @@ fn signal_clear(handle_id: HandleId) -> Result<SignalBits, FtlError> {
 
 fn interrupt_create(irq: Irq) -> Result<HandleId, FtlError> {
     let interrupt = Interrupt::new(irq)?;
-    let handle = Handle::new(interrupt, HandleRights::NONE);
+    let handle = Handle::new(interrupt, HandleRights::ALL);
     let handle_id = current_thread()
         .process()
         .handles()
@@ -203,7 +222,7 @@ fn interrupt_ack(handle_id: HandleId) -> Result<(), FtlError> {
             .process()
             .handles()
             .lock()
-            .get_owned(handle_id)?
+            .get_owned(handle_id, HandleRights::WRITE)?
             .as_interrupt()?
             .clone()
     };
@@ -230,35 +249,39 @@ fn vmspace_map(
     let (vmspace, folio) = {
         let current = current_thread();
         let handles = current.process().handles().lock();
-        let vmspace = handles.get_owned(handle_id)?.as_vmspace()?.clone();
-        let folio = handles.get_owned(folio)?.as_folio()?.clone();
+        let vmspace = handles
+            .get_owned(handle_id, HandleRights::MAP)?
+            .as_vmspace()?
+            .clone();
+        let folio = handles
+            .get_owned(folio, HandleRights::MAP)?
+            .as_folio()?
+            .clone();
         (vmspace, folio)
     };
 
-    vmspace.map(len, folio, prot)
+    vmspace.map_anywhere(len, folio, prot)
 }
 
-pub fn syscall_entry(
-    n: isize,
+fn handle_syscall(
     a0: isize,
     a1: isize,
     a2: isize,
     a3: isize,
     a4: isize,
     a5: isize,
+    n: isize,
 ) -> Result<isize, FtlError> {
     match n {
         _ if n == SyscallNumber::Print as isize => {
-            let bytes = unsafe { core::slice::from_raw_parts(a0 as *const u8, a1 as usize) };
-            let s = core::str::from_utf8(bytes).unwrap().trim_end();
-            println!("{}", s);
+            print(UAddr::new(a0 as usize), a1 as usize);
             Ok(0)
         }
         _ if n == SyscallNumber::ChannelCreate as isize => channel_create(),
         _ if n == SyscallNumber::ChannelSend as isize => {
             let handle = HandleId::from_raw_isize_truncated(a0);
             let msginfo = MessageInfo::from_raw(a1);
-            let msgbuffer = unsafe { &*(a2 as usize as *const MessageBuffer) };
+            let msgbuffer = UAddr::new(a2 as usize);
             let err = channel_send(handle, msginfo, msgbuffer);
             if let Err(e) = err {
                 return Err(e);
@@ -268,8 +291,14 @@ pub fn syscall_entry(
         }
         _ if n == SyscallNumber::ChannelRecv as isize => {
             let handle = HandleId::from_raw_isize_truncated(a0);
-            let msgbuffer = unsafe { &mut *(a1 as usize as *mut MessageBuffer) };
+            let msgbuffer = UAddr::new(a1 as usize);
             let msginfo = channel_recv(handle, msgbuffer)?;
+            Ok(msginfo.as_raw())
+        }
+        _ if n == SyscallNumber::ChannelTryRecv as isize => {
+            let handle = HandleId::from_raw_isize_truncated(a0);
+            let msgbuffer = UAddr::new(a1 as usize);
+            let msginfo = channel_try_recv(handle, msgbuffer)?;
             Ok(msginfo.as_raw())
         }
         _ if n == SyscallNumber::FolioCreate as isize => {
@@ -277,7 +306,7 @@ pub fn syscall_entry(
             Ok(handle_id.as_isize())
         }
         _ if n == SyscallNumber::FolioCreateFixed as isize => {
-            let paddr = PAddr::new(a0 as usize).ok_or(FtlError::InvalidArg)?;
+            let paddr = PAddr::new(a0 as usize);
             let len = a1 as usize;
             let handle_id = folio_create_fixed(paddr, len)?;
             Ok(handle_id.as_isize())
@@ -285,7 +314,16 @@ pub fn syscall_entry(
         _ if n == SyscallNumber::FolioPAddr as isize => {
             let handle = HandleId::from_raw_isize_truncated(a0);
             let paddr = folio_paddr(handle)?;
-            Ok(paddr.as_usize() as isize) // FIXME: guarantee casting to isize is OK
+
+            // Try to convert PAddr to isize. We can't cast PAddr to isize directly
+            // because negative values are considered as error codes. This hack should
+            // be fine until your computer has more than 2^63 bytes of memory.
+            let paddr_isize: isize = match paddr.as_usize().try_into() {
+                Ok(value) => value,
+                Err(_) => return Err(FtlError::TooLargePAddr),
+            };
+
+            Ok(paddr_isize)
         }
         _ if n == SyscallNumber::PollCreate as isize => {
             let handle_id = poll_create()?;
@@ -354,5 +392,20 @@ pub fn syscall_entry(
 
             Err(FtlError::UnknownSyscall)
         }
+    }
+}
+
+pub fn syscall_handler(
+    a0: isize,
+    a1: isize,
+    a2: isize,
+    a3: isize,
+    a4: isize,
+    a5: isize,
+    n: isize,
+) -> isize {
+    match handle_syscall(a0, a1, a2, a3, a4, a5, n) {
+        Ok(isize) => isize,
+        Err(err) => err as isize,
     }
 }
