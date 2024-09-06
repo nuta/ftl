@@ -34,7 +34,7 @@ pub mod ftl_autogen {
                     | ::core::mem::size_of::<Self>() as isize,
                 );
 
-                fn serialize(&self, buffer: &mut MessageBuffer) {
+                fn serialize(self, buffer: &mut MessageBuffer) {
                     // FIXME: Avoid copy entire bytes/str.
                     todo!();
                     // core::ptr::write(buffer.as_mut_ptr() as *mut Self, *self);
