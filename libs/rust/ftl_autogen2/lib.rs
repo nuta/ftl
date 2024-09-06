@@ -1,5 +1,6 @@
 use std::env;
 use std::fmt;
+use std::fmt::Write;
 use std::fs::File;
 use std::path::Path;
 use std::path::PathBuf;
@@ -8,9 +9,6 @@ use anyhow::Context;
 use anyhow::Result;
 use ftl_types::idl;
 use ftl_types::idl::IdlFile;
-use ftl_types::spec::DependWithName;
-use ftl_types::spec::Spec;
-use ftl_types::spec::SpecFile;
 use minijinja::context;
 use minijinja::Environment;
 use serde::Serialize;
@@ -18,11 +16,7 @@ use serde::Serialize;
 #[derive(Debug, Serialize, Clone)]
 struct Field {
     name: String,
-    is_handle: bool,
-    is_bytes: bool,
     ty: String,
-    builder_ty: String,
-    raw_ty: String,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -30,49 +24,22 @@ struct Message {
     protocol_name: String,
     name: String,
     msgid: isize,
-    num_handles: usize,
-    has_bytes_fields: bool,
     fields: Vec<Field>,
 }
 
-#[derive(Debug, Serialize)]
-struct UsedMessage {
-    /// `"PingRequest"`, `"PingReply"`, ...
-    camel_name: String,
-    /// `ftl_api_autogen::protocols::ping::PingRequest`, ...
-    ty: String,
-}
-
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 struct Protocol {
     name: String,
     messages: Vec<Message>,
 }
 
-#[derive(Debug, Serialize)]
-struct App {
-    name: String,
-    depends: Vec<DependWithName>,
-    used_messages: Vec<UsedMessage>,
-}
-
-fn resolve_builder_type_name(ty: &idl::Ty) -> String {
+fn resolve_type(ty: &idl::Ty) -> String {
     match ty {
         idl::Ty::UInt16 => "u16".to_string(),
         idl::Ty::Int32 => "i32".to_string(),
-        idl::Ty::Bytes { .. } => "&'a [u8]".to_string(),
-        idl::Ty::String { capacity } => format!("ftl_types::idl::StringField<{capacity}>"),
-        idl::Ty::Handle | idl::Ty::Channel => "unreachable!()".to_string(),
-    }
-}
-
-fn resolve_raw_type_name(ty: &idl::Ty) -> String {
-    match ty {
-        idl::Ty::UInt16 => "u16".to_string(),
-        idl::Ty::Int32 => "i32".to_string(),
+        idl::Ty::Channel => "ftl_types::idl::HandleField<Channel>".to_string(),
         idl::Ty::Bytes { capacity } => format!("ftl_types::idl::BytesField<{capacity}>"),
         idl::Ty::String { capacity } => format!("ftl_types::idl::StringField<{capacity}>"),
-        idl::Ty::Handle | idl::Ty::Channel => "unreachable!()".to_string(),
     }
 }
 
@@ -85,10 +52,10 @@ impl fmt::Display for CamelCase<'_> {
             if c == '_' {
                 next_upper = true;
             } else if next_upper {
-                write!(f, "{}", c.to_ascii_uppercase())?;
+                f.write_char(c.to_ascii_uppercase())?;
                 next_upper = false;
             } else {
-                write!(f, "{}", c)?;
+                f.write_char(c)?;
             }
         }
         Ok(())
@@ -100,11 +67,7 @@ fn visit_fields(idl_fields: &[idl::Field]) -> Vec<Field> {
     for f in idl_fields {
         fields.push(Field {
             name: f.name.clone(),
-            is_handle: matches!(f.ty, idl::Ty::Handle | idl::Ty::Channel),
-            is_bytes: matches!(f.ty, idl::Ty::Bytes { .. }),
-            ty: format!("{}", f.ty),
-            builder_ty: resolve_builder_type_name(&f.ty),
-            raw_ty: resolve_raw_type_name(&f.ty),
+            ty: resolve_type(&f.ty),
         });
     }
 
@@ -131,113 +94,73 @@ fn run_rustfmt(file: &Path) -> Result<()> {
 
 pub fn generate_for_app() -> Result<()> {
     let out_dir = env::var_os("OUT_DIR").unwrap();
+    let manifest_dir = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").unwrap());
     let dest_path = Path::new(&out_dir).join("autogen.rs");
-    let app_dir = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").unwrap());
-    let idl_path = env::var_os("FTL_IDL_FILE").unwrap();
+    let idl_path = manifest_dir
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("idl.json");
 
     let idl_file = File::open(idl_path)?;
     let idl: IdlFile = serde_json::from_reader(&idl_file)?;
 
     let mut next_msgid = 1;
+    let mut messages = Vec::new();
     let mut protocols = Vec::new();
-    let mut all_messages = Vec::new();
     for protocol in idl.protocols {
-        let mut messages = Vec::new();
+        let mut protocol_messages = Vec::new();
         if let Some(oneways) = &protocol.oneways {
             for oneway in oneways {
-                let req_fields = visit_fields(&oneway.fields);
-                let msg = Message {
+                protocol_messages.push(Message {
                     protocol_name: protocol.name.clone(),
                     name: format!("{}", CamelCase(&oneway.name)),
                     msgid: next_msgid,
-                    num_handles: req_fields.iter().filter(|f| f.is_handle).count(),
-                    has_bytes_fields: req_fields.iter().any(|f| f.is_bytes),
-                    fields: req_fields,
-                };
+                    fields: visit_fields(&oneway.fields),
+                });
                 next_msgid += 1;
-
-                all_messages.push(msg.clone());
-                messages.push(msg);
             }
         }
 
         if let Some(rpcs) = &protocol.rpcs {
             for rpc in rpcs {
-                let req_fields = visit_fields(&rpc.request.fields);
-                let req_msg = Message {
+                protocol_messages.push(Message {
                     protocol_name: protocol.name.clone(),
-                    name: format!("{}Request", CamelCase(&rpc.name)),
+                    name: format!("{}", CamelCase(&rpc.name)),
                     msgid: next_msgid,
-                    num_handles: req_fields.iter().filter(|f| f.is_handle).count(),
-                    has_bytes_fields: req_fields.iter().any(|f| f.is_bytes),
-                    fields: req_fields,
-                };
+                    fields: visit_fields(&rpc.request.fields),
+                });
                 next_msgid += 1;
 
-                let res_fields = visit_fields(&rpc.response.fields);
-                let res_msg = Message {
+                protocol_messages.push(Message {
                     protocol_name: protocol.name.clone(),
                     name: format!("{}Reply", CamelCase(&rpc.name)),
                     msgid: next_msgid,
-                    num_handles: res_fields.iter().filter(|f| f.is_handle).count(),
-                    has_bytes_fields: res_fields.iter().any(|f| f.is_bytes),
-                    fields: res_fields,
-                };
+                    fields: visit_fields(&rpc.response.fields),
+                });
                 next_msgid += 1;
-
-                all_messages.push(req_msg.clone());
-                all_messages.push(res_msg.clone());
-                messages.push(req_msg);
-                messages.push(res_msg);
             }
         }
 
+        messages.extend(protocol_messages.iter().cloned());
         protocols.push(Protocol {
-            name: protocol.name.clone(),
-            messages,
+            name: protocol.name,
+            messages: protocol_messages.clone(),
         });
     }
-
-    let spec_path = app_dir.join("app.spec.json");
-    let spec_file = File::open(&spec_path)
-        .with_context(|| format!("failed to open {}", spec_path.display()))?;
-    let spec: SpecFile = serde_json::from_reader(&spec_file)
-        .with_context(|| format!("failed to parse {}", spec_path.display()))?;
-
-    let mut used_messages = Vec::new();
-    for m in &all_messages {
-        used_messages.push(UsedMessage {
-            camel_name: format!("{}", CamelCase(&m.name)),
-            ty: format!(
-                "crate::ftl_autogen2_generated::protocols::{}::{}",
-                &m.protocol_name,
-                CamelCase(&m.name)
-            ),
-        });
-    }
-
-    let app = match spec.spec {
-        Spec::App(app) => {
-            App {
-                name: spec.name,
-                depends: app.depends,
-                used_messages,
-            }
-        } // _ => {
-          //     anyhow::bail!("unexpected spec type for {}", spec_path.display());
-          // }
-    };
 
     let mut j2env = Environment::new();
     j2env
-        .add_template("app_autogen", include_str!("templates/app_autogen.rs.j2"))
+        .add_template("autogen", include_str!("autogen.rs.j2"))
         .unwrap();
-    let template = j2env.get_template("app_autogen")?;
+    let template = j2env.get_template("autogen")?;
     let lib_rs = template.render(context! {
-        app => app,
+        messages => messages,
         protocols => protocols,
         generate_for_app => true,
-    })?;
+    }).context("failed to generate autogen")?;
+
     std::fs::write(&dest_path, lib_rs)?;
     run_rustfmt(&dest_path)?;
 

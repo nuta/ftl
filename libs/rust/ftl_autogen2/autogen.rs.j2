@@ -1,0 +1,32 @@
+pub mod ftl_autogen {
+    use ftl_api::types as ftl_types;
+
+    use ftl_types::message::MessageSerialize;
+    use ftl_types::message::MessageDeserialize;
+    use ftl_types::message::MessageBuffer;
+    use ftl_types::message::MessageInfo;
+
+    #[derive(Debug)]
+    pub enum Message {
+        {% for m in messages %}
+        {{ m.name }}({{ m.protocol_name }}::{{ m.name }}),
+        {% endfor %}
+    }
+
+    {% for protocol in protocols %}
+    pub mod {{ protocol.name }} {
+        #[allow(unused)]
+        use super::ftl_types;
+
+        {% for m in messages %}
+            #[repr(C)]
+            #[derive(Debug)]
+            pub struct {{ m.name }} {
+                {%- for f in m.fields %}
+                    pub {{ f.name }}: {{ f.ty }},
+                {%- endfor %}
+            }
+        {% endfor %}
+    }
+    {% endfor %}
+}

@@ -62,7 +62,7 @@ fn resolve_builder_type_name(ty: &idl::Ty) -> String {
         idl::Ty::Int32 => "i32".to_string(),
         idl::Ty::Bytes { .. } => "&'a [u8]".to_string(),
         idl::Ty::String { capacity } => format!("ftl_types::idl::StringField<{capacity}>"),
-        idl::Ty::Handle | idl::Ty::Channel => "unreachable!()".to_string(),
+        idl::Ty::Channel => "unreachable!()".to_string(),
     }
 }
 
@@ -72,7 +72,7 @@ fn resolve_raw_type_name(ty: &idl::Ty) -> String {
         idl::Ty::Int32 => "i32".to_string(),
         idl::Ty::Bytes { capacity } => format!("ftl_types::idl::BytesField<{capacity}>"),
         idl::Ty::String { capacity } => format!("ftl_types::idl::StringField<{capacity}>"),
-        idl::Ty::Handle | idl::Ty::Channel => "unreachable!()".to_string(),
+        idl::Ty::Channel => "unreachable!()".to_string(),
     }
 }
 
@@ -100,7 +100,7 @@ fn visit_fields(idl_fields: &[idl::Field]) -> Vec<Field> {
     for f in idl_fields {
         fields.push(Field {
             name: f.name.clone(),
-            is_handle: matches!(f.ty, idl::Ty::Handle | idl::Ty::Channel),
+            is_handle: matches!(f.ty, idl::Ty::Channel),
             is_bytes: matches!(f.ty, idl::Ty::Bytes { .. }),
             ty: format!("{}", f.ty),
             builder_ty: resolve_builder_type_name(&f.ty),
