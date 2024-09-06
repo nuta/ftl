@@ -17,6 +17,7 @@ use serde::Serialize;
 struct Field {
     name: String,
     ty: String,
+    is_handle: bool,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -78,6 +79,7 @@ fn visit_fields(idl_fields: &[idl::Field]) -> Vec<Field> {
         fields.push(Field {
             name: f.name.clone(),
             ty: resolve_type(&f.ty),
+            is_handle: matches!(f.ty, idl::Ty::Channel),
         });
     }
 

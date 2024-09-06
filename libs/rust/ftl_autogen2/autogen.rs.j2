@@ -23,6 +23,12 @@ pub mod ftl_autogen {
             #[derive(Debug)]
             pub struct {{ m.name }} {
                 {%- for f in m.fields %}
+                {%- if f.is_handle %}
+                pub {{ f.name }}: {{ f.ty }},
+                {%- endfor %}
+
+                {%- for f in m.fields %}
+                {%- if not f.is_handle %}
                     pub {{ f.name }}: {{ f.ty }},
                 {%- endfor %}
             }
