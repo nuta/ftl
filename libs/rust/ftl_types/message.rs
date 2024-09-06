@@ -1,5 +1,3 @@
-use crate::handle::HandleId;
-
 pub const MESSAGE_DATA_MAX_LEN: usize = 0xfff;
 pub const MESSAGE_HANDLES_MAX_COUNT: usize = 3;
 
@@ -33,7 +31,6 @@ impl MessageInfo {
 #[repr(C, align(16))] // Align to 16 bytes for SIMD instructions.
 pub struct MessageBuffer {
     pub data: [u8; MESSAGE_DATA_MAX_LEN],
-    pub handles: [HandleId; MESSAGE_HANDLES_MAX_COUNT],
 }
 
 impl MessageBuffer {
@@ -41,7 +38,6 @@ impl MessageBuffer {
         // TODO: Avoid zeroing the buffer because it's not necessary.
         Self {
             data: [0; MESSAGE_DATA_MAX_LEN],
-            handles: [HandleId::from_raw(0); MESSAGE_HANDLES_MAX_COUNT],
         }
     }
 }
@@ -55,4 +51,9 @@ pub trait MessageSerialize: Sized {
 pub trait MessageDeserialize: Sized {
     fn deserialize<'a>(buffer: &'a mut MessageBuffer, msginfo: MessageInfo)
         -> Option<&'a mut Self>;
+}
+
+pub trait MessageDeserializeOwned: Sized {
+    fn deserialize_owned(buffer: &mut MessageBuffer, msginfo: MessageInfo)
+        -> Option<Self>;
 }

@@ -3,6 +3,7 @@ pub mod ftl_autogen {
 
     use ftl_types::message::MessageSerialize;
     use ftl_types::message::MessageDeserialize;
+    use ftl_types::message::MessageDeserializeOwned;
     use ftl_types::message::MessageBuffer;
     use ftl_types::message::MessageInfo;
 
@@ -11,6 +12,21 @@ pub mod ftl_autogen {
         {% for m in messages %}
         {{ m.name }}({{ m.protocol_name }}::{{ m.name }}),
         {% endfor %}
+    }
+
+    impl MessageDeserializeOwned for Message {
+        fn deserialize<'a>(buffer: &mut MessageBuffer, msginfo: MessageInfo)
+            -> Option<Self> {
+            match msginfo {
+                {% for m in messages %}
+                    {{ m.protocol_name }}::{{ m.name }}::MSGINFO => {
+                        let msg = {{ m.protocol_name }}::{{ m.name }}::deserialize(buffer, msginfo)?;
+                        Some(Message::{{ m.name }}(*msg))
+                    },
+                {% endfor %}
+                _ => None,
+            }
+        }
     }
 
     {% for protocol in protocols %}
@@ -25,11 +41,13 @@ pub mod ftl_autogen {
                 {%- for f in m.fields %}
                 {%- if f.is_handle %}
                 pub {{ f.name }}: {{ f.ty }},
+                {%- endif %}
                 {%- endfor %}
 
                 {%- for f in m.fields %}
                 {%- if not f.is_handle %}
-                    pub {{ f.name }}: {{ f.ty }},
+                pub {{ f.name }}: {{ f.ty }},
+                {%- endif %}
                 {%- endfor %}
             }
 
@@ -42,8 +60,10 @@ pub mod ftl_autogen {
 
                 fn serialize(self, buffer: &mut MessageBuffer) {
                     // FIXME: Avoid copy entire bytes/str.
-                    todo!();
-                    // core::ptr::write(buffer.as_mut_ptr() as *mut Self, *self);
+                    unsafe {
+                        debug_assert!(::core::mem::size_of::<Self>() <= ftl_types::message::MESSAGE_DATA_MAX_LEN);
+                        core::ptr::write(buffer.data.as_mut_ptr() as *mut Self, self);
+                    }
                 }
             }
 
@@ -54,8 +74,9 @@ pub mod ftl_autogen {
                         return None;
                     }
 
-                    todo!()
-                    // Some(unsafe { &mut *(buffer.as_mut_ptr() as *mut Self) })
+                    debug_assert!(::core::mem::size_of::<Self>() <= ftl_types::message::MESSAGE_DATA_MAX_LEN);
+                    let msg = unsafe { &mut *(buffer.data.as_mut_ptr() as *mut Self) };
+                    Some(msg)
                 }
             }
         {% endfor %}
