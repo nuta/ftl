@@ -37,7 +37,7 @@ fn resolve_type(ty: &idl::Ty) -> String {
     match ty {
         idl::Ty::UInt16 => "u16".to_string(),
         idl::Ty::Int32 => "i32".to_string(),
-        idl::Ty::Channel => "ftl_types::idl::HandleField<Channel>".to_string(),
+        idl::Ty::Channel => "ftl_types::idl::HandleField".to_string(),
         idl::Ty::Bytes { capacity } => format!("ftl_types::idl::BytesField<{capacity}>"),
         idl::Ty::String { capacity } => format!("ftl_types::idl::StringField<{capacity}>"),
     }
@@ -92,7 +92,7 @@ fn run_rustfmt(file: &Path) -> Result<()> {
     Ok(())
 }
 
-pub fn generate_for_app() -> Result<()> {
+pub fn generate() -> Result<()> {
     let out_dir = env::var_os("OUT_DIR").unwrap();
     let manifest_dir = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").unwrap());
     let dest_path = Path::new(&out_dir).join("autogen.rs");
@@ -158,7 +158,7 @@ pub fn generate_for_app() -> Result<()> {
     let lib_rs = template.render(context! {
         messages => messages,
         protocols => protocols,
-        generate_for_app => true,
+        kernel_mode => cfg!(feature = "generate_for_kernel"),
     }).context("failed to generate autogen")?;
 
     std::fs::write(&dest_path, lib_rs)?;

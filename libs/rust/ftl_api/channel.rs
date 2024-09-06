@@ -2,13 +2,14 @@ use alloc::boxed::Box;
 use alloc::sync::Arc;
 use core::fmt;
 use core::mem;
+use core::num::NonZeroI32;
 
 use ftl_types::error::FtlError;
 use ftl_types::message::MessageBuffer;
 use ftl_types::message::MessageDeserialize;
 use ftl_types::message::MessageInfo;
 use ftl_types::message::MessageSerialize;
-use ftl_types::message::MovedHandle;
+use ftl_types::idl::MovedHandle;
 
 use crate::handle::OwnedHandle;
 use crate::syscall;
@@ -143,11 +144,23 @@ impl fmt::Debug for Channel {
     }
 }
 
+impl From<MovedHandle> for Channel {
+    fn from(moved_handle: MovedHandle) -> Channel {
+        let handle_id = moved_handle.handle_id();
+        Channel {
+            handle: OwnedHandle::from_raw(handle_id),
+        }
+    }
+}
+
 impl From<Channel> for MovedHandle {
     fn from(channel: Channel) -> MovedHandle {
         let handle_id = channel.handle.id();
         mem::forget(channel);
-        MovedHandle(handle_id)
+
+        // TODO: Make other handle types non-zero to avoid unwrap.
+        let raw_id = NonZeroI32::new(handle_id.as_i32()).unwrap();
+        MovedHandle::new(raw_id)
     }
 }
 

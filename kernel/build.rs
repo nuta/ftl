@@ -63,6 +63,8 @@ const AUTOGEN_TEMPLATE: &str = r#"
 "#;
 
 fn main() {
+    ftl_autogen2::generate().expect("autogen failed");
+
     let out_dir = env::var_os("OUT_DIR").unwrap();
     let dest_path = Path::new(&out_dir).join("autogen.rs");
 

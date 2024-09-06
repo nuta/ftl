@@ -1,11 +1,15 @@
 use alloc::string::String;
 use alloc::vec::Vec;
+use ftl_utils::static_assert;
 use core::fmt;
+use core::num::NonZeroI32;
 use core::str;
 use core::str::Utf8Error;
 
 use serde::Deserialize;
 use serde::Serialize;
+
+use crate::handle::HandleId;
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct IdlFile {
@@ -153,5 +157,31 @@ impl<const CAP: usize> TryFrom<&str> for StringField<CAP> {
     fn try_from(value: &str) -> Result<StringField<CAP>, TooManyItemsError> {
         let bytes = BytesField::try_from(value.as_bytes())?;
         Ok(StringField(bytes))
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+#[repr(transparent)]
+pub struct MovedHandle(NonZeroI32);
+
+impl MovedHandle {
+    pub const fn new(raw: NonZeroI32) -> MovedHandle {
+        MovedHandle(raw)
+    }
+
+    pub fn handle_id(&self) -> HandleId {
+        HandleId::from_raw(self.0.get())
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+#[repr(transparent)]
+pub struct HandleField(Option<MovedHandle>);
+
+static_assert!(size_of::<HandleField>() == size_of::<HandleId>());
+
+impl HandleField {
+    pub fn take<T: From<MovedHandle>>(&mut self) -> Option<T> {
+        self.0.take().map(From::from)
     }
 }
