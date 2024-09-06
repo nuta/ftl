@@ -16,7 +16,7 @@ pub mod ftl_autogen {
     {% for protocol in protocols %}
     pub mod {{ protocol.name }} {
         #[allow(unused)]
-        use super::ftl_types;
+        use super::*;
 
         {% for m in messages %}
             #[repr(C)]
@@ -25,6 +25,32 @@ pub mod ftl_autogen {
                 {%- for f in m.fields %}
                     pub {{ f.name }}: {{ f.ty }},
                 {%- endfor %}
+            }
+
+            impl MessageSerialize for {{ m.name }} {
+                const MSGINFO: MessageInfo = MessageInfo::from_raw(
+                    ({{ m.msgid }} << 14)
+                    | ({{ m.num_handles }} << 12)
+                    | ::core::mem::size_of::<Self>() as isize,
+                );
+
+                fn serialize(&self, buffer: &mut MessageBuffer) {
+                    // FIXME: Avoid copy entire bytes/str.
+                    todo!();
+                    // core::ptr::write(buffer.as_mut_ptr() as *mut Self, *self);
+                }
+            }
+
+            impl MessageDeserialize for {{ m.name }} {
+                fn deserialize<'a>(buffer: &'a mut MessageBuffer, msginfo: MessageInfo)
+                    -> Option<&'a mut Self> {
+                    if msginfo != Self::MSGINFO {
+                        return None;
+                    }
+
+                    todo!()
+                    // Some(unsafe { &mut *(buffer.as_mut_ptr() as *mut Self) })
+                }
             }
         {% endfor %}
     }

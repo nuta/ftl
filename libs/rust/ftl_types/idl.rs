@@ -1,11 +1,11 @@
 use alloc::string::String;
 use alloc::vec::Vec;
-use ftl_utils::static_assert;
 use core::fmt;
 use core::num::NonZeroI32;
 use core::str;
 use core::str::Utf8Error;
 
+use ftl_utils::static_assert;
 use serde::Deserialize;
 use serde::Serialize;
 

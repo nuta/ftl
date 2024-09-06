@@ -28,7 +28,7 @@ pub enum Error {
 
 #[derive(Debug)]
 pub enum Event<'a, Ctx, M: MessageDeserialize> {
-    Message(&'a mut Ctx, M::Reader<'a>, &'a mut ChannelSender),
+    Message(&'a mut Ctx, &'a mut M, &'a mut ChannelSender),
     Interrupt(&'a mut Ctx, &'a mut Interrupt),
     Error(Error),
 }

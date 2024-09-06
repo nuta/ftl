@@ -5,11 +5,11 @@ use core::mem;
 use core::num::NonZeroI32;
 
 use ftl_types::error::FtlError;
+use ftl_types::idl::MovedHandle;
 use ftl_types::message::MessageBuffer;
 use ftl_types::message::MessageDeserialize;
 use ftl_types::message::MessageInfo;
 use ftl_types::message::MessageSerialize;
-use ftl_types::idl::MovedHandle;
 
 use crate::handle::OwnedHandle;
 use crate::syscall;
@@ -24,28 +24,26 @@ pub struct Channel {
     handle: OwnedHandle,
 }
 
-fn do_recv<M: MessageDeserialize>(
-    buffer: &mut MessageBuffer,
+fn do_recv<'a, M: MessageDeserialize>(
+    buffer: &'a mut MessageBuffer,
     msginfo: MessageInfo,
-) -> Result<M::Reader<'_>, RecvError> {
-    let msg = match M::deserialize(buffer, msginfo) {
-        Some(msg) => msg,
-        None => {
-            // Close transferred handles to prevent resource leaks.
-            //
-            // Also, if they're IPC-related handles like channels, this might
-            // let the sender know that we don't never use them. Otherwise, the
-            // sender might be waiting for a message from us.
-            for i in 0..msginfo.num_handles() {
-                let handle_id = buffer.handles[i];
-                syscall::handle_close(handle_id).expect("failed to close handle");
-            }
+) -> Result<&'a mut M, RecvError> {
+    if let Some(msg) = M::deserialize(buffer, msginfo) {
+        return Ok(msg);
+    }
 
-            return Err(RecvError::Deserialize(msginfo));
-        }
-    };
+    // Close transferred handles to prevent resource leaks.
+    //
+    // Also, if they're IPC-related handles like channels, this might
+    // let the sender know that we don't never use them. Otherwise, the
+    // sender might be waiting for a message from us.
+    for i in 0..msginfo.num_handles() {
+        // FIXME:
+        // let handle_id = buffer.handles[i];
+        // syscall::handle_close(handle_id).expect("failed to close handle");
+    }
 
-    Ok(msg)
+    Err(RecvError::Deserialize(msginfo))
 }
 
 impl Channel {
@@ -107,7 +105,7 @@ impl Channel {
     pub fn try_recv_with_buffer<'a, M: MessageDeserialize>(
         &self,
         buffer: &'a mut MessageBuffer,
-    ) -> Result<Option<M::Reader<'a>>, RecvError> {
+    ) -> Result<Option<&'a mut M>, RecvError> {
         // TODO: Optimize parameter order to avoid unnecessary register swaps.
         let msginfo = match syscall::channel_try_recv(self.handle.id(), buffer) {
             Ok(msginfo) => msginfo,
@@ -122,7 +120,7 @@ impl Channel {
     pub fn recv_with_buffer<'a, M: MessageDeserialize>(
         &self,
         buffer: &'a mut MessageBuffer,
-    ) -> Result<M::Reader<'a>, RecvError> {
+    ) -> Result<&'a mut M, RecvError> {
         // TODO: Optimize parameter order to avoid unnecessary register swaps.
         let msginfo =
             syscall::channel_recv(self.handle.id(), buffer).map_err(RecvError::Syscall)?;
@@ -177,14 +175,14 @@ impl ChannelReceiver {
     pub fn recv_with_buffer<'a, M: MessageDeserialize>(
         &self,
         buffer: &'a mut MessageBuffer,
-    ) -> Result<M::Reader<'a>, RecvError> {
+    ) -> Result<&'a mut M, RecvError> {
         self.ch.recv_with_buffer::<M>(buffer)
     }
 
     pub fn try_recv_with_buffer<'a, M: MessageDeserialize>(
         &self,
         buffer: &'a mut MessageBuffer,
-    ) -> Result<Option<M::Reader<'a>>, RecvError> {
+    ) -> Result<Option<&'a mut M>, RecvError> {
         self.ch.try_recv_with_buffer::<M>(buffer)
     }
 }

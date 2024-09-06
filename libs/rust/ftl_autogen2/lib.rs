@@ -24,6 +24,7 @@ struct Message {
     protocol_name: String,
     name: String,
     msgid: isize,
+    num_handles: isize,
     fields: Vec<Field>,
 }
 
@@ -41,6 +42,10 @@ fn resolve_type(ty: &idl::Ty) -> String {
         idl::Ty::Bytes { capacity } => format!("ftl_types::idl::BytesField<{capacity}>"),
         idl::Ty::String { capacity } => format!("ftl_types::idl::StringField<{capacity}>"),
     }
+}
+
+fn num_handles(fields: &[Field]) -> isize {
+    fields.iter().filter(|f| f.ty == "ftl_types::idl::HandleField").count().try_into().unwrap()
 }
 
 struct CamelCase<'a>(&'a str);
@@ -113,11 +118,13 @@ pub fn generate() -> Result<()> {
         let mut protocol_messages = Vec::new();
         if let Some(oneways) = &protocol.oneways {
             for oneway in oneways {
+                let fields = visit_fields(&oneway.fields),
                 protocol_messages.push(Message {
                     protocol_name: protocol.name.clone(),
                     name: format!("{}", CamelCase(&oneway.name)),
                     msgid: next_msgid,
-                    fields: visit_fields(&oneway.fields),
+                    num_handles: num_handles(&fields),
+                    fields,
                 });
                 next_msgid += 1;
             }
@@ -125,19 +132,23 @@ pub fn generate() -> Result<()> {
 
         if let Some(rpcs) = &protocol.rpcs {
             for rpc in rpcs {
+                let req_fields = visit_fields(&rpc.request.fields),
                 protocol_messages.push(Message {
                     protocol_name: protocol.name.clone(),
                     name: format!("{}", CamelCase(&rpc.name)),
                     msgid: next_msgid,
-                    fields: visit_fields(&rpc.request.fields),
+                    num_handles: num_handles(&req_fields),
+                    fields: req_fields,
                 });
                 next_msgid += 1;
 
+                let reply_fields = visit_fields(&rpc.response.fields),
                 protocol_messages.push(Message {
                     protocol_name: protocol.name.clone(),
                     name: format!("{}Reply", CamelCase(&rpc.name)),
                     msgid: next_msgid,
-                    fields: visit_fields(&rpc.response.fields),
+                    num_handles: num_handles(&reply_fields),
+                    fields: reply_fields,
                 });
                 next_msgid += 1;
             }
@@ -155,11 +166,13 @@ pub fn generate() -> Result<()> {
         .add_template("autogen", include_str!("autogen.rs.j2"))
         .unwrap();
     let template = j2env.get_template("autogen")?;
-    let lib_rs = template.render(context! {
-        messages => messages,
-        protocols => protocols,
-        kernel_mode => cfg!(feature = "generate_for_kernel"),
-    }).context("failed to generate autogen")?;
+    let lib_rs = template
+        .render(context! {
+            messages => messages,
+            protocols => protocols,
+            kernel_mode => cfg!(feature = "generate_for_kernel"),
+        })
+        .context("failed to generate autogen")?;
 
     std::fs::write(&dest_path, lib_rs)?;
     run_rustfmt(&dest_path)?;
