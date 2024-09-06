@@ -6,8 +6,8 @@ ftl_api::autogen!();
 use ftl_api::environ::Environ;
 use ftl_api::prelude::*;
 use ftl_api::types::message::MessageBuffer;
-use ftl_autogen::ping::PingReply;
 use ftl_autogen::ping::Ping;
+use ftl_autogen::ping::PingReply;
 
 #[no_mangle]
 pub fn main(mut env: Environ) {

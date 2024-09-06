@@ -3,6 +3,7 @@ pub mod ftl_autogen {
 
     use ftl_types::message::MessageSerialize;
     use ftl_types::message::MessageDeserialize;
+    use ftl_types::message::MessageDeserializeAny;
     use ftl_types::message::MessageBuffer;
     use ftl_types::message::MessageInfo;
 
@@ -13,8 +14,8 @@ pub mod ftl_autogen {
         {% endfor %}
     }
 
-    impl<'a> Message<'a> {
-        fn deserialize(buffer: &'a mut MessageBuffer, msginfo: MessageInfo)
+    impl<'a> MessageDeserializeAny<'a> {
+        pub fn deserialize(buffer: &'a mut MessageBuffer, msginfo: MessageInfo)
             -> Option<Message<'a>> {
             match msginfo {
                 {% for m in messages %}

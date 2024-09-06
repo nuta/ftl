@@ -8,6 +8,7 @@ use ftl_types::error::FtlError;
 use ftl_types::idl::MovedHandle;
 use ftl_types::message::MessageBuffer;
 use ftl_types::message::MessageDeserialize;
+use ftl_types::message::MessageDeserializeAny;
 use ftl_types::message::MessageInfo;
 use ftl_types::message::MessageSerialize;
 
@@ -128,6 +129,35 @@ impl Channel {
         let msg = do_recv::<M>(buffer, msginfo)?;
         Ok(msg)
     }
+
+    pub fn try_recv_with_buffer_any<'a, M: MessageDeserializeAny>(
+        &self,
+        buffer: &'a mut MessageBuffer,
+    ) -> Result<Option<M>, RecvError> {
+        // TODO: Optimize parameter order to avoid unnecessary register swaps.
+        let msginfo = match syscall::channel_try_recv(self.handle.id(), buffer) {
+            Ok(msginfo) => msginfo,
+            Err(FtlError::WouldBlock) => return Ok(None),
+            Err(err) => return Err(RecvError::Syscall(err)),
+        };
+
+        if let Some(msg) = M::deserialize_any(buffer, msginfo) {
+            return Ok(Some(msg));
+        }
+
+        // Close transferred handles to prevent resource leaks.
+        //
+        // Also, if they're IPC-related handles like channels, this might
+        // let the sender know that we don't never use them. Otherwise, the
+        // sender might be waiting for a message from us.
+        for i in 0..msginfo.num_handles() {
+            // FIXME:
+            // let handle_id = buffer.handles[i];
+            // syscall::handle_close(handle_id).expect("failed to close handle");
+        }
+
+        Err(RecvError::Deserialize(msginfo))
+    }
 }
 
 impl From<Channel> for (ChannelSender, ChannelReceiver) {
@@ -184,6 +214,13 @@ impl ChannelReceiver {
         buffer: &'a mut MessageBuffer,
     ) -> Result<Option<&'a mut M>, RecvError> {
         self.ch.try_recv_with_buffer::<M>(buffer)
+    }
+
+    pub fn try_recv_with_buffer_any<'a, M: MessageDeserializeAny>(
+        &self,
+        buffer: &'a mut MessageBuffer,
+    ) -> Result<Option<M>, RecvError> {
+        self.ch.try_recv_with_buffer_any::<M>(buffer)
     }
 }
 
