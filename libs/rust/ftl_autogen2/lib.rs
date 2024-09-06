@@ -45,7 +45,12 @@ fn resolve_type(ty: &idl::Ty) -> String {
 }
 
 fn num_handles(fields: &[Field]) -> isize {
-    fields.iter().filter(|f| f.ty == "ftl_types::idl::HandleField").count().try_into().unwrap()
+    fields
+        .iter()
+        .filter(|f| f.ty == "ftl_types::idl::HandleField")
+        .count()
+        .try_into()
+        .unwrap()
 }
 
 struct CamelCase<'a>(&'a str);
@@ -118,7 +123,7 @@ pub fn generate() -> Result<()> {
         let mut protocol_messages = Vec::new();
         if let Some(oneways) = &protocol.oneways {
             for oneway in oneways {
-                let fields = visit_fields(&oneway.fields),
+                let fields = visit_fields(&oneway.fields);
                 protocol_messages.push(Message {
                     protocol_name: protocol.name.clone(),
                     name: format!("{}", CamelCase(&oneway.name)),
@@ -132,7 +137,7 @@ pub fn generate() -> Result<()> {
 
         if let Some(rpcs) = &protocol.rpcs {
             for rpc in rpcs {
-                let req_fields = visit_fields(&rpc.request.fields),
+                let req_fields = visit_fields(&rpc.request.fields);
                 protocol_messages.push(Message {
                     protocol_name: protocol.name.clone(),
                     name: format!("{}", CamelCase(&rpc.name)),
@@ -142,7 +147,7 @@ pub fn generate() -> Result<()> {
                 });
                 next_msgid += 1;
 
-                let reply_fields = visit_fields(&rpc.response.fields),
+                let reply_fields = visit_fields(&rpc.response.fields);
                 protocol_messages.push(Message {
                     protocol_name: protocol.name.clone(),
                     name: format!("{}Reply", CamelCase(&rpc.name)),
