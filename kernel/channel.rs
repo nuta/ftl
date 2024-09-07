@@ -5,7 +5,6 @@ use core::fmt;
 use ftl_inlinedvec::InlinedVec;
 use ftl_types::error::FtlError;
 use ftl_types::handle::HandleId;
-use ftl_types::message::MessageBuffer;
 use ftl_types::message::MessageInfo;
 use ftl_types::message::MESSAGE_HANDLES_MAX_COUNT;
 use ftl_types::poll::PollEvent;
@@ -98,7 +97,7 @@ impl Channel {
             // First loop: make sure moving handles won't fail and there are
             //             not too many ones.
             let mut handle_ids: InlinedVec<HandleId, MESSAGE_HANDLES_MAX_COUNT> = InlinedVec::new();
-            for i in 0..num_handles {
+            for _ in 0..num_handles {
                 let handle_id = msgbuffer.read_from_user_at(offset);
                 offset += size_of::<HandleId>();
 
@@ -185,7 +184,7 @@ impl Channel {
         let current_thread = current_thread();
         let mut handle_table = current_thread.process().handles().lock();
         let mut offset = 0;
-        for (i, any_handle) in entry.handles.drain(..).enumerate() {
+        for  any_handle in entry.handles.drain(..) {
             // TODO: Define the expected behavior when it fails to add a handle.
             let handle_id = handle_table.add(any_handle)?;
             msgbuffer.write_to_user_at(offset, handle_id);

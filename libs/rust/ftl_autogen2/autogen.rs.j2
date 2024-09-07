@@ -56,9 +56,10 @@ pub mod ftl_autogen {
             }
 
             impl MessageSerialize for {{ m.name }} {
+                const NUM_HANDLES: usize = {{ m.num_handles }};
                 const MSGINFO: MessageInfo = MessageInfo::from_raw(
                     ({{ m.msgid }} << 14)
-                    | ({{ m.num_handles }} << 12)
+                    | ((Self::NUM_HANDLES as isize) << 12)
                     | ::core::mem::size_of::<Self>() as isize,
                 );
 
