@@ -2,7 +2,6 @@ use alloc::boxed::Box;
 use alloc::sync::Arc;
 use core::fmt;
 use core::mem;
-use core::num::NonZeroI32;
 
 use ftl_types::error::FtlError;
 use ftl_types::idl::MovedHandle;
@@ -155,10 +154,7 @@ impl From<Channel> for MovedHandle {
     fn from(channel: Channel) -> MovedHandle {
         let handle_id = channel.handle.id();
         mem::forget(channel);
-
-        // TODO: Make other handle types non-zero to avoid unwrap.
-        let raw_id = NonZeroI32::new(handle_id.as_i32()).unwrap();
-        MovedHandle::new(raw_id)
+        MovedHandle::new(handle_id)
     }
 }
 

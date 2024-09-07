@@ -15,6 +15,7 @@ use ftl_types::environ::EnvironSerializer;
 use ftl_types::error::FtlError;
 use ftl_types::handle::HandleId;
 use ftl_types::handle::HandleRights;
+use ftl_types::idl::MovedHandle;
 use ftl_types::message::MessageBuffer;
 use ftl_types::message::MessageSerialize;
 use ftl_types::syscall::VsyscallPage;
@@ -107,7 +108,7 @@ impl<'a> StartupAppLoader<'a> {
 
         let mut msgbuffer = MessageBuffer::new();
         (NewClient {
-            handle: handle_id.into(),
+            handle: MovedHandle::new(handle_id).into(),
         })
         .serialize(&mut msgbuffer);
 
