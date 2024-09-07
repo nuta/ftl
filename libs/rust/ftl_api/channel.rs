@@ -37,9 +37,8 @@ fn do_recv<'a, M: MessageDeserialize>(
     // let the sender know that we don't never use them. Otherwise, the
     // sender might be waiting for a message from us.
     for i in 0..msginfo.num_handles() {
-        // FIXME:
-        // let handle_id = buffer.handles[i];
-        // syscall::handle_close(handle_id).expect("failed to close handle");
+        let handle_id = buffer.handle_id(i);
+        syscall::handle_close(handle_id).expect("failed to close handle");
     }
 
     Err(RecvError::Deserialize(msginfo))

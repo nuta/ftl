@@ -1,3 +1,5 @@
+use crate::handle::HandleId;
+
 pub const MESSAGE_DATA_MAX_LEN: usize = 0xfff;
 pub const MESSAGE_HANDLES_MAX_COUNT: usize = 3;
 
@@ -39,6 +41,11 @@ impl MessageBuffer {
         Self {
             data: [0; MESSAGE_DATA_MAX_LEN],
         }
+    }
+
+    pub fn handle_id(&self, index: usize) -> HandleId {
+        debug_assert!(index < MESSAGE_HANDLES_MAX_COUNT);
+        unsafe { *(self.data.as_ptr().add(index * size_of::<HandleId>()) as *const HandleId) }
     }
 }
 
