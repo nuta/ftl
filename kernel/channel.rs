@@ -102,7 +102,7 @@ impl Channel {
                 offset += size_of::<HandleId>();
 
                 handle_ids
-                .try_push(handle_id)
+                    .try_push(handle_id)
                     .map_err(|_| FtlError::TooManyHandles)?;
 
                 if !our_handles.is_movable(handle_id) {
@@ -184,7 +184,7 @@ impl Channel {
         let current_thread = current_thread();
         let mut handle_table = current_thread.process().handles().lock();
         let mut offset = 0;
-        for  any_handle in entry.handles.drain(..) {
+        for any_handle in entry.handles.drain(..) {
             // TODO: Define the expected behavior when it fails to add a handle.
             let handle_id = handle_table.add(any_handle)?;
             msgbuffer.write_to_user_at(offset, handle_id);
