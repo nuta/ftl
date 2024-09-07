@@ -1,7 +1,6 @@
 use alloc::collections::VecDeque;
 use alloc::vec::Vec;
 use core::fmt;
-use core::mem::offset_of;
 
 use ftl_inlinedvec::InlinedVec;
 use ftl_types::error::FtlError;
@@ -80,6 +79,8 @@ impl Channel {
     }
 
     pub fn send(&self, msginfo: MessageInfo, msgbuffer: UAddr) -> Result<(), FtlError> {
+        let mut offset = 0;
+
         // Move handles.
         //
         // In this phase, since we don't know the receiver process, we don't
@@ -98,9 +99,11 @@ impl Channel {
             //             not too many ones.
             let mut handle_ids: InlinedVec<HandleId, MESSAGE_HANDLES_MAX_COUNT> = InlinedVec::new();
             for i in 0..num_handles {
-                let handle_id = msgbuffer.read_from_user_at(i * size_of::<HandleId>());
+                let handle_id = msgbuffer.read_from_user_at(offset);
+                offset += size_of::<HandleId>();
+
                 handle_ids
-                    .try_push(handle_id)
+                .try_push(handle_id)
                     .map_err(|_| FtlError::TooManyHandles)?;
 
                 if !our_handles.is_movable(handle_id) {
@@ -126,7 +129,7 @@ impl Channel {
 
         // Copy message data into the kernel memory.
         let data_len = msginfo.data_len();
-        let data = msgbuffer.read_from_user_to_vec::<u8>(offset_of!(MessageBuffer, data), data_len);
+        let data = msgbuffer.read_from_user_to_vec::<u8>(offset, data_len);
 
         let entry = MessageEntry {
             msginfo,
@@ -181,15 +184,17 @@ impl Channel {
         // Install handles into the current (receiver) process.
         let current_thread = current_thread();
         let mut handle_table = current_thread.process().handles().lock();
+        let mut offset = 0;
         for (i, any_handle) in entry.handles.drain(..).enumerate() {
             // TODO: Define the expected behavior when it fails to add a handle.
             let handle_id = handle_table.add(any_handle)?;
-            msgbuffer.write_to_user_at(i * size_of::<HandleId>(), handle_id);
+            msgbuffer.write_to_user_at(offset, handle_id);
+            offset += size_of::<HandleId>();
         }
 
         // Copy message data into the buffer.
         let data_len = entry.msginfo.data_len();
-        msgbuffer.write_to_user_at_slice(offset_of!(MessageBuffer, data), &entry.data[0..data_len]);
+        msgbuffer.write_to_user_at_slice(offset, &entry.data[0..data_len]);
 
         Ok(entry.msginfo)
     }
