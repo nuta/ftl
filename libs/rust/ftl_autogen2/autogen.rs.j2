@@ -60,7 +60,7 @@ pub mod ftl_autogen {
                 const MSGINFO: MessageInfo = MessageInfo::from_raw(
                     ({{ m.msgid }} << 14)
                     | ((Self::NUM_HANDLES as isize) << 12)
-                    | ::core::mem::size_of::<Self>() as isize,
+                    | (::core::mem::size_of::<Self>() - Self::NUM_HANDLES * ::core::mem::size_of::<HandleId>()) as isize,
                 );
 
                 fn serialize(self, buffer: &mut MessageBuffer) {
