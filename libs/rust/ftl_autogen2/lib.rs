@@ -104,16 +104,25 @@ fn run_rustfmt(file: &Path) -> Result<()> {
     Ok(())
 }
 
+fn find_idl_file() -> Result<PathBuf> {
+    let manifest_dir = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").unwrap());
+    let mut dir = manifest_dir.as_path();
+    while let Some(parent_dir) = dir.parent() {
+        let idl_path = parent_dir.join("idl.json");
+        if idl_path.exists() {
+            return Ok(idl_path);
+        }
+
+        dir = parent_dir;
+    }
+
+    anyhow::bail!("idl.json not found in any parent directory of CARGO_MANIFEST_DIR");
+}
+
 pub fn generate() -> Result<()> {
     let out_dir = env::var_os("OUT_DIR").unwrap();
-    let manifest_dir = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").unwrap());
     let dest_path = Path::new(&out_dir).join("autogen.rs");
-    let idl_path = manifest_dir
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .join("idl.json");
+    let idl_path = find_idl_file()?;
 
     let idl_file = File::open(idl_path)?;
     let idl: IdlFile = serde_json::from_reader(&idl_file)?;
@@ -177,7 +186,7 @@ pub fn generate() -> Result<()> {
         .render(context! {
             messages => messages,
             protocols => protocols,
-            kernel_mode => cfg!(feature = "generate_for_kernel"),
+            generate_for_kernel => cfg!(feature = "generate_for_kernel"),
         })
         .context("failed to generate autogen")?;
 

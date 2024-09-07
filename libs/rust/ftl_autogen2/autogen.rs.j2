@@ -1,9 +1,10 @@
 pub mod ftl_autogen {
+    {% if not generate_for_kernel %}
     use ftl_api::types as ftl_types;
+    {% endif %}
 
     use ftl_types::message::MessageSerialize;
     use ftl_types::message::MessageDeserialize;
-    use ftl_types::message::MessageDeserializeAny;
     use ftl_types::message::MessageBuffer;
     use ftl_types::message::MessageInfo;
 
@@ -14,9 +15,11 @@ pub mod ftl_autogen {
         {% endfor %}
     }
 
-    impl<'a> MessageDeserializeAny<'a> {
-        pub fn deserialize(buffer: &'a mut MessageBuffer, msginfo: MessageInfo)
-            -> Option<Message<'a>> {
+    impl MessageDeserialize for Message<'_> {
+        type Reader<'a> = Message<'a>;
+
+        fn deserialize(buffer: &mut MessageBuffer, msginfo: MessageInfo)
+            -> Option<Self::Reader<'_>> {
             match msginfo {
                 {% for m in messages %}
                     {{ m.protocol_name }}::{{ m.name }}::MSGINFO => {
@@ -68,8 +71,10 @@ pub mod ftl_autogen {
             }
 
             impl MessageDeserialize for {{ m.name }} {
+                type Reader<'a> = &'a mut Self;
+
                 fn deserialize<'a>(buffer: &'a mut MessageBuffer, msginfo: MessageInfo)
-                    -> Option<&'a mut Self> {
+                    -> Option<Self::Reader<'a>> {
                     if msginfo != Self::MSGINFO {
                         return None;
                     }

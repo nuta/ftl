@@ -49,11 +49,7 @@ pub trait MessageSerialize: Sized {
 }
 
 pub trait MessageDeserialize: Sized {
+    type Reader<'a>: 'a;
     fn deserialize<'a>(buffer: &'a mut MessageBuffer, msginfo: MessageInfo)
-        -> Option<&'a mut Self>;
-}
-
-pub trait MessageDeserializeAny: Sized {
-    type Reader<'a>;
-    fn deserialize_any<'a>(buffer: &'a mut MessageBuffer, msginfo: MessageInfo) -> Option<Self::Reader<'a>>;
+        -> Option<Self::Reader<'a>>;
 }

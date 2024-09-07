@@ -25,7 +25,7 @@ pub fn main(mut env: Environ) {
 
     loop {
         match mainloop.next() {
-            Event::Message(Context::Startup, Message::NewClient(mut m), _sender) => {
+            Event::Message(Context::Startup, Message::NewClient(m), _sender) => {
                 let new_ch = m.handle.take::<Channel>().unwrap();
                 mainloop
                     .add_channel(new_ch, Context::Client { counter: 0 })

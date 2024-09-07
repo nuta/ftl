@@ -3,7 +3,7 @@ use core::marker::PhantomData;
 use ftl_types::error::FtlError;
 use ftl_types::handle::HandleId;
 use ftl_types::message::MessageBuffer;
-use ftl_types::message::MessageDeserializeAny;
+use ftl_types::message::MessageDeserialize;
 use ftl_types::poll::PollEvent;
 use hashbrown::HashMap;
 
@@ -27,8 +27,8 @@ pub enum Error {
 }
 
 #[derive(Debug)]
-pub enum Event<'a, Ctx, M: MessageDeserializeAny> {
-    Message(&'a mut Ctx, M, &'a mut ChannelSender),
+pub enum Event<'a, Ctx, M: MessageDeserialize> {
+    Message(&'a mut Ctx, M::Reader<'a>, &'a mut ChannelSender),
     Interrupt(&'a mut Ctx, &'a mut Interrupt),
     Error(Error),
 }
@@ -53,7 +53,7 @@ pub struct Mainloop<Ctx, AllM> {
     _pd: PhantomData<AllM>,
 }
 
-impl<Ctx, AllM: MessageDeserializeAny> Mainloop<Ctx, AllM> {
+impl<Ctx, AllM: MessageDeserialize> Mainloop<Ctx, AllM> {
     pub fn new() -> Result<Self, Error> {
         let poll = Poll::new().map_err(Error::PollCreate)?;
 
@@ -124,7 +124,7 @@ impl<Ctx, AllM: MessageDeserializeAny> Mainloop<Ctx, AllM> {
         if poll_ev.contains(PollEvent::READABLE) {
             match &mut entry.object {
                 Object::Channel { sender, receiver } => {
-                    let m = match receiver.try_recv_with_buffer_any::<AllM>(&mut self.msgbuffer) {
+                    let m = match receiver.try_recv_with_buffer::<AllM>(&mut self.msgbuffer) {
                         Ok(Some(m)) => m,
                         Ok(None) => return Event::Error(Error::ChannelRecvWouldBlock),
                         Err(err) => return Event::Error(Error::ChannelRecv(err)),
