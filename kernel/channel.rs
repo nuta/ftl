@@ -184,10 +184,7 @@ impl Channel {
         for (i, any_handle) in entry.handles.drain(..).enumerate() {
             // TODO: Define the expected behavior when it fails to add a handle.
             let handle_id = handle_table.add(any_handle)?;
-            msgbuffer.write_to_user_at(
-                offset_of!(MessageBuffer, handles) + i * size_of::<HandleId>(),
-                handle_id,
-            );
+            msgbuffer.write_to_user_at(i * size_of::<HandleId>(), handle_id);
         }
 
         // Copy message data into the buffer.
