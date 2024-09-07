@@ -11,7 +11,8 @@ pub mod ftl_autogen {
     #[derive(Debug)]
     pub enum Message<'a> {
         {% for m in messages %}
-        {{ m.name }}(pub &'a mut {{ m.protocol_name }}::{{ m.name }}),
+        #[allow(unused)]
+        {{ m.name }}(&'a mut {{ m.protocol_name }}::{{ m.name }}),
         {% endfor %}
     }
 
