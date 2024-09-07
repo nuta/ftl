@@ -6,7 +6,6 @@ use alloc::vec::Vec;
 include!(concat!(env!("OUT_DIR"), "/autogen.rs"));
 
 use ftl_autogen::autopilot::NewClient;
-
 use ftl_elf::Elf;
 use ftl_elf::PhdrType;
 use ftl_elf::ET_DYN;
@@ -117,10 +116,7 @@ impl<'a> StartupAppLoader<'a> {
         self.our_chs
             .get(app_name)
             .unwrap()
-            .send(
-                NewClient::MSGINFO,
-                UAddr::from_kernel_ptr(&msgbuffer),
-            )
+            .send(NewClient::MSGINFO, UAddr::from_kernel_ptr(&msgbuffer))
             .unwrap();
 
         Handle::new(ch2.into(), HandleRights::ALL).into()

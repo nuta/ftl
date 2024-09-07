@@ -98,9 +98,7 @@ impl Channel {
             //             not too many ones.
             let mut handle_ids: InlinedVec<HandleId, MESSAGE_HANDLES_MAX_COUNT> = InlinedVec::new();
             for i in 0..num_handles {
-                let handle_id = msgbuffer.read_from_user_at(
-                    offset_of!(MessageBuffer, handles) + i * size_of::<HandleId>(),
-                );
+                let handle_id = msgbuffer.read_from_user_at(i * size_of::<HandleId>());
                 handle_ids
                     .try_push(handle_id)
                     .map_err(|_| FtlError::TooManyHandles)?;
