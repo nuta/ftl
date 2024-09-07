@@ -129,6 +129,7 @@ dependencies = [
 name = "ftl_api"
 version = "0.0.0"
 dependencies = [
+ "ftl_inlinedvec",
  "ftl_types",
  "ftl_utils",
  "hashbrown",

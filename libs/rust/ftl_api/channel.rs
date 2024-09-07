@@ -1,5 +1,7 @@
 use alloc::boxed::Box;
 use alloc::sync::Arc;
+use ftl_inlinedvec::InlinedVec;
+use ftl_types::message::MESSAGE_HANDLES_MAX_COUNT;
 use core::fmt;
 use core::mem;
 
@@ -23,25 +25,31 @@ pub struct Channel {
     handle: OwnedHandle,
 }
 
-fn do_recv<'a, M: MessageDeserialize>(
-    buffer: &'a mut MessageBuffer,
+fn do_recv<M: MessageDeserialize>(
+    buffer: &mut MessageBuffer,
     msginfo: MessageInfo,
-) -> Result<M::Reader<'a>, RecvError> {
-    if let Some(msg) = M::deserialize(buffer, msginfo) {
-        return Ok(msg);
-    }
-
-    // Close transferred handles to prevent resource leaks.
-    //
-    // Also, if they're IPC-related handles like channels, this might
-    // let the sender know that we don't never use them. Otherwise, the
-    // sender might be waiting for a message from us.
+) -> Result<M::Reader<'_>, RecvError> {
+    // FIXME: Due to a possibly false-positive borrow check issue, we can't
+    //        use `buffer` anymore in the Option::ok_or_else below. This is a
+    //        naive workaround.
+    let mut handles: InlinedVec<_, MESSAGE_HANDLES_MAX_COUNT> = InlinedVec::new();
     for i in 0..msginfo.num_handles() {
         let handle_id = buffer.handle_id(i);
-        syscall::handle_close(handle_id).expect("failed to close handle");
+        handles.try_push(handle_id).unwrap();
     }
 
-    Err(RecvError::Deserialize(msginfo))
+    M::deserialize(buffer, msginfo).ok_or_else(|| {
+        // Close transferred handles to prevent resource leaks.
+        //
+        // Also, if they're IPC-related handles like channels, this might
+        // let the sender know that we don't never use them. Otherwise, the
+        // sender might be waiting for a message from us.
+        for handle_id in handles {
+            syscall::handle_close(handle_id).expect("failed to close handle");
+        }
+
+        RecvError::Deserialize(msginfo)
+    })
 }
 
 impl Channel {
