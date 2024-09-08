@@ -9,9 +9,9 @@ use ftl_api::environ::Environ;
 use ftl_api::mainloop::Event;
 use ftl_api::mainloop::Mainloop;
 use ftl_api::prelude::*;
-use ftl_autogen::Message;
 use ftl_autogen::tcpip::TcpListen;
 use ftl_autogen::tcpip::TcpSend;
+use ftl_autogen::Message;
 
 #[derive(Debug)]
 struct Client {
@@ -29,7 +29,11 @@ impl Client {
         trace!("request: {:?}", req);
 
         let data = &b"HTTP/1.1 200 OK\r\nContent-Length: 12\r\n\r\nHello, world!"[..];
-        tcp_sender.send(TcpSend { data: data.try_into().unwrap() }).unwrap();
+        tcp_sender
+            .send(TcpSend {
+                data: data.try_into().unwrap(),
+            })
+            .unwrap();
     }
 
     pub fn receive(&mut self, tcp_sender: &ChannelSender, data: &[u8]) {

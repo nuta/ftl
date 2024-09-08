@@ -224,7 +224,10 @@ impl<'a> Server<'a> {
                             }
 
                             // FIXME: Backpressure
-                            ch.send(TcpReceived { data: buf[..len].try_into().unwrap() }).unwrap();
+                            ch.send(TcpReceived {
+                                data: buf[..len].try_into().unwrap(),
+                            })
+                            .unwrap();
                         }
                     }
                     (State::Established { .. }, tcp::State::Established) => {

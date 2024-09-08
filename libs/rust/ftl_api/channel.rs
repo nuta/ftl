@@ -1,11 +1,11 @@
 use alloc::boxed::Box;
 use alloc::sync::Arc;
-use ftl_types::idl::HandleField;
 use core::fmt;
 use core::mem;
 
 use ftl_inlinedvec::InlinedVec;
 use ftl_types::error::FtlError;
+use ftl_types::idl::HandleField;
 use ftl_types::idl::MovedHandle;
 use ftl_types::message::MessageBuffer;
 use ftl_types::message::MessageDeserialize;
