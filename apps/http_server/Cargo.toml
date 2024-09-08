@@ -11,3 +11,6 @@ path = "main.rs"
 [dependencies]
 ftl_api = { workspace = true }
 httparse = { workspace = true }
+
+[build-dependencies]
+ftl_autogen2 = { workspace = true }

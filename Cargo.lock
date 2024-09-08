@@ -253,6 +253,7 @@ name = "http_server"
 version = "0.0.0"
 dependencies = [
  "ftl_api",
+ "ftl_autogen2",
  "httparse",
 ]
 
@@ -597,6 +598,7 @@ name = "virtio_net"
 version = "0.0.0"
 dependencies = [
  "ftl_api",
+ "ftl_autogen2",
  "ftl_driver_utils",
  "ftl_utils",
  "ftl_virtio",

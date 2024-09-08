@@ -1,5 +1,6 @@
 use alloc::boxed::Box;
 use alloc::sync::Arc;
+use ftl_types::idl::HandleField;
 use core::fmt;
 use core::mem;
 
@@ -162,6 +163,12 @@ impl From<Channel> for MovedHandle {
         let handle_id = channel.handle.id();
         mem::forget(channel);
         MovedHandle::new(handle_id)
+    }
+}
+
+impl From<Channel> for HandleField {
+    fn from(channel: Channel) -> HandleField {
+        HandleField::from(MovedHandle::from(channel))
     }
 }
 
