@@ -161,6 +161,8 @@ impl Channel {
                 None => {
                     if blocking {
                         mutable.wait_queue.listen();
+                        drop(mutable);
+
                         Thread::block_current(Continuation::ChannelRecv {
                             channel: self.clone(),
                             msgbuffer,
