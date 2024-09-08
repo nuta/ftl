@@ -12,6 +12,7 @@ use ftl_types::poll::PollEvent;
 use crate::cpuvar::current_thread;
 use crate::handle::AnyHandle;
 use crate::poll::Poller;
+use crate::process::Process;
 use crate::ref_counted::SharedRef;
 use crate::spinlock::SpinLock;
 use crate::thread::Continuation;
@@ -153,6 +154,7 @@ impl Channel {
         self: &SharedRef<Channel>,
         msgbuffer: UAddr,
         blocking: bool,
+        process: &SharedRef<Process>,
     ) -> Result<MessageInfo, FtlError> {
         let mut entry = {
             let mut mutable = self.mutable.lock();
@@ -164,6 +166,7 @@ impl Channel {
                         drop(mutable);
 
                         Thread::block_current(Continuation::ChannelRecv {
+                            process: process.clone(),
                             channel: self.clone(),
                             msgbuffer,
                         });
@@ -183,8 +186,7 @@ impl Channel {
         };
 
         // Install handles into the current (receiver) process.
-        let current_thread = current_thread();
-        let mut handle_table = current_thread.process().handles().lock();
+        let mut handle_table = process.handles().lock();
         let mut offset = 0;
         for any_handle in entry.handles.drain(..) {
             // TODO: Define the expected behavior when it fails to add a handle.
