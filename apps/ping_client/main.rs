@@ -14,6 +14,7 @@ pub fn main(mut env: Environ) {
     let ch = env.take_channel("dep:ping_server").unwrap();
     let mut msgbuffer = MessageBuffer::new();
     loop {
+        info!("sending ping");
         ch.send(Ping { value: 42 }).unwrap();
 
         let reply = ch.recv_with_buffer::<PingReply>(&mut msgbuffer).unwrap();

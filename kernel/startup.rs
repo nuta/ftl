@@ -114,7 +114,10 @@ impl<'a> StartupAppLoader<'a> {
         })
         .serialize(&mut msgbuffer);
 
-        let app_name = self.service_to_app_name.get(service_name).unwrap();
+        let app_name = match self.service_to_app_name.get(service_name) {
+            Some(app_name) => app_name,
+            None => panic!("service \"{}\" not found", service_name.0),
+        };
 
         self.our_chs
             .get(app_name)

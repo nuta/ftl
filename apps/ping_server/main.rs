@@ -19,6 +19,7 @@ enum Context {
 
 #[no_mangle]
 pub fn main(mut env: Environ) {
+    info!("ping_server started");
     let mut mainloop = Mainloop::<Context, Message>::new().unwrap();
     let startup_ch = env.take_channel("dep:startup").unwrap();
     mainloop.add_channel(startup_ch, Context::Startup).unwrap();
