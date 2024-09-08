@@ -61,7 +61,7 @@ impl<'a> smoltcp::phy::TxToken for TxTokenImpl<'a> {
         let ret = f(&mut buf[..len]);
 
         let tx = ethernet_device::Tx {
-            payload: &buf[..len],
+            payload: buf[..len].try_into().unwrap(),
         };
         if let Err(err) = self.0.driver_sender.send(tx) {
             warn!("failed to send: {:?}", err);
