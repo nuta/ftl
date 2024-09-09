@@ -11,6 +11,10 @@ permissions: read-all
 env:
   CARGO_TERM_COLOR: always
 
+concurrency:
+    group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   lint:
     runs-on: ubuntu-latest
@@ -90,7 +94,7 @@ jobs:
         rustup toolchain install nightly
         rustup default nightly
         rustup target add riscv64gc-unknown-none-elf
-        rustup component add rust-src
+        rustup component add rust-src llvm-tools
 
     - name: Cache Cargo dependencies
       uses: actions/cache@v3
