@@ -86,24 +86,6 @@ fn visit_fields(idl_fields: &[idl::Field]) -> Vec<Field> {
     fields
 }
 
-fn run_rustfmt(file: &Path) -> Result<()> {
-    let output = std::process::Command::new("rustup")
-        .args(["run", "nightly", "rustfmt"])
-        .arg(file)
-        .output()
-        .with_context(|| format!("failed to run rustfmt on {}", file.display()))?;
-
-    if !output.status.success() {
-        anyhow::bail!(
-            "rustfmt failed with status {}: {}",
-            output.status,
-            std::str::from_utf8(&output.stderr).unwrap()
-        );
-    }
-
-    Ok(())
-}
-
 fn find_idl_file() -> Result<PathBuf> {
     let manifest_dir = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").unwrap());
     let mut dir = manifest_dir.as_path();
@@ -191,7 +173,6 @@ pub fn generate() -> Result<()> {
         .context("failed to generate autogen")?;
 
     std::fs::write(&dest_path, lib_rs)?;
-    run_rustfmt(&dest_path)?;
 
     Ok(())
 }
