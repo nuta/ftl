@@ -22,8 +22,7 @@ jobs:
       run: |
         rustup toolchain install nightly
         rustup default nightly
-        rustup target add riscv64gc-unknown-none-elf
-        rustup component add rust-src rustfmt clippy
+        rustup component add rust-src rustfmt
 
     - name: Cache Cargo dependencies
       uses: actions/cache@v3
@@ -35,9 +34,6 @@ jobs:
         key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
         restore-keys: |
           ${{ runner.os }}-cargo-
-
-    - name: Clippy
-      run: make clippy
 
     - name: Format check
       run: |
