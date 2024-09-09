@@ -54,7 +54,7 @@ jobs:
         rustup toolchain install nightly
         rustup default nightly
         rustup target add riscv64gc-unknown-none-elf
-        rustup component add rust-src
+        rustup component add rust-src llvm-tools-preview
 
     - name: Cache Cargo dependencies
       uses: actions/cache@v3
