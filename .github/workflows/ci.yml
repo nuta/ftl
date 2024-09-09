@@ -34,7 +34,7 @@ jobs:
         path: |
           ~/.cargo/registry
           ~/.cargo/git
-          target
+          build/target
         key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
         restore-keys: |
           ${{ runner.os }}-cargo-
@@ -102,7 +102,7 @@ jobs:
         path: |
           ~/.cargo/registry
           ~/.cargo/git
-          target
+          build/target
         key: ${{ runner.os }}-cargo-release-${{ hashFiles('**/Cargo.lock') }}
         restore-keys: |
           ${{ runner.os }}-cargo-release-
