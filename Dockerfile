@@ -41,7 +41,9 @@ func main() {
 
     fmt.Println("[supervisor] QEMU started")
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-        fmt.Printf("[supervisor] %s %s %s\n", r.RemoteAddr, r.Method, r.URL)
+        xff := r.Header.Get("X-Forwarded-For")
+        remoteAddr := strings.Split(xff, ",")[0]
+        fmt.Printf("[supervisor] %s: %s %s\n", remoteAddr, r.Method, r.URL)
 		proxy.ServeHTTP(w, r)
 	})
 
