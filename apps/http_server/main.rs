@@ -28,7 +28,7 @@ impl Client {
     fn handle_request(&self, tcp_sender: &ChannelSender, req: httparse::Request<'_, '_>) {
         trace!("request: {:?}", req);
 
-        let data = &b"HTTP/1.1 200 OK\r\nContent-Length: 12\r\n\r\nHello, world!"[..];
+        let data = &b"HTTP/1.1 200 OK\r\nContent-Length: 13\r\n\r\nHello, world!"[..];
         tcp_sender
             .send(TcpSend {
                 data: data.try_into().unwrap(),
