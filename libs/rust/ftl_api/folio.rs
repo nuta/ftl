@@ -13,9 +13,10 @@ use crate::syscall;
 /// # Prefer [`Box<T>`](crate::prelude::Box) over folio
 ///
 /// Unless you need low-level control over memory allocation, use containers
-/// like [`Vec<T>`] or [`Box<T>`] instead of folio. Folio is intended for
-/// OS services that need to manage memory regions directly, such as DMA
-/// buffers, MMIO regions, and shared memory between processes.
+/// like [`Vec<T>`](crate::prelude::Vec) or [`Box<T>`](crate::prelude::Box)
+/// memory regions directly, such as DMA buffers, MMIO regions, and shared
+/// instead of folio. Folio is intended for OS services that need to manage
+/// memory between processes.
 ///
 /// # Key facts
 ///
