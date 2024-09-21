@@ -12,7 +12,7 @@ use crate::syscall;
 /// Each signal has 32-bit-wide bitfields. Updating the bitfields wakes up
 /// waiting processes. You can update the bitfields multiple times before
 /// it is cleared, but it can't tell how many times it was updated. In other
-/// words, it guarantees a event has happened at least once.
+/// words, it guarantees bitfields are set at least once.
 ///
 /// # [`Signal`] vs. [`Channel`](crate::channel::Channel)
 ///
