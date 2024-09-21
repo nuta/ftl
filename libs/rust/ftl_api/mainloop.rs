@@ -70,7 +70,17 @@ struct Entry<Ctx> {
 /// channel would have a state to track the connection state, timers, and
 /// TX/RX buffers.
 ///
-/// See examples for how to define and use per-object state.
+/// See the example below for how to define and use per-object state.
+///
+/// # Why not async Rust?
+///
+/// This is very similar to `epoll` + non-blocking I/O in Linux. A event loop
+/// API like this means that you can write a state machine manually, which
+/// async Rust (`async fn`) does automatically.
+///
+/// However, explicit state machines makes debugging easier because the
+/// execution flow is crystal clear. Moreover, my observation is that most of
+/// OS components are very simple and manual state machines are sufficient.
 ///
 /// # Example
 ///
@@ -136,16 +146,6 @@ struct Entry<Ctx> {
 ///     }
 /// }
 /// ```
-///
-/// # Why not async Rust?
-///
-/// This is very similar to `epoll` + non-blocking I/O in Linux. A event loop
-/// API like this means that you can write a state machine manually, which
-/// async Rust (`async fn`) does automatically.
-///
-/// However, explicit state machines makes debugging easier because the
-/// execution flow is crystal clear. Moreover, my observation is that most of
-/// OS components are very simple and manual state machines are sufficient.
 pub struct Mainloop<Ctx, AllM> {
     poll: Poll,
     objects: HashMap<HandleId, Entry<Ctx>>,
