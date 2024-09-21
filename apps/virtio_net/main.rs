@@ -233,7 +233,7 @@ pub fn main(mut env: Environ) {
 
                     receiveq.notify(&mut *transport);
                     transport.ack_interrupt(status);
-                    interrupt.ack().unwrap();
+                    interrupt.acknowledge().unwrap();
                 }
             }
             ev => {

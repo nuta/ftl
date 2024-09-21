@@ -38,7 +38,7 @@ impl Interrupt {
     ///
     /// This tells the CPU (or the interrupt controller) that the interrupt has
     /// been handled and we are ready to receive the next one.
-    pub fn ack(&self) -> Result<(), FtlError> {
+    pub fn acknowledge(&self) -> Result<(), FtlError> {
         syscall::interrupt_ack(self.handle().id())
     }
 }
