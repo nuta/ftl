@@ -10,7 +10,7 @@ use crate::syscall;
 
 /// The ownership of a contiguous page-aliged memory region.
 ///
-/// # Prefer [`Box<T>`] over folio
+/// # Prefer [`Box<T>`](crate::prelude::Box) over folio
 ///
 /// Unless you need low-level control over memory allocation, use containers
 /// like [`Vec<T>`] or [`Box<T>`] instead of folio. Folio is intended for
