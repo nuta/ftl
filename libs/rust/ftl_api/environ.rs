@@ -1,3 +1,5 @@
+use core::fmt;
+
 use alloc::vec::Vec;
 
 use ftl_types::environ::Device;
@@ -17,7 +19,45 @@ enum Value {
     Devices(Vec<Device>),
 }
 
-#[derive(Debug)]
+/// Environ, short for *environment*, is a collection of key-value pairs that
+/// are used to configure the application. It is also known as *environment
+/// variables* in POSIX.
+///
+/// The keys are always strings, and the values can be of different types.
+/// Currently, the supported types are:
+///
+/// - Channel.
+/// - VmSpace.
+/// - A list of found devices (for device drivers).
+///
+/// # Examples
+///
+/// ```
+/// pub fn main(mut env: Environ) {
+///     // Dump all environ items.
+///     info!("env: {:#?}", env);
+///
+///     // Take the ownership of the channel.
+///     let driver_ch: Channel = env.take_channel("dep:ethernet_device").unwrap();
+/// }
+/// ```
+///
+/// This snippet logs:
+///
+/// ```text
+/// [tcpip       ] INFO   env: {
+///     "dep:ethernet_device": Channel(
+///         Channel(#1),
+///     ),
+///     "dep:startup": Channel(
+///         Channel(#2),
+///     ),
+/// }
+/// ```
+///
+///
+///
+///
 pub struct Environ {
     entries: HashMap<&'static str, Value>,
 }
@@ -78,5 +118,13 @@ impl Environ {
             Some(_) => panic!("not devices"),
             None => None,
         }
+    }
+}
+
+impl fmt::Debug for Environ {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_map()
+            .entries(self.entries.iter().map(|(k, v)| (k, v)))
+            .finish()
     }
 }
