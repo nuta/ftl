@@ -78,9 +78,14 @@ struct Entry<Ctx> {
 /// API like this means that you can write a state machine manually, which
 /// async Rust (`async fn`) does automatically.
 ///
-/// However, explicit state machines makes debugging easier because the
-/// execution flow is crystal clear. Moreover, my observation is that most of
+/// However, explicit state machines make debugging easier because the
+/// execution flow is crystal clear, and we don't have to care about
+/// *cancellation safety*. Moreover, my observation is that most of
 /// OS components are very simple and manual state machines are sufficient.
+///
+/// # Future work
+///
+/// - Support multi-threaded mainloop.
 ///
 /// # Example
 ///

@@ -18,6 +18,10 @@ use crate::syscall;
 /// instead of folio. Folio is intended for OS services that need to manage
 /// memory between processes.
 ///
+/// # You may want [`MappedFolio`] instead
+///
+/// If you want to access the memory region, use [`MappedFolio`] instead.
+///
 /// # Key facts
 ///
 /// - The memory block address is page-aligned (typically 4KB).
@@ -51,16 +55,16 @@ impl Folio {
 }
 
 /// A folio mapped to the current process's address space.
-pub struct MmioFolio {
+pub struct MappedFolio {
     _folio: Folio,
     paddr: PAddr,
     vaddr: VAddr,
 }
 
-impl MmioFolio {
+impl MappedFolio {
     /// Allocates a folio at an arbitrary physical address, and maps it to the
     /// current process's address space.
-    pub fn create(len: usize) -> Result<MmioFolio, FtlError> {
+    pub fn create(len: usize) -> Result<MappedFolio, FtlError> {
         let handle = syscall::folio_create(len)?;
         let vaddr = syscall::vmspace_map(
             app_vmspace_handle(),
@@ -69,7 +73,7 @@ impl MmioFolio {
             PageProtect::READABLE | PageProtect::WRITABLE,
         )?;
         let paddr = syscall::folio_paddr(handle)?;
-        Ok(MmioFolio {
+        Ok(MappedFolio {
             _folio: Folio {
                 handle: OwnedHandle::from_raw(handle),
             },
@@ -80,7 +84,7 @@ impl MmioFolio {
 
     /// Allocates a folio at a specific physical address (`paddr`), and maps it to the
     /// current process's address space.
-    pub fn create_pinned(paddr: PAddr, len: usize) -> Result<MmioFolio, FtlError> {
+    pub fn create_pinned(paddr: PAddr, len: usize) -> Result<MappedFolio, FtlError> {
         let handle = syscall::folio_create_fixed(paddr, len)?;
         let vaddr = syscall::vmspace_map(
             app_vmspace_handle(),
@@ -89,7 +93,7 @@ impl MmioFolio {
             PageProtect::READABLE | PageProtect::WRITABLE,
         )?;
 
-        Ok(MmioFolio {
+        Ok(MappedFolio {
             _folio: Folio {
                 handle: OwnedHandle::from_raw(handle),
             },
