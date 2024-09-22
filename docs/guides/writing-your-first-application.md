@@ -11,6 +11,7 @@ The first step is to generate a template for your application. FTL provides a ha
 ```
 $ ./tools/scaffold.py --type app demo
   GEN apps/demo/Cargo.toml
+  GEN apps/demo/build.rs
   GEN apps/demo/main.rs
   GEN apps/demo/app.spec.json
 
@@ -20,6 +21,7 @@ $ ./tools/scaffold.py --type app demo
 Now you have a new directory at `apps/demo` with the following files:
 
 - `Cargo.toml`: The Cargo manifest file (see [The Cargo Book](https://doc.rust-lang.org/cargo/reference/manifest.html)).
+- `build.rs`: The build script file (see [The Cargo Book](https://doc.rust-lang.org/cargo/reference/build-scripts.html)).
 - `main.rs`: The main source file. You can write your application here.
 - `app.spec.json`: The application manifest file.
 
@@ -163,6 +165,22 @@ You can find the IDL file at `idl.json`. Here is the IDL for the `ping_server` s
 },
 ```
 
+There's a RPC (send-then-receive operation like HTTP) called `"ping"`. Both request/resuponse messages have a single 32-bit integer field `value`. This is what we'll try!
+
+Now we know the service protocol, you might wonder how to define the message structure in Rust. No worries! FTL will auto-generate the message structure for you in `build.rs` using `    ftl_autogen::generate_for_app`, which `scaffold.py` has already done.
+
+To import the generated code, add the following line to `main.rs`:
+
+```rust
+ftl_api::autogen!();
+
+// Import the generated code.
+use ftl_autogen::idl::ping::Ping;
+use ftl_autogen::idl::ping::PingReply;
+```
+
+This internally calls [`include!`](https://doc.rust-lang.org/std/macro.include.html) macro to include the generated code. The auto generated code will be embedded into the file directly, as `ftl_autogen` module.
+
 > [!TIP] **Why not defniing interfaces in Rust?**
 >
 > Rust `struct`s with procedural macros are powerful, but they are not suitable for IPC. However, we prefer IDL because:
@@ -170,6 +188,71 @@ You can find the IDL file at `idl.json`. Here is the IDL for the `ping_server` s
 > - IDL is language-agnostic. We plan to support other programming languages in the future.
 > - It's easier to debug and maintain the auto-generated code.
 
+## Send a message to the server
+
+You're now ready to send a message to the `ping_server` service! Let's send and receive a message:
+
+```rust
+#![no_std]
+#![no_main]
+
+// Embed the auto-generated code from IDL.
+ftl_api::autogen!();
+
+use ftl_api::environ::Environ;
+use ftl_api::prelude::*;
+use ftl_api::types::message::MessageBuffer;
+
+// Use the auto-generated message definitions.
+use ftl_autogen::idl::ping::Ping;
+use ftl_autogen::idl::ping::PingReply;
+
+#[no_mangle]
+pub fn main(mut env: Environ) {
+    // Get the channel to the ping_server.
+    let ping_server_ch = env.take_channel("dep:ping_server").unwrap();
+    info!("ping_server_ch: {:?}", ping_server_ch);
+
+    // Prepare a memory buffer to receive a message.
+    let mut msgbuffer = MessageBuffer::new();
+    loop {
+        // Send a message to the server asynchronously.
+        ping_server_ch.send(Ping { value: 10 }).unwrap();
+
+        // Wait for a reply from the server.
+        let reply = ping_server_ch
+            .recv_with_buffer::<PingReply>(&mut msgbuffer)
+            .unwrap();
+
+        // We've got a reply successfully!
+        info!("got a reply: {:?}", reply);
+    }
+}
+```
+
+Run the application with `ping_server`. You will see infinite log messages like this:
+
+```
+$ make run APPS="apps/demo apps/ping_server"
+...
+[demo        ] INFO   ping_server_ch: Channel(#1)
+[ping_server ] INFO   ping_server started
+[demo        ] INFO   got a reply: PingReply { value: 0 }
+[demo        ] INFO   got a reply: PingReply { value: 1 }
+[demo        ] INFO   got a reply: PingReply { value: 2 }
+[demo        ] INFO   got a reply: PingReply { value: 3 }
+[demo        ] INFO   got a reply: PingReply { value: 4 }
+[demo        ] INFO   got a reply: PingReply { value: 5 }
+[demo        ] INFO   got a reply: PingReply { value: 6 }
+[demo        ] INFO   got a reply: PingReply { value: 7 }
+[demo        ] INFO   got a reply: PingReply { value: 8 }
+[demo        ] INFO   got a reply: PingReply { value: 9 }
+```
+
+It works! You've successfully written your first FTL app!
+
 ## Next steps
+
+Interestingly, this guide covers most of what you need to know to write an FTL application. You will need to learn few more APIs to write OS services, but the basic concepts are the same: scaffold your app with `tools/scaffold.py`, fill the spec file to inject dependencies into `Environ`, and communicate with other components over channels.
 
 [Writing Your First Serverrver](writing-your-first-server) is a good next step to learn how to write an OS service.
