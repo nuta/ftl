@@ -10,6 +10,18 @@ use crate::syscall;
 
 /// The ownership of a contiguous page-aliged memory region.
 ///
+/// To summarize:
+///
+/// - The memory block address is page-aligned (typically 4KB).
+/// - The memory block size is also page-aligned.
+/// - The memory block is physically contiguous.
+///
+/// # When to use
+///
+/// Use folio when you need a *physically contiguous* memory region. The common
+/// case is when you need to allocate a DMA buffer in a device driver (strictly
+/// speaking, when IOMMU is not available).
+///
 /// # Prefer [`Box<T>`](crate::prelude::Box) over folio
 ///
 /// Unless you need low-level control over memory allocation, use containers
@@ -21,12 +33,6 @@ use crate::syscall;
 /// # You may want [`MappedFolio`] instead
 ///
 /// If you want to access the memory region, use [`MappedFolio`] instead.
-///
-/// # Key facts
-///
-/// - The memory block address is page-aligned (typically 4KB).
-/// - The memory block size is also page-aligned.
-/// - The memory block is physically contiguous.
 ///
 /// # Why "folio"?
 ///
