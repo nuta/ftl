@@ -1,0 +1,16 @@
+[package]
+name = "goldfish"
+version = { workspace = true }
+authors = { workspace = true }
+edition = { workspace = true }
+
+[[bin]]
+name = "goldfish"
+path = "main.rs"
+
+[dependencies]
+ftl_api = { workspace = true }
+ftl_driver_utils = { workspace = true }
+
+[build-dependencies]
+ftl_autogen = { workspace = true }

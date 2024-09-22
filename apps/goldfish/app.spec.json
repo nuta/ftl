@@ -1,0 +1,8 @@
+{
+  "name": "goldfish",
+  "kind": "app/v0",
+  "spec": {
+    "depends": [],
+    "provides": []
+  }
+}
