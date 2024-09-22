@@ -25,5 +25,5 @@ pub fn main(_env: Environ) {
 
     let now_i64: i64 = now.try_into().unwrap();
     let datetime = chrono::DateTime::from_timestamp_nanos(now_i64);
-    info!("now = {datetime}");
+    info!("now: {datetime}");
 }
