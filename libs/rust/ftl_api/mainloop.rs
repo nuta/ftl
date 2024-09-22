@@ -32,14 +32,19 @@ pub enum Error {
 pub enum Event<'a, Ctx, M: MessageDeserialize> {
     /// A received message.
     Message {
-        ctx: &'a mut Ctx,
-        message: M::Reader<'a>,
+        /// The channel where the message is received.
         sender: &'a mut ChannelSender,
+        /// The per-object state associated with the channel object.
+        ctx: &'a mut Ctx,
+        /// The received message.
+        message: M::Reader<'a>,
     },
     /// A received hardware interrupts.
     Interrupt {
-        ctx: &'a mut Ctx,
+        /// The object which received the interrupt.
         interrupt: &'a mut Interrupt,
+        /// The per-object state associated with the interrupt object.
+        ctx: &'a mut Ctx,
     },
     /// An error occurred when processing events.
     Error(Error),
@@ -118,6 +123,7 @@ struct Entry<Ctx> {
 ///
 ///     // Mainloop!
 ///     loop {
+///        // Wait for the next event. Use `match` to be exhaustive.
 ///         match mainloop.next() {
 ///             Event::Message { // The "message received" event.
 ///                 ctx: Context::Startup, // The message is from startup.
@@ -134,14 +140,14 @@ struct Entry<Ctx> {
 ///             Event::Message { // The "message received" event.
 ///                 ctx: Context::Client { counter }, // The message is from a client.
 ///                 message: Message::Ping(m), // Ping message.
-///                 sender,
+///                 sender, // The channel which received the message.
 ///             } => {
 ///                 // Update the per-object state.
 ///                 *counter += 1;
 ///
 ///                 // Reply with the counter value.
 ///                 if let Err(err) = sender.send(PingReply { value: *counter }) {
-///                     warn!("failed to reply: {:?}", err);
+///                     debug_warn!("failed to reply: {:?}", err);
 ///                 }
 ///             }
 ///             ev => {

@@ -14,7 +14,7 @@ use crate::syscall;
 ///
 /// - The memory block address is page-aligned (typically 4KB).
 /// - The memory block size is also page-aligned.
-/// - The memory block is physically contiguous.
+/// - The memory block is *physically* contiguous.
 ///
 /// # When to use
 ///
