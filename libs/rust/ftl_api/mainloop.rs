@@ -123,7 +123,7 @@ struct Entry<Ctx> {
 ///
 ///     // Mainloop!
 ///     loop {
-///        // Wait for the next event. Use `match` to be exhaustive.
+///        // Wait for the next event. Use `match` not to miss unexpected cases.
 ///         match mainloop.next() {
 ///             Event::Message { // The "message received" event.
 ///                 ctx: Context::Startup, // The message is from startup.
@@ -142,7 +142,7 @@ struct Entry<Ctx> {
 ///                 message: Message::Ping(m), // Ping message.
 ///                 sender, // The channel which received the message.
 ///             } => {
-///                 // Update the per-object state.
+///                 // Update the per-object state. It's mutable!
 ///                 *counter += 1;
 ///
 ///                 // Reply with the counter value.
