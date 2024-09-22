@@ -1,91 +1,86 @@
 {
-    "$schema": "http://json-schema.org/draft-07/schema#",
-    "title": "FTL Spec File",
-    "type": "object",
-    "properties": {
-      "name": {
-        "type": "string"
-      },
-      "kind": {
-        "type": "string",
-        "enum": ["app/v0"]
-      },
-      "spec": {
-        "type": "object",
-        "properties": {
-          "depends": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "name": {
-                  "type": "string"
-                },
-                "type": {
-                  "type": "string",
-                  "enum": ["service", "device"]
-                },
-                "protocol": {
-                  "type": "string"
-                },
-                "device_tree": {
-                  "type": "object",
-                  "properties": {
-                    "compatible": {
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    }
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "FTL Spec File",
+  "description": "FTL Spec File",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "The name of the resource."
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "app/v0"
+      ],
+      "description": "The spec file type."
+    },
+    "spec": {
+      "type": "object",
+      "description": "The spec body.",
+      "properties": {
+        "depends": {
+          "type": "array",
+          "description": "A list of dependencies required by the app.",
+          "items": {
+            "oneOf": [
+              {
+                "properties": {
+                  "type": {
+                    "const": "service"
                   },
-                  "required": ["compatible"]
-                }
+                  "protocol": {
+                    "type": "string",
+                    "description": "The service's protocol."
+                  }
+                },
+                "required": [
+                  "protocol"
+                ]
               },
-              "required": ["name", "type"],
-              "oneOf": [
-                {
-                  "properties": {
-                    "type": {
-                      "enum": ["service"]
-                    },
-                    "protocol": {
-                      "type": "string"
-                    }
+              {
+                "properties": {
+                  "type": {
+                    "const": "device"
                   },
-                  "required": ["protocol"]
-                },
-                {
-                  "properties": {
-                    "type": {
-                      "enum": ["device"]
-                    },
-                    "device_tree": {
-                      "type": "object",
-                      "properties": {
-                        "compatible": {
-                          "type": "array",
-                          "items": {
-                            "type": "string"
-                          }
+                  "device_tree": {
+                    "type": "object",
+                    "description": "Details of the device tree if the dependency is a device.",
+                    "properties": {
+                      "compatible": {
+                        "type": "array",
+                        "description": "List of compatible devices.",
+                        "items": {
+                          "type": "string"
                         }
-                      },
-                      "required": ["compatible"]
-                    }
-                  },
-                  "required": ["device_tree"]
+                      }
+                    },
+                    "required": [
+                      "compatible"
+                    ]
+                  }
                 }
-              ]
-            }
-          },
-          "provides": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
+              }
+            ]
           }
         },
-        "required": ["depends", "provides"]
-      }
-    },
-    "required": ["name", "kind", "spec"]
-  }
+        "provides": {
+          "type": "array",
+          "description": "A list of services provided by the application.",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "depends",
+        "provides"
+      ]
+    }
+  },
+  "required": [
+    "name",
+    "kind",
+    "spec"
+  ]
+}
