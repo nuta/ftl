@@ -1,8 +1,8 @@
 //! Low-level printing utilities.
 //!
-//! # Prefer [`crate::log`] over `print!`
+//! # Prefer [`mod@crate::log`] over `print!`
 //!
-//! This module is a low-level utilities for [`crate::log`] module. Use [`crate::log`]
+//! This module is a low-level utilities for [`mod@crate::log`] module. Use [`mod@crate::log`]
 //! instead of this module.
 use alloc::string::String;
 
