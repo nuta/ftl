@@ -79,12 +79,12 @@ struct Entry<Ctx> {
 ///
 /// # Why not async Rust?
 ///
-/// This is very similar to `epoll` + non-blocking I/O in Linux. A event loop
-/// API like this means that you can write a state machine manually, which
+/// This API is very similar to `epoll` + non-blocking I/O in Linux. An event
+/// loop API like this means that you need to write state machines manually, which
 /// async Rust (`async fn`) does automatically.
 ///
 /// However, explicit state machines make debugging easier because the
-/// execution flow is crystal clear, and we don't have to care about
+/// execution flow is crystal clear. Also we don't have to care about pitfalls like
 /// *cancellation safety*. Moreover, my observation is that most of
 /// OS components are very simple and manual state machines are sufficient.
 ///
