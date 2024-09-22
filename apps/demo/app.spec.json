@@ -1,0 +1,14 @@
+{
+  "name": "demo",
+  "kind": "app/v0",
+  "spec": {
+    "depends": [
+      {
+        "name": "ping_server",
+        "type": "service",
+        "protocol": "ping"
+      }
+    ],
+    "provides": []
+  }
+}

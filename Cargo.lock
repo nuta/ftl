@@ -98,6 +98,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "demo"
+version = "0.0.0"
+dependencies = [
+ "ftl_api",
+]
+
+[[package]]
 name = "endian-type-rs"
 version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
