@@ -1,5 +1,5 @@
 ---
-title: Writing your first application
+title: Writing Your First Application
 ---
 
 Let's write a simple Hello World application. In this section, we'll create a simple app called `demo`.
