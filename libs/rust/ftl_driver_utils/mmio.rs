@@ -131,7 +131,7 @@ impl Access for ReadWrite {}
 ///
 /// - `E`: Endianness of the register ([`LittleEndian`], [`BigEndian`]).
 /// - `A`: Access type of the register ([`ReadOnly`], [`WriteOnly`], [`ReadWrite`]).
-/// - `T`: Type of the register (e.g. u32).
+/// - `T`: Type of the register (`u8`, `u16`, `u32`, `u64`).
 pub struct MmioReg<E: Endianess, A: Access, T: Copy> {
     offset: usize,
     _pd1: PhantomData<E>,
