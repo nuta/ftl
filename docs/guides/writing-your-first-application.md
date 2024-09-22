@@ -22,8 +22,8 @@ Now you have a new directory at `apps/demo` with the following files:
 
 - `Cargo.toml`: The Cargo manifest file (see [The Cargo Book](https://doc.rust-lang.org/cargo/reference/manifest.html)).
 - `build.rs`: The build script file (see [The Cargo Book](https://doc.rust-lang.org/cargo/reference/build-scripts.html)).
-- `main.rs`: The main source file. You can write your application here.
-- `app.spec.json`: The application manifest file.
+- `main.rs`: The main source file.
+- `app.spec.json`: The FTL application manifest file.
 
 ## Running the application
 
@@ -53,7 +53,7 @@ vec.push(2);
 vec.push(3);
 info!("vec: {:?}", vec);
 
-// HashMap (so-called map, dictionary, or associative array).
+// HashMap (so-called dictionary or associative array).
 use ftl_api::collections::HashMap;
 let mut map = HashMap::new();
 map.insert("apple", 1000);
@@ -72,7 +72,7 @@ In FTL, each service (or *server*) provides a set of APIs over a message-passing
 
 Here, let's connect the `demo` application with `apps/ping_server` app, which is a simple server which replies a simple message, just like `ping` command in Linux.
 
-However, how can we know the server's channel? In FTL, the service dependencies are managed through systemd/Kubernetes-like declarative configuration files called *spec files*. Add a new entry in `depends`:
+However, how can we know the server's channel? In FTL, the service dependencies are managed through systemd/Kubernetes-like declarative configuration files called *spec files*. Declare a new dependency in `app.spec.json`:
 
 ```json
 {
@@ -91,7 +91,7 @@ However, how can we know the server's channel? In FTL, the service dependencies 
 }
 ```
 
-Now, FTL will automatically connect the `ping_server` service! You can get the channel via `Environ`, the first parameter of the `main` function:
+Now, FTL will automatically connect the `ping_server` service. You can get the channel via `Environ`, the first parameter of the `main` function:
 
 ```rust
 #![no_std]
@@ -126,7 +126,7 @@ $ make run APPS="apps/demo apps/ping_server"
 
 You can see the `ping_server` channel is connected to the `demo` application!
 
-> [!TIP] **What's `dep:startup`?**
+> [!TIP] **What is `dep:startup`?**
 >
 > You may notice that there is another channel named `dep:startup`. This is a channel which is connected to the service which started the application.
 >
@@ -183,10 +183,11 @@ This internally calls [`include!`](https://doc.rust-lang.org/std/macro.include.h
 
 > [!TIP] **Why not defniing interfaces in Rust?**
 >
-> Rust `struct`s with procedural macros are powerful, but they are not suitable for IPC. However, we prefer IDL because:
+> Rust `struct`s with procedural macros are powerful, but we prefer IDL because:
 >
 > - IDL is language-agnostic. We plan to support other programming languages in the future.
 > - It's easier to debug and maintain the auto-generated code.
+> - JSON is easier to read and write by programs. For example, we don't need to port Rust compiler to build a web-based IDL visualizer.
 
 ## Send a message to the server
 
