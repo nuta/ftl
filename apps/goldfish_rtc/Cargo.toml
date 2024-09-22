@@ -1,11 +1,11 @@
 [package]
-name = "goldfish"
+name = "goldfish_rtc"
 version = { workspace = true }
 authors = { workspace = true }
 edition = { workspace = true }
 
 [[bin]]
-name = "goldfish"
+name = "goldfish_rtc"
 path = "main.rs"
 
 [dependencies]
