@@ -1,0 +1,91 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "FTL Spec File",
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string"
+      },
+      "kind": {
+        "type": "string",
+        "enum": ["app/v0"]
+      },
+      "spec": {
+        "type": "object",
+        "properties": {
+          "depends": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string",
+                  "enum": ["service", "device"]
+                },
+                "protocol": {
+                  "type": "string"
+                },
+                "device_tree": {
+                  "type": "object",
+                  "properties": {
+                    "compatible": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": ["compatible"]
+                }
+              },
+              "required": ["name", "type"],
+              "oneOf": [
+                {
+                  "properties": {
+                    "type": {
+                      "enum": ["service"]
+                    },
+                    "protocol": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["protocol"]
+                },
+                {
+                  "properties": {
+                    "type": {
+                      "enum": ["device"]
+                    },
+                    "device_tree": {
+                      "type": "object",
+                      "properties": {
+                        "compatible": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "required": ["compatible"]
+                    }
+                  },
+                  "required": ["device_tree"]
+                }
+              ]
+            }
+          },
+          "provides": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": ["depends", "provides"]
+      }
+    },
+    "required": ["name", "kind", "spec"]
+  }
