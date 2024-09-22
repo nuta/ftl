@@ -1,7 +1,7 @@
 //! Frequently used types and traits.
 //!
-//! The [`prelude`] module contains the most common types and traits to
-//! import. Here is an idiomatic way to import the prelude:
+//! This module contains the most common types and traits to import. Here is an
+//! idiomatic way to import the prelude:
 //!
 //! ```
 //! use ftl_api::prelude::*;

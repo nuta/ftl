@@ -1,3 +1,4 @@
+//! Kernel object handle types.
 use core::fmt;
 
 use ftl_types::handle::HandleId;
