@@ -17,8 +17,8 @@
 
 extern crate alloc;
 
-pub mod allocator;
-pub mod arch;
+mod allocator;
+mod arch;
 pub mod channel;
 pub mod environ;
 pub mod folio;
@@ -26,7 +26,7 @@ pub mod handle;
 pub mod interrupt;
 pub mod log;
 pub mod mainloop;
-pub mod panic;
+mod panic;
 pub mod poll;
 pub mod prelude;
 pub mod print;

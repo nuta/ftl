@@ -1,4 +1,4 @@
-//! Polling API.
+//! A polling API, similar to Linux's `epoll`.
 use ftl_types::error::FtlError;
 use ftl_types::handle::HandleId;
 use ftl_types::poll::PollEvent;

@@ -1,4 +1,4 @@
-//! Message-passing channel API.
+//! A message-passing channel.
 use alloc::boxed::Box;
 use alloc::sync::Arc;
 use core::fmt;

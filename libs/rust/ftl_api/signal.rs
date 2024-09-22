@@ -39,7 +39,6 @@ impl Signal {
         Signal { handle }
     }
 
-
     /// Returns the handle.
     pub fn handle(&self) -> &OwnedHandle {
         &self.handle

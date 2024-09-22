@@ -1,7 +1,6 @@
 //! Environ, a collection of key-value pairs passed to the application.
-use core::fmt;
-
 use alloc::vec::Vec;
+use core::fmt;
 
 use ftl_types::environ::Device;
 use ftl_types::environ::EnvType;

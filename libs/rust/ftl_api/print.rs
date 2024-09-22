@@ -1,3 +1,9 @@
+//! Low-level printing utilities.
+//!
+//! # Prefer [`crate::log`] over `print!`
+//!
+//! This module is a low-level utilities for [`crate::log`] module. Use [`crate::log`]
+//! instead of this module.
 use alloc::string::String;
 
 use spin::Mutex;
