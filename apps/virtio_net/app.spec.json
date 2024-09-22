@@ -1,17 +1,20 @@
 {
-    "$schema": "https://raw.githubusercontent.com/nuta/ftl/refs/heads/code-docs/libs/rust/ftl_types/spec.schema.json",
-    "name": "virtio_net",
-    "kind": "app/v0",
-    "spec": {
-        "depends": [
-            {
-                "type": "device",
-                "name": "virtio",
-                "device_tree": {
-                    "compatible": ["virtio,mmio"]
-                }
-            }
-        ],
-        "provides": ["ethernet_device"]
-    }
+  "name": "virtio_net",
+  "kind": "app/v0",
+  "spec": {
+    "depends": [
+      {
+        "type": "device",
+        "name": "virtio",
+        "device_tree": {
+          "compatible": [
+            "virtio,mmio"
+          ]
+        }
+      }
+    ],
+    "provides": [
+      "ethernet_device"
+    ]
+  }
 }
