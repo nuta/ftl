@@ -26,7 +26,7 @@ We support macOS, Linux (Ubuntu), and WSL2 (Ubuntu) for development. You will ne
 On macOS, you can install these tools using Homebrew:
 
 ```
-brew install qemu python3
+brew install qemu
 ```
 
 On Ubuntu, you can install these tools using `apt`:
@@ -64,4 +64,3 @@ That's it!
 ## Next Steps
 
 Now you have a development environment ready. Let's write your first application! See [Writing Your First Application](guides/writing-your-first-application.md) for the next steps.
-```
