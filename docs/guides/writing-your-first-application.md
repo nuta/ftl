@@ -136,7 +136,7 @@ You can see the `ping_server` channel is connected to the `demo` application!
 >
 > You may notice that there is another channel named `dep:startup`. This is a channel which is connected to the service which started the application.
 >
-> You will see more about this in [Writing Your First Server](writing-your-first-server) guide.
+> You will see more about this in [Writing Your First Server](writing-your-first-server.md) guide.
 
 ## Interface Defniition Language (IDL)
 
@@ -171,7 +171,7 @@ You can find the IDL file at `idl.json`. Here is the IDL for the `ping_server` s
 },
 ```
 
-There's a RPC (send-then-receive operation like HTTP) called `"ping"`. Both request/resuponse messages have a single 32-bit integer field `value`. This is what we'll try!
+There's a RPC (send-then-receive operation, akin to HTTP) called `"ping"`. Both request/resuponse messages have a single 32-bit integer field `value`. This is what we'll try!
 
 Now we know the service protocol, you might wonder how to define the message structure in Rust. No worries! FTL will auto-generate the message structure for you in `build.rs` using `    ftl_autogen::generate_for_app`, which `scaffold.py` has already done.
 

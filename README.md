@@ -2,6 +2,8 @@
 
 FTL is a new general-purpose operating system based on a modern microkernel architecture. It is designed to provide the best developer experience so that you, even a kernel newbie, can easily understand and enjoy developing an operating system.
 
+TODO: nice drawing of the architecture
+
 - **[Quickstart](docs/quickstart.md)**: Setting up the development environment, and running FTL on QEMU emulator.
 - **[Writing Your First Application](docs/guides/writing-your-first-application.md)**: Step-by-step guide for writing your first FTL application.
 - **[Guides](docs/guides)**: More step-by-step guides for developing OS components such as device drivers.
@@ -14,20 +16,17 @@ It has been said that microkernels are not practical due to performance overhead
 
 FTL aims to be:
 
-- **Approachable:** Be easy to understand and develop, even for non-experts. Have you ever experienced some programming languages? You are ready to join the development!
-- **Practical:** Aim to be a general-purpose operating system, not ending up as a hobby/research project.
-- **Performant:** Don't stick to the beautiful design.
+- **Approachable:** Be easy to understand and develop, even for non-experts. Focused on the developer experience.
+- **Practical:** Aim to be a general-purpose operating system, not ending up as a hobby/research project.a
+- **Performant:** The traditional "user mode" concept is just one of the many ways to isolate components. Implement other faster ways like language-based (e.g. Rust/WebAssembly), and CPU-specific mechanisms (e.g. Intel PKS) for better performance.
 
 ## Design Principles
 
 To achieve this goal, we have the following design principles:
 
-- Aim to be easy to develop, not achieving a correct and beautiful architecture. Make OS development approachable and fun for everyone.
-- Don't try to achieve the perfect design from the beginning. Imagine how the userspace should look like first, not vice versa - the microkernel is just a runtime for applications.
-- The traditional "user-mode" concept is just one of the many ways to isolate components. Implement other faster ways like language-based (e.g. Rust/WebAssembly), or Intel/Arm specific mechanisms (e.g. Intel PKS) for better performance.
-- Implement in [Rust](https://www.rust-lang.org/) with async APIs, without async Rust (`async fn`). Every component has a simple main loop to make the execution flow clear.
-
-TODO: nice drawing of the architecture
+- **Userspace first:** FTL started from designing the developer experience in userspace - *"How do I want to write OS components?"*. In FTL, the kernel is just a runtime for applications.
+- **Intuitiveness over perfection:** Don't stick to a *correct* design first. Deliver an intuitive, easy-to-use, API good enough for the 90% of the use cases. The remaining 10% can be solved later, with specialized APIs. Make it work first, then make it better.
+- **Convention over configuration:** Microkernel-based OS is a collection of components. They should look similar and be easy to understand. Follow conventions to focus on what you want to do, and reduce the cognitive load of new contributors.
 
 ## Features
 
