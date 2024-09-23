@@ -14,7 +14,9 @@ title: Writing Your First Server
 
 ## Reply to the client
 
-> [!TIP] **`ChannelSender` to send to clients from multiple places**
+> [!TIP]
+>
+> **`ChannelSender` to send to clients from multiple places**
 
 ## Do not trust the client!
 

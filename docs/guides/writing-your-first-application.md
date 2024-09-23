@@ -130,7 +130,9 @@ $ make run APPS="apps/demo apps/ping_server"
 
 You can see the `ping_server` channel is connected to the `demo` application!
 
-> [!TIP] **What is `dep:startup`?**
+> [!TIP]
+>
+> **What is `dep:startup`?**
 >
 > You may notice that there is another channel named `dep:startup`. This is a channel which is connected to the service which started the application.
 >
@@ -185,7 +187,9 @@ use ftl_autogen::idl::ping::PingReply;
 
 This internally calls [`include!`](https://doc.rust-lang.org/std/macro.include.html) macro to include the generated code. The auto generated code will be embedded into the file directly, as `ftl_autogen` module.
 
-> [!TIP] **Why not defniing interfaces in Rust?**
+> [!TIP]
+>
+> **Why not defniing interfaces in Rust?**
 >
 > Rust `struct`s with procedural macros are powerful, but we prefer IDL because:
 >
