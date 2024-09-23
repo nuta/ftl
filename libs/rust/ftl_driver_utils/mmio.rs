@@ -15,7 +15,7 @@
 //! # Example (Goldfish RTC driver)
 //!
 //! In this example, two MMIO registers are defined: `TIME_LOW_REG` and
-//! `TIME_HIGH_REG` and prints the current time read from the Goldfish RTC
+//! `TIME_HIGH_REG` and prints the current time read from the [Goldfish RTC](https://android.googlesource.com/kernel/goldfish/+/android-goldfish-3.10-n-dev/Documentation/rtc.txt)
 //! device.
 //!
 //! To access the MMIO registers, you need to acquire and map the MMIO region
