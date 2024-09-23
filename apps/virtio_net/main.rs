@@ -15,7 +15,7 @@ use ftl_api::types::environ::Device;
 use ftl_api::types::interrupt::Irq;
 use ftl_autogen::idl::ethernet_device;
 use ftl_autogen::idl::Message;
-use ftl_driver_utils::dma_buffer_pool::DmaBufferPool;
+use ftl_driver_utils::DmaBufferPool;
 use ftl_virtio::transports::mmio::VirtioMmio;
 use ftl_virtio::transports::VirtioTransport;
 use ftl_virtio::virtqueue::VirtqDescBuffer;

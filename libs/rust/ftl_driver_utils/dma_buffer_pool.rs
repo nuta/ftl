@@ -11,17 +11,34 @@ use ftl_utils::alignment::align_up;
 #[derive(Copy, Clone)]
 pub struct BufferId(usize);
 
-/// A buffer pool.
+/// A DMA buffer pool.
 ///
 /// This struct manages a pool of buffers. Unlike a `Vec`-based buffers, this
 /// struct provides a way to know the physical memory address of a buffer so
-/// that it can be used for DMA operations.
+/// that it can be passed to a device for DMA operations.
 ///
 /// # Future Work
 ///
 /// - Distinguish the physical memory address and device memory address. Some
 ///   computers might have different address spaces for devices, and some might
 ///   have IOMMU to translate the addresses.
+///
+/// # Example
+///
+/// ```rust
+/// const BUFFER_SIZE: usize = 4096;
+/// const NUM_BUFFERS: usize = 16;
+///
+/// let mut pool = DmaBufferPool::new(BUFFER_SIZE, NUM_BUFFERS);
+/// let buffer_id = pool.allocate().unwrap();
+///
+/// let paddr = pool.paddr(buffer_id);
+/// let vaddr = pool.vaddr(buffer_id);
+///
+/// // Do DMA operations here!
+///
+/// pool.free(buffer_id);
+/// ```
 pub struct DmaBufferPool {
     folio: MappedFolio,
     free_indices: Vec<BufferId>,
