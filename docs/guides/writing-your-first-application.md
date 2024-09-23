@@ -2,7 +2,7 @@
 title: Writing Your First Application
 ---
 
-> [!TIP]
+> [!NOTE]
 >
 > See [Quickstart](../quickstart.md) first to set up the development environment.
 
@@ -31,7 +31,7 @@ Now you have a new directory at `apps/demo` with the following files:
 
 ## Running the application
 
-To run the application, execute `make run APPS=apps/<name>`:
+To run the application, execute `make run APPS=apps/<name>`. `APPS` is a space-separated list of applications to run. You will see the following log message from the `demo` app:
 
 ```
 $ make run APPS=apps/demo
