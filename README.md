@@ -25,7 +25,7 @@ FTL aims to be:
 To achieve the goal, we have the following design principles:
 
 - **Userspace-first:** FTL's design process began with the developer experience in userspace - asking, "How do we want to write OS components?" In FTL, applications take center stage, with the microkernel provindng the necessary abstractions to support them.
-- **Intuitiveness over perfection:** Prioritize delivering an intuitive, easy-to-use API that addresses 90% of use cases, rather than striving for an initially perfect design. The remaining 10% can be solved later with specialized APIs. Make things work first, then make them better.
+- **Intuitiveness over perfection:** Prioritize delivering an intuitive, easy-to-use API that addresses 90% of use cases, rather than striving for a perfect design. The remaining 10% can be solved later with specialized APIs. Make things work first, then make them better.
 - **Convention over configuration:** A microkernel-based OS is a collection of OS components. They should be consistent and easily understandable. Follow conventions to focus on what you want to build, and reduce the cognitive load on new contributors.
 
 ## Features
