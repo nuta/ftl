@@ -25,7 +25,7 @@ FTL aims to be:
 To achieve this goal, we have the following design principles:
 To achieve these goals, we adhere to the following design principles:
 
-- **Userspace over kernel-space:** FTL's design process began with the developer experience in userspace - asking, "How do we want to write OS components?" In FTL, applications take center stage, with the microkernel provindng the necessary abstractions to support them.
+- **Userspace-first:** FTL's design process began with the developer experience in userspace - asking, "How do we want to write OS components?" In FTL, applications take center stage, with the microkernel provindng the necessary abstractions to support them.
 - **Intuitiveness over perfection:** Prioritize delivering an intuitive, easy-to-use API that addresses 90% of use cases, rather than striving for an initially "perfect" design. The remaining 10% can be solved later with specialized APIs. Our approach is to make it work first, then make it better.
 - **Convention over configuration:** As a microkernel-based OS, FTL is a collection of components. These should be consistent and easily understandable. By following conventions, we reduce the cognitive load on new contributors and allow developers to focus on their specific tasks.
 
