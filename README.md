@@ -30,7 +30,7 @@ To achieve the goal, we have the following design principles:
 
 ## Features
 
-- 64-bit RISC-V support.
+- 64-bit RISC-V CPU support.
 - Virtio device support (virtio-net only for now).
 - TCP/IP stack based on [smoltcp](https://github.com/smoltcp-rs/smoltcp).
 - Intuitive Rust API for apps, OS servers, and device drivers.
