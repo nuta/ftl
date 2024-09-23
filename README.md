@@ -22,8 +22,7 @@ FTL aims to be:
 
 ## Design Principles
 
-To achieve this goal, we have the following design principles:
-To achieve these goals, we adhere to the following design principles:
+To achieve the goal, we have the following design principles:
 
 - **Userspace-first:** FTL's design process began with the developer experience in userspace - asking, "How do we want to write OS components?" In FTL, applications take center stage, with the microkernel provindng the necessary abstractions to support them.
 - **Intuitiveness over perfection:** Prioritize delivering an intuitive, easy-to-use API that addresses 90% of use cases, rather than striving for an initially perfect design. The remaining 10% can be solved later with specialized APIs. Make things work first, then make them better.
