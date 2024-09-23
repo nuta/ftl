@@ -10,7 +10,7 @@ TODO: nice drawing of the architecture
 
 ## Why FTL?
 
-***"What if we try building a microkernel-based general-purpose OS with 21st century technologies?"*** This is the question we try to answer. There are already many microkernel projects out there, however, they aim to be hobby/research projects or designed for embedded systems.
+***"What if we build a microkernel-based general-purpose OS with 21st century technologies?"*** This is the question we try to answer. There are already many microkernel projects out there, however, they aim to be hobby/research projects or designed for embedded systems.
 
 It has been said that microkernels are not practical due to performance overhead, but the hardware and software landscape has changed a lot since the 1990s. Don't you think it's time to revisit the microkernel architecture? Let's try with modern technologies and see how far we can go!
 
