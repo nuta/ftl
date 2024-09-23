@@ -2,8 +2,9 @@
 
 FTL is a new general-purpose operating system based on a modern microkernel architecture. It is designed to provide the best developer experience so that you, even a kernel newbie, can easily understand and enjoy developing an operating system.
 
-- **[Quickstart](docs/quickstart.md)**: How to build and run FTL, and write your first application.
-- **[Guides](docs/guides)**: Step-by-step guides for developing OS components such as device drivers.
+- **[Quickstart](docs/quickstart.md)**: Setting up the development environment, and building and running FTL on QEMU emulator.
+- **[Writing Your First Application](docs/guides/writing-your-first-application.md)**: Step-by-step guide for writing your first FTL application.
+- **[Guides](docs/guides)**: More step-by-step guides for developing OS components such as device drivers.
 
 ## Why FTL?
 

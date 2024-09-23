@@ -60,3 +60,8 @@ $ make run
 ```
 
 That's it!
+
+## Next Steps
+
+Now you have a development environment ready. Let's write your first application! See [Writing Your First Application](guides/writing-your-first-application.md) for the next steps.
+```
