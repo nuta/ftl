@@ -34,10 +34,9 @@ To achieve the goal, we have the following design principles:
 - Virtio device support (virtio-net only for now).
 - TCP/IP stack based on [smoltcp](https://github.com/smoltcp-rs/smoltcp).
 - Intuitive Rust API for apps, OS servers, and device drivers.
-- Auto-generated IPC stubs and startup code from declarative YAML files.
+- Auto-generated IPC stubs and startup code from Kubernetes-ish declarative JSON files.
 
 ### Planned Features
-
 
 - MMU/usermode-based isolation (so-called traditional "process" isolation).
 - Arm and x86_64 support (once the kernel API stabilizes).
@@ -45,7 +44,7 @@ To achieve the goal, we have the following design principles:
 - File system support.
 - JavaScript API.
 - WebAssembly-based isolation.
-- Linux compatibility layer using the genuine Linux kernel microVM.
+- Linux compatibility layer using the genuine Linux kernel.
 
 ## Getting Started
 
