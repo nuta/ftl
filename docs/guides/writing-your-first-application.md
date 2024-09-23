@@ -256,4 +256,4 @@ It works! You've successfully written your first FTL app!
 
 Interestingly, this guide covers most of what you need to know to write an FTL application. You will need to learn few more APIs to write OS services, but the basic concepts are the same: scaffold your app with `tools/scaffold.py`, fill the spec file to inject dependencies into `Environ`, and communicate with other components over channels.
 
-[Writing Your First Serverrver](writing-your-first-server) is a good next step to learn how to write an OS service.
+[Writing Your First Server](writing-your-first-server.md) is a good next step to learn how to write an OS service.
