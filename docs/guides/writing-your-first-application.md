@@ -2,7 +2,9 @@
 title: Writing Your First Application
 ---
 
-> [!TIP] See [Quickstart](../quickstart.md) first to set up the development environment.
+> [!TIP]
+>
+> See [Quickstart](../quickstart.md) first to set up the development environment.
 
 Let's write a simple Hello World application. In this section, we'll create a simple app called `demo`.
 
