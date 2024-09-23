@@ -2,6 +2,9 @@
 
 FTL is a new general-purpose operating system based on a modern microkernel architecture. It is designed to provide the best developer experience so that you, even a kernel newbie, can easily understand and enjoy developing an operating system.
 
+- **[Quickstart](docs/quickstart.md)**: How to build and run FTL, and write your first application.
+- **[Guides](docs/guides)**: Step-by-step guides for developing OS components such as device drivers.
+
 ## Why FTL?
 
 "What if we try building a microkernel-based general-purpose operating system with 21st century technologies?" This is the question we try to answer. There are already many microkernel projects out there, however, they aim to be hobby/research projects or designed for embedded systems.
@@ -10,7 +13,7 @@ It has been said that microkernels are not practical due to performance overhead
 
 FTL aims to be:
 
-- **Approachable:** Be easy to understand and develop, even for non-experts. Have you ever experienced some programming languges? You are ready to join the development!
+- **Approachable:** Be easy to understand and develop, even for non-experts. Have you ever experienced some programming languages? You are ready to join the development!
 - **Practical:** Aim to be a general-purpose operating system, not ending up as a hobby/research project.
 - **Performant:** Don't stick to the beautiful design.
 
@@ -18,12 +21,12 @@ FTL aims to be:
 
 To achieve this goal, we have the following design principles:
 
-- Aim to being easy to develop, not achiving a correct and beautiful architecture. Make OS development approachable and fun for everyone.
+- Aim to be easy to develop, not achieving a correct and beautiful architecture. Make OS development approachable and fun for everyone.
 - Don't try to achieve the perfect design from the beginning. Imagine how the userspace should look like first, not vice versa - the microkernel is just a runtime for applications.
 - The traditional "user-mode" concept is just one of the many ways to isolate components. Implement other faster ways like language-based (e.g. Rust/WebAssembly), or Intel/Arm specific mechanisms (e.g. Intel PKS) for better performance.
 - Implement in [Rust](https://www.rust-lang.org/) with async APIs, without async Rust (`async fn`). Every component has a simple main loop to make the execution flow clear.
 
-TODO: nice drawining of the architecture
+TODO: nice drawing of the architecture
 
 ## Features
 
