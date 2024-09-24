@@ -1,0 +1,10 @@
+name: ping
+kind: interface/v0
+spec:
+  rpcs:
+    - name: echo
+      params:
+        - { name: value, type: int32, help: "The value to return" }
+      returns:
+        - { name: value, type: int32, help: "Will return the value passed in" }
+        - { name: count, type: int32, help: "The number of times this method has been called" }
