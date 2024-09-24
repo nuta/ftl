@@ -9,6 +9,7 @@ use anyhow::Context;
 use anyhow::Result;
 use ftl_types::idl;
 use ftl_types::idl::IdlFile;
+use ftl_types::spec::SpecFile;
 use minijinja::context;
 use minijinja::Environment;
 use serde::Serialize;
@@ -99,6 +100,42 @@ fn find_idl_file() -> Result<PathBuf> {
     }
 
     anyhow::bail!("idl.json not found in any parent directory of CARGO_MANIFEST_DIR");
+}
+
+fn find_spec_dir() -> Result<PathBuf> {
+    let manifest_dir = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").unwrap());
+    let mut dir = manifest_dir.as_path();
+    while let Some(parent_dir) = dir.parent() {
+        let path = parent_dir.join("spec/interfaces");
+        if path.is_dir() {
+            return Ok(path);
+        }
+
+        dir = parent_dir;
+    }
+
+    anyhow::bail!(
+        "spec/interfaces directory not found in any parent directory of CARGO_MANIFEST_DIR"
+    );
+}
+
+fn do_generate2(for_kernel: bool) -> Result<()> {
+    let out_dir = env::var_os("OUT_DIR").unwrap();
+    let dest_path = Path::new(&out_dir).join("autogen.rs");
+    let spec_dir = find_spec_dir()?;
+
+    for dentry in spec_dir
+        .read_dir()
+        .context("failed to readdir spec/interfaces")?
+    {
+        let dentry = dentry.unwrap();
+        let spec_file = File::open(dentry.path())
+            .with_context(|| format!("failed to open spec file {}", dentry.path().display()))?;
+        let spec: SpecFile = serde_yaml::from_reader(spec_file)
+            .with_context(|| format!("failed to parse spec file {}", dentry.path().display()))?;
+    }
+
+    Ok(())
 }
 
 fn do_generate(for_kernel: bool) -> Result<()> {
