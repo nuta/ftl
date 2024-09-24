@@ -13,7 +13,7 @@ pub mod idl {
     pub enum Message<'a> {
         {% for m in messages %}
         #[allow(unused)]
-        {{ m.name }}(&'a mut {{ m.protocol_name }}::{{ m.name }}),
+        {{ m.name }}(&'a mut {{ m.interface_name }}::{{ m.name }}),
         {% endfor %}
     }
 
@@ -24,8 +24,8 @@ pub mod idl {
             -> Option<Self::Reader<'_>> {
             match msginfo {
                 {% for m in messages %}
-                    {{ m.protocol_name }}::{{ m.name }}::MSGINFO => {
-                        let msg = {{ m.protocol_name }}::{{ m.name }}::deserialize(buffer, msginfo)?;
+                    {{ m.interface_name }}::{{ m.name }}::MSGINFO => {
+                        let msg = {{ m.interface_name }}::{{ m.name }}::deserialize(buffer, msginfo)?;
                         Some(Message::{{ m.name }}(msg))
                     },
                 {% endfor %}
@@ -34,8 +34,8 @@ pub mod idl {
         }
     }
 
-    {% for protocol in protocols %}
-    pub mod {{ protocol.name }} {
+    {% for interface in interfaces %}
+    pub mod {{ interface.name }} {
         #[allow(unused)]
         use super::*;
 

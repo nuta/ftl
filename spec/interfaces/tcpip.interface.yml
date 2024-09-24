@@ -33,6 +33,7 @@ spec:
     type: push
     origin: server
     context: connection
+    params: []
 
   - name: tcp_received
     type: push

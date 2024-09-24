@@ -47,11 +47,11 @@ pub struct AppSpec {
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct InterfaceSpec {
-    pub messages: Vec<MessageField>,
+    pub messages: Vec<Message>,
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct MessageField {
+pub struct Message {
     /// The message name.
     pub name: String,
     /// The message description.
@@ -64,13 +64,14 @@ pub struct MessageField {
     /// Who sends the message.
     pub origin: Option<MessageOrigin>,
     /// The message fields.
-    pub params: Vec<ParamField>,
+    pub params: Vec<MessageField>,
     /// The return message fields. Only valid in [`MessageType::Call`].
-    pub returns: Option<Vec<ReturnField>>,
+    pub returns: Option<Vec<MessageField>>,
 }
 
 /// How the message is sent.
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum MessageType {
     /// Send and then receive the response message.
     Call,
@@ -80,6 +81,7 @@ pub enum MessageType {
 
 /// Who sends the message.
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum MessageOrigin {
     /// The message is sent from client, to server.
     Client,
@@ -91,27 +93,22 @@ pub enum MessageOrigin {
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ParamField {
+pub struct MessageField {
     pub name: String,
     #[serde(flatten)]
-    pub ty: Ty,
-    pub help: Option<String>,
-    pub context: Option<String>,
-}
-
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ReturnField {
-    pub name: String,
-    #[serde(flatten)]
-    pub ty: Ty,
+    pub ty: MessageFieldType,
     pub help: Option<String>,
     pub context: Option<String>,
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase", tag = "type")]
-pub enum Ty {
+pub enum MessageFieldType {
+    UInt8,
     UInt16,
+    UInt32,
+    Int8,
+    Int16,
     Int32,
     Channel,
     Bytes { capacity: usize },
