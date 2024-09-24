@@ -1,0 +1,15 @@
+[package]
+name = "echo"
+version = { workspace = true }
+authors = { workspace = true }
+edition = { workspace = true }
+
+[[bin]]
+name = "echo"
+path = "main.rs"
+
+[dependencies]
+ftl_api = { workspace = true }
+
+[build-dependencies]
+ftl_autogen = { workspace = true }

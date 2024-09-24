@@ -107,6 +107,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "echo"
+version = "0.0.0"
+dependencies = [
+ "ftl_api",
+ "ftl_autogen",
+]
+
+[[package]]
 name = "endian-type-rs"
 version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"

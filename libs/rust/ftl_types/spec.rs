@@ -16,6 +16,8 @@ pub struct SpecFile {
 pub enum Spec {
     #[serde(rename = "app/v0")]
     App(AppSpec),
+    #[serde(rename = "interface/v0")]
+    Interface(InterfaceSpec),
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -41,4 +43,77 @@ pub struct DependWithName {
 pub struct AppSpec {
     pub depends: Vec<DependWithName>,
     pub provides: Vec<String>,
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct InterfaceSpec {
+    pub messages: Vec<MessageField>,
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MessageField {
+    /// The message name.
+    pub name: String,
+    /// The message description.
+    pub description: Option<String>,
+    /// The message type.
+    #[serde(rename = "type")]
+    pub ty: MessageType,
+    /// The channel context.
+    pub context: String,
+    /// Who sends the message.
+    pub origin: Option<MessageOrigin>,
+    /// The message fields.
+    pub params: Vec<ParamField>,
+    /// The return message fields. Only valid in [`MessageType::Call`].
+    pub returns: Option<Vec<ReturnField>>,
+}
+
+/// How the message is sent.
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum MessageType {
+    /// Send and then receive the response message.
+    Call,
+    /// An one-way message.
+    Push,
+}
+
+/// Who sends the message.
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum MessageOrigin {
+    /// The message is sent from client, to server.
+    Client,
+    /// The message is sent from server, to client.
+    Server,
+    /// Both client/server may send the message, in other words, no
+    /// client/server distinction.
+    Both,
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ParamField {
+    pub name: String,
+    #[serde(flatten)]
+    pub ty: Ty,
+    pub help: Option<String>,
+    pub context: Option<String>,
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReturnField {
+    pub name: String,
+    #[serde(flatten)]
+    pub ty: Ty,
+    pub help: Option<String>,
+    pub context: Option<String>,
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase", tag = "type")]
+pub enum Ty {
+    UInt16,
+    Int32,
+    Channel,
+    Bytes { capacity: usize },
+    String { capacity: usize },
 }
