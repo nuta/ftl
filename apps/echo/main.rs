@@ -24,6 +24,7 @@ pub fn main(mut env: Environ) {
     let startup_ch = env.take_channel("dep:startup").unwrap();
     mainloop.add_channel(startup_ch, Context::Startup).unwrap();
 
+    info!("ready");
     loop {
         match mainloop.next() {
             Event::Message {
