@@ -7,7 +7,7 @@ spec:
     type: call
     context: control
     params:
-    - { name: port, type: int16, help: "The port to listen on" }
+    - { name: port, type: uint16, help: "The port to listen on" }
     returns:
     - { name: listen, type: channel, context: listen, help: "The channel to receive new connection channels" }
     errors:

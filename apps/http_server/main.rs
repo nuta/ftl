@@ -92,7 +92,7 @@ pub fn main(mut env: Environ) {
                 message: Message::TcpAccepted(m),
                 ..
             } => {
-                let sock_ch = m.sock.take::<Channel>().unwrap();
+                let sock_ch = m.conn.take::<Channel>().unwrap();
                 mainloop
                     .add_channel(sock_ch, Context::Data(Client::new()))
                     .unwrap();
