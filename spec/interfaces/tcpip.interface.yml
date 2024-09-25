@@ -10,8 +10,6 @@ spec:
     - { name: port, type: uint16, help: "The port to listen on" }
     returns:
     - { name: listen, type: channel, context: listen, help: "The channel to receive new connection channels" }
-    errors:
-    - { name: invalid_port, help: "The port number is invalid" }
 
   # "listen" channels
   - name: tcp_accepted

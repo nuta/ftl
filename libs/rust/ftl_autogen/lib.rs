@@ -30,6 +30,7 @@ struct JinjaMessage {
     name: String,
     msgid: isize,
     num_handles: isize,
+    reply_message_name: Option<String>,
     fields: Vec<JinjaField>,
 }
 
@@ -122,12 +123,19 @@ fn visit_interface(
 ) -> Result<JinjaInterface> {
     let mut jinja_messages = Vec::with_capacity(spec.messages.len());
     for message in &spec.messages {
+        let reply_message_name = format!("{}Reply", CamelCase(&message.name));
+
         jinja_messages.push(JinjaMessage {
             interface_name: interface_name.to_string(),
             name: format!("{}", CamelCase(&message.name)),
             msgid: *next_msgid,
             num_handles: num_handles(&message.params),
             fields: visit_fields(&message.params),
+            reply_message_name: if message.ty == MessageType::Call {
+                Some(reply_message_name.clone())
+            } else {
+                None
+            },
         });
         *next_msgid += 1;
 
@@ -135,10 +143,11 @@ fn visit_interface(
             (Some(returns), MessageType::Call) => {
                 jinja_messages.push(JinjaMessage {
                     interface_name: interface_name.to_string(),
-                    name: format!("{}Reply", CamelCase(&message.name)),
+                    name: reply_message_name,
                     msgid: *next_msgid,
                     num_handles: num_handles(&returns),
                     fields: visit_fields(returns),
+                    reply_message_name: None,
                 });
                 *next_msgid += 1;
             }

@@ -165,7 +165,7 @@ impl Channel {
     }
 
     /// Send a message and then receive a reply. Blocking.
-    pub fn call<'a, M>(
+    pub fn call_with_buffer<'a, M>(
         &self,
         msg: M,
         buffer: &'a mut MessageBuffer,

@@ -6,6 +6,7 @@ pub mod idl {
 
     use ftl_types::message::MessageSerialize;
     use ftl_types::message::MessageDeserialize;
+    use ftl_types::message::MessageCallable;
     use ftl_types::message::MessageBuffer;
     use ftl_types::message::MessageInfo;
 
@@ -72,6 +73,12 @@ pub mod idl {
                     }
                 }
             }
+
+            {% if m.reply_message_name %}
+                impl MessageCallable for {{ m.name }} {
+                    type Reply = {{  m.reply_message_name }};
+                }
+            {% endif %}
 
             impl MessageDeserialize for {{ m.name }} {
                 type Reader<'a> = &'a mut Self;
