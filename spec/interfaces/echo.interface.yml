@@ -2,9 +2,10 @@ name: echo
 kind: interface/v0
 spec:
   messages:
-  - name: ping_int32
+  - name: ping
     context: control
-    type: push
-    origin: both
+    type: call
     params:
     - { name: value, type: int32, help: "The value to return" }
+    returns:
+    - { name: value, type: int32, help: "The value returned" }
