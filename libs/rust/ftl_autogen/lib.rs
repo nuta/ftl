@@ -143,10 +143,16 @@ fn visit_interface(
                 *next_msgid += 1;
             }
             (Some(_), _) => {
-                panic!("{}:{}: non-call message must not have \"returns\"", interface_name, message.name);
+                panic!(
+                    "{}:{}: non-call message must not have \"returns\"",
+                    interface_name, message.name
+                );
             }
             (None, MessageType::Call) => {
-                panic!("{}:{}: call message must have \"returns\"", interface_name, message.name);
+                panic!(
+                    "{}:{}: call message must have \"returns\"",
+                    interface_name, message.name
+                );
             }
             (None, _) => {
                 // Non-call message without returns. Nothing to do.
@@ -187,7 +193,7 @@ fn do_generate(for_kernel: bool) -> Result<()> {
         let iface = visit_interface(&spec.name, &interface_spec, &mut next_msgid)
             .with_context(|| format!("failed to process interface {}", dentry.path().display()))?;
 
-         interfaces.push(iface);
+        interfaces.push(iface);
     }
 
     let mut all_messages = Vec::new();

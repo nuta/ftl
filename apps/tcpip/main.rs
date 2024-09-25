@@ -15,8 +15,8 @@ use ftl_api::types::error::FtlError;
 use ftl_autogen::idl::ethernet_device;
 use ftl_autogen::idl::tcpip::TcpAccepted;
 use ftl_autogen::idl::tcpip::TcpClosed;
-use ftl_autogen::idl::tcpip::TcpReceived;
 use ftl_autogen::idl::tcpip::TcpListenReply;
+use ftl_autogen::idl::tcpip::TcpReceived;
 use ftl_autogen::idl::Message;
 use smoltcp::iface::Config;
 use smoltcp::iface::Interface;
@@ -175,16 +175,21 @@ impl<'a> Server<'a> {
                 let smol_sock = self.smol_sockets.get_mut::<tcp::Socket>(sock.smol_handle);
                 let mut close = false;
                 match (&mut sock.state, smol_sock.state()) {
-                    (SockState::Listening { .. }, tcp::State::Listen | tcp::State::SynReceived) => {}
+                    (SockState::Listening { .. }, tcp::State::Listen | tcp::State::SynReceived) => {
+                    }
                     (
                         SockState::Listening {
-                             listen_sender,
+                            listen_sender,
                             listen_endpoint,
                         },
                         tcp::State::Established,
                     ) => {
                         let (their_ch, our_ch) = Channel::create().unwrap();
-                        listen_sender.send(TcpAccepted { conn: their_ch.into() }).unwrap();
+                        listen_sender
+                            .send(TcpAccepted {
+                                conn: their_ch.into(),
+                            })
+                            .unwrap();
 
                         let (our_ch_sender, our_ch_receiver) = our_ch.split();
                         mainloop
@@ -210,7 +215,9 @@ impl<'a> Server<'a> {
                             },
                         });
 
-                        sock.state = SockState::Established { sender: our_ch_sender };
+                        sock.state = SockState::Established {
+                            sender: our_ch_sender,
+                        };
                     }
                     (SockState::Listening { .. }, _) => {
                         // Inactive, closed, or unknown state. Close the socket.
@@ -275,7 +282,7 @@ impl<'a> Server<'a> {
         let mut sock = tcp::Socket::new(rx_buf, tx_buf);
         sock.listen(listen_endpoint).unwrap();
 
-        let (listen_sender ,_) = our_listen_ch.split();
+        let (listen_sender, _) = our_listen_ch.split();
 
         info!("listening on port {}", port);
         let handle = self.smol_sockets.add(sock);
@@ -373,9 +380,7 @@ pub fn main(mut env: Environ) {
             } => {
                 match server.tcp_listen(m.port) {
                     Ok(ch) => {
-                        if let Err(err) = sender.send(TcpListenReply {
-                            listen: ch.into(),
-                        }) {
+                        if let Err(err) = sender.send(TcpListenReply { listen: ch.into() }) {
                             debug_warn!("failed to send: {:?}", err);
                         }
                     }
