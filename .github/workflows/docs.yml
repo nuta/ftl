@@ -16,7 +16,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  docs:
+  build:
     runs-on: ubuntu-latest
 
     steps:
@@ -50,3 +50,27 @@ jobs:
 
     - name: Build
       run: make docs
+
+    - uses: actions/upload-artifact@v4
+      with:
+        name: docs
+        path: build/docs
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+    - uses: actions/download-artifact@v2
+      with:
+        name: docs
+        path: docs
+
+    - name: Install Vercel CLI
+      run: npm install -g vercel
+
+    - name: Deploy to Vercel
+      run: vercel deploy docs
+      secrets:
+        VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
