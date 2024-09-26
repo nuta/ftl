@@ -8,7 +8,6 @@ V       ?=            # "1" to enable verbose output
 APPS         ?= apps/tcpip apps/virtio_net apps/http_server
 STARTUP_APPS ?= $(APPS)
 
-FTL_IDL_FILE ?= $(abspath idl.json)
 BUILD_DIR ?= build
 
 # Disable builtin implicit rules and variables.
@@ -56,8 +55,9 @@ QEMUFLAGS += $(if $(GDB),-gdb tcp::7789 -S)
 app_elfs := $(foreach app,$(APPS),$(BUILD_DIR)/$(app).elf)
 sources += \
 	$(shell find \
-		boot/$(ARCH) kernel libs apps \
-		-name '*.rs' -o -name '*.json' -o -name '*.ld' -o -name '*.toml' -o -name '*.S' \
+		boot/$(ARCH) kernel libs apps spec \
+		-name '*.rs' -o -name '*.ld' -o -name '*.S' -o -name '*.S' \
+		-o -name '*.json' -o -name '*.yml' -o -name '*.toml' -o -name '*.j2' \
 	)
 
 .DEFAULT_GOAL := default
@@ -84,10 +84,21 @@ fmt:
 fix:
 	cargo clippy --fix --allow-dirty --allow-staged $(CARGOFLAGS)
 
+.PHONY: docs
+docs:
+	rm -rf $(BUILD_DIR)/docs
+	mkdir -p $(BUILD_DIR)/docs
+	$(PROGRESS) "DOCSHIP" "docs"
+	docship --indir docs --outdir $(BUILD_DIR)/docs
+	$(MAKE) rustdoc
+	mv $(BUILD_DIR)/cargo/doc $(BUILD_DIR)/docs/rust
+
+
 .PHONY: rustdoc
 rustdoc:
 	$(PROGRESS) "CARGO" "doc"
 	BUILD_DIR="$(realpath $(BUILD_DIR))" \
+	CARGO_TARGET_DIR="$(BUILD_DIR)/cargo" \
 	STARTUP_APP_DIRS="$(foreach app_dir,$(STARTUP_APPS),$(realpath $(app_dir)))" \
 		$(CARGO) doc \
 			--package ftl_api \
@@ -120,7 +131,6 @@ $(BUILD_DIR)/%.elf: $(sources) Makefile
 	$(PROGRESS) "CARGO" "$(@)"
 	mkdir -p $(@D)
 	RUSTFLAGS="$(RUSTFLAGS)" \
-	FTL_IDL_FILE="$(FTL_IDL_FILE)" \
 	CARGO_TARGET_DIR="$(BUILD_DIR)/cargo" \
 		$(CARGO) build $(CARGOFLAGS) \
 		--target libs/rust/ftl_api/arch/$(ARCH)/$(ARCH)-user.json \
