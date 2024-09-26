@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: Set up Node.js
       uses: actions/setup-node@v4
@@ -34,7 +34,7 @@ jobs:
         rustup component add rust-src
 
     - name: Cache Cargo dependencies
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: |
           ~/.cargo/registry
@@ -45,7 +45,7 @@ jobs:
           ${{ runner.os }}-cargo-
 
     - name: Cache build artifacts
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: build
         key: ${{ runner.os }}-build-${{ hashFiles('**/*.rs', '**/Cargo.toml', '**/Cargo.lock', 'Makefile') }}
@@ -77,3 +77,7 @@ jobs:
 
     - name: Deploy to Vercel
       run: vercel --prod docs
+      environment:
+        name: Production
+      secrets:
+        VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
