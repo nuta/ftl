@@ -45,6 +45,10 @@ jobs:
         make fmt
         git diff --exit-code
 
+    - name: Permission
+      run: |
+        curl -sSfL -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" https://api.github.com | grep "x-oauth-scopes:"
+
   build-debug:
     strategy:
       matrix:
