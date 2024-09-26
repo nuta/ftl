@@ -20,4 +20,6 @@ title: Writing Your First Server
 
 ## Do not trust the client!
 
+## Error handling
+
 ## Next Steps
