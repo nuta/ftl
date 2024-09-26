@@ -67,10 +67,8 @@ jobs:
         name: docs
         path: docs
 
-    - name: Install Vercel CLI
-      run: npm install -g vercel
-
-    - name: Deploy to Vercel
-      run: vercel deploy docs
-      secrets:
-        VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+    - name: Deploy
+      uses: peaceiris/actions-gh-pages@v4
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: docs
