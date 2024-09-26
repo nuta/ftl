@@ -1,3 +1,3 @@
 ---
-blog
+title: FTL Documentation
 ---
