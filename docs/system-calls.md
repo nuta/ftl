@@ -20,6 +20,9 @@ typedef isize_t error_t;
 /// Handle ID.
 typedef isize_t handle_t;
 
+/// Handle rights.
+typedef uint8_t handle_rights_t;
+
 /// Message information.
 typedef int32_t msginfo_t;
 
@@ -79,6 +82,30 @@ Closes a handle. It's an equivalent of `close` system call in Linux.
 error_t handle_close(handle_t handle);
 ```
 
+- This decrements the reference count of the object associated with the handle. If it's still referenced by other handles, the object is not destroyed.
+- It depends on the object type how the kernel handles the close operation.
+
+### `handle_restrict` (NOT IMPLEMENTED)
+
+Drops the capability of the handle.
+
+```c
+error_t handle_restrict(handle_t handle, handle_rights_t rights);
+```
+
+- This system call is used to restrict the capability of the handle. For example, if the handle is a channel, it can only send messages but not receive.
+
+
+### `handle_clone` (NOT IMPLEMENTED)
+
+Duplicates a handle.
+
+```c
+handle_or_error_t handle_clone(handle_t handle);
+```
+
+- `handle` should be `HANDLE_CLONEABLE` (NOT IMPLEMENTED).
+
 ## Channel
 
 Channel is a bi-directional and asynchronous message queue used for inter-process communication (IPC). Each channel is connected to another channel (called *peer*).
@@ -110,8 +137,6 @@ error_t channel_send(handle_t ch, msginfo_t msginfo, const void *msgbuffer);
 
 TODO: Describe the message format.
 
-#### Notes
-
 - The message will be delivered to the channel's *peer*, not the specified channel.
 - This operation is non-blocking and asynchronous. If the peer's message queue is full, it immediately returns an error code.
 
@@ -124,8 +149,6 @@ msginfo_or_error_t channel_recv(handle_t ch, void *msgbuffer);
 ```
 
 TODO: Describe the message format.
-
-#### Notes
 
 - This operation is blocking. If there is no message in the queue, it waits until a message arrives.
 
@@ -253,6 +276,14 @@ uaddr_or_error_t folio_paddr(handle_t folio);
 
 Vmspace represents a virtual memory space of a process. Unlike Linux, where each process has its own address space, FTL processes can share the same address space.
 
+### `vmspace_create` (NOT IMPLEMENTED)
+
+Creates a new virtual memory space.
+
+```c
+handle_or_error_t vmspace_create(void);
+```
+
 ### `vmspace_map`
 
 Maps a folio into the virtual memory space, and returns the mapped address.
@@ -262,6 +293,16 @@ uaddr_or_error_t vmspace_map(handle_t vmspace, usize_t len, handle_t folio, prot
 ```
 
 - The address will be assigned by the kernel. Consider it as random.
+
+### `vmspace_unmap` (NOT IMPLEMENTED)
+
+Unmaps a folio from the virtual memory space.
+
+```c
+error_t vmspace_unmap(handle_t vmspace, uaddr_t addr);
+```
+
+- `addr` must be the starting address of the folio.
 
 ## Interrupt
 
@@ -295,6 +336,26 @@ error_t interrupt_ack(handle_t interrupt);
 Process is a set of threads sharing a virtual memory space (vmspace) and
 handles.
 
+### `process_create` (NOT IMPLEMENTED)
+
+Creates a new process.
+
+```c
+handle_or_error_t process_create(handle_t vmspace, const char *name);
+```
+
+### `process_inject_handle` (NOT IMPLEMENTED)
+
+Moves a handle to the process.
+
+```c
+handle_or_error_t process_inject_handle(handle_t process, handle_t handle);
+```
+
+- Once the handle is injected, the handle is no longer valid in the caller
+  process. It's moved to the target process.
+- This system call returns the handle ID in the target process.
+
 ### `process_exit`
 
 Exits the current process.
@@ -304,3 +365,31 @@ void process_exit(void);
 ```
 
 - This system call never fails and never returns.
+
+## Thread
+
+### `thread_create` (NOT IMPLEMENTED)
+
+Creates a new thread in the current process.
+
+```c
+handle_or_error_t thread_create(handle_t process, const char *name);
+```
+
+TODO: Should it return the handle ID in caller process or the target process? I think the former is better, but what if we want both?
+
+### `thread_start` (NOT IMPLEMENTED)
+
+Starts the thread from the entry point (`entry`) with an argument (`arg`).
+
+```c
+error_t thread_start(handle_t thread, uaddr_t entry, uaddr_t arg);
+```
+
+### `thread_exit` (NOT IMPLEMENTED)
+
+Exits the current thread.
+
+```c
+void thread_exit(void);
+```
