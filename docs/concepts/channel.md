@@ -4,6 +4,12 @@ title: Channel
 
 Channel is a bi-directional, asynchronous, and bounded message queue used for inter-process communication (IPC).
 
+## Interface Definition Language (IDL)
+
+In FTL, message definitions are written in the Interface Definition Language (IDL), which is actually JSON/YAML. `ftl_autogen` generates the message definitions in Rust so that IPC can be language-agnotic and type-safe.
+
+See [IDL](../spec/interface.md) for more details.
+
 ## Backpressure
 
 Channel is a bounded message queue, which means that it has a limited capacity. When the queue is full, the sender will fail to send a message. This mechanism is called *backpressure*.
@@ -29,7 +35,6 @@ You should always consider the send operation failure and handle it properly. Th
 >
 > Interestingly, the channel capacity can be used as a rate limiting mechanism. For example, connection channel created for each TCP connection can be used as a TCP buffer, and listen channel can be used as TCP backlog.
 
-## Design decisions
 
 > [!TIP]
 >
