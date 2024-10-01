@@ -1,5 +1,5 @@
 ---
-title: Process
+title: Process, Thread, and Isolation
 ---
 
 Like popular operating systems, each running program instance (or application) in FTL is represented as a *process*.
@@ -16,7 +16,7 @@ Process can be considered as a container of other kernel objects such as:
 
 ## Virtual Memory Space
 
-In Linux, each process has its own address space. In FTL, on the other hand, it's slightly different - each process belongs to a *virtual memory space*. This means that multiple processes can share the same address space! It enables to implement a lightweight IPC mechanism without copies nor kernele involvement (not implemented yet though).
+In Linux, each process has its own address space. In FTL, on the other hand, it's slightly different - each process belongs to a *virtual memory space*. This means that multiple processes can share the same address space! It enables to implement a lightweight IPC mechanism without memory copies nor kernele involvement (not implemented yet though).
 
 ## Handles
 

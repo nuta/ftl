@@ -6,9 +6,9 @@ FTL provides multiple ways for inter-process communication (IPC). The most basic
 
 > [!TIP]
 >
-> **Design decision: Do not do everything in message passing.**
+> **Design decision: Don't do everything in message passing.**
 >
-> In other words, FTL should provide multiple ways for IPC, designed for different purposes. I plan to add another message-passing like mechanism for bulk data transfers for performance critical services such as network/file system stacks.
+> In other words, FTL provides multiple ways for IPC, designed for different purposes. I plan to add another IPC mechanism for bulk data transfers for performance critical services such as network/file system stacks.
 
 ## Channel
 
@@ -44,3 +44,13 @@ You should always consider the send operation failure and handle it properly. Th
 > The capacity of the channel is the maximum length of data clients may request. Like Linux's pipe has [a size limit](https://man7.org/linux/man-pages/man7/pipe.7.html#:~:text=to%20a%20pipe.-,Pipe%20capacity,-A%20pipe%20has), you should always be aware of the capacity.
 >
 > Interestingly, the channel capacity can be used as a rate limiting mechanism. For example, connection channel created for each TCP connection can be used as a TCP buffer, and listen channel can be used as TCP backlog.
+
+## Signal
+
+Signal is a way to notify a process that an event has occurred. It's a simple and lightweight way to notify a process
+
+As of this writing, signal is not used in userland.
+
+> [!TIP]
+>
+> **Fun Fact:** Signal implementation is also used as the internal mechanism of `Interrupt` object.
