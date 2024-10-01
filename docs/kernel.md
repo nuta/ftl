@@ -1,0 +1,48 @@
+---
+title: Kernel
+---
+
+# Implementation Notes
+
+## Kernel Architecture
+
+The kernel consists of two parts: the core (`kernel/*.rs`) and the arch layer (`arch/<ARCH>/*.rs`), so-called Hardware Abstraction Layer (HAL).
+
+> [!NOTE]
+>
+> The arch layer interface is not stable and thus is not documented. Once it's documented, let's start porting to other CPUs!
+
+## Single-stack Kernel
+
+The kernel is written in the *single-stack kernel* design (strictly speaking, single-stack per CPU). This makes the kernel coding different from others like Linux when a thread blocks. To block a thread, you need to save the state into `Continuation` object, and retry making a progress to unblock it later using the saved state. This is similar to Rust's zero-cost futures.
+
+> ![TIP]
+>
+> The typical reason for single-stack kernel is to save memory usage. Also, it simplifies the cognitive load of the kernel developers. In single-stack design, the there's only one context - the kernel saves registers, handle interrupts/exceptions/syscalls, then switch back to a thread. Super simple!
+
+## Kernel Rust Primitives
+
+Due to kernel-specific requirements, we implement alternatives to Rust standard library primitives:
+
+| Rust | FTL |
+|------|-----|
+| `std::sync::Arc<T>` | `SharedRef<T>` |
+| `std::sync::Mutex<T>` | `SpinLock<T>` |
+| `std::ptr::NonNull<T>` | `VAddr<T>`, `UAddr<T>`, `PAddr<T>` |
+
+## How the Kernel Boots
+
+1. The bootloader loads the kernel binary to the memory.
+2. The boot crate (`boot/<ARCH>`), Bootloader Abstraction Layer, does bootloader-specific setup and jumps to the kernel entry point.
+3. The kernel starts from `kernel/boot.rs` and initializes subsystems.
+4. Once the kernel is ready, it loads apps (ELF files) embedded in the kernel images and create processes.
+5. The kernel switches into the first thread.
+
+## How the Kernel Works
+
+Once the kernel is booted, the kernel behaves like an event-driven program:
+
+1. CPU executes a thread until a CPU event happens, such as system calls, hardware interrupts (e.g. timer, network/disk device, ...), or exceptions (e.g. page faults).
+2. CPU enters the kernel's trap handler written in assembly. It saves the current execution state (namely CPU registers) and call the Rust part.
+3. The Rust part calls the corresponding handler such as `syscall_handler`.
+4. Once it's done, the kernel pops a next thread from the runqueue, try making a progress if ther thread is blocked (see `Continuation` object), and if it's runnable, it restores the execution state and jumps to the thread.
