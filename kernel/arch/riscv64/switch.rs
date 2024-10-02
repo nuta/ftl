@@ -4,7 +4,7 @@ use core::mem::offset_of;
 use super::idle;
 use super::interrupt::interrupt_handler;
 use super::thread::Context;
-use crate::ref_counted::SharedRef;
+use crate::refcount::SharedRef;
 use crate::scheduler::GLOBAL_SCHEDULER;
 use crate::thread::ContinuationResult;
 use crate::thread::Thread;

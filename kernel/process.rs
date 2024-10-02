@@ -1,3 +1,4 @@
+//! Process management.
 use core::fmt;
 
 use crate::arch::get_cpuvar;
@@ -15,11 +16,6 @@ impl Process {
         Process {
             handles: SpinLock::new(HandleTable::new()),
         }
-    }
-
-    pub fn in_kernel_space(&self) -> bool {
-        // TODO: Support user space.
-        true
     }
 
     pub fn handles(&self) -> &SpinLock<HandleTable> {
