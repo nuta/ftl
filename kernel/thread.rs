@@ -10,21 +10,23 @@ use crate::cpuvar::current_thread;
 use crate::poll::Poll;
 use crate::process::kernel_process;
 use crate::process::Process;
-use crate::ref_counted::SharedRef;
+use crate::refcount::SharedRef;
 use crate::scheduler::GLOBAL_SCHEDULER;
 use crate::spinlock::SpinLock;
 use crate::uaddr::UAddr;
 use crate::vmspace::VmSpace;
+
+/// The blocked thread state.
 #[derive(Debug)]
 pub enum Continuation {
+    /// Waiting for a message (`channel_recv` or `channel_call` system calls).
     ChannelRecv {
         process: SharedRef<Process>,
         channel: SharedRef<Channel>,
         msgbuffer: UAddr,
     },
-    PollWait {
-        poll: SharedRef<Poll>,
-    },
+    /// Waiting for a poll event (`poll_wait` system call).
+    PollWait { poll: SharedRef<Poll> },
 }
 
 pub enum ContinuationResult {
