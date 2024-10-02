@@ -4,18 +4,23 @@ use core::mem::offset_of;
 use super::idle;
 use super::interrupt::interrupt_handler;
 use super::thread::Context;
+use crate::ref_counted::SharedRef;
 use crate::scheduler::GLOBAL_SCHEDULER;
 use crate::thread::ContinuationResult;
 use crate::thread::Thread;
 
 pub fn return_to_user() -> ! {
     loop {
-        let mut current_thread = super::get_cpuvar().current_thread.borrow_mut();
+        let (mut current_thread, in_idle) = {
+            let cpuvar = super::get_cpuvar();
+            let current_thread = cpuvar.current_thread.borrow_mut();
+            let in_idle = SharedRef::ptr_eq(&*current_thread, &cpuvar.idle_thread);
+            (current_thread, in_idle)
+        };
 
         // Preemptive scheduling: push the current thread back to the
         // runqueue if it's still runnable.
-        let thread_to_enqueue = if current_thread.is_runnable() && !current_thread.is_idle_thread()
-        {
+        let thread_to_enqueue = if current_thread.is_runnable() && !in_idle {
             Some(current_thread.clone())
         } else {
             None
