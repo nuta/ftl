@@ -65,9 +65,17 @@ pub fn interrupt_ack(irq: Irq) -> Result<(), FtlError> {
     todo!()
 }
 
-pub fn init(cpu_id: CpuId, device_tree: Option<&crate::device_tree::DeviceTree>) {
-    todo!()
+pub fn early_init(cpu_id: CpuId) {
+    const CR4_FSGSBASE: u64 = 1 << 16;
+    unsafe {
+        let mut cr4: u64;
+        core::arch::asm!("mov rax, cr4", out("rax") cr4);
+        cr4 |= CR4_FSGSBASE;
+        core::arch::asm!("mov cr4, rax", in("rax") cr4);
+    }
 }
+
+pub fn init(cpu_id: CpuId, device_tree: Option<&crate::device_tree::DeviceTree>) {}
 
 pub struct VmSpace {}
 

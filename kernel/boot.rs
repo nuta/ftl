@@ -28,11 +28,13 @@ pub struct BootInfo {
 
 /// The entry point of the kernel.
 pub fn boot(cpu_id: CpuId, bootinfo: BootInfo) -> ! {
+    println!();
     info!("FTL - Faster Than \"L\"");
 
     // Memory subystem should be initialized first to enable dynamic memory
     // allocation.
     memory::init(&bootinfo);
+    arch::init(cpu_id);
 
     let device_tree: Option<DeviceTree> = bootinfo.dtb_addr.map(DeviceTree::parse);
     process::init();
