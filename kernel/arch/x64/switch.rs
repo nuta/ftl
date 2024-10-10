@@ -15,6 +15,7 @@ pub fn return_to_user(current_thread: RefMut<'_, SharedRef<Thread>>, sysret: Opt
     }
 
     drop(current_thread);
+    println!("Returning to user");
 
     unsafe {
         asm!(
