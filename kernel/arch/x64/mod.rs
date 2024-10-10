@@ -7,7 +7,14 @@ use crate::cpuvar::CpuId;
 use crate::interrupt::Interrupt;
 use crate::refcount::SharedRef;
 
+mod cpuvar;
 mod serial;
+mod thread;
+
+pub use cpuvar::get_cpuvar;
+pub use cpuvar::set_cpuvar;
+pub use cpuvar::CpuVar;
+pub use thread::Thread;
 
 pub fn halt() -> ! {
     todo!()
@@ -50,14 +57,6 @@ pub unsafe extern "C" fn kernel_syscall_entry(
     todo!()
 }
 
-pub fn set_cpuvar(cpuvar: *mut crate::cpuvar::CpuVar) {
-    todo!()
-}
-
-pub fn get_cpuvar() -> &'static crate::cpuvar::CpuVar {
-    todo!()
-}
-
 pub fn interrupt_create(interrupt: &SharedRef<Interrupt>) -> Result<(), FtlError> {
     todo!()
 }
@@ -68,14 +67,6 @@ pub fn interrupt_ack(irq: Irq) -> Result<(), FtlError> {
 
 pub fn init(cpu_id: CpuId, device_tree: Option<&crate::device_tree::DeviceTree>) {
     todo!()
-}
-
-pub struct CpuVar {}
-
-impl CpuVar {
-    pub fn new(idle_thread: &SharedRef<crate::thread::Thread>) -> Self {
-        todo!()
-    }
 }
 
 pub struct VmSpace {}
@@ -94,23 +85,6 @@ impl VmSpace {
     }
 
     pub fn switch(&self) {
-        todo!()
-    }
-}
-
-pub struct Thread {}
-
-impl Thread {
-    pub fn new_idle() -> Thread {
-        todo!()
-    }
-
-    pub fn new_kernel(
-        vmspace: SharedRef<crate::vmspace::VmSpace>,
-        pc: usize,
-        sp: usize,
-        arg: usize,
-    ) -> Thread {
         todo!()
     }
 }
