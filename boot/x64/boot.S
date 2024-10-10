@@ -1,4 +1,4 @@
-.section ".boot", "ax"
+.section ".text.boot", "ax"
 
 .code32
 

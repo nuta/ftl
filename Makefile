@@ -38,7 +38,7 @@ QEMUFLAGS += -object filter-dump,id=fiter0,netdev=net0,file=virtio-net.pcap
 QEMUFLAGS += -netdev user,id=net0,hostfwd=tcp:127.0.0.1:1234-:80
 else ifeq ($(ARCH),x64)
 QEMU      ?= qemu-system-x86_64
-QEMUFLAGS += -machine qemu -m 256
+QEMUFLAGS += -machine microvm -m 256
 else
 $(error "Unknown ARCH: $(ARCH)")
 endif
@@ -71,8 +71,12 @@ default: ftl.elf
 
 .PHONY: run
 run: ftl.elf disk.img
-	$(PROGRESS) "QEMU" "ftl.elf"
-	$(QEMU) $(QEMUFLAGS) -kernel ftl.elf
+	cp ftl.elf build/ftl.qemu.elf
+ifeq ($(ARCH),x64)
+	python3 ./tools/make-bootable-on-qemu.py build/ftl.qemu.elf
+endif
+	$(PROGRESS) "QEMU" "build/ftl.qemu.elf"
+	$(QEMU) $(QEMUFLAGS) -kernel build/ftl.qemu.elf
 
 .PHONY: clean
 clean:
