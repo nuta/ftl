@@ -1,7 +1,7 @@
 {
-    // "rust-analyzer.cargo.allTargets": false,
-    // "rust-analyzer.cargo.target": "riscv64gc-unknown-none-elf",
-    "rust-analyzer.server.extraEnv": {
-        "CARGO_TARGET_DIR": "${workspaceFolder}/build/rust-analyzer"
-    },
+  // "rust-analyzer.cargo.allTargets": false,
+  "rust-analyzer.cargo.target": "x86_64-unknown-none-elf",
+  "rust-analyzer.server.extraEnv": {
+    "CARGO_TARGET_DIR": "${workspaceFolder}/build/rust-analyzer"
+  },
 }
