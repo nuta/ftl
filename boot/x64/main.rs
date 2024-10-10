@@ -19,7 +19,7 @@ extern "C" {
 }
 
 #[no_mangle]
-unsafe extern "C" fn riscv64_boot(hartid: u64, dtb_addr: u64) -> ! {
+unsafe extern "C" fn x64_boot(hartid: u64, dtb_addr: u64) -> ! {
     let bss_start = &__bss as *const _ as usize;
     let bss_end = &__bss_end as *const _ as usize;
     let free_ram = &__free_ram as *const _ as usize;

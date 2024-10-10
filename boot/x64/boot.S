@@ -239,7 +239,7 @@ setup_bsp:
     // Clear the frame pointer to stop backtracing here.
     xor rbp, rbp
 
-    lea  rax, [rip + bsp_early_init]
+    lea  rax, [rip + x64_boot]
     call rax
 
     // In case init() returns.

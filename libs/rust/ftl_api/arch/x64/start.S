@@ -4,7 +4,7 @@
 .global start
 start:
     xor rbp, rbp
-    lea rsp, [__stack_top]
+    lea rsp, [rip + __stack_top]
 
     call start_rust
 

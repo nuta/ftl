@@ -47,7 +47,7 @@ pub fn syscall(
 }
 
 #[cfg(target_arch = "x86_64")]
-#[inline(never)] // TODO: List clobbered registers explicitly in asm!
+#[inline(never)] // TODO: List clobbersed registers explicitly in asm!
 pub fn syscall(
     n: SyscallNumber,
     rdi: isize,

@@ -26,12 +26,6 @@ SECTIONS {
     .data : AT(ADDR(.data) - VMA_OFFSET) {
         *(.data);
         *(.data.*);
-
-        *(.got*);
-
-        __bsp_cpu_local = .;
-        . += __cpu_local_size;
-        __bsp_cpu_local_end = .;
     }
 
     .bss : AT(ADDR(.bss) - VMA_OFFSET) {

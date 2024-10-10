@@ -11,7 +11,7 @@
   "linker-flavor": "gnu-lld",
   "pre-link-args": {
     "ld.lld": [
-      "--script=boot/x64/x64.ld",
+      "--script=boot/x64/x64-pc.ld",
       "-Map",
       "ftl.map"
     ]
@@ -27,7 +27,7 @@
   "panic-strategy": "abort",
   "plt-by-default": false,
   "position-independent-executables": true,
-  "relro-level": "full",
+  "relocation-model": "static",
   "stack-probes": {
     "kind": "inline"
   },

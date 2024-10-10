@@ -1,7 +1,8 @@
-# "riscv64" or "x64"
+# ARCH=riscv64 MACHINE=qemu-virt
+# ARCH=x64     MACHINE=qemu-x86_64
 ARCH    ?= riscv64
-
 MACHINE ?= qemu-virt
+
 RELEASE ?=            # "1" to build release version
 V       ?=            # "1" to enable verbose output
 
