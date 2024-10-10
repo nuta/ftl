@@ -220,5 +220,6 @@ impl VmSpace {
         unsafe {
             asm!("mov cr3, {}", in(reg) self.cr3);
         }
+        loop {}
     }
 }
