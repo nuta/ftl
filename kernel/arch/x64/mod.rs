@@ -7,6 +7,8 @@ use crate::cpuvar::CpuId;
 use crate::interrupt::Interrupt;
 use crate::refcount::SharedRef;
 
+mod serial;
+
 pub fn halt() -> ! {
     todo!()
 }
@@ -20,7 +22,9 @@ pub fn vaddr2paddr(vaddr: VAddr) -> Result<PAddr, FtlError> {
 }
 
 pub fn console_write(bytes: &[u8]) {
-    todo!()
+    for ch in bytes {
+        serial::SERIAL0.print_char(*ch);
+    }
 }
 
 pub fn backtrace<F>(mut callback: F)

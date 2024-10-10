@@ -8,7 +8,7 @@ use crate::interrupt::Interrupt;
 use crate::refcount::SharedRef;
 
 pub fn halt() -> ! {
-    todo!()
+    loop {}
 }
 
 pub fn paddr2vaddr(paddr: PAddr) -> Result<VAddr, FtlError> {
