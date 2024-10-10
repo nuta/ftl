@@ -34,7 +34,7 @@ pub fn boot(cpu_id: CpuId, bootinfo: BootInfo) -> ! {
     // Memory subystem should be initialized first to enable dynamic memory
     // allocation.
     memory::init(&bootinfo);
-    arch::init(cpu_id);
+    arch::early_init(cpu_id);
 
     let device_tree: Option<DeviceTree> = bootinfo.dtb_addr.map(DeviceTree::parse);
     process::init();
