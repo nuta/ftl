@@ -38,7 +38,7 @@ QEMUFLAGS += -object filter-dump,id=fiter0,netdev=net0,file=virtio-net.pcap
 QEMUFLAGS += -netdev user,id=net0,hostfwd=tcp:127.0.0.1:1234-:80
 else ifeq ($(ARCH),x64)
 QEMU      ?= qemu-system-x86_64
-QEMUFLAGS += -machine microvm -m 256
+QEMUFLAGS += -machine microvm -cpu Icelake-Server -m 256
 else
 $(error "Unknown ARCH: $(ARCH)")
 endif
