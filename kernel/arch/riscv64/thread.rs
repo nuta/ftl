@@ -44,25 +44,22 @@ pub struct Context {
 
 pub struct Thread {
     pub(super) context: Context,
-    pub(super) vmspace: Option<SharedRef<VmSpace>>,
 }
 
 impl Thread {
     pub fn new_idle() -> Thread {
         Thread {
-            vmspace: None,
             context: Default::default(),
         }
     }
 
-    pub fn new_kernel(vmspace: SharedRef<VmSpace>, pc: usize, sp: usize, arg: usize) -> Thread {
+    pub fn new_kernel(pc: usize, sp: usize, arg: usize) -> Thread {
         let mut sstatus: usize;
         unsafe {
             core::arch::asm!("csrr {}, sstatus", out(reg) sstatus);
         }
 
         Thread {
-            vmspace: Some(vmspace),
             context: Context {
                 sepc: pc,
                 sstatus,

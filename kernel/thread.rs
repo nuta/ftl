@@ -14,7 +14,6 @@ use crate::refcount::SharedRef;
 use crate::scheduler::GLOBAL_SCHEDULER;
 use crate::spinlock::SpinLock;
 use crate::uaddr::UAddr;
-use crate::vmspace::VmSpace;
 
 /// The blocked thread state.
 #[derive(Debug)]
@@ -64,7 +63,6 @@ impl Thread {
 
     pub fn spawn_kernel(
         process: SharedRef<Process>,
-        vmspace: SharedRef<VmSpace>,
         pc: usize,
         sp: usize,
         arg: usize,
@@ -73,7 +71,7 @@ impl Thread {
             mutable: SpinLock::new(Mutable {
                 state: State::Runnable,
             }),
-            arch: arch::Thread::new_kernel(vmspace, pc, sp, arg),
+            arch: arch::Thread::new_kernel(pc, sp, arg),
             process,
         });
 
@@ -103,7 +101,7 @@ impl Thread {
         mutable.state = State::Exited;
     }
 
-    pub fn run_continuation(this: RefMut<'_, SharedRef<Self>>) -> ContinuationResult {
+    pub fn run_continuation(this: &RefMut<'_, SharedRef<Self>>) -> ContinuationResult {
         let mut mutable = this.mutable.lock();
         let continuation = match &mut mutable.state {
             State::Exited => {
@@ -158,14 +156,67 @@ impl Thread {
         drop(mutable);
         drop(thread);
 
-        arch::return_to_user();
+        switch_to_next();
     }
 
     pub fn switch() -> ! {
-        arch::return_to_user();
+        switch_to_next();
     }
 
     pub fn push_to_runqueue(this: SharedRef<Thread>) {
         GLOBAL_SCHEDULER.push(this);
+    }
+}
+
+/// Switches to the thread execution: save the current thread, picks the next
+/// thread to run, and restores the next thread's context.
+fn switch_to_next() -> ! {
+    loop {
+        let (mut current_thread, in_idle) = {
+            // Borrow the cpvuar inside a brace not to forget to drop it.
+            let cpuvar = arch::get_cpuvar();
+
+            let current_thread = cpuvar.current_thread.borrow_mut();
+            let in_idle = SharedRef::ptr_eq(&*current_thread, &cpuvar.idle_thread);
+            (current_thread, in_idle)
+        };
+
+        // Preemptive scheduling: push the current thread back to the
+        // runqueue if it's still runnable.
+        let thread_to_enqueue = if current_thread.is_runnable() && !in_idle {
+            Some(current_thread.clone())
+        } else {
+            None
+        };
+
+        // Get the next thread to run. If the runqueue is empty, run the
+        // idle thread.
+        let next = match GLOBAL_SCHEDULER.schedule(thread_to_enqueue) {
+            Some(next) => next,
+            None => {
+                drop(current_thread);
+                arch::idle();
+            }
+        };
+
+        // Make the next thread the current thread.
+        *current_thread = next;
+
+        // Switch to the new thread's address space.sstatus,a1
+        current_thread.process.vmspace().switch();
+
+        // Execute the pending continuation if any.
+        let result = Thread::run_continuation(&current_thread);
+
+        // Can we resume the thread?
+        match result {
+            ContinuationResult::StillBlocked => {
+                warn!("thread is still blocked");
+                continue;
+            }
+            ContinuationResult::ReturnToUser(ret) => {
+                arch::return_to_user(current_thread, ret);
+            }
+        }
     }
 }

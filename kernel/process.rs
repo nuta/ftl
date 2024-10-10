@@ -2,24 +2,31 @@
 use core::fmt;
 
 use crate::arch::get_cpuvar;
-use crate::arch::return_to_user;
 use crate::handle::HandleTable;
 use crate::refcount::SharedRef;
 use crate::spinlock::SpinLock;
+use crate::thread::Thread;
+use crate::vmspace::VmSpace;
 
 pub struct Process {
     handles: SpinLock<HandleTable>,
+    vmspace: SharedRef<VmSpace>,
 }
 
 impl Process {
-    pub fn create() -> Process {
+    pub fn create(vmspace: SharedRef<VmSpace>) -> Process {
         Process {
             handles: SpinLock::new(HandleTable::new()),
+            vmspace,
         }
     }
 
     pub fn handles(&self) -> &SpinLock<HandleTable> {
         &self.handles
+    }
+
+    pub fn vmspace(&self) -> &SharedRef<VmSpace> {
+        &self.vmspace
     }
 
     pub fn exit_current() -> ! {
@@ -33,7 +40,7 @@ impl Process {
         debug_warn!("exited a process");
 
         // TODO: Destroy the process.
-        return_to_user();
+        Thread::switch();
     }
 }
 
@@ -43,8 +50,13 @@ impl fmt::Debug for Process {
     }
 }
 
+pub static KERNEL_VMSPACE: spin::Lazy<SharedRef<VmSpace>> = spin::Lazy::new(|| {
+    let vmspace = VmSpace::kernel_space().unwrap();
+    SharedRef::new(vmspace)
+});
+
 static KERNEL_PROCESS: spin::Lazy<SharedRef<Process>> = spin::Lazy::new(|| {
-    let proc = Process::create();
+    let proc = Process::create(KERNEL_VMSPACE.clone());
     SharedRef::new(proc)
 });
 

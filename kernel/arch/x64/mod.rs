@@ -1,3 +1,4 @@
+#![allow(unused)]
 use ftl_types::address::PAddr;
 use ftl_types::address::VAddr;
 use ftl_types::error::FtlError;
@@ -8,24 +9,34 @@ use crate::interrupt::Interrupt;
 use crate::refcount::SharedRef;
 
 mod cpuvar;
+mod idle;
 mod serial;
+mod switch;
 mod thread;
+mod vmspace;
 
 pub use cpuvar::get_cpuvar;
 pub use cpuvar::set_cpuvar;
 pub use cpuvar::CpuVar;
+pub use idle::idle;
+pub use switch::return_to_user;
 pub use thread::Thread;
+pub use vmspace::VmSpace;
+pub use vmspace::USERSPACE_END;
+pub use vmspace::USERSPACE_START;
+
+const KERNEL_BASE: usize = 0xffff_8000_0000_0000;
 
 pub fn halt() -> ! {
     todo!()
 }
 
 pub fn paddr2vaddr(paddr: PAddr) -> Result<VAddr, FtlError> {
-    todo!()
+    Ok(VAddr::new(paddr.as_usize() + KERNEL_BASE))
 }
 
 pub fn vaddr2paddr(vaddr: VAddr) -> Result<PAddr, FtlError> {
-    todo!()
+    Ok(PAddr::new(vaddr.as_usize() - KERNEL_BASE))
 }
 
 pub fn console_write(bytes: &[u8]) {
@@ -38,10 +49,6 @@ pub fn backtrace<F>(mut callback: F)
 where
     F: FnMut(usize),
 {
-    todo!()
-}
-
-pub fn return_to_user() -> ! {
     todo!()
 }
 
@@ -77,27 +84,5 @@ pub fn early_init(cpu_id: CpuId) {
 
 pub fn init(cpu_id: CpuId, device_tree: Option<&crate::device_tree::DeviceTree>) {}
 
-pub struct VmSpace {}
-
-impl VmSpace {
-    pub fn new() -> Result<VmSpace, FtlError> {
-        todo!()
-    }
-
-    pub fn map_fixed(&self, vaddr: VAddr, paddr: PAddr, len: usize) -> Result<(), FtlError> {
-        todo!()
-    }
-
-    pub fn map_anywhere(&self, paddr: PAddr, len: usize) -> Result<VAddr, FtlError> {
-        todo!()
-    }
-
-    pub fn switch(&self) {
-        todo!()
-    }
-}
-
 pub const PAGE_SIZE: usize = 4096;
 pub const NUM_CPUS_MAX: usize = 8;
-pub const USERSPACE_START: VAddr = VAddr::new(0);
-pub const USERSPACE_END: VAddr = VAddr::new(0);

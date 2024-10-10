@@ -183,7 +183,7 @@ impl<'a> StartupAppLoader<'a> {
         mut env: EnvironSerializer,
         handles: Vec<AnyHandle>,
     ) {
-        let proc = SharedRef::new(Process::create());
+        let proc = SharedRef::new(Process::create(self.vmspace.clone()));
 
         let mut handle_table = proc.handles().lock();
         let mut i = 0;
@@ -241,13 +241,8 @@ impl<'a> StartupAppLoader<'a> {
         let sp = stack_vaddr.add(KERNEL_STACK_SIZE).as_usize();
         handle_table.add(stack_folio).unwrap();
 
-        let thread = Thread::spawn_kernel(
-            proc.clone(),
-            self.vmspace.clone(),
-            entry_addr,
-            sp,
-            vsyscall_buffer_ptr.as_usize(),
-        );
+        let thread =
+            Thread::spawn_kernel(proc.clone(), entry_addr, sp, vsyscall_buffer_ptr.as_usize());
         handle_table
             .add(Handle::new(thread, HandleRights::ALL))
             .unwrap();
@@ -499,6 +494,11 @@ impl<'a> ElfLoader<'a> {
         for rela in rela_entries {
             let base = self.base_vaddr.as_usize();
             match rela.r_info {
+                #[cfg(target_arch = "x86_64")]
+                ftl_elf::R_X86_64_RELATIVE => unsafe {
+                    let ptr = (base + rela.r_offset as usize) as *mut i64;
+                    *ptr += (base as i64) + rela.r_addend;
+                },
                 #[cfg(target_arch = "riscv64")]
                 ftl_elf::R_RISCV_RELATIVE => unsafe {
                     let ptr = (base + rela.r_offset as usize) as *mut i64;
