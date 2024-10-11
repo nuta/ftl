@@ -24,7 +24,6 @@ pub fn get_cpuvar() -> &'static crate::cpuvar::CpuVar {
     unsafe {
         asm!("mv {}, tp", out(reg) cpuvar);
     }
-    debug!("@@@ get_cpuvar = {:x}", cpuvar as usize);
     unsafe { &*cpuvar }
 }
 

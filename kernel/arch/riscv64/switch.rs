@@ -1,11 +1,8 @@
 use core::arch::asm;
-use core::cell::RefMut;
 use core::mem::offset_of;
 
 use super::interrupt::interrupt_handler;
 use super::thread::Context;
-use crate::refcount::SharedRef;
-use crate::thread::Thread;
 
 /// The entry point for the system call from in-kernel apps.
 #[naked]
@@ -185,22 +182,13 @@ pub unsafe extern "C" fn switch_to_kernel() -> ! {
     }
 }
 
-pub fn return_to_user(current_thread: RefMut<'_, SharedRef<Thread>>, sysret: Option<isize>) -> ! {
-    debug!(
-        "current_thread: {:x} -----------------------------------------",
-        &current_thread as *const _ as usize
-    );
-    let context: *mut Context = &current_thread.arch().context as *const _ as *mut _;
-    debug!("read context OK OK OK OK");
+pub fn return_to_user(thread: *mut super::Thread, sysret: Option<isize>) -> ! {
+    let context: *mut Context = unsafe { &mut (*thread).context as *mut _ };
     if let Some(value) = sysret {
         unsafe {
             (*context).a0 = value as usize;
         }
     }
-
-    debug!("drop (current_thread)");
-    drop(current_thread);
-    debug!("drop (current_thread) OK OK OK OK");
 
     unsafe {
         asm!(r#"
