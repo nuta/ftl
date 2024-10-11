@@ -2,12 +2,18 @@ use core::arch::asm;
 use core::cell::RefMut;
 use core::mem::offset_of;
 
+use super::gdt::KERNEL_CS;
 use super::thread::Context;
 use crate::refcount::SharedRef;
 use crate::thread::Thread;
 
 pub fn return_to_user(current_thread: RefMut<'_, SharedRef<Thread>>, sysret: Option<isize>) -> ! {
+    debug!(
+        "current_thread: {:x} -----------------------------------------",
+        &current_thread as *const _ as usize
+    );
     let context: *mut Context = &current_thread.arch().context as *const _ as *mut _;
+    debug!("read context OK OK OK OK");
     if let Some(value) = sysret {
         unsafe {
             (*context).rax = value as usize;
@@ -15,7 +21,7 @@ pub fn return_to_user(current_thread: RefMut<'_, SharedRef<Thread>>, sysret: Opt
     }
 
     drop(current_thread);
-    println!("Returning to user");
+    println!("Returning to user: rip={:x?}", unsafe { (*context).rip });
 
     unsafe {
         asm!(
@@ -37,11 +43,11 @@ pub fn return_to_user(current_thread: RefMut<'_, SharedRef<Thread>>, sysret: Opt
                 mov r15, [rax + {r15_offset}]
 
                 // Build an IRET frame
-                push [rax + {rip_offset}] // RIP
-                push 8                 // CS (FIXME:)
-                push 0x202             // RFLAGS
+                push 0                    // SS
                 push [rax + {rsp_offset}] // RSP
-                push 0                 // SS (FIXME:)
+                push 0x002                // RFLAGS
+                push {iret_cs}            // CS
+                push [rax + {rip_offset}] // RIP
 
                 // Restore RAX
                 mov rax, [rax + {rax_offset}]
@@ -50,6 +56,7 @@ pub fn return_to_user(current_thread: RefMut<'_, SharedRef<Thread>>, sysret: Opt
                 iretq
             "#,
             in ("rax") context as usize,
+            iret_cs = const KERNEL_CS,
             rip_offset = const offset_of!(Context, rip),
             rax_offset = const offset_of!(Context, rax),
             rbx_offset = const offset_of!(Context, rbx),

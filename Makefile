@@ -75,7 +75,6 @@ run: ftl.elf disk.img
 ifeq ($(ARCH),x64)
 	python3 ./tools/make-bootable-on-qemu.py build/ftl.qemu.elf
 endif
-	$(PROGRESS) "QEMU" "build/ftl.qemu.elf"
 	$(QEMU) $(QEMUFLAGS) -kernel build/ftl.qemu.elf
 
 .PHONY: clean

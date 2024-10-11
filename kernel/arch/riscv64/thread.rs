@@ -1,6 +1,3 @@
-use crate::refcount::SharedRef;
-use crate::vmspace::VmSpace;
-
 // TODO: static assert to ensure usize == u64
 
 /// Context of a thread.

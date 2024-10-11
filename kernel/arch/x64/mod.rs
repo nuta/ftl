@@ -1,24 +1,35 @@
 #![allow(unused)]
+use core::arch::asm;
+use core::arch::global_asm;
+use core::mem::offset_of;
+
 use ftl_types::address::PAddr;
 use ftl_types::address::VAddr;
 use ftl_types::error::FtlError;
 use ftl_types::interrupt::Irq;
+use thread::Context;
 
 use crate::cpuvar::CpuId;
 use crate::interrupt::Interrupt;
 use crate::refcount::SharedRef;
 
 mod cpuvar;
+mod gdt;
 mod idle;
+mod idt;
+mod init;
 mod serial;
 mod switch;
 mod thread;
+mod tss;
 mod vmspace;
 
 pub use cpuvar::get_cpuvar;
 pub use cpuvar::set_cpuvar;
 pub use cpuvar::CpuVar;
 pub use idle::idle;
+pub use init::early_init;
+pub use init::init;
 pub use switch::return_to_user;
 pub use thread::Thread;
 pub use vmspace::VmSpace;
@@ -59,9 +70,63 @@ pub unsafe extern "C" fn kernel_syscall_entry(
     _a3: isize,
     _a4: isize,
     _a5: isize,
-    _a6: isize,
 ) -> isize {
-    todo!()
+    asm!(
+        r#"
+            mov rax, gs:[{context_offset}]
+
+            // Save general-purpose registers.
+            mov [rax + {rbx_offset}], rbx
+            mov [rax + {rcx_offset}], rcx
+            mov [rax + {rdx_offset}], rdx
+            mov [rax + {rsi_offset}], rsi
+            mov [rax + {rdi_offset}], rdi
+            mov [rax + {rbp_offset}], rbp
+            mov [rax + {rsp_offset}], rsp
+            mov [rax + {r8_offset}],  r8
+            mov [rax + {r9_offset}],  r9
+            mov [rax + {r10_offset}], r10
+            mov [rax + {r11_offset}], r11
+            mov [rax + {r12_offset}], r12
+            mov [rax + {r13_offset}], r13
+            mov [rax + {r14_offset}], r14
+            mov [rax + {r15_offset}], r15
+
+            // Get the return address.
+            mov rax, [rsp]
+            mov gs:[{rip_offset}], rax
+
+            // Handle the system call.
+            call {syscall_handler}
+
+            // Save the return value in the thread context, and switch
+            // to the next thread.
+            mov rax, gs:[{context_offset}]
+            mov rax, [rax + {rax_offset}]
+            jmp {return_to_user}
+        "#,
+        context_offset = const offset_of!(crate::arch::CpuVar, context),
+        rip_offset = const offset_of!(Context, rip),
+        rax_offset = const offset_of!(Context, rax),
+        rbx_offset = const offset_of!(Context, rbx),
+        rcx_offset = const offset_of!(Context, rcx),
+        rdx_offset = const offset_of!(Context, rdx),
+        rsi_offset = const offset_of!(Context, rsi),
+        rdi_offset = const offset_of!(Context, rdi),
+        rbp_offset = const offset_of!(Context, rbp),
+        rsp_offset = const offset_of!(Context, rsp),
+        r8_offset = const offset_of!(Context, r8),
+        r9_offset = const offset_of!(Context, r9),
+        r10_offset = const offset_of!(Context, r10),
+        r11_offset = const offset_of!(Context, r11),
+        r12_offset = const offset_of!(Context, r12),
+        r13_offset = const offset_of!(Context, r13),
+        r14_offset = const offset_of!(Context, r14),
+        r15_offset = const offset_of!(Context, r15),
+        syscall_handler = sym crate::syscall::syscall_handler,
+        return_to_user = sym return_to_user,
+        options(noreturn)
+    )
 }
 
 pub fn interrupt_create(interrupt: &SharedRef<Interrupt>) -> Result<(), FtlError> {
@@ -71,18 +136,6 @@ pub fn interrupt_create(interrupt: &SharedRef<Interrupt>) -> Result<(), FtlError
 pub fn interrupt_ack(irq: Irq) -> Result<(), FtlError> {
     todo!()
 }
-
-pub fn early_init(cpu_id: CpuId) {
-    const CR4_FSGSBASE: u64 = 1 << 16;
-    unsafe {
-        let mut cr4: u64;
-        core::arch::asm!("mov rax, cr4", out("rax") cr4);
-        cr4 |= CR4_FSGSBASE;
-        core::arch::asm!("mov cr4, rax", in("rax") cr4);
-    }
-}
-
-pub fn init(cpu_id: CpuId, device_tree: Option<&crate::device_tree::DeviceTree>) {}
 
 pub const PAGE_SIZE: usize = 4096;
 pub const NUM_CPUS_MAX: usize = 8;

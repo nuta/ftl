@@ -1,6 +1,21 @@
 .section ".text.boot", "ax"
-
 .code32
+
+// GDTR/GDT entries. This must be located in the .text.boot section as its
+// address (gdt) must be physical.
+.align 16
+.global gdtr
+gdtr:
+    .word gdt_end - gdt - 1
+    .quad gdt
+
+.align 16
+gdt:
+    .quad 0x0000000000000000 // 0:  null descriptor
+    .quad 0x00af9a000000ffff // 8:  64-bit code segment (kernel)
+    .quad 0x00cf92000000ffff // 16: 64-bit data segment (kernel)
+    .quad 0x00cf9a000000ffff // 24: 32-bit code segment (kernel)
+gdt_end:
 
 // Multiboot2 header
 // https://www.gnu.org/software/grub/manual/multiboot2/multiboot.html
@@ -54,7 +69,7 @@ boot:
 
     // Booted directly in 64-bit mode. To simplify the boot code, we switch back
     // into the 32-bit mode and start executing the 32-bit boot code.
-    lgdt [boot_gdtr]
+    lgdt [gdtr]
     mov eax, 0xb002b002 // magic for boot_params
     mov ebx, esi        // struct boot_params *
     sub rsp, 8
@@ -93,7 +108,7 @@ boot32:
     push edx
 
     // Switch to our own temporary GDT.
-    lgdt [boot_gdtr]
+    lgdt [gdtr]
     retf
 
 protected_mode:
@@ -175,22 +190,6 @@ enable_long_mode:
 
     retf
 
-// Temporary GDTR/GDT entries. This must be located in the .boot section as its
-// address (gdt) must be physical to load.
-.align 16
-.global boot_gdtr
-boot_gdtr:
-    .word gdt_end - gdt - 1
-    .quad gdt
-
-.align 16
-gdt:
-    .quad 0x0000000000000000 // 0:  null descriptor
-    .quad 0x00af9a000000ffff // 8:  64-bit code segment (kernel)
-    .quad 0x00cf92000000ffff // 16: 64-bit data segment (kernel)
-    .quad 0x00cf9a000000ffff // 24: 32-bit code segment (kernel)
-gdt_end:
-
 .code64
 long_mode_in_low_address:
     mov ax, 0
@@ -242,7 +241,7 @@ setup_bsp:
     lea  rax, [rip + x64_boot]
     call rax
 
-    // In case init() returns.
+// In case init() returns.
 halt:
     cli
     hlt

@@ -26,6 +26,6 @@ pub fn get_cpuvar() -> &'static crate::cpuvar::CpuVar {
 
 pub fn set_cpuvar(cpuvar: *mut crate::cpuvar::CpuVar) {
     unsafe {
-        asm!("wrfsbase {}", in(reg) cpuvar);
+        asm!("wrgsbase {}", in(reg) cpuvar);
     }
 }
