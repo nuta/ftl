@@ -101,7 +101,7 @@ impl Thread {
         mutable.state = State::Exited;
     }
 
-    pub fn run_continuation(this: &RefMut<'_, SharedRef<Self>>) -> ContinuationResult {
+    pub fn run_continuation(this: RefMut<'_, SharedRef<Self>>) -> ContinuationResult {
         let mut mutable = this.mutable.lock();
         let continuation = match &mut mutable.state {
             State::Exited => {
@@ -206,7 +206,8 @@ fn switch_to_next() -> ! {
         current_thread.process.vmspace().switch();
 
         // Execute the pending continuation if any.
-        let result = Thread::run_continuation(&current_thread);
+        let arch_thread: *mut arch::Thread = current_thread.arch() as *const _ as *mut _;
+        let result = Thread::run_continuation(current_thread);
 
         // Can we resume the thread?
         match result {
@@ -215,7 +216,7 @@ fn switch_to_next() -> ! {
                 continue;
             }
             ContinuationResult::ReturnToUser(ret) => {
-                arch::return_to_user(current_thread, ret);
+                arch::return_to_user(arch_thread, ret);
             }
         }
     }

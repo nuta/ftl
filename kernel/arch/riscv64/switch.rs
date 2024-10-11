@@ -198,7 +198,9 @@ pub fn return_to_user(current_thread: RefMut<'_, SharedRef<Thread>>, sysret: Opt
         }
     }
 
+    debug!("drop (current_thread)");
     drop(current_thread);
+    debug!("drop (current_thread) OK OK OK OK");
 
     unsafe {
         asm!(r#"

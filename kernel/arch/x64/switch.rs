@@ -7,21 +7,13 @@ use super::thread::Context;
 use crate::refcount::SharedRef;
 use crate::thread::Thread;
 
-pub fn return_to_user(current_thread: RefMut<'_, SharedRef<Thread>>, sysret: Option<isize>) -> ! {
-    debug!(
-        "current_thread: {:x} -----------------------------------------",
-        &current_thread as *const _ as usize
-    );
-    let context: *mut Context = &current_thread.arch().context as *const _ as *mut _;
-    debug!("read context OK OK OK OK");
+pub fn return_to_user(thread: *mut super::Thread, sysret: Option<isize>) -> ! {
+    let context: *mut Context = unsafe { &mut (*thread).context as *mut _ };
     if let Some(value) = sysret {
         unsafe {
             (*context).rax = value as usize;
         }
     }
-
-    drop(current_thread);
-    println!("Returning to user: rip={:x?}", unsafe { (*context).rip });
 
     unsafe {
         asm!(
