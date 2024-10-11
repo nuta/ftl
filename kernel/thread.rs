@@ -170,7 +170,7 @@ impl Thread {
 
 /// Switches to the thread execution: save the current thread, picks the next
 /// thread to run, and restores the next thread's context.
-fn switch_to_next() -> ! {
+pub fn switch_to_next() -> ! {
     loop {
         let (mut current_thread, in_idle) = {
             // Borrow the cpvuar inside a brace not to forget to drop it.

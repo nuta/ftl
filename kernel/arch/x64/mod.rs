@@ -101,9 +101,9 @@ pub unsafe extern "C" fn kernel_syscall_entry(
 
             // Save the return value in the thread context, and switch
             // to the next thread.
-            mov rax, gs:[{context_offset}]
-            mov rax, [rax + {rax_offset}]
-            jmp {return_to_user}
+            mov rdi, gs:[{context_offset}]
+            mov [rdi + {rax_offset}], rax
+            jmp {switch_to_next}
         "#,
         context_offset = const offset_of!(crate::arch::CpuVar, context),
         rip_offset = const offset_of!(Context, rip),
@@ -124,7 +124,7 @@ pub unsafe extern "C" fn kernel_syscall_entry(
         r14_offset = const offset_of!(Context, r14),
         r15_offset = const offset_of!(Context, r15),
         syscall_handler = sym crate::syscall::syscall_handler,
-        return_to_user = sym return_to_user,
+        switch_to_next = sym crate::thread::switch_to_next,
         options(noreturn)
     )
 }

@@ -47,12 +47,6 @@ interrupt_common:
     //            +--------------------+
     //
 
-    // Check CS register in the IRET frame to determine if the interrupt has
-    // occurred in user mode.
-    test qword ptr [rsp + 24], 3
-    jz 1f
-    swapgs
-1:
     // Save RDI and set the IRQ number to RDI at once.
     xchg rdi, [rsp]
 
@@ -93,13 +87,5 @@ interrupt_common:
 
     // Skip error code.
     add rsp, 8
-
-    // Check CS register in the IRET frame to determine whether the exception
-    // occur in the userspace. If so, do SWAPGS.
-    test qword ptr [rsp + 8], 3
-    jz 1f
-
-    cli
-    swapgs
 1:
     iretq

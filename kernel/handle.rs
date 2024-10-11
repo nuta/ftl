@@ -212,6 +212,7 @@ impl HandleTable {
         self.next_id = (self.next_id + 1) & HANDLE_ID_MASK;
 
         debug_assert!(id.as_i32() != 0);
+        trace!("HandleTable::add: id={:?}, len={}", id, self.handles.len());
         self.handles.insert(id, handle.into());
         Ok(id)
     }

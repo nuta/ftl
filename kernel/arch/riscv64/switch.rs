@@ -54,12 +54,12 @@ pub unsafe extern "C" fn kernel_syscall_entry(
                 mv s0, t0
 
                 // Handle the system call.
-                call {syscall_handler}
+                j {syscall_handler}
 
                 // Save the return value in the thread context, and switch
                 // to the next thread.
                 sd a0, {a0_offset}(s0)
-                j {return_to_user}
+                j {switch_to_next}
             "#,
             context_offset = const offset_of!(crate::arch::CpuVar, context),
             sepc_offset = const offset_of!(Context, sepc),
@@ -81,7 +81,7 @@ pub unsafe extern "C" fn kernel_syscall_entry(
             s10_offset = const offset_of!(Context, s10),
             s11_offset = const offset_of!(Context, s11),
             syscall_handler = sym crate::syscall::syscall_handler,
-            return_to_user = sym return_to_user,
+            switch_to_next = sym crate::thread::switch_to_next,
             options(noreturn)
         )
     }
@@ -190,6 +190,11 @@ pub fn return_to_user(thread: *mut super::Thread, sysret: Option<isize>) -> ! {
         }
     }
 
+    println!(
+        "switching to RIP={:#x}, sp={:#x}",
+        unsafe { (*context).sepc },
+        unsafe { (*context).sp }
+    );
     unsafe {
         asm!(r#"
             sd a0, {context_offset}(tp) // Update CpuVar.arch.context
