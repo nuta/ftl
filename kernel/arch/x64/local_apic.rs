@@ -70,5 +70,8 @@ pub fn init(paddr: PAddr) {
     let mut lapic = LocalApic::new(folio);
     lapic.init();
 
+    // Clear any pending interrupts.
+    lapic.ack_interrupt();
+
     LOCAL_APIC.lock().replace(lapic);
 }

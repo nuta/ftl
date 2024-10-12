@@ -22,8 +22,8 @@ pub fn init() {
         out8(0xa1, 0xff);
         out8(0x21, 0xff);
 
-        // symmetric I/O mode.
-        asm_out8(0x22, 0x70);
-        asm_out8(0x23, 0x01);
+        // symmetric I/O mode. TODO: Do we need this?
+        out8(0x22, 0x70);
+        out8(0x23, 0x01);
     }
 }
