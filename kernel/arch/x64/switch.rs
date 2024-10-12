@@ -193,7 +193,9 @@ extern "C" fn x64_handle_interrupt(vector: u64, irq: *const IrqFrame) {
             0x0a => panic!("invalid TSS"),
             0x0b => panic!("segment not present"),
             0x0c => panic!("stack-segment fault"),
-            0x0d => panic!("general protection fault"),
+            0x0d => {
+                panic!("general protection fault: RIP={:x}", unsafe { (*irq).rip },);
+            }
             0x0e => {
                 panic!(
                     "page fault: RIP={:x}, CR2={:x}",

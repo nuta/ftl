@@ -74,6 +74,7 @@ impl PageTable {
             PTE_G | PTE_W,
         )?;
         // IO APIC
+        // TODO: Disable caching
         self.map_range(
             VAddr::new(0xffff_8000_fec0_0000),
             PAddr::new(0x0000_0000_fec0_0000),
@@ -81,6 +82,7 @@ impl PageTable {
             PTE_G | PTE_W,
         )?;
         // Local APIC
+        // TODO: Disable caching
         self.map_range(
             VAddr::new(0xffff_8000_fee0_0000),
             PAddr::new(0x0000_0000_fee0_0000),
