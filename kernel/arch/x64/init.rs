@@ -1,6 +1,7 @@
 use super::gdt;
 use super::idt;
 use super::mptable;
+use super::pic;
 use super::tss;
 use super::CpuId;
 
@@ -17,6 +18,7 @@ pub fn early_init(cpu_id: CpuId) {
         core::arch::asm!("mov cr4, rax", in("rax") cr4);
     }
 
+    pic::init();
     gdt::init();
     tss::init();
     idt::init();

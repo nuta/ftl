@@ -29,6 +29,7 @@ struct IdtEntry {
     attrs: u16,
     offset1: u16,
     offset2: u32,
+    reserved: u32,
 }
 
 impl IdtEntry {
@@ -38,7 +39,8 @@ impl IdtEntry {
             segment: 8,    // KERNEL_CS
             attrs: 0x8e00, // Present, DPL=0, 64-bit interrupt gate, IST=0
             offset1: ((handler >> 16) & 0xffff) as u16,
-            offset2: ((handler >> 32) & 0xffff) as u32,
+            offset2: ((handler >> 32) & 0xffffffff) as u32,
+            reserved: 0,
         }
     }
 }

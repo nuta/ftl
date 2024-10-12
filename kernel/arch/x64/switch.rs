@@ -174,47 +174,45 @@ pub struct IrqFrame {
 
 #[no_mangle]
 extern "C" fn x64_handle_interrupt(vector: u64, irq: *const IrqFrame) {
-    panic!("interrupt: {vector}");
-    if vector > VECTOR_IRQ_BASE as u64 {
-        let irq = vector - VECTOR_IRQ_BASE as u64;
-        interrupt::handle_interrupt(irq as usize);
-    } else {
-        match vector {
-            0x00 => panic!("divide error"),
-            0x01 => panic!("debug exception"),
-            0x02 => panic!("non-maskable interrupt"),
-            0x03 => panic!("breakpoint"),
-            0x04 => panic!("overflow"),
-            0x05 => panic!("bound range exceeded"),
-            0x06 => panic!("invalid opcode"),
-            0x07 => panic!("device not available"),
-            0x08 => panic!("double fault"),
-            0x09 => panic!("coprocessor segment overrun"),
-            0x0a => panic!("invalid TSS"),
-            0x0b => panic!("segment not present"),
-            0x0c => panic!("stack-segment fault"),
-            0x0d => {
-                panic!("general protection fault: RIP={:x}", unsafe { (*irq).rip },);
-            }
-            0x0e => {
-                panic!(
-                    "page fault: RIP={:x}, CR2={:x}",
-                    unsafe { (*irq).rip },
-                    unsafe {
-                        let cr2: u64;
-                        asm!("mov rax, cr2", out("rax") cr2);
-                        cr2
-                    }
-                )
-            }
-            0x0f => panic!("reserved"),
-            0x10 => panic!("x87 FPU error"),
-            0x11 => panic!("alignment check"),
-            0x12 => panic!("machine check"),
-            0x13 => panic!("SIMD floating-point exception"),
-            0x14 => panic!("virtualization exception"),
-            0x15 => panic!("control protection exception"),
-            _ => panic!("unexpected exception: {}", vector),
+    match vector {
+        0x00 => panic!("divide error: RIP={:x}", unsafe { (*irq).rip }),
+        0x01 => panic!("debug exception"),
+        0x02 => panic!("non-maskable interrupt"),
+        0x03 => panic!("breakpoint"),
+        0x04 => panic!("overflow"),
+        0x05 => panic!("bound range exceeded"),
+        0x06 => panic!("invalid opcode"),
+        0x07 => panic!("device not available"),
+        0x08 => panic!("double fault"),
+        0x09 => panic!("coprocessor segment overrun"),
+        0x0a => panic!("invalid TSS"),
+        0x0b => panic!("segment not present"),
+        0x0c => panic!("stack-segment fault"),
+        0x0d => {
+            panic!("general protection fault: RIP={:x}", unsafe { (*irq).rip },);
         }
+        0x0e => {
+            panic!(
+                "page fault: RIP={:x}, CR2={:x}",
+                unsafe { (*irq).rip },
+                unsafe {
+                    let cr2: u64;
+                    asm!("mov rax, cr2", out("rax") cr2);
+                    cr2
+                }
+            )
+        }
+        0x0f => panic!("reserved"),
+        0x10 => panic!("x87 FPU error"),
+        0x11 => panic!("alignment check"),
+        0x12 => panic!("machine check"),
+        0x13 => panic!("SIMD floating-point exception"),
+        0x14 => panic!("virtualization exception"),
+        0x15 => panic!("control protection exception"),
+        _ if vector > VECTOR_IRQ_BASE as u64 => {
+            let irq = vector - VECTOR_IRQ_BASE as u64;
+            interrupt::handle_interrupt(irq as usize);
+        }
+        _ => panic!("unexpected exception: {}", vector),
     }
 }

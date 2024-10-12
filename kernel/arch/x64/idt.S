@@ -1,4 +1,5 @@
-.align 16
+.set INTERRUPT_HANDLER_SIZE, 16
+.align INTERRUPT_HANDLER_SIZE
 .global interrupt_handlers
 interrupt_handlers:
 .set i, 0
@@ -6,19 +7,19 @@ interrupt_handlers:
 .set handler_start, .
 // Exceptions with error code.
 .if i == 8 || 10 <= i && i <= 14 || i == 17
-    .align 16
+    .align INTERRUPT_HANDLER_SIZE
     cli
     push i
     jmp interrupt_common
-    .align 16
+    .align INTERRUPT_HANDLER_SIZE
 // Interrupts and exceptions without error code.
 .else
-    .align 16
+    .align INTERRUPT_HANDLER_SIZE
     cli
     push 0 // Dummy value as error code.
     push i
     jmp interrupt_common
-    .align 16
+    .align INTERRUPT_HANDLER_SIZE
 .endif
 
 // Increment the counter.

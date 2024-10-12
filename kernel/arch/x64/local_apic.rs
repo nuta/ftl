@@ -11,6 +11,7 @@ use crate::utils::mmio::ReadWrite;
 
 const EOI_REG: MmioReg<LittleEndian, ReadWrite, u32> = MmioReg::new(0xb0);
 const SPURIOUS_INT_REG: MmioReg<LittleEndian, ReadWrite, u32> = MmioReg::new(0xf0);
+const LVT_TIMER_REG: MmioReg<LittleEndian, ReadWrite, u32> = MmioReg::new(0x320);
 const IA32_APIC_BASE_MSR: u32 = 0x1b;
 
 pub static LOCAL_APIC: SpinLock<Option<LocalApic>> = SpinLock::new(None);
@@ -48,6 +49,14 @@ impl LocalApic {
             let mut value = SPURIOUS_INT_REG.read(&mut self.folio);
             value |= 1 << 8;
             SPURIOUS_INT_REG.write(&mut self.folio, value);
+        }
+
+        // Mask timer interrupt.
+        {
+            let mut value = LVT_TIMER_REG.read(&mut self.folio);
+            value &= !(1 << 16); // Masked
+            value |= crate::arch::x64::idt::VECTOR_IRQ_BASE + 0; // Vector
+            LVT_TIMER_REG.write(&mut self.folio, value);
         }
     }
 

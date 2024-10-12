@@ -20,6 +20,7 @@ mod interrupt;
 mod io_apic;
 mod local_apic;
 mod mptable;
+mod pic;
 mod serial;
 mod switch;
 mod thread;
