@@ -6,11 +6,9 @@ use core::mem::offset_of;
 use ftl_types::address::PAddr;
 use ftl_types::address::VAddr;
 use ftl_types::error::FtlError;
-use ftl_types::interrupt::Irq;
 use thread::Context;
 
 use crate::cpuvar::CpuId;
-use crate::interrupt::Interrupt;
 use crate::refcount::SharedRef;
 
 mod cpuvar;
@@ -18,6 +16,9 @@ mod gdt;
 mod idle;
 mod idt;
 mod init;
+mod interrupt;
+mod io_apic;
+mod local_apic;
 mod serial;
 mod switch;
 mod thread;
@@ -30,6 +31,8 @@ pub use cpuvar::CpuVar;
 pub use idle::idle;
 pub use init::early_init;
 pub use init::init;
+pub use interrupt::interrupt_ack;
+pub use interrupt::interrupt_create;
 pub use switch::kernel_syscall_entry;
 pub use switch::return_to_user;
 pub use thread::Thread;
@@ -67,14 +70,6 @@ where
     F: FnMut(usize),
 {
     println!("backtrace not implemented")
-}
-
-pub fn interrupt_create(interrupt: &SharedRef<Interrupt>) -> Result<(), FtlError> {
-    todo!()
-}
-
-pub fn interrupt_ack(irq: Irq) -> Result<(), FtlError> {
-    todo!()
 }
 
 pub const PAGE_SIZE: usize = 4096;
