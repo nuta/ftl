@@ -10,6 +10,7 @@ use ftl_api::environ::Environ;
 use ftl_api::mainloop::Event;
 use ftl_api::mainloop::Mainloop;
 use ftl_api::prelude::*;
+use ftl_api::types::environ::Device;
 use ftl_autogen::idl::ethernet_device::Rx;
 use ftl_autogen::idl::Message;
 use virtio_net::VirtioNet;
@@ -26,8 +27,15 @@ pub fn main(mut env: Environ) {
     info!("starting");
     let startup_ch = env.take_channel("dep:startup").unwrap();
 
-    let devices = env.devices("virtio,mmio").unwrap();
-    let mut virtio_net = VirtioNet::new(devices);
+    // let devices = env.devices("virtio,mmio").unwrap();
+    let devices = vec![Device {
+        name: "virtio,mmio".to_string(),
+        compatible: "virtio,mmio".to_string(),
+        reg: 0xfeb00400,
+        interrupts: Some(vec![1]),
+    }];
+
+    let mut virtio_net = VirtioNet::new(&devices);
 
     let mut mainloop = Mainloop::<Context, Message>::new().unwrap();
     mainloop.add_channel(startup_ch, Context::Startup).unwrap();

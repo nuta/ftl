@@ -41,7 +41,11 @@ const KERNEL_BASE: usize = 0xffff_8000_0000_0000;
 
 pub fn halt() -> ! {
     warn!("entering halt");
-    loop {}
+    loop {
+        unsafe {
+            core::arch::asm!("cli; hlt");
+        }
+    }
 }
 
 pub fn paddr2vaddr(paddr: PAddr) -> Result<VAddr, FtlError> {
