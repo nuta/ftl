@@ -3,6 +3,9 @@ use core::cell::RefMut;
 use core::mem::offset_of;
 
 use super::gdt::KERNEL_CS;
+use super::idt::VECTOR_IRQ_BASE;
+use super::interrupt;
+use super::io_apic;
 use super::thread::Context;
 use crate::refcount::SharedRef;
 use crate::thread::Thread;
@@ -109,7 +112,7 @@ pub fn return_to_user(thread: *mut super::Thread, sysret: Option<isize>) -> ! {
                 // Build an IRET frame
                 push 0                    // SS
                 push [rax + {rsp_offset}] // RSP
-                push 0x002                // RFLAGS
+                push 0x202                // RFLAGS (FIXME: should we save & restore RFLAGS?)
                 push {iret_cs}            // CS
                 push [rax + {rip_offset}] // RIP
 
@@ -141,5 +144,75 @@ pub fn return_to_user(thread: *mut super::Thread, sysret: Option<isize>) -> ! {
             r15_offset = const offset_of!(Context, r15),
             options(noreturn)
         );
+    }
+}
+
+#[repr(C, packed)]
+pub struct IrqFrame {
+    rax: u64,
+    rbx: u64,
+    rcx: u64,
+    rdx: u64,
+    rsi: u64,
+    rbp: u64,
+    r8: u64,
+    r9: u64,
+    r10: u64,
+    r11: u64,
+    r12: u64,
+    r13: u64,
+    r14: u64,
+    r15: u64,
+    rdi: u64,
+    error: u64,
+    rip: u64,
+    cs: u64,
+    rflags: u64,
+    rsp: u64,
+    ss: u64,
+}
+
+#[no_mangle]
+extern "C" fn x64_handle_interrupt(vector: u64, irq: *const IrqFrame) {
+    panic!("interrupt: {vector}");
+    if vector > VECTOR_IRQ_BASE as u64 {
+        let irq = vector - VECTOR_IRQ_BASE as u64;
+        interrupt::handle_interrupt(irq as usize);
+    } else {
+        match vector {
+            0x00 => panic!("divide error"),
+            0x01 => panic!("debug exception"),
+            0x02 => panic!("non-maskable interrupt"),
+            0x03 => panic!("breakpoint"),
+            0x04 => panic!("overflow"),
+            0x05 => panic!("bound range exceeded"),
+            0x06 => panic!("invalid opcode"),
+            0x07 => panic!("device not available"),
+            0x08 => panic!("double fault"),
+            0x09 => panic!("coprocessor segment overrun"),
+            0x0a => panic!("invalid TSS"),
+            0x0b => panic!("segment not present"),
+            0x0c => panic!("stack-segment fault"),
+            0x0d => panic!("general protection fault"),
+            0x0e => {
+                panic!(
+                    "page fault: RIP={:x}, CR2={:x}",
+                    unsafe { (*irq).rip },
+                    unsafe {
+                        let cr2: u64;
+                        asm!("mov rax, cr2", out("rax") cr2);
+                        cr2
+                    }
+                )
+            }
+            0x0f => panic!("reserved"),
+            0x10 => panic!("x87 FPU error"),
+            0x11 => panic!("alignment check"),
+            0x12 => panic!("machine check"),
+            0x13 => panic!("SIMD floating-point exception"),
+            0x14 => panic!("virtualization exception"),
+            0x15 => panic!("control protection exception"),
+            _ => panic!("unexpected exception: {}", vector),
+        }
     }
 }

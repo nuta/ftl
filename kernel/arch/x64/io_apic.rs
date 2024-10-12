@@ -1,6 +1,7 @@
 use ftl_types::address::PAddr;
 use ftl_types::interrupt::Irq;
 
+use super::idt::VECTOR_IRQ_BASE;
 use crate::folio::Folio;
 use crate::spinlock::SpinLock;
 use crate::utils::mmio::LittleEndian;
@@ -10,7 +11,6 @@ use crate::utils::mmio::ReadWrite;
 
 const IOREGSEL_REG: MmioReg<LittleEndian, ReadWrite, u32> = MmioReg::new(0x00);
 const IOWIN_REG: MmioReg<LittleEndian, ReadWrite, u32> = MmioReg::new(0x10);
-const VECTOR_IRQ_BASE: u32 = 48;
 
 struct IoApicReg(u8);
 

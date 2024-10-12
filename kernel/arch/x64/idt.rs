@@ -3,6 +3,8 @@ use core::arch::global_asm;
 
 global_asm!(include_str!("idt.S"));
 
+pub const VECTOR_IRQ_BASE: u32 = 48;
+
 pub fn init() {
     let idtr = Idtr {
         limit: (core::mem::size_of::<[IdtEntry; 256]>() - 1) as u16,
@@ -12,11 +14,6 @@ pub fn init() {
     unsafe {
         asm!("lidt [{}]", in(reg) &idtr);
     }
-}
-
-#[no_mangle]
-extern "C" fn x64_handle_interrupt(vector: u64) {
-    panic!("interrupt: {vector}");
 }
 
 #[repr(C, packed)]

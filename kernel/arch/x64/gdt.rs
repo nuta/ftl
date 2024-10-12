@@ -15,7 +15,7 @@ pub const KERNEL_DS: u16 = 8 * 2;
 pub const KERNEL_TSS: u16 = 8 * 3;
 
 static GDT: spin::Lazy<GdtType> = spin::Lazy::new(|| {
-    let tss_addr = &TSS as *const _ as u64;
+    let tss_addr = TSS.as_mut_ptr() as u64;
     let tss_low = 0x0000890000000000
         | size_of::<Tss>() as u64
         | ((tss_addr & 0xffff) << 16)

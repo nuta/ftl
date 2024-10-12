@@ -22,3 +22,12 @@ pub fn interrupt_ack(irq: Irq) -> Result<(), FtlError> {
     /* Nothing to do: per-IRQ ack is needed for IO APIC */
     Ok(())
 }
+
+pub fn handle_interrupt(vector: usize) {
+    let irq = Irq::from_raw(vector as usize);
+
+    let listeners = LISTENERS.lock();
+    if let Some(listener) = listeners.get(&irq) {
+        listener.trigger().unwrap();
+    }
+}
