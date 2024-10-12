@@ -57,6 +57,7 @@ pub fn main(mut env: Environ) {
         }
     };
 
+    trace!("smol init");
     let device = NetDevice::new(Box::new(transmit));
     smotcp_log::init();
     let mut server = TcpIp::new(device, mac);
@@ -67,6 +68,7 @@ pub fn main(mut env: Environ) {
         .add_channel((driver_sender, driver_receiver), Context::Driver)
         .unwrap();
 
+    trace!("ready");
     loop {
         // Process received packets, update socket states, and transmit
         // packets to the device driver.

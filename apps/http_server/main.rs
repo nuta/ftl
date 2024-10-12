@@ -39,6 +39,7 @@ pub fn main(mut env: Environ) {
     mainloop.add_channel(startup_ch, Context::Startup).unwrap();
     mainloop.add_channel(listen_ch, Context::Listen).unwrap();
 
+    trace!("ready");
     loop {
         match mainloop.next() {
             Event::Message {

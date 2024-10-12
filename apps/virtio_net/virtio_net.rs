@@ -63,6 +63,8 @@ impl VirtioNet {
         let (mut transport, irq) = probe(devices, VIRTIO_DEVICE_TYPE_NET).unwrap();
         assert!(transport.is_modern());
 
+        info!("found virtio-net device");
+
         let interrupt = Interrupt::create(irq).unwrap();
         let mut transport = Box::new(transport) as Box<dyn VirtioTransport>;
         let mut virtqueues = transport.initialize(0, 2).unwrap();

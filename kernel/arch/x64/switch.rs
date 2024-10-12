@@ -7,6 +7,7 @@ use super::thread::Context;
 use crate::refcount::SharedRef;
 use crate::thread::Thread;
 
+#[naked]
 pub unsafe extern "C" fn kernel_syscall_entry(
     _a0: isize,
     _a1: isize,
@@ -26,7 +27,6 @@ pub unsafe extern "C" fn kernel_syscall_entry(
             mov [rax + {rsi_offset}], rsi
             mov [rax + {rdi_offset}], rdi
             mov [rax + {rbp_offset}], rbp
-            mov [rax + {rsp_offset}], rsp
             mov [rax + {r8_offset}],  r8
             mov [rax + {r9_offset}],  r9
             mov [rax + {r10_offset}], r10
@@ -36,17 +36,21 @@ pub unsafe extern "C" fn kernel_syscall_entry(
             mov [rax + {r14_offset}], r14
             mov [rax + {r15_offset}], r15
 
-            // Get the return address.
             mov rbx, rax
-            mov rax, [rsp]
+            pop rax
             mov [rbx + {rip_offset}], rax
+            mov [rbx + {rsp_offset}], rsp
 
             // Handle the system call.
             call {syscall_handler}
 
             // Save the return value in the thread context, and switch
             // to the next thread.
+            push rbx
+            mov rbx, gs:[{context_offset}]
             mov [rbx + {rax_offset}], rax
+            pop rbx
+
             jmp {switch_thread}
         "#,
         context_offset = const offset_of!(crate::arch::CpuVar, context),
@@ -84,6 +88,8 @@ pub fn return_to_user(thread: *mut super::Thread, sysret: Option<isize>) -> ! {
     unsafe {
         asm!(
             r#"
+                mov gs:[{context_offset}], rax
+
                 // Restore general-purpose registers except RAX/RSP.
                 mov rbx, [rax + {rbx_offset}]
                 mov rcx, [rax + {rcx_offset}]
@@ -115,6 +121,7 @@ pub fn return_to_user(thread: *mut super::Thread, sysret: Option<isize>) -> ! {
             "#,
             in ("rax") context as usize,
             iret_cs = const KERNEL_CS,
+            context_offset = const offset_of!(crate::arch::CpuVar, context),
             rip_offset = const offset_of!(Context, rip),
             rax_offset = const offset_of!(Context, rax),
             rbx_offset = const offset_of!(Context, rbx),

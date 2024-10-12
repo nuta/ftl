@@ -25,6 +25,7 @@ enum Context {
 #[no_mangle]
 pub fn main(mut env: Environ) {
     info!("starting");
+    info!("yes it's ready");
     let startup_ch = env.take_channel("dep:startup").unwrap();
 
     // let devices = env.devices("virtio,mmio").unwrap();
@@ -35,14 +36,17 @@ pub fn main(mut env: Environ) {
         interrupts: Some(vec![1]),
     }];
 
+    trace!("device init");
     let mut virtio_net = VirtioNet::new(&devices);
 
+    trace!("device init OK");
     let mut mainloop = Mainloop::<Context, Message>::new().unwrap();
     mainloop.add_channel(startup_ch, Context::Startup).unwrap();
     mainloop
         .add_interrupt(virtio_net.take_interrupt().unwrap(), Context::Interrupt)
         .unwrap();
 
+    trace!("ready");
     let mut tcpip_ch = None;
     loop {
         match mainloop.next() {
