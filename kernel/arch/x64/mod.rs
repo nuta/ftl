@@ -39,7 +39,8 @@ pub use vmspace::USERSPACE_START;
 const KERNEL_BASE: usize = 0xffff_8000_0000_0000;
 
 pub fn halt() -> ! {
-    todo!()
+    warn!("entering halt");
+    loop {}
 }
 
 pub fn paddr2vaddr(paddr: PAddr) -> Result<VAddr, FtlError> {
@@ -60,7 +61,7 @@ pub fn backtrace<F>(mut callback: F)
 where
     F: FnMut(usize),
 {
-    todo!()
+    println!("backtrace not implemented")
 }
 
 pub unsafe extern "C" fn kernel_syscall_entry(
@@ -124,7 +125,7 @@ pub unsafe extern "C" fn kernel_syscall_entry(
         r14_offset = const offset_of!(Context, r14),
         r15_offset = const offset_of!(Context, r15),
         syscall_handler = sym crate::syscall::syscall_handler,
-        switch_to_next = sym crate::thread::switch_to_next,
+        switch_to_next = sym crate::thread::switch_thread,
         options(noreturn)
     )
 }
