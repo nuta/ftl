@@ -7,8 +7,8 @@ fn out8(port: u16, value: u8) {
 }
 
 pub fn init() {
-    // Disables PIC. We use IO APIC instead.
     unsafe {
+        // Disables PIC. We use IO APIC instead.
         out8(0xa1, 0xff);
         out8(0x21, 0xff);
         out8(0x20, 0x11);
@@ -21,5 +21,9 @@ pub fn init() {
         out8(0xa1, 0x01);
         out8(0xa1, 0xff);
         out8(0x21, 0xff);
+
+        // symmetric I/O mode.
+        asm_out8(0x22, 0x70);
+        asm_out8(0x23, 0x01);
     }
 }
