@@ -43,6 +43,7 @@ pub fn boot(cpu_id: CpuId, bootinfo: BootInfo) -> ! {
     cpuvar::percpu_init(cpu_id);
     arch::init(cpu_id, device_tree.as_ref());
 
+    info!("loading startup apps...");
     startup::load_startup_apps(device_tree.as_ref());
     Thread::switch();
 }
