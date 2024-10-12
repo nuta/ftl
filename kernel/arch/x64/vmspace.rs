@@ -73,6 +73,20 @@ impl PageTable {
             0x8000000,
             PTE_G | PTE_W,
         )?;
+        // IO APIC
+        self.map_range(
+            VAddr::new(0xffff_8000_fec0_0000),
+            PAddr::new(0x0000_0000_fec0_0000),
+            0x1000,
+            PTE_G | PTE_W,
+        )?;
+        // Local APIC
+        self.map_range(
+            VAddr::new(0xffff_8000_fee0_0000),
+            PAddr::new(0x0000_0000_fee0_0000),
+            0x1000,
+            PTE_G | PTE_W,
+        )?;
         Ok(())
     }
 
