@@ -1,3 +1,4 @@
+use ftl_types::address::PAddr;
 use ftl_types::interrupt::Irq;
 
 use crate::folio::Folio;
@@ -49,10 +50,6 @@ impl IoApic {
     }
 
     pub fn init(&mut self) {
-        // FIXME: symmetric I/O mode
-        // asm_out8(0x22, 0x70);
-        // asm_out8(0x23, 0x01);
-
         // Disable all hardware interrupts.
         let n = IOAPIC_REG_IOAPICVER.read(&mut self.folio) >> 16 + 1;
         for i in 0..n {
@@ -68,7 +65,8 @@ impl IoApic {
     }
 }
 
-pub fn init(folio: Folio) {
+pub fn init(paddr: PAddr) {
+    let folio = Folio::alloc_fixed(paddr, 0x1000).unwrap();
     let mut ioapic = IoApic::new(folio);
     ioapic.init();
 

@@ -1,5 +1,6 @@
 use super::gdt;
 use super::idt;
+use super::mptable;
 use super::tss;
 use super::CpuId;
 
@@ -19,6 +20,7 @@ pub fn early_init(cpu_id: CpuId) {
     gdt::init();
     tss::init();
     idt::init();
+    mptable::init();
 }
 
 pub fn init(cpu_id: CpuId, device_tree: Option<&crate::device_tree::DeviceTree>) {}

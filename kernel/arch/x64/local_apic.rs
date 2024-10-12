@@ -1,3 +1,5 @@
+use ftl_types::address::PAddr;
+
 use crate::folio::Folio;
 use crate::spinlock::SpinLock;
 use crate::utils::mmio::LittleEndian;
@@ -23,4 +25,9 @@ impl LocalApic {
     pub fn ack_interrupt(&mut self) {
         EOI_REG.write(&mut self.folio, 0);
     }
+}
+
+pub fn init(paddr: PAddr) {
+    let folio = Folio::alloc_fixed(paddr, 0x1000).unwrap();
+    LOCAL_APIC.lock().replace(LocalApic::new(folio));
 }
