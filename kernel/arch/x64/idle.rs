@@ -1,4 +1,10 @@
+use core::arch::asm;
+
 pub fn idle() -> ! {
     warn!("idle");
-    loop {}
+    loop {
+        unsafe {
+            asm!("sti; hlt");
+        }
+    }
 }

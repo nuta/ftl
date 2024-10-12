@@ -211,6 +211,7 @@ extern "C" fn x64_handle_interrupt(vector: u64, irq: *const IrqFrame) {
         0x15 => panic!("control protection exception"),
         _ if vector > VECTOR_IRQ_BASE as u64 => {
             let irq = vector - VECTOR_IRQ_BASE as u64;
+            trace!("interrupt received: {}", irq);
             interrupt::handle_interrupt(irq as usize);
         }
         _ => panic!("unexpected exception: {}", vector),
