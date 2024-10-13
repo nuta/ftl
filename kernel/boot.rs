@@ -1,4 +1,5 @@
 //! The kernel entry point.
+use ftl_inlinedvec::InlinedString;
 use ftl_inlinedvec::InlinedVec;
 use ftl_utils::byte_size::ByteSize;
 
@@ -23,6 +24,7 @@ pub struct FreeMem {
 /// The boot information passed from the bootloader.
 #[derive(Debug)]
 pub struct BootInfo {
+    pub cmdline: Option<InlinedString<126>>,
     pub free_mems: InlinedVec<FreeMem, 8>,
     pub dtb_addr: Option<*const u8>,
 }
