@@ -6,6 +6,7 @@ use super::gdt::KERNEL_CS;
 use super::idt::VECTOR_IRQ_BASE;
 use super::interrupt;
 use super::io_apic;
+use super::local_apic;
 use super::thread::Context;
 use crate::refcount::SharedRef;
 use crate::thread::Thread;
@@ -214,6 +215,7 @@ extern "C" fn x64_handle_interrupt(vector: u64, irq: *const IrqFrame) {
             let irq = vector - VECTOR_IRQ_BASE as u64;
             trace!("interrupt received: {}", irq);
             interrupt::handle_interrupt(irq as usize);
+            local_apic::ack_interrupt();
         }
         _ => panic!("unexpected exception: {}", vector),
     }

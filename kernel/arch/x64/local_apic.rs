@@ -60,6 +60,10 @@ impl LocalApic {
     }
 }
 
+pub fn ack_interrupt() {
+    LOCAL_APIC.lock().as_mut().unwrap().ack_interrupt();
+}
+
 pub fn init(paddr: PAddr) {
     let folio = Folio::alloc_fixed(paddr, 0x1000).unwrap();
     let mut lapic = LocalApic::new(folio);
