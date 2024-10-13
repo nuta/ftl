@@ -21,6 +21,7 @@ pub unsafe extern "C" fn kernel_syscall_entry(
 ) -> isize {
     asm!(
         r#"
+            cli
             mov rax, gs:[{context_offset}]
 
             // Save general-purpose registers.

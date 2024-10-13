@@ -71,7 +71,16 @@ pub fn backtrace<F>(mut callback: F)
 where
     F: FnMut(usize),
 {
-    println!("backtrace not implemented")
+    let mut rbp: usize;
+    unsafe {
+        asm!("mov {}, rbp", out(reg) rbp);
+    }
+
+    while rbp < KERNEL_BASE {
+        let rip = unsafe { *(rbp as *const usize).offset(1) };
+        callback(rip);
+        rbp = unsafe { *(rbp as *const usize) };
+    }
 }
 
 pub const PAGE_SIZE: usize = 4096;

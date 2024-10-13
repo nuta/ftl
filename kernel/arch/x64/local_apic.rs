@@ -34,9 +34,8 @@ impl LocalApic {
     pub fn init(&mut self) {
         // Enable APIC.
         {
-            let mut value = 0;
-            value |= 0x0800; // Enable APIC
-            value |= self.folio.paddr().as_usize() as u64 & 0xfffff100; // APIC base address
+            let apic_base = self.folio.paddr().as_usize() as u64;
+            let value = (apic_base & 0xfffff100) | 0x0800;
             unsafe {
                 asm!(
                     "wrmsr",
