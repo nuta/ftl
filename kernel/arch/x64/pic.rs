@@ -25,5 +25,10 @@ pub fn init() {
         // symmetric I/O mode. TODO: Do we need this?
         out8(0x22, 0x70);
         out8(0x23, 0x01);
+
+        // Disable PIT (Programmable Interval Timer).
+        out8(0x43, 0x30);
+        out8(0x40, 0x00);
+        out8(0x40, 0x00);
     }
 }
