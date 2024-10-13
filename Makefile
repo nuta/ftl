@@ -32,7 +32,7 @@ QEMU      ?= qemu-system-riscv64
 QEMUFLAGS += -machine virt -m 256 -bios default
 else ifeq ($(ARCH),x64)
 QEMU      ?= qemu-system-x86_64
-QEMUFLAGS += -machine microvm -cpu Icelake-Server -m 256
+QEMUFLAGS += -machine microvm,ioapic2=off -cpu Icelake-Server -m 256
 else
 $(error "Unknown ARCH: $(ARCH)")
 endif
@@ -42,7 +42,7 @@ QEMUFLAGS += -global virtio-mmio.force-legacy=false
 QEMUFLAGS += -device virtio-net-device,netdev=net0,bus=virtio-mmio-bus.0
 QEMUFLAGS += -object filter-dump,id=fiter0,netdev=net0,file=virtio-net.pcap
 QEMUFLAGS += -netdev user,id=net0,hostfwd=tcp:127.0.0.1:1234-:80
-QEMUFLAGS += -trace enable=on --trace "virtio_*" --trace "ioapic_*"
+QEMUFLAGS += -trace "virtio_*" -trace "ioapic_*"
 
 CARGO    ?= cargo
 PROGRESS ?= printf "  \\033[1;96m%8s\\033[0m  \\033[1;m%s\\033[0m\\n"

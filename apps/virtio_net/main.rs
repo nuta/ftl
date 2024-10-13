@@ -33,7 +33,7 @@ pub fn main(mut env: Environ) {
         name: "virtio,mmio".to_string(),
         compatible: "virtio,mmio".to_string(),
         reg: 0xfeb00000,
-        interrupts: Some(vec![4]),
+        interrupts: Some(vec![16]),
     }];
 
     trace!("device init");

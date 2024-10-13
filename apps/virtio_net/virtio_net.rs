@@ -66,14 +66,6 @@ impl VirtioNet {
         info!("found virtio-net device");
 
         let interrupt = Interrupt::create(irq).unwrap();
-        for i in 1..118 {
-            if i == 2 {
-                // IRQ 2 is used by the timer.
-                continue;
-            }
-            let itr = Interrupt::create(Irq::from_raw(i)).unwrap();
-            core::mem::forget(itr);
-        }
         let mut transport = Box::new(transport) as Box<dyn VirtioTransport>;
         let mut virtqueues = transport.initialize(0, 2).unwrap();
 

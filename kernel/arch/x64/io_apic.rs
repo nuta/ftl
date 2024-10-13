@@ -26,6 +26,8 @@ impl IoApicReg {
     }
 }
 
+const IOAPIC_REG_IOAPICVER: IoApicReg = IoApicReg(0x01);
+
 fn ioredtbl_low_reg(irq: Irq) -> IoApicReg {
     IoApicReg(0x10 + (2 * irq.as_usize() as u8))
 }
@@ -33,8 +35,6 @@ fn ioredtbl_low_reg(irq: Irq) -> IoApicReg {
 fn ioredtbl_high_reg(irq: Irq) -> IoApicReg {
     IoApicReg(0x10 + (2 * irq.as_usize() as u8 + 1))
 }
-
-const IOAPIC_REG_IOAPICVER: IoApicReg = IoApicReg(0x01);
 
 pub static IO_APIC: SpinLock<Option<IoApic>> = SpinLock::new(None);
 
