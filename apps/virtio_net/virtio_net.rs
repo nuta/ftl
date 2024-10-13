@@ -151,6 +151,8 @@ impl VirtioNet {
     {
         loop {
             let status = self.transport.read_isr_status();
+            self.transport.ack_interrupt(status);
+
             if !status.queue_intr() {
                 break;
             }
@@ -202,7 +204,6 @@ impl VirtioNet {
             }
 
             self.receiveq.notify(&mut *self.transport);
-            self.transport.ack_interrupt(status);
         }
     }
 }
