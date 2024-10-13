@@ -32,7 +32,7 @@ pub fn main(mut env: Environ) {
     let devices = vec![Device {
         name: "virtio,mmio".to_string(),
         compatible: "virtio,mmio".to_string(),
-        reg: 0xfeb00400,
+        reg: 0xfeb00000,
         interrupts: Some(vec![1]),
     }];
 

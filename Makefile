@@ -39,12 +39,10 @@ endif
 
 QEMUFLAGS += -rtc base=localtime
 QEMUFLAGS += -global virtio-mmio.force-legacy=false
-QEMUFLAGS += -drive id=drive0,file=disk.img,format=raw,if=none
-QEMUFLAGS += -device virtio-blk-device,drive=drive0,bus=virtio-mmio-bus.0
-QEMUFLAGS += -device virtio-net-device,netdev=net0,bus=virtio-mmio-bus.2
+QEMUFLAGS += -device virtio-net-device,netdev=net0,bus=virtio-mmio-bus.0
 QEMUFLAGS += -object filter-dump,id=fiter0,netdev=net0,file=virtio-net.pcap
 QEMUFLAGS += -netdev user,id=net0,hostfwd=tcp:127.0.0.1:1234-:80
-QEMUFLAGS += -trace enable=ioapic_*
+QEMUFLAGS += -trace enable=on --trace "virtio_*" --trace "ioapic_*"
 
 CARGO    ?= cargo
 PROGRESS ?= printf "  \\033[1;96m%8s\\033[0m  \\033[1;m%s\\033[0m\\n"

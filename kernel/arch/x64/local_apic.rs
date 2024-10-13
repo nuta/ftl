@@ -9,9 +9,13 @@ use crate::utils::mmio::MmioFolio;
 use crate::utils::mmio::MmioReg;
 use crate::utils::mmio::ReadWrite;
 
+const TPR_REG: MmioReg<LittleEndian, ReadWrite, u32> = MmioReg::new(0x80);
+const LOGICAL_DEST_REG: MmioReg<LittleEndian, ReadWrite, u32> = MmioReg::new(0xd0);
+const DEST_FORMAT_REG: MmioReg<LittleEndian, ReadWrite, u32> = MmioReg::new(0xe0);
 const EOI_REG: MmioReg<LittleEndian, ReadWrite, u32> = MmioReg::new(0xb0);
 const SPURIOUS_INT_REG: MmioReg<LittleEndian, ReadWrite, u32> = MmioReg::new(0xf0);
 const LVT_TIMER_REG: MmioReg<LittleEndian, ReadWrite, u32> = MmioReg::new(0x320);
+const LVT_ERROR_REG: MmioReg<LittleEndian, ReadWrite, u32> = MmioReg::new(0x370);
 const IA32_APIC_BASE_MSR: u32 = 0x1b;
 
 pub static LOCAL_APIC: SpinLock<Option<LocalApic>> = SpinLock::new(None);
@@ -31,8 +35,8 @@ impl LocalApic {
         // Enable APIC.
         {
             let mut value = 0;
-            value |= 1 << 8; // Enable APIC
-            value |= self.folio.paddr().as_usize() as u64 & 0xfffff000; // APIC base address
+            value |= 0x0800; // Enable APIC
+            value |= self.folio.paddr().as_usize() as u64 & 0xfffff100; // APIC base address
             unsafe {
                 asm!(
                     "wrmsr",
@@ -44,20 +48,12 @@ impl LocalApic {
             }
         }
 
-        // Set spurious interrupt vector.
-        {
-            let mut value = SPURIOUS_INT_REG.read(&mut self.folio);
-            value |= 1 << 8;
-            SPURIOUS_INT_REG.write(&mut self.folio, value);
-        }
-
-        // Mask timer interrupt.
-        {
-            let mut value = LVT_TIMER_REG.read(&mut self.folio);
-            value &= !(1 << 16); // Masked
-            value |= crate::arch::x64::idt::VECTOR_IRQ_BASE + 0; // Vector
-            LVT_TIMER_REG.write(&mut self.folio, value);
-        }
+        TPR_REG.write(&mut self.folio, 0);
+        SPURIOUS_INT_REG.write(&mut self.folio, 1 << 8);
+        LOGICAL_DEST_REG.write(&mut self.folio, 0x01000000);
+        DEST_FORMAT_REG.write(&mut self.folio, 0xffff_ffff);
+        LVT_TIMER_REG.write(&mut self.folio, 1 << 16 /* masked (disabled) */);
+        LVT_ERROR_REG.write(&mut self.folio, 1 << 16 /* masked (disabled) */);
     }
 
     pub fn ack_interrupt(&mut self) {
