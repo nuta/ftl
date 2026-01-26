@@ -45,6 +45,16 @@ extern "C" fn rust_boot(start_info: PAddr) -> ! {
 
     println!("\nBooting FTL...");
 
+    // Enable FS/GS base.
+    unsafe {
+        asm!(
+            "mov rax, cr4",
+            "or rax, 1 << 16",
+            "mov cr4, rax",
+            out("rax") _,
+        );
+    }
+
     // Initialize CPU-local variables.
     super::cpuvar::init(
         [0; NUM_GDT_ENTRIES],

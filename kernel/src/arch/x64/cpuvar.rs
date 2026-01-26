@@ -1,5 +1,6 @@
 use core::arch::asm;
 use core::cell::RefCell;
+use core::cell::UnsafeCell;
 use core::ptr;
 
 use ftl_utils::static_assert;
@@ -15,6 +16,7 @@ const MAGIC: u64 = 0xc12c_12c1_2c12_c12c;
 /// The kernel stack continues after the CPU variable.
 #[repr(C)]
 pub(super) struct CpuVar {
+    pub(super) common: crate::cpuvar::CpuVar,
     pub(super) gdt: RefCell<[u64; NUM_GDT_ENTRIES]>,
     pub(super) tss: RefCell<Tss>,
     /// The magic number to verify that the CPU-local variables are initialized
@@ -49,9 +51,16 @@ pub fn get_cpuvar() -> &'static CpuVar {
 pub fn init(gdt: [u64; NUM_GDT_ENTRIES], tss: Tss) {
     unsafe {
         let cpuvar_ptr = get_cpuvar_ptr();
+
+        asm!("wrgsbase rax", in("rax") cpuvar_ptr);
+
         ptr::write(
             cpuvar_ptr,
             CpuVar {
+                // TODO: Do not initialize in arch.
+                common: crate::cpuvar::CpuVar {
+                    current_thread: UnsafeCell::new(core::ptr::null()),
+                },
                 gdt: RefCell::new(gdt),
                 tss: RefCell::new(tss),
                 magic: MAGIC,

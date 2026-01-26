@@ -1,11 +1,17 @@
 mod boot;
 mod console;
 mod cpuvar;
+mod idle;
 mod idt;
 mod ioport;
 mod pvh;
+mod syscall;
+mod thread;
 mod vmspace;
 
 pub use console::console_write;
+pub use idle::idle;
+pub use thread::Thread;
+pub use thread::thread_switch;
 pub use vmspace::MIN_PAGE_SIZE;
 pub use vmspace::paddr2vaddr;

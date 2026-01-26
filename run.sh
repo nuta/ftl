@@ -16,7 +16,7 @@ fi
 
 set +e
 qemu-system-x86_64 \
-  -m 128 -kernel ftl.elf \
+  -m 128 -cpu qemu64,+fsgsbase -kernel ftl.elf \
   -nographic -serial mon:stdio --no-reboot \
   -d cpu_reset,unimp,guest_errors,int -D qemu.log \
   -gdb tcp::7778
