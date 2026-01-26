@@ -2,6 +2,8 @@ use core::arch::asm;
 use core::cell::RefCell;
 use core::ptr;
 
+use ftl_utils::static_assert;
+
 use crate::arch::x64::boot::KERNEL_STACK_SIZE;
 use crate::arch::x64::boot::NUM_GDT_ENTRIES;
 use crate::arch::x64::boot::Tss;
@@ -22,6 +24,7 @@ pub(super) struct CpuVar {
 }
 
 const SP_BOTTOM_MASK: u64 = !(KERNEL_STACK_SIZE as u64 - 1);
+static_assert!(KERNEL_STACK_SIZE.is_power_of_two());
 
 fn get_cpuvar_ptr() -> *mut CpuVar {
     let rsp: u64;
