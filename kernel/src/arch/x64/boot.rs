@@ -7,7 +7,9 @@ use core::mem::offset_of;
 use super::vmspace::BOOT_PDPT;
 use super::vmspace::BOOT_PML4;
 use super::vmspace::KERNEL_BASE;
+use crate::address::PAddr;
 use crate::address::VAddr;
+use crate::arch::x64::pvh;
 use crate::arch::x64::vmspace::vaddr2paddr;
 
 pub(super) const NUM_GDT_ENTRIES: usize = 8;
@@ -38,7 +40,7 @@ pub(super) struct Tss {
     io_permission_map: [u8; 8192],
 }
 
-extern "C" fn rust_boot() -> ! {
+extern "C" fn rust_boot(start_info: PAddr) -> ! {
     super::console::init();
 
     println!("\nBooting FTL...");
@@ -98,7 +100,9 @@ extern "C" fn rust_boot() -> ! {
     }
 
     super::idt::init();
-    crate::boot::boot();
+
+    let bootinfo = pvh::parse_start_info(start_info);
+    crate::boot::boot(&bootinfo);
 }
 
 // Defines a temporary GDT to boot a CPU. Another per-CPU GDT will be set up later.
@@ -143,9 +147,21 @@ static BSP_STACK: MaybeUninit<Stack> = MaybeUninit::uninit();
 #[unsafe(naked)]
 unsafe extern "C" fn x64_boot() -> ! {
     naked_asm!(
+        // The entry point. The kernel boots from this assembly code.
+        //
+        // - PVH boot protocol: EBX = HvmStartInfo
+        // - 32-bit protected mode
+        // - paging disabled
+        // - EIP is in physical address
+        //
+        // Important: Symbols are in the high virtual address space
+        //            (KERNEL_BASE). Be careful when using symbols!
         ".code32",
         "cli",
         "cld",
+
+        // Prepare arguments for rust_boot. Do not modify edi in this code!
+        "mov edi, ebx",
 
         // Initialize the stack for this bootstrap processor (BSP).
         "lea esp, [{BSP_STACK_TOP} + {KERNEL_STACK_SIZE} - {KERNEL_BASE}]",

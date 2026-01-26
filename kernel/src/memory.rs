@@ -9,6 +9,8 @@ use ftl_utils::alignment::is_aligned;
 use crate::address::PAddr;
 use crate::address::VAddr;
 use crate::arch::MIN_PAGE_SIZE;
+use crate::boot::BootInfo;
+use crate::boot::FreeRam;
 use crate::spinlock::SpinLock;
 
 /// The physical memory allocator.
@@ -135,7 +137,7 @@ struct PageAligned<T>(T);
 static mut EARLY_RAM: PageAligned<[u8; EARLY_RAM_SIZE]> = PageAligned([0; EARLY_RAM_SIZE]);
 const EARLY_RAM_SIZE: usize = 128 * 1024; // 128 KB
 
-pub fn init() {
+pub fn init(bootinfo: &BootInfo) {
     unsafe {
         let vaddr = VAddr::new(&raw mut EARLY_RAM as usize);
         GLOBAL_ALLOCATOR.add_region(vaddr, EARLY_RAM_SIZE);

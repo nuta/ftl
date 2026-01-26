@@ -47,6 +47,15 @@ pub(super) static BOOT_PDPT: Table = {
 /// The boot-time PML4. The boot code will populate this.
 pub(super) static mut BOOT_PML4: Table = Table([Pte(0); ENTRIES_PER_TABLE]);
 
+pub fn paddr2vaddr(paddr: PAddr) -> VAddr {
+    debug_assert!(
+        paddr.as_usize() < KERNEL_BASE,
+        "{paddr} is suspiciously high for a physical address"
+    );
+
+    VAddr::new(paddr.as_usize() + KERNEL_BASE)
+}
+
 pub fn vaddr2paddr(vaddr: VAddr) -> PAddr {
     debug_assert!(
         vaddr.as_usize() >= KERNEL_BASE,
