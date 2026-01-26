@@ -4,6 +4,7 @@ use ftl_utils::alignment::is_aligned;
 
 /// A virtual memory address.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[repr(transparent)]
 pub struct VAddr(usize);
 
 impl VAddr {
@@ -34,6 +35,7 @@ impl fmt::Display for VAddr {
 
 /// A physical memory address.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[repr(transparent)]
 pub struct PAddr(usize);
 
 impl PAddr {
