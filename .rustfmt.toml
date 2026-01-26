@@ -1,0 +1,5 @@
+edition = "2024"
+force_multiline_blocks = true
+hex_literal_case = "Lower"
+imports_granularity = "Item"
+group_imports = "StdExternalCrate"
