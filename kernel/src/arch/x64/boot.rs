@@ -13,9 +13,6 @@ pub(super) const NUM_GDT_ENTRIES: usize = 8;
 pub(super) const GDT_KERNEL_CS: u16 = 1 * 8;
 const GDT_TSS: u16 = 6 * 8;
 
-/// The per-CPU kernel stack size.
-pub(super) const KERNEL_STACK_SIZE: usize = 512 * 1024;
-
 #[repr(C, packed)]
 struct Gdtr {
     limit: u16,
@@ -130,7 +127,12 @@ gdt_end:
 "#
 );
 
-#[repr(align(4096))]
+/// The per-CPU kernel stack size.
+///
+/// **Note:** Do not forget to change the boot stack alignment.
+pub(super) const KERNEL_STACK_SIZE: usize = 65536;
+
+#[repr(align(65536 /* must be KERNEL_STACK_SIZE */))]
 struct Stack(#[allow(unused)] [u8; KERNEL_STACK_SIZE]);
 
 #[unsafe(link_section = ".data")]
