@@ -15,6 +15,7 @@
 /// ```
 pub const fn align_down(value: usize, align: usize) -> usize {
     debug_assert!(align.is_power_of_two());
+    debug_assert!(align != 0);
 
     (value) & !(align - 1)
 }

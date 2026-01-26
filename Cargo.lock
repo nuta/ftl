@@ -3,6 +3,13 @@
 version = 4
 
 [[package]]
+name = "ftl_bump_allocator"
+version = "0.0.0"
+dependencies = [
+ "ftl_utils",
+]
+
+[[package]]
 name = "ftl_utils"
 version = "0.0.0"
 
