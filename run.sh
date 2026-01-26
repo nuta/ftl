@@ -3,12 +3,16 @@ set -eu
 
 ARCH=x64
 cargo build \
-  -Z build-std=core \
+  -Z build-std=core,alloc \
   -Z build-std-features=compiler-builtins-mem \
   --manifest-path kernel/Cargo.toml \
   --target kernel/src/arch/$ARCH/kernel.json
 
 cp target/kernel/debug/kernel ftl.elf
+
+if [[ ${BUILD_ONLY:-} != "" ]]; then
+  exit 0
+fi
 
 set +e
 qemu-system-x86_64 \

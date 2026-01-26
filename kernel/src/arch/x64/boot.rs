@@ -100,12 +100,7 @@ extern "C" fn rust_boot() -> ! {
     }
 
     super::idt::init();
-
-    unsafe {
-        asm!("ud2");
-    }
-
-    loop {}
+    crate::boot::boot();
 }
 
 // Defines a temporary GDT to boot a CPU. Another per-CPU GDT will be set up later.
