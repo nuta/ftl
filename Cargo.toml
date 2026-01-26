@@ -1,0 +1,14 @@
+[workspace.package]
+version = "0.0.0"
+authors = ["Seiya Nuta <nuta@seiya.me>"]
+edition = "2024"
+
+[workspace]
+resolver = "2"
+members = [
+    "kernel",
+    "libs/rust/ftl_utils",
+]
+
+[workspace.dependencies]
+ftl_utils = { path = "libs/rust/ftl_utils" }

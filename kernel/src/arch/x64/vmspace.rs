@@ -1,0 +1,41 @@
+use crate::address::PAddr;
+
+const ENTRIES_PER_TABLE: usize = 512;
+const GIGA_PAGE_SIZE: usize = 1024 * 1024 * 1024;
+
+// Page table entry flags.
+const PTE_V: u64 = 1 << 0;
+const PTE_W: u64 = 1 << 1;
+const PTE_HUGE: u64 = 1 << 7;
+
+#[repr(align(4096))]
+pub(super) struct Table([Pte; ENTRIES_PER_TABLE]);
+
+#[derive(Debug, Clone, Copy)]
+#[repr(transparent)]
+struct Pte(u64);
+
+impl Pte {
+    const fn new(paddr: PAddr, flags: u64) -> Self {
+        debug_assert!(paddr.is_aligned(4096));
+
+        Self(paddr.as_u64() | flags)
+    }
+}
+
+pub(super) static BOOT_PDPT: Table = {
+    let mut pdpt = Table([Pte(0); ENTRIES_PER_TABLE]);
+
+    // Map the first 4GiB of physical memory. It should be plenty enough to
+    // boot the kernel.
+    let mut i = 0;
+    while i < 4 {
+        pdpt.0[i] = Pte::new(PAddr::new(i * GIGA_PAGE_SIZE), PTE_V | PTE_W | PTE_HUGE);
+        i += 1;
+    }
+
+    pdpt
+};
+
+/// Marked as `mut` since this will be populated by the boot code.
+pub(super) static mut BOOT_PML4: Table = Table([Pte(0); ENTRIES_PER_TABLE]);
