@@ -31,19 +31,15 @@ impl PageAllocator {
         }
     }
 
-    pub fn add_region(&self, paddr: PAddr, size: usize) {
-        let Some(end) = paddr.as_usize().checked_add(size) else {
-            println!("the size of the memory region overflows: base={paddr}, size={size}");
-            return;
-        };
+    pub fn add_regions(&self, free_rams: &ArrayVec<FreeRam, 8>) {
+        let mut regions = self.regions.lock();
 
-        if self
-            .regions
-            .lock()
-            .try_push(BumpAllocator::new(paddr.as_usize(), end))
-            .is_err()
-        {
-            println!("too many memory regions: {} ({})", paddr, size);
+        for free_ram in free_rams {
+            let Some(end) = free_ram.base.as_usize().checked_add(free_ram.size) else {
+                println!("the size of the memory region overflows: {free_ram:?}");
+                return;
+            };
+            regions.try_push(BumpAllocator::new(free_ram.base.as_usize(), end));
         }
     }
 
@@ -138,6 +134,8 @@ static mut EARLY_RAM: PageAligned<[u8; EARLY_RAM_SIZE]> = PageAligned([0; EARLY_
 const EARLY_RAM_SIZE: usize = 128 * 1024; // 128 KB
 
 pub fn init(bootinfo: &BootInfo) {
+    PAGE_ALLOCATOR.add_regions(&bootinfo.free_rams);
+
     unsafe {
         let vaddr = VAddr::new(&raw mut EARLY_RAM as usize);
         GLOBAL_ALLOCATOR.add_region(vaddr, EARLY_RAM_SIZE);
