@@ -2,6 +2,7 @@ use core::arch::asm;
 use core::arch::global_asm;
 use core::arch::naked_asm;
 use core::mem::MaybeUninit;
+use core::mem::offset_of;
 
 use super::vmspace::BOOT_PDPT;
 use super::vmspace::BOOT_PML4;
@@ -54,7 +55,7 @@ extern "C" fn rust_boot() -> ! {
             ist: [0; 7],
             reserved2: 0,
             reserved3: 0,
-            iomap_offset: 0,
+            iomap_offset: offset_of!(Tss, io_permission_map) as u16,
             io_permission_map: [0xff; 8192],
         },
     );
