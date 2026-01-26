@@ -14,7 +14,7 @@ pub(super) const NUM_GDT_ENTRIES: usize = 8;
 const GDT_TSS: usize = 6 * 8;
 
 /// The per-CPU kernel stack size.
-const KERNEL_STACK_SIZE: usize = 512 * 1024;
+pub(super) const KERNEL_STACK_SIZE: usize = 512 * 1024;
 
 #[repr(C, packed)]
 struct Gdtr {
@@ -45,22 +45,26 @@ extern "C" fn rust_boot() -> ! {
 
     println!("\nBooting FTL...");
 
-    // Build a TSS.
-    let tss = Tss {
-        reserved0: 0,
-        rsp0: 0,
-        rsp1: 0,
-        rsp2: 0,
-        reserved1: 0,
-        ist: [0; 7],
-        reserved2: 0,
-        reserved3: 0,
-        iomap_offset: 0,
-        io_permission_map: [0xff; 8192],
-    };
+    // Initialize CPU-local variables.
+    super::cpuvar::init(
+        [0; NUM_GDT_ENTRIES],
+        Tss {
+            reserved0: 0,
+            rsp0: 0,
+            rsp1: 0,
+            rsp2: 0,
+            reserved1: 0,
+            ist: [0; 7],
+            reserved2: 0,
+            reserved3: 0,
+            iomap_offset: 0,
+            io_permission_map: [0xff; 8192],
+            },
+    );
+    let cpuvar = super::cpuvar::get_cpuvar();
 
     // Get the physical address of the TSS.
-    let tss_vaddr = VAddr::new(&raw const tss as usize);
+    let tss_vaddr = VAddr::new(cpuvar.tss.as_ptr() as usize);
     let tss_paddr = vaddr2paddr(tss_vaddr).as_u64();
 
     // Build a 64-bit TSS descriptor.
@@ -71,7 +75,7 @@ extern "C" fn rust_boot() -> ! {
     let tss_high = tss_paddr >> 32; // base[32:63]
 
     // Build a GDT.
-    let gdt = [
+    *cpuvar.gdt.borrow_mut() = [
         0x0000000000000000, // null
         0x00af9a000000ffff, // kernel_cs
         0x00af92000000ffff, // kernel_ds
@@ -83,7 +87,7 @@ extern "C" fn rust_boot() -> ! {
     ];
 
     // Build a GDTR.
-    let gdt_vaddr = VAddr::new(&raw const gdt as usize);
+    let gdt_vaddr = VAddr::new(cpuvar.gdt.as_ptr() as usize);
     let gdt_paddr = vaddr2paddr(gdt_vaddr).as_u64();
     let gdtr = Gdtr {
         limit: (NUM_GDT_ENTRIES * size_of::<u64>() - 1) as u16,
