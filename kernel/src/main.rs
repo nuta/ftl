@@ -4,6 +4,6 @@
 #[macro_use]
 mod print;
 
+mod address;
 mod arch;
 mod panic;
-mod address;

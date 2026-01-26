@@ -1,10 +1,11 @@
 use core::hint::spin_loop;
 
-use super::ioport::{in8, out8};
+use super::ioport::in8;
+use super::ioport::out8;
 
 fn putchar(c: u8) {
     // Wait for the serial port to be ready to receive more data.
-    while unsafe { in8(COM1_LSR) } & 0x20 == 0{
+    while unsafe { in8(COM1_LSR) } & 0x20 == 0 {
         spin_loop();
     }
 

@@ -1,14 +1,13 @@
 use core::arch::asm;
-use core::mem::MaybeUninit;
-use core::arch::naked_asm;
 use core::arch::global_asm;
+use core::arch::naked_asm;
+use core::mem::MaybeUninit;
 
+use super::vmspace::BOOT_PDPT;
+use super::vmspace::BOOT_PML4;
+use super::vmspace::KERNEL_BASE;
 use crate::address::VAddr;
 use crate::arch::x64::vmspace::vaddr2paddr;
-
-use super::vmspace::{BOOT_PML4, BOOT_PDPT};
-use super::vmspace::KERNEL_BASE;
-
 
 pub(super) const NUM_GDT_ENTRIES: usize = 8;
 const GDT_TSS: usize = 6 * 8;
@@ -59,7 +58,7 @@ extern "C" fn rust_boot() -> ! {
             reserved3: 0,
             iomap_offset: 0,
             io_permission_map: [0xff; 8192],
-            },
+        },
     );
     let cpuvar = super::cpuvar::get_cpuvar();
 
@@ -106,7 +105,8 @@ extern "C" fn rust_boot() -> ! {
 //
 // This is written in assembly because it needs some pointer arithmetic which is not
 // allowed in Rust's static initialization.
-global_asm!(r#"
+global_asm!(
+    r#"
 .pushsection .rodata
 
 // GDTR.
@@ -125,7 +125,8 @@ gdt:
 gdt_end:
 
 .popsection
-"#);
+"#
+);
 
 #[repr(align(4096))]
 struct Stack(#[allow(unused)] [u8; KERNEL_STACK_SIZE]);

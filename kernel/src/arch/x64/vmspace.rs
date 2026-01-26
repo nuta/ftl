@@ -1,4 +1,5 @@
-use crate::address::{PAddr, VAddr};
+use crate::address::PAddr;
+use crate::address::VAddr;
 
 pub(super) const KERNEL_BASE: usize = 0xffff_8000_0000_0000;
 
@@ -46,7 +47,10 @@ pub(super) static BOOT_PDPT: Table = {
 pub(super) static mut BOOT_PML4: Table = Table([Pte(0); ENTRIES_PER_TABLE]);
 
 pub(super) fn vaddr2paddr(vaddr: VAddr) -> PAddr {
-    debug_assert!(vaddr.as_usize() >= KERNEL_BASE, "{vaddr} is not mapped in the kernel");
+    debug_assert!(
+        vaddr.as_usize() >= KERNEL_BASE,
+        "{vaddr} is not mapped in the kernel"
+    );
 
     PAddr::new(vaddr.as_usize() - KERNEL_BASE)
 }

@@ -1,6 +1,10 @@
-use core::{arch::asm, cell::RefCell, ptr};
+use core::arch::asm;
+use core::cell::RefCell;
+use core::ptr;
 
-use crate::arch::x64::boot::{KERNEL_STACK_SIZE, NUM_GDT_ENTRIES, Tss};
+use crate::arch::x64::boot::KERNEL_STACK_SIZE;
+use crate::arch::x64::boot::NUM_GDT_ENTRIES;
+use crate::arch::x64::boot::Tss;
 
 const MAGIC: u64 = 0xc12c_12c1_2c12_c12c;
 
@@ -42,10 +46,13 @@ pub fn get_cpuvar() -> &'static CpuVar {
 pub fn init(gdt: [u64; NUM_GDT_ENTRIES], tss: Tss) {
     unsafe {
         let cpuvar_ptr = get_cpuvar_ptr();
-        ptr::write(cpuvar_ptr, CpuVar {
-            gdt: RefCell::new(gdt),
-            tss: RefCell::new(tss),
-            magic: MAGIC,
-        });
+        ptr::write(
+            cpuvar_ptr,
+            CpuVar {
+                gdt: RefCell::new(gdt),
+                tss: RefCell::new(tss),
+                magic: MAGIC,
+            },
+        );
     }
 }
