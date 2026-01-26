@@ -1,0 +1,7 @@
+[package]
+name = "ftl_arrayvec"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+
+[dependencies]
