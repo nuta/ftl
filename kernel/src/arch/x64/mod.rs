@@ -1,6 +1,7 @@
 mod boot;
 mod console;
 mod cpuvar;
+mod idt;
 mod ioport;
 mod vmspace;
 

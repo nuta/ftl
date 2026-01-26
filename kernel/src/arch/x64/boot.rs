@@ -10,7 +10,8 @@ use crate::address::VAddr;
 use crate::arch::x64::vmspace::vaddr2paddr;
 
 pub(super) const NUM_GDT_ENTRIES: usize = 8;
-const GDT_TSS: usize = 6 * 8;
+pub(super) const GDT_KERNEL_CS: u16 = 1 * 8;
+const GDT_TSS: u16 = 6 * 8;
 
 /// The per-CPU kernel stack size.
 pub(super) const KERNEL_STACK_SIZE: usize = 512 * 1024;
@@ -96,6 +97,12 @@ extern "C" fn rust_boot() -> ! {
     unsafe {
         asm!("lgdt [{}]", in(reg) &gdtr);
         asm!("ltr ax", in("ax") GDT_TSS);
+    }
+
+    super::idt::init();
+
+    unsafe {
+        asm!("ud2");
     }
 
     loop {}

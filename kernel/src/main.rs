@@ -7,3 +7,4 @@ mod print;
 mod address;
 mod arch;
 mod panic;
+mod spinlock;
