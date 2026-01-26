@@ -48,8 +48,8 @@ static IDT: SpinLock<[IdtEntry; NUM_IDT_ENTRIES]> =
 global_asm!(
     r#"
 interrupt_common:
-    pop rdi
-    push rsi
+    pop  rdi
+    pop  rsi
     call handle_interrupt
     hlt
 
