@@ -30,10 +30,15 @@ impl PageAllocator {
     }
 
     pub fn add_region(&self, paddr: PAddr, size: usize) {
+        let Some(end) = paddr.as_usize().checked_add(size) else {
+            println!("the size of the memory region overflows: base={paddr}, size={size}");
+            return;
+        };
+
         if self
             .regions
             .lock()
-            .try_push(BumpAllocator::new(paddr.as_usize(), size))
+            .try_push(BumpAllocator::new(paddr.as_usize(), end))
             .is_err()
         {
             println!("too many memory regions: {} ({})", paddr, size);
