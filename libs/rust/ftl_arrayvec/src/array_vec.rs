@@ -1,4 +1,5 @@
 use core::mem::MaybeUninit;
+use core::ptr;
 use core::slice;
 
 /// A fixed-size vector.
@@ -76,12 +77,31 @@ impl<T, const N: usize> ArrayVec<T, N> {
         Some(unsafe { self.elems[self.len].assume_init_read() })
     }
 
+    pub fn clear(&mut self) {
+        for elem in self.as_slice_mut() {
+            // SAFETY: as_slice_mut() guarantees that the elements are valid,
+            // and the length will be set to 0 which ensures that the they
+            // won't be read again.
+            unsafe {
+                ptr::drop_in_place(elem);
+            }
+        }
+
+        self.len = 0;
+    }
+
     pub fn iter(&self) -> slice::Iter<'_, T> {
         self.as_slice().iter()
     }
 
     pub fn iter_mut(&mut self) -> slice::IterMut<'_, T> {
         self.as_slice_mut().iter_mut()
+    }
+}
+
+impl<T, const N: usize> Drop for ArrayVec<T, N> {
+    fn drop(&mut self) {
+        self.clear();
     }
 }
 
@@ -133,5 +153,30 @@ mod tests {
         assert!(!vec.is_empty());
         assert_eq!(vec.len(), 2);
         assert_eq!(vec.as_ref(), &['A', 'B']);
+    }
+
+    #[test]
+    fn test_drop() {
+        #[derive(Debug)]
+        struct Item<'a> {
+            dropped: &'a mut bool,
+        }
+
+        impl<'a> Drop for Item<'a> {
+            fn drop(&mut self) {
+                *self.dropped = true;
+            }
+        }
+
+        let mut dropped = false;
+        {
+            let mut vec = ArrayVec::<Item, 1>::new();
+            vec.try_push(Item {
+                dropped: &mut dropped,
+            })
+            .unwrap();
+        }
+
+        assert!(dropped);
     }
 }
