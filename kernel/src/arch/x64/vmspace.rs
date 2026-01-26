@@ -1,4 +1,6 @@
-use crate::address::PAddr;
+use crate::address::{PAddr, VAddr};
+
+pub(super) const KERNEL_BASE: usize = 0xffff_8000_0000_0000;
 
 const ENTRIES_PER_TABLE: usize = 512;
 const GIGA_PAGE_SIZE: usize = 1024 * 1024 * 1024;
@@ -42,3 +44,9 @@ pub(super) static BOOT_PDPT: Table = {
 
 /// The boot-time PML4. The boot code will populate this.
 pub(super) static mut BOOT_PML4: Table = Table([Pte(0); ENTRIES_PER_TABLE]);
+
+pub(super) fn vaddr2paddr(vaddr: VAddr) -> PAddr {
+    debug_assert!(vaddr.as_usize() >= KERNEL_BASE, "{vaddr} is not mapped in the kernel");
+
+    PAddr::new(vaddr.as_usize() - KERNEL_BASE)
+}

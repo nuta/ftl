@@ -1,23 +1,100 @@
+use core::arch::asm;
 use core::mem::MaybeUninit;
 use core::arch::naked_asm;
 use core::arch::global_asm;
 
+use crate::address::VAddr;
+use crate::arch::x64::vmspace::vaddr2paddr;
+
 use super::vmspace::{BOOT_PML4, BOOT_PDPT};
-use super::KERNEL_BASE;
+use super::vmspace::KERNEL_BASE;
+
+
+pub(super) const NUM_GDT_ENTRIES: usize = 8;
+const GDT_TSS: usize = 6 * 8;
 
 /// The per-CPU kernel stack size.
 const KERNEL_STACK_SIZE: usize = 512 * 1024;
 
-#[repr(align(4096))]
-struct Stack(#[allow(unused)] [u8; KERNEL_STACK_SIZE]);
+#[repr(C, packed)]
+struct Gdtr {
+    limit: u16,
+    base: u64,
+}
 
-#[unsafe(link_section = ".data")]
-static BSP_STACK: MaybeUninit<Stack> = MaybeUninit::uninit();
+#[repr(C, packed)]
+pub(super) struct Tss {
+    reserved0: u32,
+    rsp0: u64,
+    rsp1: u64,
+    rsp2: u64,
+    reserved1: u64,
+    ist: [u64; 7],
+    reserved2: u64,
+    reserved3: u16,
+    iomap_offset: u16,
+    /// The I/O permission map.
+    ///
+    /// - Each bit corresponds to an I/O port. If set, the port is not accessible.
+    /// - The last byte must be `0xff`.
+    io_permission_map: [u8; 8192],
+}
 
 extern "C" fn rust_boot() -> ! {
     super::console::init();
 
-    println!("\nHello world!\n");
+    println!("\nBooting FTL...");
+
+    // Build a TSS.
+    let tss = Tss {
+        reserved0: 0,
+        rsp0: 0,
+        rsp1: 0,
+        rsp2: 0,
+        reserved1: 0,
+        ist: [0; 7],
+        reserved2: 0,
+        reserved3: 0,
+        iomap_offset: 0,
+        io_permission_map: [0xff; 8192],
+    };
+
+    // Get the physical address of the TSS.
+    let tss_vaddr = VAddr::new(&raw const tss as usize);
+    let tss_paddr = vaddr2paddr(tss_vaddr).as_u64();
+
+    // Build a 64-bit TSS descriptor.
+    let mut tss_low = 0x0000890000000000;
+    tss_low |= (size_of::<Tss>() - 1) as u64; // limit (size - 1)
+    tss_low |= (tss_paddr & 0x00ff_ffff) << 16; // base[0:23]
+    tss_low |= (tss_paddr & 0xff00_0000) << 32; // base[24:31]
+    let tss_high = tss_paddr >> 32; // base[32:63]
+
+    // Build a GDT.
+    let gdt = [
+        0x0000000000000000, // null
+        0x00af9a000000ffff, // kernel_cs
+        0x00af92000000ffff, // kernel_ds
+        0x0000000000000000, // user_cs32
+        0x008ff2000000ffff, // user_ds
+        0x00affa000000ffff, // user_cs64
+        tss_low,            // tss_low
+        tss_high,           // tss_high
+    ];
+
+    // Build a GDTR.
+    let gdt_vaddr = VAddr::new(&raw const gdt as usize);
+    let gdt_paddr = vaddr2paddr(gdt_vaddr).as_u64();
+    let gdtr = Gdtr {
+        limit: (NUM_GDT_ENTRIES * size_of::<u64>() - 1) as u16,
+        base: gdt_paddr,
+    };
+
+    unsafe {
+        asm!("lgdt [{}]", in(reg) &gdtr);
+        asm!("ltr ax", in("ax") GDT_TSS);
+    }
+
     loop {}
 }
 
@@ -45,6 +122,12 @@ gdt_end:
 
 .popsection
 "#);
+
+#[repr(align(4096))]
+struct Stack(#[allow(unused)] [u8; KERNEL_STACK_SIZE]);
+
+#[unsafe(link_section = ".data")]
+static BSP_STACK: MaybeUninit<Stack> = MaybeUninit::uninit();
 
 #[unsafe(no_mangle)]
 #[unsafe(naked)]
