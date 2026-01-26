@@ -2,6 +2,7 @@ use core::fmt;
 
 use ftl_utils::alignment::is_aligned;
 
+/// A physical memory address.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct PAddr(usize);
 

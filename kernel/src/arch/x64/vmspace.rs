@@ -8,9 +8,11 @@ const PTE_V: u64 = 1 << 0;
 const PTE_W: u64 = 1 << 1;
 const PTE_HUGE: u64 = 1 << 7;
 
+/// A page table, at any level (PML4, PDPT, PDT, PT).
 #[repr(align(4096))]
 pub(super) struct Table([Pte; ENTRIES_PER_TABLE]);
 
+/// A page table entry.
 #[derive(Debug, Clone, Copy)]
 #[repr(transparent)]
 struct Pte(u64);
@@ -23,6 +25,7 @@ impl Pte {
     }
 }
 
+/// The boot-time PDPT.
 pub(super) static BOOT_PDPT: Table = {
     let mut pdpt = Table([Pte(0); ENTRIES_PER_TABLE]);
 
@@ -37,5 +40,5 @@ pub(super) static BOOT_PDPT: Table = {
     pdpt
 };
 
-/// Marked as `mut` since this will be populated by the boot code.
+/// The boot-time PML4. The boot code will populate this.
 pub(super) static mut BOOT_PML4: Table = Table([Pte(0); ENTRIES_PER_TABLE]);
