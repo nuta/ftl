@@ -1,5 +1,6 @@
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(C)]
 pub struct PciEntry {
-    bus: u8,
-    device: u8,
+    pub bus: u8,
+    pub device: u8,
 }
