@@ -1,12 +1,31 @@
+use ftl_types::error::ErrorCode;
+use ftl_types::syscall::ERROR_RETVAL_BASE;
 use ftl_types::syscall::SYS_CONSOLE_WRITE;
 use ftl_types::syscall::SYS_PCI_LOOKUP;
 
 use crate::arch::get_start_info;
 
 #[inline(always)]
-pub(super) fn syscall2(n: usize, a0: usize, a1: usize) -> usize {
+fn syscall(
+    n: usize,
+    a0: usize,
+    a1: usize,
+    a2: usize,
+    a3: usize,
+    a4: usize,
+) -> Result<usize, ErrorCode> {
     let start_info = get_start_info();
-    (start_info.syscall)(a0, a1, 0, 0, 0, n)
+    let result = (start_info.syscall)(a0, a1, a2, a3, a4, n);
+    if let Some(error) = result.checked_sub(ERROR_RETVAL_BASE) {
+        Err(ErrorCode::from(error))
+    } else {
+        Ok(result)
+    }
+}
+
+#[inline(always)]
+pub(super) fn syscall2(n: usize, a0: usize, a1: usize) -> Result<usize, ErrorCode> {
+    syscall(n, a0, a1, 0, 0, 0)
 }
 
 #[inline(always)]
@@ -17,9 +36,7 @@ pub(super) fn syscall4(
     a2: usize,
     a3: usize,
 ) -> Result<usize, ErrorCode> {
-    let start_info = get_start_info();
-    let result = (start_info.syscall)(a0, a1, a2, a3, 0, n);
-    Ok(result)
+    syscall(n, a0, a1, a2, a3, 0)
 }
 
 pub fn sys_console_write(s: &[u8]) {

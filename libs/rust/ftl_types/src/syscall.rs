@@ -1,2 +1,12 @@
+/// The return values of syscalls higher than or equal to this value indicate
+/// error codes (`ERROR_RETVAL_BASE + error`).
+pub const ERROR_RETVAL_BASE: usize = {
+    if cfg!(target_pointer_width = "64") {
+        0xffff_ffff_ffff_ff00
+    } else {
+        0xffff_ff00
+    }
+};
+
 pub const SYS_CONSOLE_WRITE: usize = 1;
 pub const SYS_PCI_LOOKUP: usize = 2;

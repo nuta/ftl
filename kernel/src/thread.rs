@@ -2,6 +2,7 @@ use core::cell::UnsafeCell;
 use core::mem::offset_of;
 
 use ftl_types::error::ErrorCode;
+use ftl_types::syscall::ERROR_RETVAL_BASE;
 use ftl_utils::static_assert;
 
 use crate::arch;
@@ -102,8 +103,12 @@ impl CurrentThread {
     /// Sets the system call return value.
     pub unsafe fn set_syscall_result(&self, retval: Result<usize, ErrorCode>) {
         let raw = match retval {
+            Ok(retval) if retval >= ERROR_RETVAL_BASE => {
+                println!("invalid syscall return value: {:x}", retval);
+                ERROR_RETVAL_BASE + ErrorCode::Unreachable as usize
+            }
             Ok(retval) => retval,
-            Err(error) => error as usize,
+            Err(error) => ERROR_RETVAL_BASE + error as usize,
         };
 
         // TODO: safety comment
