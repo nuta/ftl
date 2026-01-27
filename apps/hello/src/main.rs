@@ -12,11 +12,11 @@ fn main() {
     );
 
     let mut entries: MaybeUninit<[PciEntry; 10]> = MaybeUninit::uninit();
-    ftl::pci::sys_pci_lookup(entries.as_mut_ptr() as *mut PciEntry, 10, 0x1000, 0x1000).unwrap();
+    ftl::pci::sys_pci_lookup(entries.as_mut_ptr() as *mut PciEntry, 10, 0x1af4, 0x1000).unwrap();
 
     let entryies = unsafe { entries.assume_init() };
-    for i in 0.. {
-        println!("entry {}: {:?}", i, entryies[i]);
+    for i in 0..1 {
+        println!("{:x}:{:x}", entryies[i].bus, entryies[i].slot);
     }
 
     loop {
