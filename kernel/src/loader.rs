@@ -1,6 +1,13 @@
 //! Application loader.
+use core::slice;
+
+use ftl_utils::alignment::align_up;
+
+use crate::arch::MIN_PAGE_SIZE;
+use crate::arch::{self};
 use crate::initfs;
 use crate::initfs::InitFs;
+use crate::memory::PAGE_ALLOCATOR;
 
 #[repr(C)]
 struct Ehdr64 {
@@ -42,19 +49,35 @@ fn load_file(file: initfs::File) {
 
     println!("{}: ELF entry={:x}", file.name, ehdr.entry);
     let phdrs = unsafe {
-        let ptr = (file.data.as_ptr().add(ehdr.phoff as usize) as *const Phdr64);
+        let ptr = file.data.as_ptr().add(ehdr.phoff as usize) as *const Phdr64;
         core::slice::from_raw_parts(ptr, ehdr.phnum as usize)
     };
 
+    // Calculate the size of the image.
+    let mut image_size = 0;
     for phdr in phdrs {
-        println!("{}: PHDR type={:x}, flags={:x}, offset={:x}, vaddr={:x}, paddr={:x}, filesz={:x}, memsz={:x}, align={:x}",
-            file.name,
-            phdr.type_,
-            phdr.flags,
-            phdr.offset,
-            phdr.vaddr,
-            phdr.paddr,
-        );
+        image_size = image_size.max(phdr.vaddr + phdr.memsz);
+    }
+
+    // Allocate memory for the image.
+    println!("allocating {} bytes for the image", image_size);
+    let image_paddr = PAGE_ALLOCATOR
+        .alloc(align_up(image_size as usize, MIN_PAGE_SIZE))
+        .expect("failed to allocate memory for the image");
+    let image_vaddr = arch::paddr2vaddr(image_paddr);
+    let image = unsafe {
+        slice::from_raw_parts_mut(image_vaddr.as_usize() as *mut u8, image_size as usize)
+    };
+
+    // Copy the image into the allocated memory.
+    let elf_file = unsafe { slice::from_raw_parts(file.data.as_ptr(), file.data.len()) };
+    for phdr in phdrs {
+        let src_range = phdr.offset as usize..phdr.offset as usize + phdr.filesz as usize;
+        let dst_range = phdr.vaddr as usize..phdr.vaddr as usize + phdr.filesz as usize;
+        image[dst_range].copy_from_slice(&elf_file[src_range]);
+    }
+
+    println!("image loaded at {:?}", image_vaddr);
 }
 
 pub fn load(initfs: &InitFs) {
