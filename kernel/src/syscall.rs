@@ -14,6 +14,8 @@ pub extern "C" fn syscall_handler(
     _a4: usize,
     n: usize,
 ) -> ! {
+    let current = &arch::get_cpuvar().current_thread;
+    let thread = current.thread();
     match n {
         SYS_CONSOLE_WRITE => {
             let s = unsafe { slice::from_raw_parts(a0 as *const u8, a1) };
@@ -24,7 +26,7 @@ pub extern "C" fn syscall_handler(
         }
         #[cfg(target_arch = "x86_64")]
         SYS_PCI_LOOKUP => {
-            arch::sys_pci_lookup(a0, a1, a2, a3);
+            arch::sys_pci_lookup(&thread, a0, a1, a2, a3);
         }
         _ => {
             println!("unknown syscall: {}", n);

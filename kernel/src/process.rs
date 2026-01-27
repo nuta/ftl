@@ -13,6 +13,10 @@ impl Process {
     pub fn new(isolation: SharedRef<dyn Isolation>) -> Result<SharedRef<Self>, ErrorCode> {
         SharedRef::new(Self { isolation })
     }
+
+    pub fn isolation(&self) -> &SharedRef<dyn Isolation> {
+        &self.isolation
+    }
 }
 
 pub static IDLE_PROCESS: SharedRef<Process> = {

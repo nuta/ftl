@@ -35,6 +35,10 @@ impl Thread {
             process: IDLE_PROCESS.clone(),
         })
     }
+
+    pub fn process(&self) -> &SharedRef<Process> {
+        &self.process
+    }
 }
 
 /// The current thread.

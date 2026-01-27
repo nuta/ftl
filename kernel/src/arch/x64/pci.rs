@@ -4,6 +4,8 @@ use ftl_types::pci::PciEntry;
 
 use super::ioport::in32;
 use super::ioport::out32;
+use crate::shared_ref::SharedRef;
+use crate::thread::Thread;
 
 #[repr(C, packed)]
 struct PciConfig {
@@ -84,12 +86,13 @@ fn scan_all(vendor: u16, device: u16) {
     }
 }
 
-pub fn sys_pci_lookup(a0: usize, a1: usize, a2: usize, a3: usize) {
+pub fn sys_pci_lookup(thread: &SharedRef<Thread>, a0: usize, a1: usize, a2: usize, a3: usize) {
     let buf = a0 as *mut PciEntry;
     let buf_len = a1 as usize;
     let vendor = a2 as u16;
     let device = a3 as u16;
 
+    let isolation = thread.process().isolation();
     scan_all(vendor, device);
 }
 
