@@ -52,6 +52,10 @@ impl Thread {
             ..Default::default()
         }
     }
+
+    pub fn set_syscall_result(&mut self, retval: usize) {
+        self.rax = retval as u64;
+    }
 }
 
 pub fn thread_switch(thread: *const Thread) -> ! {

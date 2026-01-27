@@ -2,6 +2,7 @@ use core::cell::UnsafeCell;
 use core::mem::offset_of;
 
 use ftl_types::error::ErrorCode;
+use ftl_types::syscall::ERROR_RETVAL_BASE;
 use ftl_utils::static_assert;
 
 use crate::arch;
@@ -97,6 +98,28 @@ impl CurrentThread {
 
         // SAFETY: The static_assert above guarantees arch::Thread is at the offset 0.
         unsafe { *self.ptr.get() as *mut arch::Thread }
+    }
+
+    /// Sets the system call return value.
+    ///
+    /// # Safety
+    ///
+    /// This function must be called only from the CPU which is running the
+    /// thread.
+    pub unsafe fn set_syscall_result(&self, retval: Result<usize, ErrorCode>) {
+        let raw = match retval {
+            Ok(retval) if retval >= ERROR_RETVAL_BASE => {
+                println!("invalid syscall return value: {:x}", retval);
+                ERROR_RETVAL_BASE + ErrorCode::Unreachable as usize
+            }
+            Ok(retval) => retval,
+            Err(error) => ERROR_RETVAL_BASE + error as usize,
+        };
+
+        // I wish there was a better way to do this...
+        unsafe {
+            (*self.arch_thread()).set_syscall_result(raw);
+        }
     }
 }
 
