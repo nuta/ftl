@@ -24,13 +24,7 @@ pub struct Completer;
 pub struct Cookie;
 
 pub trait Server {
-    fn request(
-        &mut self,
-        ctx: &dyn Context<'_>,
-        ch: &Channel,
-        request: Request,
-        completer: Completer,
-    );
+    fn request(&mut self, ctx: &dyn Context, ch: &Channel, request: Request, completer: Completer);
     fn response(&mut self, ctx: &dyn Context, ch: &Channel, response: Response, cookie: Cookie);
 }
 
