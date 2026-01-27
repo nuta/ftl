@@ -32,6 +32,7 @@ pub struct Thread {
 
 impl Thread {
     pub fn new(entry: usize, sp: usize, arg: usize) -> Self {
+        println!("new thread: entry={:x}, sp={:x}, arg={:x}", entry, sp, arg);
         Self {
             rip: entry as u64,
             cs: GDT_KERNEL_CS as u64,

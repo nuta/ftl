@@ -1,6 +1,8 @@
 ENTRY(start)
 
 SECTIONS {
+    __image_base = .;
+
     . = ALIGN(16);
     .text : {
         *(.text .text.*);
