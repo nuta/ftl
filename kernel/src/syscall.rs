@@ -2,7 +2,11 @@ use core::slice;
 
 use ftl_types::error::ErrorCode;
 use ftl_types::syscall::SYS_CONSOLE_WRITE;
+#[cfg(target_arch = "x86_64")]
+use ftl_types::syscall::SYS_PCI_GET_BAR;
 use ftl_types::syscall::SYS_PCI_LOOKUP;
+#[cfg(target_arch = "x86_64")]
+use ftl_types::syscall::SYS_PCI_SET_BUSMASTER;
 
 use crate::arch;
 use crate::shared_ref::SharedRef;
@@ -29,6 +33,10 @@ fn do_syscall(
         }
         #[cfg(target_arch = "x86_64")]
         SYS_PCI_LOOKUP => arch::sys_pci_lookup(&thread, a0, a1, a2, a3),
+        #[cfg(target_arch = "x86_64")]
+        SYS_PCI_SET_BUSMASTER => arch::sys_pci_set_busmaster(a0, a1, a2),
+        #[cfg(target_arch = "x86_64")]
+        SYS_PCI_GET_BAR => arch::sys_pci_get_bar(a0, a1, a2),
         _ => {
             println!("unknown syscall: {}", n);
             Err(ErrorCode::UnknownSyscall)
