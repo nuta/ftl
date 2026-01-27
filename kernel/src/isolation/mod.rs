@@ -61,6 +61,20 @@ impl UserSlice {
     }
 }
 
+pub fn write<T: Copy>(
+    isolation: &SharedRef<dyn Isolation>,
+    slice: UserSlice,
+    index: usize,
+    value: T,
+) -> Result<(), ErrorCode> {
+    let offset = index * size_of::<T>();
+    let subslice = slice.subslice(offset, size_of::<T>())?;
+    let bytes =
+        unsafe { core::slice::from_raw_parts(&raw const value as *const u8, size_of::<T>()) };
+
+    isolation.write_bytes(subslice, &bytes)
+}
+
 pub trait Isolation: Send + Sync {
     fn read_bytes(&self, slice: UserSlice, buf: &mut [u8]) -> Result<(), ErrorCode>;
     fn write_bytes(&self, slice: UserSlice, buf: &[u8]) -> Result<(), ErrorCode>;

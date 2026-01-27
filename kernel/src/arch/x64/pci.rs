@@ -104,8 +104,7 @@ pub fn sys_pci_lookup(
                     break 'outer;
                 }
 
-                let subslice = slice.subslice(index, size_of::<PciEntry>())?;
-                isolation.write_bytes(subslice, &entry)?;
+                crate::isolation::write(isolation, slice, index, entry)?;
                 index += 1;
             }
         }
