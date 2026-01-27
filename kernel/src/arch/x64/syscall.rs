@@ -13,6 +13,16 @@ pub unsafe extern "C" fn direct_syscall_handler() -> ! {
         // thread = CpuVar.current_thread
         "mov rax, gs:[{current_thread_offset}]",
 
+        // Save the return address. Pop it since we'll return to the address
+        // directly using IRETQ, not via RET.
+        "pop r11",
+        "mov [rax + {rip_offset}], r11",
+
+        // Save rflags.
+        "pushfq",
+        "pop r11",
+        "mov [rax + {rflags_offset}], r11",
+
         // Save callee-saved registers to the thread.
         "mov [rax + {rbx_offset}], rbx",
         "mov [rax + {rsp_offset}], rsp",
@@ -24,6 +34,8 @@ pub unsafe extern "C" fn direct_syscall_handler() -> ! {
 
         "call {syscall_handler}",
         current_thread_offset = const offset_of!(CpuVar, current_thread),
+        rip_offset = const offset_of!(Thread, rip),
+        rflags_offset = const offset_of!(Thread, rflags),
         rbx_offset = const offset_of!(Thread, rbx),
         rsp_offset = const offset_of!(Thread, rsp),
         rbp_offset = const offset_of!(Thread, rbp),
