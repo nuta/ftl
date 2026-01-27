@@ -53,10 +53,13 @@ pub enum ElfError {
 ///
 /// Returns the entry point of the ELF file.
 fn load_elf(file: &initfs::File) -> Result<VAddr, ElfError> {
+    // TODO: Is data guaranteed to be aligned?
     let ehdr = unsafe { &*(file.data.as_ptr() as *const Ehdr64) };
     if ehdr.magic[..4] != [0x7f, b'E', b'L', b'F'] {
         return Err(ElfError::NotAnElfFile);
     }
+
+    // TODO: More checks: file type, bound checking, etc.
 
     let phdrs = unsafe {
         let ptr = file.data.as_ptr().add(ehdr.phoff as usize) as *const Phdr64;
@@ -91,6 +94,7 @@ fn load_elf(file: &initfs::File) -> Result<VAddr, ElfError> {
         );
         let src_range = phdr.offset as usize..phdr.offset as usize + phdr.filesz as usize;
         let dst_range = phdr.vaddr as usize..phdr.vaddr as usize + phdr.filesz as usize;
+        // TODO: Clear .bss section (filesz < range < memsz).
         image[dst_range].copy_from_slice(&elf_file[src_range]);
     }
 
