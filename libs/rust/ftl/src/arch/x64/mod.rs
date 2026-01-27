@@ -1,6 +1,4 @@
 use core::arch::asm;
-use core::arch::naked_asm;
-use core::mem::offset_of;
 
 use ftl_types::environ::StartInfo;
 
@@ -11,25 +9,6 @@ struct Elf64Rela {
     addend: i64,
 }
 
-const R_X86_64_RELATIVE: u32 = 8;
-
-/// Applies PIE relocations. Called from asm with addresses passed as args
-/// (not accessed via GOT).
-#[inline(never)]
-extern "C" fn apply_relocs(base: usize, rela: *const Elf64Rela, rela_end: *const Elf64Rela) {
-    let mut rel = rela;
-    while rel < rela_end {
-        unsafe {
-            let r_type = (*rel).info as u32;
-            if r_type == R_X86_64_RELATIVE {
-                let ptr = (base + (*rel).offset as usize) as *mut usize;
-                *ptr = base + (*rel).addend as usize;
-            }
-            rel = rel.add(1);
-        }
-    }
-}
-
 pub fn get_start_info() -> &'static StartInfo {
     unsafe {
         let start_info: *const StartInfo;
@@ -38,23 +17,43 @@ pub fn get_start_info() -> &'static StartInfo {
     }
 }
 
-/// PIE entry point. Minimal asm to get addresses via LEA, then call Rust.
 #[unsafe(no_mangle)]
-#[unsafe(naked)]
-pub extern "C" fn start() -> ! {
+extern "C" fn start() -> ! {
+    let image_base: u64;
+    let relocs: *const Elf64Rela;
+    let relocs_end: *const Elf64Rela;
+    let main_addr: u64;
+
+    // Use RIP-relative LEA to get addresses without needing relocations
     unsafe {
-        naked_asm!(
-            // Get addresses via RIP-relative LEA (no GOT)
-            "lea rdi, [rip + __image_base]",
-            "lea rsi, [rip + __rela_dyn]",
-            "lea rdx, [rip + __rela_dyn_end]",
-            // Apply relocations in Rust
-            "call {apply_relocs}",
-            // Now safe to call main (GOT is fixed)
-            "call main",
-            "2: hlt",
-            "jmp 2b",
-            apply_relocs = sym apply_relocs,
-        )
+        asm!(
+            "lea {0}, [rip + __image_base]",
+            "lea {1}, [rip + __rela_dyn]",
+            "lea {2}, [rip + __rela_dyn_end]",
+            "lea {3}, [rip + main]",
+            out(reg) image_base,
+            out(reg) relocs,
+            out(reg) relocs_end,
+            out(reg) main_addr,
+            options(nostack, nomem)
+        );
     }
+
+    let mut rel = relocs;
+    while rel < relocs_end {
+        unsafe {
+            let r_offset = (*rel).offset;
+            let r_addend = (*rel).addend;
+            let p = (image_base + r_offset) as *mut u64;
+            *p = image_base + r_addend as u64;
+            rel = rel.offset(1);
+        }
+    }
+
+    // Call main via function pointer (RIP-relative address already computed)
+    unsafe {
+        let main_fn: extern "C" fn() = core::mem::transmute(main_addr);
+        main_fn();
+    }
+    loop {}
 }
