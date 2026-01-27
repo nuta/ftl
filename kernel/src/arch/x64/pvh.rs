@@ -75,5 +75,26 @@ pub fn parse_start_info(start_info: PAddr) -> BootInfo {
         }
     }
 
-    BootInfo { free_rams }
+    let modlist_paddr = PAddr::new(start_info.modlist_paddr as usize);
+    let modlist = unsafe {
+        core::slice::from_raw_parts(
+            paddr2vaddr(modlist_paddr).as_usize() as *const HvmModuleEntry,
+            start_info.nr_modules as usize,
+        )
+    };
+
+    if modlist.len() != 1 {
+        panic!(
+            "unexpected number of modules ({} found, expected 1 for initfs)",
+            modlist.len()
+        );
+    }
+
+    let initfs_module = &modlist[0];
+    let paddr = PAddr::new(initfs_module.paddr as usize);
+    let size = initfs_module.size as usize;
+    let initfs =
+        unsafe { core::slice::from_raw_parts(paddr2vaddr(paddr).as_usize() as *const u8, size) };
+
+    BootInfo { free_rams, initfs }
 }

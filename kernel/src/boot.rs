@@ -3,6 +3,7 @@ use ftl_arrayvec::ArrayVec;
 use crate::address::PAddr;
 use crate::arch::paddr2vaddr;
 use crate::cpuvar;
+use crate::initfs::InitFs;
 use crate::memory::PAGE_ALLOCATOR;
 use crate::memory::{self};
 use crate::scheduler::SCHEDULER;
@@ -17,27 +18,25 @@ pub struct FreeRam {
 
 pub struct BootInfo {
     pub free_rams: ArrayVec<FreeRam, 8>,
+    pub initfs: &'static [u8],
 }
 
 pub fn boot(bootinfo: &BootInfo) -> ! {
     memory::init(bootinfo);
     cpuvar::init();
+    let initfs = InitFs::new(bootinfo.initfs);
 
-    let mut v = alloc::vec::Vec::new();
-    v.push(1);
-    v.push(2);
-    v.push(3);
-    println!("v: {:?}", v);
-
-    const STACK_SIZE: usize = 16 * 1024;
-    let sp1_bottom = paddr2vaddr(PAGE_ALLOCATOR.alloc(STACK_SIZE).unwrap());
-    let sp1 = sp1_bottom.as_usize() + STACK_SIZE;
-    let sp2_bottom = paddr2vaddr(PAGE_ALLOCATOR.alloc(STACK_SIZE).unwrap());
-    let sp2 = sp2_bottom.as_usize() + STACK_SIZE;
-    let thread1 = Thread::new(thread_entry as usize, sp1, b'A' as usize).unwrap();
-    let thread2 = Thread::new(thread_entry as usize, sp2, b'B' as usize).unwrap();
-    SCHEDULER.push(thread1);
-    SCHEDULER.push(thread2);
+    for file in initfs.iter() {
+        println!(
+            "file: {}: {:x}, {:x}, {:x}, {:x} ({} bytes)",
+            file.name,
+            file.data[0],
+            file.data[1],
+            file.data[2],
+            file.data[3],
+            file.data.len()
+        );
+    }
 
     return_to_user();
 }

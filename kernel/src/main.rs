@@ -13,6 +13,7 @@ mod address;
 mod arch;
 mod boot;
 mod cpuvar;
+mod initfs;
 mod memory;
 mod panic;
 mod scheduler;

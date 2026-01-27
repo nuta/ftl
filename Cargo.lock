@@ -3,6 +3,10 @@
 version = 4
 
 [[package]]
+name = "ftl"
+version = "0.0.0"
+
+[[package]]
 name = "ftl_arrayvec"
 version = "0.0.0"
 
@@ -20,6 +24,13 @@ version = "0.0.0"
 [[package]]
 name = "ftl_utils"
 version = "0.0.0"
+
+[[package]]
+name = "hello"
+version = "0.0.0"
+dependencies = [
+ "ftl",
+]
 
 [[package]]
 name = "kernel"
