@@ -18,5 +18,5 @@ pub fn sys_pci_lookup(
         device as usize,
     );
 
-    todo!()
+    Ok(0)
 }
