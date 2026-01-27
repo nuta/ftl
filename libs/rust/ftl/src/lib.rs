@@ -5,4 +5,5 @@ pub mod print;
 
 mod arch;
 mod panic;
+mod server;
 mod syscall;
