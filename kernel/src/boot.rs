@@ -1,13 +1,10 @@
 use ftl_arrayvec::ArrayVec;
 
 use crate::address::PAddr;
-use crate::arch::paddr2vaddr;
 use crate::cpuvar;
 use crate::initfs::InitFs;
-use crate::memory::PAGE_ALLOCATOR;
-use crate::memory::{self};
-use crate::scheduler::SCHEDULER;
-use crate::thread::Thread;
+use crate::loader;
+use crate::memory;
 use crate::thread::return_to_user;
 
 #[derive(Debug)]
@@ -25,19 +22,7 @@ pub fn boot(bootinfo: &BootInfo) -> ! {
     memory::init(bootinfo);
     cpuvar::init();
     let initfs = InitFs::new(bootinfo.initfs);
-
-    for file in initfs.iter() {
-        println!(
-            "file: {}: {:x}, {:x}, {:x}, {:x} ({} bytes)",
-            file.name,
-            file.data[0],
-            file.data[1],
-            file.data[2],
-            file.data[3],
-            file.data.len()
-        );
-    }
-
+    loader::load(&initfs);
     return_to_user();
 }
 
