@@ -144,7 +144,7 @@ gdt_end:
 );
 
 /// The per-CPU kernel stack size.
-pub(super) const KERNEL_STACK_SIZE: usize = 65536;
+pub(super) const KERNEL_STACK_SIZE: usize = 1024 * 1024;
 
 #[repr(align(16))]
 struct Stack(#[allow(unused)] [u8; KERNEL_STACK_SIZE]);
