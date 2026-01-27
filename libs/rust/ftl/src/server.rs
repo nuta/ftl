@@ -1,3 +1,4 @@
+#![allow(unused)]
 use ftl_types::error::ErrorCode;
 
 pub struct Uri;
