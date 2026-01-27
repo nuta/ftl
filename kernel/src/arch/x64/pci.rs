@@ -1,9 +1,80 @@
+use core::mem::offset_of;
+
 use ftl_types::pci::PciEntry;
 
-pub fn get_pci_devices(vendor: u16, device: u16) {
-    for bus in 0..256 {
+use super::ioport::in32;
+use super::ioport::out32;
+
+#[repr(C, packed)]
+struct PciConfig {
+    vendor: u16,
+    device: u16,
+    command: u16,
+    status: u16,
+    revision: u8,
+    prog_if: u8,
+    subclass: u8,
+    class: u8,
+    cache_line_size: u8,
+    latency_timer: u8,
+    header_type: u8,
+    bist: u8,
+    bar: [u32; 6],
+    carbus: u32,
+    subsystem_vendor: u16,
+    subsystem_id: u16,
+    expansion_rom: u32,
+    capabilities_pointer: u8,
+    reserved: [u32; 7],
+    interrupt_line: u8,
+    interrupt_pin: u8,
+    min_grant: u8,
+    max_latency: u8,
+}
+
+fn read_config32(bus: u8, slot: u8, offset: usize) -> u32 {
+    debug_assert!(offset & 0b11 == 0, "offset must be aligned to 4 bytes");
+    debug_assert!(offset < 0xff, "offset is out of range");
+
+    let addr = (1 << 31) | ((bus as u32) << 16) | ((slot as u32) << 11) | (offset as u32);
+    unsafe {
+        out32(0xcf8, addr);
+        in32(0xcfc)
+    }
+}
+
+fn read_config16(bus: u8, slot: u8, offset: usize) -> u16 {
+    debug_assert!(offset & 0b01 == 0, "offset must be aligned to 2 bytes");
+    debug_assert!(offset < 0xff, "offset is out of range");
+
+    let value = read_config32(bus, slot, offset & !0b11);
+    let is_high = offset & 0b11 != 0;
+    if is_high {
+        (value >> 16) as u16
+    } else {
+        value as u16
+    }
+}
+
+fn scan(vendor: u16, device: u16) {
+    for bus in 0..=255 {
         for slot in 0..32 {
-            println!("bus: {}, slot: {}", bus, slot);
+            let vendor_id = read_config16(bus, slot, offset_of!(PciConfig, vendor));
+            if vendor_id == 0xffff {
+                // No device found.
+                continue;
+            }
+
+            let device_id = read_config16(bus, slot, offset_of!(PciConfig, device));
+            if device_id == 0xffff {
+                // No device found.
+                continue;
+            }
+
+            println!(
+                "[pci] {}:{}: vendor={:x}, device={:x}",
+                bus, slot, vendor_id, device_id,
+            );
         }
     }
 }
@@ -14,5 +85,5 @@ pub fn sys_pci_lookup(a0: usize, a1: usize, a2: usize, a3: usize) {
     let vendor = a2 as u16;
     let device = a3 as u16;
 
-    get_pci_devices(vendor, device);
+    scan(vendor, device);
 }
