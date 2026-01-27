@@ -37,6 +37,7 @@ impl Thread {
 ///
 /// - The thread running on a CPU should never be dropped. This struct owns a
 ///   reference count of SharedRef<Thread>.
+#[repr(transparent)]
 pub struct CurrentThread {
     ptr: UnsafeCell<*const Thread>,
 }
@@ -49,8 +50,12 @@ impl CurrentThread {
     }
 
     /// Updates the current thread.
-    fn update(&mut self, next: SharedRef<Thread>) {
+    ///
+    fn update(&self, next: SharedRef<Thread>) {
         let new_ptr = next.into_raw();
+
+        // SAFETY: Data races should not happen because this is CPU-local and
+        //         interrupts are disabled.
         let old_ptr = unsafe { self.ptr.replace(new_ptr) };
 
         // Decrement the ref count of the current thread.
@@ -84,10 +89,9 @@ fn schedule() -> Option<*const arch::Thread> {
     let thread = SCHEDULER.pop()?;
     let cpuvar = arch::get_cpuvar();
 
-    let mut current_thread = cpuvar.current_thread.borrow_mut();
-    current_thread.update(thread);
+    cpuvar.current_thread.update(thread);
 
-    let arch_thread = current_thread.arch_thread();
+    let arch_thread = cpuvar.current_thread.arch_thread();
     Some(arch_thread)
 }
 

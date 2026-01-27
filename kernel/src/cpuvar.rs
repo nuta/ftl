@@ -1,5 +1,3 @@
-use core::cell::RefCell;
-
 use crate::arch;
 use crate::shared_ref::SharedRef;
 use crate::thread::CurrentThread;
@@ -8,7 +6,9 @@ use crate::thread::Thread;
 pub struct CpuVar {
     pub arch: arch::CpuVar,
     pub idle_thread: SharedRef<Thread>,
-    pub current_thread: RefCell<CurrentThread>,
+    // Note: Do not wrap this field. The assembly assumes it is pointer to
+    //       `arch::Thread`.
+    pub current_thread: CurrentThread,
 }
 
 pub fn init() {
@@ -17,7 +17,7 @@ pub fn init() {
         0, // FIXME:
         CpuVar {
             arch: arch::CpuVar::new(),
-            current_thread: RefCell::new(CurrentThread::new(idle_thread.clone())),
+            current_thread: CurrentThread::new(idle_thread.clone()),
             idle_thread,
         },
     );
