@@ -58,7 +58,6 @@ fn load_elf(file: &initfs::File) -> Result<VAddr, ElfError> {
         return Err(ElfError::NotAnElfFile);
     }
 
-    println!("{}: ELF entry={:x}", file.name, ehdr.entry);
     let phdrs = unsafe {
         let ptr = file.data.as_ptr().add(ehdr.phoff as usize) as *const Phdr64;
         core::slice::from_raw_parts(ptr, ehdr.phnum as usize)
@@ -71,7 +70,10 @@ fn load_elf(file: &initfs::File) -> Result<VAddr, ElfError> {
     }
 
     // Allocate memory for the image.
-    println!("allocating {} bytes for the image", image_size);
+    println!(
+        "{}: Loading an ELF file in initfs: entry={:x}, image_size={}",
+        file.name, ehdr.entry, image_size
+    );
     let image_paddr = PAGE_ALLOCATOR
         .alloc(align_up(image_size as usize, MIN_PAGE_SIZE))
         .expect("failed to allocate memory for the image");
@@ -83,6 +85,10 @@ fn load_elf(file: &initfs::File) -> Result<VAddr, ElfError> {
     // Copy the image into the allocated memory.
     let elf_file = unsafe { slice::from_raw_parts(file.data.as_ptr(), file.data.len()) };
     for phdr in phdrs {
+        println!(
+            "{}: phdr: vaddr={:x}, filesz={:x}, memsz={:x}",
+            file.name, phdr.vaddr, phdr.filesz, phdr.memsz
+        );
         let src_range = phdr.offset as usize..phdr.offset as usize + phdr.filesz as usize;
         let dst_range = phdr.vaddr as usize..phdr.vaddr as usize + phdr.filesz as usize;
         image[dst_range].copy_from_slice(&elf_file[src_range]);
@@ -95,7 +101,6 @@ fn load_elf(file: &initfs::File) -> Result<VAddr, ElfError> {
 pub fn load(initfs: &InitFs) {
     for file in initfs.iter() {
         let entry = load_elf(&file).expect("failed to load ELF file");
-        println!("{}: ELF file loaded at {:?}", file.name, entry);
 
         let stack_size = 1024 * 1024;
         let stack_bottom_paddr = PAGE_ALLOCATOR

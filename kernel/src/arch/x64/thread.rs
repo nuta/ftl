@@ -56,7 +56,6 @@ impl Thread {
 
 pub fn thread_switch(thread: *const Thread) -> ! {
     unsafe {
-        println!("switching to #{:x}", unsafe { thread as usize });
         asm!(
             "mov rsp, {}",
             "swapgs",

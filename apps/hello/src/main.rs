@@ -4,7 +4,8 @@ use ftl::println;
 
 #[unsafe(no_mangle)]
 fn main() {
-    for i in 0.. {
-        println!("Hello world from system call {} times!", i);
+    println!("Hello world from system call!");
+    loop {
+        unsafe { core::arch::asm!("hlt") }
     }
 }
