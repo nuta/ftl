@@ -173,7 +173,7 @@ unsafe extern "C" fn x64_boot() -> ! {
         "mov edi, ebx",
 
         // Initialize the stack for this bootstrap processor (BSP).
-        "lea esp, [{BSP_STACK_TOP} + {KERNEL_STACK_SIZE} - {KERNEL_BASE}]",
+        "lea esp, [{BSP_STACK_BOTTOM} + {KERNEL_STACK_SIZE} - {KERNEL_BASE}]",
 
         // Enable CPU features.
         "mov eax, cr4",
@@ -220,14 +220,14 @@ unsafe extern "C" fn x64_boot() -> ! {
         "mov gs, ax",
         "mov ss, ax",
 
-        // Use the high virtual address in RSP.
-        "mov rax, {KERNEL_BASE}",
-        "add rsp, rax",
-
-        // Get the virtual address of main.
+        // Get the physical addresses of main and the stack.
         "lea rax, [{pvh_main} - {KERNEL_BASE}]",
+        "lea rsp, [{BSP_STACK_BOTTOM} + {KERNEL_STACK_SIZE} - {KERNEL_BASE}]",
+
+        // Convert them into virtual addresses.
         "mov rbx, {KERNEL_BASE}",
         "or  rax, rbx",
+        "or  rsp, rbx",
 
         // Jump to main.
         "jmp rax",
@@ -242,7 +242,7 @@ unsafe extern "C" fn x64_boot() -> ! {
         ".popsection",
 
         pvh_main = sym rust_boot,
-        BSP_STACK_TOP = sym BSP_STACK,
+        BSP_STACK_BOTTOM = sym BSP_STACK,
         BOOT_PML4 = sym BOOT_PML4,
         BOOT_PDPT = sym BOOT_PDPT,
         KERNEL_STACK_SIZE = const KERNEL_STACK_SIZE,
