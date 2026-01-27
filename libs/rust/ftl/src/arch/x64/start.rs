@@ -24,17 +24,14 @@ extern "C" fn start() -> ! {
     let image_base: u64;
     let relocs: *const Elf64Rela;
     let relocs_end: *const Elf64Rela;
-    let main_addr: u64;
     unsafe {
         asm!(
             "lea {0}, [rip + __image_base]",
             "lea {1}, [rip + __rela_dyn]",
             "lea {2}, [rip + __rela_dyn_end]",
-            "lea {3}, [rip + main]",
             out(reg) image_base,
             out(reg) relocs,
             out(reg) relocs_end,
-            out(reg) main_addr,
             options(nostack, nomem)
         );
     }

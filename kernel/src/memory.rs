@@ -39,7 +39,12 @@ impl PageAllocator {
                 println!("the size of the memory region overflows: {free_ram:?}");
                 return;
             };
-            regions.try_push(BumpAllocator::new(free_ram.base.as_usize(), end));
+
+            let allocator = BumpAllocator::new(free_ram.base.as_usize(), end);
+            if regions.try_push(allocator).is_err() {
+                println!("failed to add memory region: {free_ram:?}");
+                return;
+            }
         }
     }
 

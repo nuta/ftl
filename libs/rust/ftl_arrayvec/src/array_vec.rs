@@ -22,6 +22,12 @@ pub struct ArrayVec<T, const N: usize> {
     len: usize,
 }
 
+impl<T, const N: usize> Default for ArrayVec<T, N> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<T, const N: usize> ArrayVec<T, N> {
     pub const fn new() -> Self {
         Self {
