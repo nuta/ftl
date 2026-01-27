@@ -57,6 +57,7 @@ extern "C" fn rust_boot(start_info: PAddr) -> ! {
 
     // Initialize CPU-local variables.
     super::cpuvar::init(
+        0, // BSP
         [0; NUM_GDT_ENTRIES],
         Tss {
             reserved0: 0,
@@ -143,11 +144,9 @@ gdt_end:
 );
 
 /// The per-CPU kernel stack size.
-///
-/// **Note:** Do not forget to change the boot stack alignment.
 pub(super) const KERNEL_STACK_SIZE: usize = 65536;
 
-#[repr(align(65536 /* must be KERNEL_STACK_SIZE */))]
+#[repr(align(16))]
 struct Stack(#[allow(unused)] [u8; KERNEL_STACK_SIZE]);
 
 #[unsafe(link_section = ".data")]

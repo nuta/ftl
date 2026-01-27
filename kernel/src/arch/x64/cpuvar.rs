@@ -1,11 +1,8 @@
 use core::arch::asm;
 use core::cell::RefCell;
 use core::cell::UnsafeCell;
-use core::ptr;
+use core::mem::MaybeUninit;
 
-use ftl_utils::static_assert;
-
-use crate::arch::x64::boot::KERNEL_STACK_SIZE;
 use crate::arch::x64::boot::NUM_GDT_ENTRIES;
 use crate::arch::x64::boot::Tss;
 
@@ -19,52 +16,39 @@ pub(super) struct CpuVar {
     pub(super) common: crate::cpuvar::CpuVar,
     pub(super) gdt: RefCell<[u64; NUM_GDT_ENTRIES]>,
     pub(super) tss: RefCell<Tss>,
-    /// The magic number to verify that the CPU-local variables are initialized
-    /// and valid. This is placed at the end intentionally to detect stack
-    /// corruption.
     magic: u64,
 }
 
-const SP_BOTTOM_MASK: u64 = !(KERNEL_STACK_SIZE as u64 - 1);
-static_assert!(KERNEL_STACK_SIZE.is_power_of_two());
-
-fn get_cpuvar_ptr() -> *mut CpuVar {
-    let rsp: u64;
-    unsafe {
-        asm!("mov {}, rsp", out(reg) rsp);
-    }
-
-    let stack_bottom = rsp & SP_BOTTOM_MASK;
-    stack_bottom as *mut CpuVar
-}
-
 pub fn get_cpuvar() -> &'static CpuVar {
-    let cpuvar_ptr = get_cpuvar_ptr();
-
-    // SAFETY: This assumes rsp points to a valid kernel stack.
-    let cpuvar = unsafe { &*cpuvar_ptr };
+    let cpuvar = unsafe {
+        let gsbase: u64;
+        asm!("rdgsbase {}", out(reg) gsbase);
+        debug_assert!(gsbase != 0);
+        &*(gsbase as *mut CpuVar)
+    };
 
     debug_assert_eq!(cpuvar.magic, MAGIC);
     cpuvar
 }
 
-pub fn init(gdt: [u64; NUM_GDT_ENTRIES], tss: Tss) {
+const NUM_CPUS_MAX: usize = 16;
+static mut CPU_VARS: [MaybeUninit<CpuVar>; NUM_CPUS_MAX] =
+    [const { MaybeUninit::uninit() }; NUM_CPUS_MAX];
+
+pub fn init(cpu_id: usize, gdt: [u64; NUM_GDT_ENTRIES], tss: Tss) {
+    assert!(cpu_id < NUM_CPUS_MAX);
     unsafe {
-        let cpuvar_ptr = get_cpuvar_ptr();
-
-        asm!("wrgsbase rax", in("rax") cpuvar_ptr);
-
-        ptr::write(
-            cpuvar_ptr,
-            CpuVar {
-                // TODO: Do not initialize in arch.
-                common: crate::cpuvar::CpuVar {
-                    current_thread: UnsafeCell::new(core::ptr::null()),
-                },
-                gdt: RefCell::new(gdt),
-                tss: RefCell::new(tss),
-                magic: MAGIC,
+        let cpu_var = &mut CPU_VARS[cpu_id];
+        cpu_var.write(CpuVar {
+            // TODO: Do not initialize in arch.
+            common: crate::cpuvar::CpuVar {
+                current_thread: UnsafeCell::new(core::ptr::null()),
             },
-        );
+            gdt: RefCell::new(gdt),
+            tss: RefCell::new(tss),
+            magic: MAGIC,
+        });
+
+        asm!("wrgsbase rax", in("rax") cpu_var.as_mut_ptr());
     }
 }
