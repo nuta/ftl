@@ -3,6 +3,7 @@ use core::mem::offset_of;
 
 use crate::arch::x64::boot::GDT_KERNEL_CS;
 
+#[derive(Default)]
 #[repr(C, packed)]
 pub struct Thread {
     // IRET frame. The order is important!
@@ -36,22 +37,14 @@ impl Thread {
             cs: GDT_KERNEL_CS as u64,
             rflags: 0x2, // interrupts disabled
             rsp: sp as u64,
-            ss: 0,
-            rax: 0,
-            rbx: 0,
-            rcx: 0,
-            rdx: 0,
-            rsi: 0,
             rdi: arg as u64,
-            rbp: 0,
-            r8: 0,
-            r9: 0,
-            r10: 0,
-            r11: 0,
-            r12: 0,
-            r13: 0,
-            r14: 0,
-            r15: 0,
+            ..Default::default()
+        }
+    }
+
+    pub fn new_idle() -> Self {
+        Self {
+            ..Default::default()
         }
     }
 }

@@ -9,6 +9,7 @@ use super::vmspace::BOOT_PML4;
 use super::vmspace::KERNEL_BASE;
 use crate::address::PAddr;
 use crate::address::VAddr;
+use crate::arch::NUM_CPUS_MAX;
 use crate::arch::x64::pvh;
 use crate::arch::x64::vmspace::vaddr2paddr;
 
@@ -40,6 +41,12 @@ pub(super) struct Tss {
     io_permission_map: [u8; 8192],
 }
 
+static mut GDT_ENTRIES: [MaybeUninit<[u64; NUM_GDT_ENTRIES]>; NUM_CPUS_MAX] =
+    [const { MaybeUninit::uninit() }; NUM_CPUS_MAX];
+
+static mut TSS_ENTRIES: [MaybeUninit<Tss>; NUM_CPUS_MAX] =
+    [const { MaybeUninit::uninit() }; NUM_CPUS_MAX];
+
 extern "C" fn rust_boot(start_info: PAddr) -> ! {
     super::console::init();
 
@@ -55,11 +62,12 @@ extern "C" fn rust_boot(start_info: PAddr) -> ! {
         );
     }
 
-    // Initialize CPU-local variables.
-    super::cpuvar::init(
-        0, // BSP
-        [0; NUM_GDT_ENTRIES],
-        Tss {
+    let cpu_id = 0; // FIXME:
+
+    // Build a TSS.
+    let tss_vaddr = unsafe {
+        let tss = &mut TSS_ENTRIES[cpu_id];
+        tss.write(Tss {
             reserved0: 0,
             rsp0: 0,
             rsp1: 0,
@@ -70,15 +78,13 @@ extern "C" fn rust_boot(start_info: PAddr) -> ! {
             reserved3: 0,
             iomap_offset: offset_of!(Tss, io_permission_map) as u16,
             io_permission_map: [0xff; 8192],
-        },
-    );
-    let cpuvar = super::cpuvar::get_cpuvar();
+        });
 
-    // Get the physical address of the TSS.
-    let tss_vaddr = VAddr::new(cpuvar.tss.as_ptr() as usize);
-    let tss_paddr = vaddr2paddr(tss_vaddr).as_u64();
+        VAddr::new(tss.as_ptr() as usize)
+    };
 
     // Build a 64-bit TSS descriptor.
+    let tss_paddr = vaddr2paddr(tss_vaddr).as_u64();
     let mut tss_low = 0x0000890000000000;
     tss_low |= (size_of::<Tss>() - 1) as u64; // limit (size - 1)
     tss_low |= (tss_paddr & 0x00ff_ffff) << 16; // base[0:23]
@@ -86,19 +92,22 @@ extern "C" fn rust_boot(start_info: PAddr) -> ! {
     let tss_high = tss_paddr >> 32; // base[32:63]
 
     // Build a GDT.
-    *cpuvar.gdt.borrow_mut() = [
-        0x0000000000000000, // null
-        0x00af9a000000ffff, // kernel_cs
-        0x00af92000000ffff, // kernel_ds
-        0x0000000000000000, // user_cs32
-        0x008ff2000000ffff, // user_ds
-        0x00affa000000ffff, // user_cs64
-        tss_low,            // tss_low
-        tss_high,           // tss_high
-    ];
+    let gdt_vaddr = unsafe {
+        let table = &mut GDT_ENTRIES[cpu_id];
+        table.write([
+            0x0000000000000000, // null
+            0x00af9a000000ffff, // kernel_cs
+            0x00af92000000ffff, // kernel_ds
+            0x0000000000000000, // user_cs32
+            0x008ff2000000ffff, // user_ds
+            0x00affa000000ffff, // user_cs64
+            tss_low,            // tss_low
+            tss_high,           // tss_high
+        ]);
+        VAddr::new(table.as_ptr() as usize)
+    };
 
     // Build a GDTR.
-    let gdt_vaddr = VAddr::new(cpuvar.gdt.as_ptr() as usize);
     let gdt_paddr = vaddr2paddr(gdt_vaddr).as_u64();
     let gdtr = Gdtr {
         limit: (NUM_GDT_ENTRIES * size_of::<u64>() - 1) as u16,

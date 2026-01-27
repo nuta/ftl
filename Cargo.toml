@@ -10,6 +10,7 @@ members = ["kernel", "libs/rust/*"]
 [workspace.dependencies]
 talc = "4.4.3"
 
+ftl_types = { path = "libs/rust/ftl_types" }
 ftl_utils = { path = "libs/rust/ftl_utils" }
 ftl_bump_allocator = { path = "libs/rust/ftl_bump_allocator" }
 ftl_arrayvec = { path = "libs/rust/ftl_arrayvec" }

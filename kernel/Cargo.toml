@@ -7,6 +7,7 @@ edition.workspace = true
 [dependencies]
 talc = { workspace = true }
 
+ftl_types = { workspace = true }
 ftl_utils = { workspace = true }
 ftl_bump_allocator = { workspace = true }
 ftl_arrayvec = { workspace = true }

@@ -1,8 +1,8 @@
 use core::arch::naked_asm;
 use core::mem::offset_of;
 
-use super::cpuvar::CpuVar;
 use crate::arch::Thread;
+use crate::cpuvar::CpuVar;
 
 #[unsafe(naked)]
 #[unsafe(no_mangle)]
@@ -23,7 +23,7 @@ pub unsafe extern "C" fn direct_syscall_handler() -> ! {
         "mov [rax + {r15_offset}], r15",
 
         "call {syscall_handler}",
-        current_thread_offset = const offset_of!(CpuVar, common.current_thread),
+        current_thread_offset = const offset_of!(CpuVar, current_thread),
         rbx_offset = const offset_of!(Thread, rbx),
         rsp_offset = const offset_of!(Thread, rsp),
         rbp_offset = const offset_of!(Thread, rbp),

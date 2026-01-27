@@ -10,8 +10,13 @@ mod thread;
 mod vmspace;
 
 pub use console::console_write;
+pub use cpuvar::CpuVar;
+pub use cpuvar::get_cpuvar;
+pub use cpuvar::set_cpuvar;
 pub use idle::idle;
 pub use thread::Thread;
 pub use thread::thread_switch;
 pub use vmspace::MIN_PAGE_SIZE;
 pub use vmspace::paddr2vaddr;
+
+pub(super) const NUM_CPUS_MAX: usize = 16;

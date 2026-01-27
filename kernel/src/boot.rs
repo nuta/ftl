@@ -2,6 +2,7 @@ use ftl_arrayvec::ArrayVec;
 
 use crate::address::PAddr;
 use crate::arch::paddr2vaddr;
+use crate::cpuvar;
 use crate::memory::PAGE_ALLOCATOR;
 use crate::memory::{self};
 use crate::scheduler::SCHEDULER;
@@ -20,6 +21,7 @@ pub struct BootInfo {
 
 pub fn boot(bootinfo: &BootInfo) -> ! {
     memory::init(bootinfo);
+    cpuvar::init();
 
     let mut v = alloc::vec::Vec::new();
     v.push(1);
@@ -32,8 +34,8 @@ pub fn boot(bootinfo: &BootInfo) -> ! {
     let sp1 = sp1_bottom.as_usize() + STACK_SIZE;
     let sp2_bottom = paddr2vaddr(PAGE_ALLOCATOR.alloc(STACK_SIZE).unwrap());
     let sp2 = sp2_bottom.as_usize() + STACK_SIZE;
-    let thread1 = alloc::sync::Arc::new(Thread::new(thread_entry as usize, sp1, b'A' as usize));
-    let thread2 = alloc::sync::Arc::new(Thread::new(thread_entry as usize, sp2, b'B' as usize));
+    let thread1 = Thread::new(thread_entry as usize, sp1, b'A' as usize).unwrap();
+    let thread2 = Thread::new(thread_entry as usize, sp2, b'B' as usize).unwrap();
     SCHEDULER.push(thread1);
     SCHEDULER.push(thread2);
 

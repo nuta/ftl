@@ -1,25 +1,94 @@
+use core::cell::UnsafeCell;
+use core::mem::offset_of;
+
+use ftl_types::error::ErrorCode;
+use ftl_utils::static_assert;
+
 use crate::arch;
 use crate::scheduler::SCHEDULER;
+use crate::shared_ref::SharedRef;
 
 pub struct Thread {
     pub arch: arch::Thread,
 }
 
 impl Thread {
-    pub fn new(entry: usize, sp: usize, arg: usize) -> Self {
-        Self {
+    pub fn new(entry: usize, sp: usize, arg: usize) -> Result<SharedRef<Self>, ErrorCode> {
+        SharedRef::new(Self {
             arch: arch::Thread::new(entry, sp, arg),
+        })
+    }
+
+    pub fn new_idle() -> Result<SharedRef<Self>, ErrorCode> {
+        SharedRef::new(Self {
+            arch: arch::Thread::new_idle(),
+        })
+    }
+}
+
+/// The current thread.
+///
+/// This is a special struct replacing SharedRef<Thread> for the current
+/// thread to implement its tricky properties:
+///
+/// - The offset 0 of this struct is the pointer to `Thread` and `arch::Thread`
+///   This allows accessing the `arch::Thread` struct from assembly code to save
+///   general-purpose registers.
+///
+/// - The thread running on a CPU should never be dropped. This struct owns a
+///   reference count of SharedRef<Thread>.
+pub struct CurrentThread {
+    ptr: UnsafeCell<*const Thread>,
+}
+
+impl CurrentThread {
+    pub fn new(idle_thread: SharedRef<Thread>) -> Self {
+        Self {
+            ptr: UnsafeCell::new(idle_thread.into_raw()),
         }
+    }
+
+    /// Updates the current thread.
+    fn update(&mut self, next: SharedRef<Thread>) {
+        let new_ptr = next.into_raw();
+        let old_ptr = unsafe { self.ptr.replace(new_ptr) };
+
+        // Decrement the ref count of the current thread.
+        drop(unsafe { SharedRef::from_raw(old_ptr) });
+    }
+
+    /// Returns the current thread.
+    pub fn thread(&self) -> SharedRef<Thread> {
+        unsafe {
+            let ptr = *self.ptr.get();
+
+            // Create and clone a temporary ref to increment the reference count.
+            let temp = SharedRef::from_raw(ptr);
+            let cloned = temp.clone();
+            core::mem::forget(temp);
+
+            cloned
+        }
+    }
+
+    /// Returns the pointer to the arch-specific thread struct.
+    fn arch_thread(&self) -> *mut arch::Thread {
+        static_assert!(offset_of!(Thread, arch) == 0);
+
+        // SAFETY: The static_assert above guarantees arch::Thread is at the offset 0.
+        unsafe { *self.ptr.get() as *mut arch::Thread }
     }
 }
 
 fn schedule() -> Option<*const arch::Thread> {
     let thread = SCHEDULER.pop()?;
+    let cpuvar = arch::get_cpuvar();
 
-    let arch_ptr = &raw const thread.arch;
-    core::mem::forget(thread);
+    let mut current_thread = cpuvar.current_thread.borrow_mut();
+    current_thread.update(thread);
 
-    Some(arch_ptr)
+    let arch_thread = current_thread.arch_thread();
+    Some(arch_thread)
 }
 
 /// Jumps to a thread.
