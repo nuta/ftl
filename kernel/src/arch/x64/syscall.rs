@@ -11,7 +11,6 @@ pub extern "C" fn direct_syscall_handler(
     a2: usize,
     a3: usize,
     a4: usize,
-    a5: usize,
     n: usize,
 ) -> usize {
     naked_asm!(
