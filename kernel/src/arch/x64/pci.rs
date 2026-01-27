@@ -56,25 +56,30 @@ fn read_config16(bus: u8, slot: u8, offset: usize) -> u16 {
     }
 }
 
-fn scan(vendor: u16, device: u16) {
+fn scan_one(bus: u8, slot: u8, vendor: u16, device: u16) -> Option<PciEntry> {
+    if read_config16(bus, slot, offset_of!(PciConfig, vendor)) != vendor {
+        return None;
+    }
+
+    if read_config16(bus, slot, offset_of!(PciConfig, device)) != device {
+        return None;
+    }
+
+    let subsystem_vendor_id = read_config16(bus, slot, offset_of!(PciConfig, subsystem_vendor));
+    let subsystem_id = read_config16(bus, slot, offset_of!(PciConfig, subsystem_id));
+
+    Some(PciEntry {
+        bus,
+        slot,
+        subsystem_vendor_id,
+        subsystem_id,
+    })
+}
+
+fn scan_all(vendor: u16, device: u16) {
     for bus in 0..=255 {
         for slot in 0..32 {
-            let vendor_id = read_config16(bus, slot, offset_of!(PciConfig, vendor));
-            if vendor_id == 0xffff {
-                // No device found.
-                continue;
-            }
-
-            let device_id = read_config16(bus, slot, offset_of!(PciConfig, device));
-            if device_id == 0xffff {
-                // No device found.
-                continue;
-            }
-
-            println!(
-                "[pci] {}:{}: vendor={:x}, device={:x}",
-                bus, slot, vendor_id, device_id,
-            );
+            scan_one(bus, slot, vendor, device);
         }
     }
 }
@@ -85,5 +90,5 @@ pub fn sys_pci_lookup(a0: usize, a1: usize, a2: usize, a3: usize) {
     let vendor = a2 as u16;
     let device = a3 as u16;
 
-    scan(vendor, device);
+    scan_all(vendor, device);
 }
