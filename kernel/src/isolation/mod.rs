@@ -25,43 +25,45 @@ impl UserPtr {
 }
 
 /// A slice in an isolation space.
+#[derive(Clone, Copy)]
 pub struct UserSlice {
     start: UserPtr,
     end: UserPtr,
 }
 
 impl UserSlice {
-    pub const fn new(ptr: UserPtr, len: usize) -> Option<Self> {
+    pub const fn new(ptr: UserPtr, len: usize) -> Result<Self, ErrorCode> {
         let Some(end) = ptr.checked_add(len) else {
-            return None;
+            return Err(ErrorCode::OutOfBounds);
         };
 
-        Some(Self { start: ptr, end })
+        Ok(Self { start: ptr, end })
     }
 
     pub const fn len(&self) -> usize {
         self.end.0 - self.start.0
     }
 
-    pub const fn subslice(&self, offset: usize, len: usize) -> Option<Self> {
+    pub const fn subslice(&self, offset: usize, len: usize) -> Result<Self, ErrorCode> {
         let Some(start) = self.start.checked_add(offset) else {
-            return None;
+            return Err(ErrorCode::OutOfBounds);
         };
 
         let Some(end) = start.checked_add(len) else {
-            return None;
+            return Err(ErrorCode::OutOfBounds);
         };
 
         if end.0 > self.end.0 {
-            return None;
+            return Err(ErrorCode::OutOfBounds);
         }
 
-        Some(Self { start, end })
+        Ok(Self { start, end })
     }
 }
 
 pub trait Isolation: Send + Sync {
-    fn read_bytes(&self, buf: &mut [u8], slice: UserSlice) -> Result<(), ErrorCode>;
+    fn read_bytes(&self, slice: UserSlice, buf: &mut [u8]) -> Result<(), ErrorCode>;
+    fn write_bytes(&self, slice: UserSlice, buf: &[u8]) -> Result<(), ErrorCode>;
 }
 
 pub static INKERNEL_ISOLATION: SharedRef<dyn Isolation> = {

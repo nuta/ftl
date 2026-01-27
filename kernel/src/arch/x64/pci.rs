@@ -1,9 +1,12 @@
 use core::mem::offset_of;
 
+use ftl_types::error::ErrorCode;
 use ftl_types::pci::PciEntry;
 
 use super::ioport::in32;
 use super::ioport::out32;
+use crate::isolation::UserPtr;
+use crate::isolation::UserSlice;
 use crate::shared_ref::SharedRef;
 use crate::thread::Thread;
 
@@ -78,22 +81,37 @@ fn scan_one(bus: u8, slot: u8, vendor: u16, device: u16) -> Option<PciEntry> {
     })
 }
 
-fn scan_all(vendor: u16, device: u16) {
-    for bus in 0..=255 {
-        for slot in 0..32 {
-            scan_one(bus, slot, vendor, device);
-        }
-    }
-}
-
-pub fn sys_pci_lookup(thread: &SharedRef<Thread>, a0: usize, a1: usize, a2: usize, a3: usize) {
-    let buf = a0 as *mut PciEntry;
-    let buf_len = a1 as usize;
+pub fn sys_pci_lookup(
+    thread: &SharedRef<Thread>,
+    a0: usize,
+    a1: usize,
+    a2: usize,
+    a3: usize,
+) -> Result<(), ErrorCode> {
+    let buf = UserPtr::new(a0);
+    let n = a1;
     let vendor = a2 as u16;
     let device = a3 as u16;
 
     let isolation = thread.process().isolation();
-    scan_all(vendor, device);
+    let slice = UserSlice::new(buf, n * size_of::<PciEntry>())?;
+    let mut index = 0;
+
+    'outer: for bus in 0..=255 {
+        for slot in 0..32 {
+            if let Some(entry) = scan_one(bus, slot, vendor, device) {
+                if index >= n {
+                    break 'outer;
+                }
+
+                let subslice = slice.subslice(index, size_of::<PciEntry>())?;
+                isolation.write_bytes(subslice, &entry)?;
+                index += 1;
+            }
+        }
+    }
+
+    Ok(())
 }
 
 pub fn sys_pci_set_busmaster(a0: usize, a1: usize, a2: usize) {
