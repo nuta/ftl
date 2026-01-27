@@ -89,7 +89,6 @@ impl GlobalAllocator {
         let ptr = vaddr.as_usize() as *mut u8;
         unsafe {
             let span = talc::Span::new(ptr, ptr.add(size));
-            println!("claiming kernel memory: {:?}", span);
             if self.inner.lock().claim(span).is_err() {
                 println!("failed to claim kernel memory region: base={vaddr}, size={size}");
             }

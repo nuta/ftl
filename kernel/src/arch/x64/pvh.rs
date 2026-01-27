@@ -96,5 +96,7 @@ pub fn parse_start_info(start_info: PAddr) -> BootInfo {
     let initfs =
         unsafe { core::slice::from_raw_parts(paddr2vaddr(paddr).as_usize() as *const u8, size) };
 
+    println!("found a module (initfs): paddr={}, size={}", paddr, size);
+
     BootInfo { free_rams, initfs }
 }
