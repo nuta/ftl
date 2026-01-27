@@ -66,7 +66,7 @@ fn cstr2str(cstr: &[u8]) -> &str {
 fn oct2int(oct: &[u8]) -> usize {
     let mut dec = 0;
     for &c in oct {
-        if c < b'0' || c > b'7' {
+        if !(b'0'..=b'7').contains(&c) {
             break;
         }
         dec = dec * 8 + (c - b'0') as usize;

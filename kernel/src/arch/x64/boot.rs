@@ -14,7 +14,7 @@ use crate::arch::x64::pvh;
 use crate::arch::x64::vmspace::vaddr2paddr;
 
 pub(super) const NUM_GDT_ENTRIES: usize = 8;
-pub(super) const GDT_KERNEL_CS: u16 = 1 * 8;
+pub(super) const GDT_KERNEL_CS: u16 = 8;
 const GDT_TSS: u16 = 6 * 8;
 
 #[repr(C, packed)]
