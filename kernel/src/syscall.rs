@@ -1,10 +1,28 @@
+use core::slice;
+
+use ftl_types::syscall::SYS_CONSOLE_WRITE;
+
 use crate::thread::return_to_user;
 
-pub extern "C" fn syscall_handler(a0: usize) -> ! {
-    println!("Hello from thread {}", a0 as u8 as char);
-    for i in 0..0x100000 {
-        use core::arch::asm;
-        unsafe { asm!("nop") }
+pub extern "C" fn syscall_handler(
+    a0: usize,
+    a1: usize,
+    _a2: usize,
+    _a3: usize,
+    _a4: usize,
+    n: usize,
+) -> ! {
+    match n {
+        SYS_CONSOLE_WRITE => {
+            let s = unsafe { slice::from_raw_parts(a0 as *const u8, a1) };
+            match core::str::from_utf8(s) {
+                Ok(s) => println!("[user] {}", s.trim_ascii_end()),
+                Err(_) => println!("[user] invalid UTF-8"),
+            }
+        }
+        _ => {
+            println!("unknown syscall: {}", n);
+        }
     }
 
     return_to_user();

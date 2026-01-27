@@ -5,3 +5,4 @@ authors.workspace = true
 edition.workspace = true
 
 [dependencies]
+ftl_types = { workspace = true }

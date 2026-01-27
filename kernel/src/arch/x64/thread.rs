@@ -12,7 +12,7 @@ pub struct Thread {
     pub(super) rflags: u64,
     pub(super) rsp: u64,
     pub(super) ss: u64,
-    // Other general-purpose registers.
+    // Other registers.
     pub(super) rax: u64,
     pub(super) rbx: u64,
     pub(super) rcx: u64,
@@ -28,16 +28,21 @@ pub struct Thread {
     pub(super) r13: u64,
     pub(super) r14: u64,
     pub(super) r15: u64,
+    pub(super) gsbase: u64,
 }
 
 impl Thread {
-    pub fn new(entry: usize, sp: usize, arg: usize) -> Self {
+    pub fn new(entry: usize, sp: usize, start_info: usize) -> Self {
+        println!(
+            "new thread: entry={:x}, sp={:x}, start_info={:x}",
+            entry, sp, start_info
+        );
         Self {
             rip: entry as u64,
             cs: GDT_KERNEL_CS as u64,
             rflags: 0x2, // interrupts disabled
             rsp: sp as u64,
-            rdi: arg as u64,
+            gsbase: start_info as u64,
             ..Default::default()
         }
     }
@@ -53,6 +58,9 @@ pub fn thread_switch(thread: *const Thread) -> ! {
     unsafe {
         asm!(
             "mov rsp, {}",
+            "swapgs",
+            "mov rax, [rsp + {gsbase_offset}]",
+            "wrgsbase rax",
             "mov rax, [rsp + {rax_offset}]",
             "mov rbx, [rsp + {rbx_offset}]",
             "mov rcx, [rsp + {rcx_offset}]",
@@ -68,9 +76,9 @@ pub fn thread_switch(thread: *const Thread) -> ! {
             "mov r13, [rsp + {r13_offset}]",
             "mov r14, [rsp + {r14_offset}]",
             "mov r15, [rsp + {r15_offset}]",
-            "swapgs",
             "iretq",
             in(reg) thread,
+            gsbase_offset = const offset_of!(Thread, gsbase),
             rax_offset = const offset_of!(Thread, rax),
             rbx_offset = const offset_of!(Thread, rbx),
             rcx_offset = const offset_of!(Thread, rcx),

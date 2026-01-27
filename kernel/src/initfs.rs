@@ -1,8 +1,8 @@
 //! InitFS: a initramfs-like file system for booting the operating system.
 //!
 //! The format is a simple uncompressed tar archive.
-
 use core::slice;
+
 pub struct File {
     pub name: &'static str,
     pub data: &'static [u8],

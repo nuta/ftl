@@ -5,6 +5,9 @@ version = 4
 [[package]]
 name = "ftl"
 version = "0.0.0"
+dependencies = [
+ "ftl_types",
+]
 
 [[package]]
 name = "ftl_arrayvec"

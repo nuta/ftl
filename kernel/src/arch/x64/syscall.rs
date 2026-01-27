@@ -5,8 +5,14 @@ use crate::arch::Thread;
 use crate::cpuvar::CpuVar;
 
 #[unsafe(naked)]
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn direct_syscall_handler() -> ! {
+pub extern "C" fn direct_syscall_handler(
+    a0: usize,
+    a1: usize,
+    a2: usize,
+    a3: usize,
+    a4: usize,
+    n: usize,
+) -> usize {
     naked_asm!(
         "swapgs",
 

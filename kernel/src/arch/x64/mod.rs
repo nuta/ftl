@@ -14,6 +14,7 @@ pub use cpuvar::CpuVar;
 pub use cpuvar::get_cpuvar;
 pub use cpuvar::set_cpuvar;
 pub use idle::idle;
+pub use syscall::direct_syscall_handler;
 pub use thread::Thread;
 pub use thread::thread_switch;
 pub use vmspace::MIN_PAGE_SIZE;
