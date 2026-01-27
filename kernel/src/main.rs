@@ -18,6 +18,7 @@ mod isolation;
 mod loader;
 mod memory;
 mod panic;
+mod process;
 mod scheduler;
 mod shared_ref;
 mod spinlock;

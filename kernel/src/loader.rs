@@ -10,7 +10,9 @@ use crate::arch;
 use crate::arch::MIN_PAGE_SIZE;
 use crate::initfs;
 use crate::initfs::InitFs;
+use crate::isolation::INKERNEL_ISOLATION;
 use crate::memory::PAGE_ALLOCATOR;
+use crate::process::Process;
 use crate::scheduler::SCHEDULER;
 use crate::thread::Thread;
 
@@ -117,8 +119,9 @@ pub fn load(initfs: &InitFs) {
         });
         let start_info = info_uninit.as_ptr() as usize;
 
-        let thread =
-            Thread::new(entry.as_usize(), sp, start_info).expect("failed to create thread");
+        let process = Process::new(INKERNEL_ISOLATION.clone()).expect("failed to create process");
+        let thread = Thread::new(process, entry.as_usize(), sp, start_info)
+            .expect("failed to create thread");
         SCHEDULER.push(thread);
     }
 }

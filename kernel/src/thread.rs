@@ -5,23 +5,34 @@ use ftl_types::error::ErrorCode;
 use ftl_utils::static_assert;
 
 use crate::arch;
+use crate::process::IDLE_PROCESS;
+use crate::process::Process;
 use crate::scheduler::SCHEDULER;
 use crate::shared_ref::SharedRef;
 
+#[repr(C)]
 pub struct Thread {
     pub arch: arch::Thread,
+    process: SharedRef<Process>,
 }
 
 impl Thread {
-    pub fn new(entry: usize, sp: usize, start_info: usize) -> Result<SharedRef<Self>, ErrorCode> {
+    pub fn new(
+        process: SharedRef<Process>,
+        entry: usize,
+        sp: usize,
+        start_info: usize,
+    ) -> Result<SharedRef<Self>, ErrorCode> {
         SharedRef::new(Self {
             arch: arch::Thread::new(entry, sp, start_info),
+            process,
         })
     }
 
     pub fn new_idle() -> Result<SharedRef<Self>, ErrorCode> {
         SharedRef::new(Self {
             arch: arch::Thread::new_idle(),
+            process: IDLE_PROCESS.clone(),
         })
     }
 }

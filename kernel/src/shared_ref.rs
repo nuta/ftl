@@ -3,8 +3,10 @@ use alloc::alloc::Layout;
 use alloc::alloc::alloc;
 use alloc::boxed::Box;
 use core::fmt;
+use core::marker::Unsize;
 use core::mem;
 use core::mem::offset_of;
+use core::ops::CoerceUnsized;
 use core::ops::Deref;
 use core::ptr::NonNull;
 use core::sync::atomic;
@@ -73,6 +75,14 @@ impl<T> SharedRef<T> {
         })
     }
 
+    /// Creates a new reference-counted object from a static reference.
+    pub const fn new_static(inner: &'static RefCounted<T>) -> Self {
+        let ptr = inner as *const RefCounted<T> as *mut RefCounted<T>;
+        Self {
+            ptr: unsafe { NonNull::new_unchecked(ptr) },
+        }
+    }
+
     /// Provides a raw pointer to the data.
     ///
     /// The counts are not affected in any way and the SharedRef is not consumed.
@@ -111,6 +121,14 @@ impl<T> SharedRef<T> {
 }
 
 impl<T: ?Sized> SharedRef<T> {
+    /// Creates a new reference-counted object from a static reference.
+    pub const fn clone_static(this: &'static SharedRef<T>) -> Self {
+        // Static references are guaranteed to be alive for the lifetime of the
+        // program. Create the new SharedRef without incrementing the reference
+        // count.
+        Self { ptr: this.ptr }
+    }
+
     /// Returns a reference to the inner object.
     fn inner(&self) -> &RefCounted<T> {
         // SAFETY: The object will be kept alive as long as `self` is alive.
@@ -179,3 +197,5 @@ where
 
 unsafe impl<T: Sync + Send + ?Sized> Sync for SharedRef<T> {}
 unsafe impl<T: Sync + Send + ?Sized> Send for SharedRef<T> {}
+
+impl<T: ?Sized + Unsize<U>, U: ?Sized> CoerceUnsized<SharedRef<U>> for SharedRef<T> {}
