@@ -92,3 +92,19 @@ pub fn sys_pci_lookup(a0: usize, a1: usize, a2: usize, a3: usize) {
 
     scan_all(vendor, device);
 }
+
+pub fn sys_pci_set_busmaster(a0: usize, a1: usize, a2: usize) {
+    let bus = a0 as u8;
+    let slot = a1 as u8;
+    let enable = a2 != 0;
+
+    todo!("enable busmaster");
+}
+
+pub fn sys_pci_get_bar(a0: usize, a1: usize, a2: usize) {
+    let bus = a0 as u8;
+    let slot = a1 as u8;
+    let bar = a2 as u8;
+
+    todo!("get bar");
+}
