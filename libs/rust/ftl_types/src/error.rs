@@ -1,3 +1,7 @@
+/// The error code.
+///
+/// Note: Do not change the size of this enum: ERROR_RETVAL_BASE assumes this
+/// enum is 8 bits wide.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u8)]
 pub enum ErrorCode {
