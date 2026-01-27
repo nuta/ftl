@@ -1,11 +1,13 @@
 //! Application loader.
+use core::mem::MaybeUninit;
 use core::slice;
 
+use ftl_types::environ::StartInfo;
 use ftl_utils::alignment::align_up;
 
 use crate::address::VAddr;
+use crate::arch;
 use crate::arch::MIN_PAGE_SIZE;
-use crate::arch::{self};
 use crate::initfs;
 use crate::initfs::InitFs;
 use crate::memory::PAGE_ALLOCATOR;
@@ -101,7 +103,17 @@ pub fn load(initfs: &InitFs) {
             .expect("failed to allocate stack");
         let stack_bottom_vaddr = arch::paddr2vaddr(stack_bottom_paddr);
         let sp = stack_bottom_vaddr.as_usize() + stack_size;
-        let thread = Thread::new(entry.as_usize(), sp, 0).expect("failed to create thread");
+
+        use alloc::boxed::Box;
+
+        let info_uninit = Box::leak(Box::new(MaybeUninit::<StartInfo>::uninit()));
+        info_uninit.write(StartInfo {
+            syscall: arch::direct_syscall_handler,
+        });
+        let start_info = info_uninit.as_ptr() as usize;
+
+        let thread =
+            Thread::new(entry.as_usize(), sp, start_info).expect("failed to create thread");
         SCHEDULER.push(thread);
     }
 }

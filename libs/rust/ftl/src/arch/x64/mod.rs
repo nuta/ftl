@@ -1,4 +1,8 @@
+use core::arch::asm;
 use core::arch::naked_asm;
+use core::mem::offset_of;
+
+use ftl_types::environ::StartInfo;
 
 #[repr(C)]
 struct Elf64Rela {
@@ -23,6 +27,14 @@ extern "C" fn apply_relocs(base: usize, rela: *const Elf64Rela, rela_end: *const
             }
             rel = rel.add(1);
         }
+    }
+}
+
+pub fn get_start_info() -> &'static StartInfo {
+    unsafe {
+        let start_info: *const StartInfo;
+        asm!("rdgsbase {}", out(reg) start_info);
+        &*(start_info as *const StartInfo)
     }
 }
 

@@ -1,6 +1,7 @@
 #[repr(C)]
 pub struct StartInfo {
-    syscall: extern "C" fn(
+    /// The syscall handler.
+    pub syscall: extern "C" fn(
         a0: usize,
         a1: usize,
         a2: usize,

@@ -13,9 +13,9 @@ pub struct Thread {
 }
 
 impl Thread {
-    pub fn new(entry: usize, sp: usize, arg: usize) -> Result<SharedRef<Self>, ErrorCode> {
+    pub fn new(entry: usize, sp: usize, start_info: usize) -> Result<SharedRef<Self>, ErrorCode> {
         SharedRef::new(Self {
-            arch: arch::Thread::new(entry, sp, arg),
+            arch: arch::Thread::new(entry, sp, start_info),
         })
     }
 

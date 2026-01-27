@@ -25,15 +25,3 @@ pub fn boot(bootinfo: &BootInfo) -> ! {
     loader::load(&initfs);
     return_to_user();
 }
-
-extern "C" fn thread_entry(arg: usize) -> ! {
-    unsafe extern "C" {
-        fn direct_syscall_handler(a0: usize);
-    }
-
-    loop {
-        unsafe {
-            direct_syscall_handler(arg);
-        }
-    }
-}
