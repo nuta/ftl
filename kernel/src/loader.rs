@@ -3,6 +3,7 @@ use core::slice;
 
 use ftl_utils::alignment::align_up;
 
+use crate::address::VAddr;
 use crate::arch::MIN_PAGE_SIZE;
 use crate::arch::{self};
 use crate::initfs;
@@ -39,12 +40,18 @@ struct Phdr64 {
     align: u64,
 }
 
-fn load_file(file: initfs::File) {
+#[derive(Debug)]
+pub enum ElfError {
+    NotAnElfFile,
+}
+
+/// Loads an ELF file into memory.
+///
+/// Returns the entry point of the ELF file.
+fn load_elf(file: &initfs::File) -> Result<VAddr, ElfError> {
     let ehdr = unsafe { &*(file.data.as_ptr() as *const Ehdr64) };
     if ehdr.magic[..4] != [0x7f, b'E', b'L', b'F'] {
-        // Not an ELF file. Ignore it.
-        println!("{}: not an ELF file", file.name);
-        return;
+        return Err(ElfError::NotAnElfFile);
     }
 
     println!("{}: ELF entry={:x}", file.name, ehdr.entry);
@@ -78,10 +85,13 @@ fn load_file(file: initfs::File) {
     }
 
     println!("image loaded at {:?}", image_vaddr);
+    let entry = VAddr::new(image_vaddr.as_usize() + ehdr.entry as usize);
+    Ok(entry)
 }
 
 pub fn load(initfs: &InitFs) {
     for file in initfs.iter() {
-        load_file(file);
+        let entry = load_elf(&file).expect("failed to load ELF file");
+        println!("{}: ELF file loaded at {:?}", file.name, entry);
     }
 }
