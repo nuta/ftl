@@ -16,7 +16,7 @@ cargo build \
 
 cp target/kernel/debug/kernel ftl.elf
 
-time bun mkinitfs.ts
+bun mkinitfs.ts
 
 if [[ ${BUILD_ONLY:-} != "" ]]; then
   exit 0
