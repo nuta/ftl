@@ -4,5 +4,7 @@ use ftl::println;
 
 #[unsafe(no_mangle)]
 fn main() {
-    println!("Hello, world!");
+    for i in 0.. {
+        println!("Hello world from system call {} times!", i);
+    }
 }

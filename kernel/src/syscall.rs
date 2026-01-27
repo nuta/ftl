@@ -12,12 +12,11 @@ pub extern "C" fn syscall_handler(
     _a4: usize,
     n: usize,
 ) -> ! {
-    println!("syscall: n={}, [{:x}, {:x}]", n, a0, a1);
     match n {
         SYS_CONSOLE_WRITE => {
             let s = unsafe { slice::from_raw_parts(a0 as *const u8, a1) };
             match core::str::from_utf8(s) {
-                Ok(s) => println!("[user] {}", s),
+                Ok(s) => println!("[user] {}", s.trim_ascii_end()),
                 Err(_) => println!("[user] invalid UTF-8"),
             }
         }
