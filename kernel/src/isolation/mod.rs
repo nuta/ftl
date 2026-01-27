@@ -83,10 +83,18 @@ impl InKernelIsolation {
 }
 
 impl Isolation for InKernelIsolation {
-    fn read_bytes(&self, buf: &mut [u8], slice: UserSlice) -> Result<(), ErrorCode> {
-        let ptr = slice.start.0 as *const u8;
+    fn read_bytes(&self, slice: UserSlice, buf: &mut [u8]) -> Result<(), ErrorCode> {
+        let src = slice.start.0 as *const u8;
         unsafe {
-            core::ptr::copy_nonoverlapping(ptr, buf.as_mut_ptr(), slice.len());
+            core::ptr::copy_nonoverlapping(src, buf.as_mut_ptr(), slice.len());
+        }
+        Ok(())
+    }
+
+    fn write_bytes(&self, slice: UserSlice, buf: &[u8]) -> Result<(), ErrorCode> {
+        let dst = slice.start.0 as *mut u8;
+        unsafe {
+            core::ptr::copy_nonoverlapping(buf.as_ptr(), dst, slice.len());
         }
         Ok(())
     }
