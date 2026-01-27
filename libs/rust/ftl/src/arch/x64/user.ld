@@ -1,4 +1,4 @@
-ENTRY(main)
+ENTRY(start)
 
 SECTIONS {
     . = ALIGN(16);
