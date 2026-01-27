@@ -9,6 +9,8 @@ use crate::arch::{self};
 use crate::initfs;
 use crate::initfs::InitFs;
 use crate::memory::PAGE_ALLOCATOR;
+use crate::scheduler::SCHEDULER;
+use crate::thread::Thread;
 
 #[repr(C)]
 struct Ehdr64 {
@@ -84,7 +86,6 @@ fn load_elf(file: &initfs::File) -> Result<VAddr, ElfError> {
         image[dst_range].copy_from_slice(&elf_file[src_range]);
     }
 
-    println!("image loaded at {:?}", image_vaddr);
     let entry = VAddr::new(image_vaddr.as_usize() + ehdr.entry as usize);
     Ok(entry)
 }
@@ -93,5 +94,14 @@ pub fn load(initfs: &InitFs) {
     for file in initfs.iter() {
         let entry = load_elf(&file).expect("failed to load ELF file");
         println!("{}: ELF file loaded at {:?}", file.name, entry);
+
+        let stack_size = 1024 * 1024;
+        let stack_bottom_paddr = PAGE_ALLOCATOR
+            .alloc(align_up(stack_size, MIN_PAGE_SIZE))
+            .expect("failed to allocate stack");
+        let stack_bottom_vaddr = arch::paddr2vaddr(stack_bottom_paddr);
+        let sp = stack_bottom_vaddr.as_usize() + stack_size;
+        let thread = Thread::new(entry.as_usize(), sp, 0).expect("failed to create thread");
+        SCHEDULER.push(thread);
     }
 }
