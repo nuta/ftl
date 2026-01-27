@@ -5,6 +5,8 @@ use ftl_types::pci::PciEntry;
 
 use super::ioport::in32;
 use super::ioport::out32;
+use crate::arch::x64::ioport::in16;
+use crate::arch::x64::ioport::out16;
 use crate::isolation::UserPtr;
 use crate::isolation::UserSlice;
 use crate::shared_ref::SharedRef;
@@ -37,14 +39,20 @@ struct PciConfig {
     max_latency: u8,
 }
 
+fn get_addr(bus: u8, slot: u8, offset: usize) -> u32 {
+    (1 << 31) | ((bus as u32) << 16) | ((slot as u32) << 11) | (offset as u32)
+}
+
+const PCI_IOPORT_ADDR: u16 = 0xcf8;
+const PCI_IOPORT_DATA: u16 = 0xcfc;
+
 fn read_config32(bus: u8, slot: u8, offset: usize) -> u32 {
     debug_assert!(offset & 0b11 == 0, "offset must be aligned to 4 bytes");
     debug_assert!(offset < 0xff, "offset is out of range");
 
-    let addr = (1 << 31) | ((bus as u32) << 16) | ((slot as u32) << 11) | (offset as u32);
     unsafe {
-        out32(0xcf8, addr);
-        in32(0xcfc)
+        out32(PCI_IOPORT_ADDR, get_addr(bus, slot, offset));
+        in32(PCI_IOPORT_DATA)
     }
 }
 
@@ -52,12 +60,29 @@ fn read_config16(bus: u8, slot: u8, offset: usize) -> u16 {
     debug_assert!(offset & 0b01 == 0, "offset must be aligned to 2 bytes");
     debug_assert!(offset < 0xff, "offset is out of range");
 
-    let value = read_config32(bus, slot, offset & !0b11);
-    let is_high = offset & 0b11 != 0;
-    if is_high {
-        (value >> 16) as u16
-    } else {
-        value as u16
+    unsafe {
+        out32(PCI_IOPORT_ADDR, get_addr(bus, slot, offset));
+        in16(PCI_IOPORT_DATA)
+    }
+}
+
+fn write_config32(bus: u8, slot: u8, offset: usize, value: u32) {
+    debug_assert!(offset & 0b11 == 0, "offset must be aligned to 4 bytes");
+    debug_assert!(offset < 0xff, "offset is out of range");
+
+    unsafe {
+        out32(PCI_IOPORT_ADDR, get_addr(bus, slot, offset));
+        out32(PCI_IOPORT_DATA, value);
+    }
+}
+
+fn write_config16(bus: u8, slot: u8, offset: usize, value: u16) {
+    debug_assert!(offset & 0b01 == 0, "offset must be aligned to 2 bytes");
+    debug_assert!(offset < 0xff, "offset is out of range");
+
+    unsafe {
+        out32(PCI_IOPORT_ADDR, get_addr(bus, slot, offset));
+        out16(PCI_IOPORT_DATA, value);
     }
 }
 
@@ -118,8 +143,14 @@ pub fn sys_pci_set_busmaster(a0: usize, a1: usize, a2: usize) -> Result<usize, E
     let slot = a1 as u8;
     let enable = a2 != 0;
 
-    // todo!("enable busmaster");
-    println!("TODO: enable busmaster for {:x}:{:x}", bus, slot);
+    let mut value = read_config16(bus, slot, offset_of!(PciConfig, command));
+    if enable {
+        value |= 1 << 2;
+    } else {
+        value &= !(1 << 2);
+    }
+
+    write_config16(bus, slot, offset_of!(PciConfig, command), value);
     Ok(0)
 }
 
