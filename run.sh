@@ -8,6 +8,12 @@ cargo build \
   --manifest-path kernel/Cargo.toml \
   --target kernel/src/arch/$ARCH/kernel.json
 
+cargo build \
+  -Z build-std=core,alloc \
+  -Z build-std-features=compiler-builtins-mem \
+  --manifest-path apps/hello/Cargo.toml \
+  --target libs/rust/ftl/src/arch/$ARCH/user.json
+
 cp target/kernel/debug/kernel ftl.elf
 
 if [[ ${BUILD_ONLY:-} != "" ]]; then

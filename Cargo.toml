@@ -5,11 +5,12 @@ edition = "2024"
 
 [workspace]
 resolver = "2"
-members = ["kernel", "libs/rust/*"]
+members = ["apps/hello", "kernel", "libs/rust/*"]
 
 [workspace.dependencies]
 talc = "4.4.3"
 
+ftl = { path = "libs/rust/ftl" }
 ftl_types = { path = "libs/rust/ftl_types" }
 ftl_utils = { path = "libs/rust/ftl_utils" }
 ftl_bump_allocator = { path = "libs/rust/ftl_bump_allocator" }
