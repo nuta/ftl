@@ -98,6 +98,18 @@ impl CurrentThread {
         // SAFETY: The static_assert above guarantees arch::Thread is at the offset 0.
         unsafe { *self.ptr.get() as *mut arch::Thread }
     }
+
+    /// Sets the system call return value.
+    pub fn set_syscall_result(&self, retval: Result<usize, ErrorCode>) {
+        let raw = match retval {
+            Ok(retval) => retval,
+            Err(error) => error as usize,
+        };
+
+        unsafe {
+            (*self.arch_thread()).set_syscall_result(raw);
+        }
+    }
 }
 
 fn schedule() -> Option<*const arch::Thread> {
