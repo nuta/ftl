@@ -3,4 +3,5 @@
 pub enum ErrorCode {
     OutOfMemory,
     OutOfBounds,
+    UnknownSyscall,
 }

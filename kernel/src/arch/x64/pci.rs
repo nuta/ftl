@@ -87,7 +87,7 @@ pub fn sys_pci_lookup(
     a1: usize,
     a2: usize,
     a3: usize,
-) -> Result<(), ErrorCode> {
+) -> Result<usize, ErrorCode> {
     let buf = UserPtr::new(a0);
     let n = a1;
     let vendor = a2 as u16;
@@ -110,7 +110,7 @@ pub fn sys_pci_lookup(
         }
     }
 
-    Ok(())
+    Ok(index)
 }
 
 pub fn sys_pci_set_busmaster(a0: usize, a1: usize, a2: usize) {

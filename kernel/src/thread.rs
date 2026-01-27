@@ -100,12 +100,13 @@ impl CurrentThread {
     }
 
     /// Sets the system call return value.
-    pub fn set_syscall_result(&self, retval: Result<usize, ErrorCode>) {
+    pub unsafe fn set_syscall_result(&self, retval: Result<usize, ErrorCode>) {
         let raw = match retval {
             Ok(retval) => retval,
             Err(error) => error as usize,
         };
 
+        // TODO: safety comment
         unsafe {
             (*self.arch_thread()).set_syscall_result(raw);
         }

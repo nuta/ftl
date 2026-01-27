@@ -10,9 +10,16 @@ pub(super) fn syscall2(n: usize, a0: usize, a1: usize) -> usize {
 }
 
 #[inline(always)]
-pub(super) fn syscall4(n: usize, a0: usize, a1: usize, a2: usize, a3: usize) -> usize {
+pub(super) fn syscall4(
+    n: usize,
+    a0: usize,
+    a1: usize,
+    a2: usize,
+    a3: usize,
+) -> Result<usize, ErrorCode> {
     let start_info = get_start_info();
-    (start_info.syscall)(a0, a1, a2, a3, 0, n)
+    let result = (start_info.syscall)(a0, a1, a2, a3, 0, n);
+    Ok(result)
 }
 
 pub fn sys_console_write(s: &[u8]) {
