@@ -29,6 +29,11 @@ pub(super) fn syscall2(n: usize, a0: usize, a1: usize) -> Result<usize, ErrorCod
 }
 
 #[inline(always)]
+pub(super) fn syscall3(n: usize, a0: usize, a1: usize, a2: usize) -> Result<usize, ErrorCode> {
+    syscall(n, a0, a1, a2, 0, 0)
+}
+
+#[inline(always)]
 pub(super) fn syscall4(
     n: usize,
     a0: usize,

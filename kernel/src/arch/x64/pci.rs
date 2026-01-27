@@ -118,7 +118,9 @@ pub fn sys_pci_set_busmaster(a0: usize, a1: usize, a2: usize) -> Result<usize, E
     let slot = a1 as u8;
     let enable = a2 != 0;
 
-    todo!("enable busmaster");
+    // todo!("enable busmaster");
+    println!("TODO: enable busmaster for {:x}:{:x}", bus, slot);
+    Ok(0)
 }
 
 pub fn sys_pci_get_bar(a0: usize, a1: usize, a2: usize) -> Result<usize, ErrorCode> {
