@@ -126,5 +126,11 @@ pub fn sys_pci_get_bar(a0: usize, a1: usize, a2: usize) -> Result<usize, ErrorCo
     let slot = a1 as u8;
     let bar = a2 as u8;
 
-    todo!("get bar");
+    if bar >= 6 {
+        return Err(ErrorCode::OutOfBounds);
+    }
+
+    let offset = offset_of!(PciConfig, bar) + (bar as usize * size_of::<u32>());
+    let value = read_config32(bus, slot, offset);
+    Ok(value as usize)
 }
