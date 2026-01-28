@@ -118,7 +118,7 @@ fn load_elf(file: &initfs::File) -> Result<VAddr, ElfError> {
         let src_start = phdr.offset as usize;
         let dst_start = phdr.vaddr as usize;
         let src_end = src_start + phdr.filesz as usize;
-        let dst_end = dst_start + phdr.memsz as usize;
+        let dst_end = dst_start + phdr.filesz as usize;
 
         println!(
             "{}: phdr: vaddr={:x}, filesz={:x}, memsz={:x}",
@@ -126,8 +126,16 @@ fn load_elf(file: &initfs::File) -> Result<VAddr, ElfError> {
         );
         let src_range = src_start..src_end;
         let dst_range = dst_start..dst_end;
-        // TODO: Clear .bss section (filesz < range < memsz).
-        image[dst_range].copy_from_slice(&elf_file[src_range]);
+
+        if !src_range.is_empty() {
+            image[dst_range].copy_from_slice(&elf_file[src_range]);
+        }
+
+        // Clear the .bss section (filesz < range < memsz).
+        let zeroed_range = dst_end..(dst_start + phdr.memsz as usize);
+        if phdr.filesz < phdr.memsz {
+            image[zeroed_range].fill(0);
+        }
     }
 
     let entry = VAddr::new(image_vaddr.as_usize() + ehdr.entry as usize);
