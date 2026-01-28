@@ -9,10 +9,6 @@
 //! <https://ozlabs.org/~rusty/virtio-spec/virtio-0.9.5.pdf>
 
 use core::arch::asm;
-use core::ops::ControlFlow;
-pub struct Virtio {}
-
-pub trait Transport {}
 
 const PCI_IOPORT_DEVICE_FEATURES: u16 = 0;
 const PCI_IOPORT_GUEST_FEATURES: u16 = 4;
@@ -32,13 +28,13 @@ const STATUS_DRIVER_FAILED: u8 = 128;
 
 pub enum Error {}
 
-pub struct PciTransport {
+pub struct VirtioPci {
     bus: u8,
     slot: u8,
     iobase: u16,
 }
 
-impl PciTransport {
+impl VirtioPci {
     pub fn new(bus: u8, slot: u8, iobase: u16) -> Self {
         Self { bus, slot, iobase }
     }

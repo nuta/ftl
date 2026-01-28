@@ -7,8 +7,8 @@ use ftl::pci::PciEntry;
 use ftl::println;
 use ftl_utils::alignment::align_up;
 
-use crate::virtio::PciTransport;
 use crate::virtio::Virtio;
+use crate::virtio::VirtioPci;
 
 mod virtio;
 
@@ -44,18 +44,18 @@ fn main() {
     println!("IOPL enabled");
 
     const VIRTIO_NET_F_MAC: u32 = 1 << 5;
-    let transport = PciTransport::new(entry.bus, entry.slot, iobase);
-    let guest_features = transport.initialize1();
-    transport.initialize2(guest_features);
+    let virtio = VirtioPci::new(entry.bus, entry.slot, iobase);
+    let guest_features = virtio.initialize1();
+    virtio.initialize2(guest_features);
     assert!(
         guest_features & VIRTIO_NET_F_MAC != 0,
         "MAC feature not supported"
     );
-    transport.write_guest_features(guest_features);
+    virtio.write_guest_features(guest_features);
 
     let mut mac = [0u8; 6];
     for i in 0..6 {
-        mac[i] = transport.read_device_config8(i as u16);
+        mac[i] = virtio.read_device_config8(i as u16);
     }
     println!(
         "MAC address: {:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
