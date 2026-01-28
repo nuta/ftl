@@ -33,6 +33,10 @@ fn main() {
         let mut paddr = 0;
         ftl::dmabuf::sys_dmabuf_alloc(4096, &mut vaddr, &mut paddr).unwrap();
         println!("DMABUF: {:x} -> {:x}", vaddr, paddr);
+
+        println!("enabling IOPL");
+        ftl::syscall::sys_x64_iopl(true).unwrap();
+        println!("IOPL enabled");
     }
 
     loop {

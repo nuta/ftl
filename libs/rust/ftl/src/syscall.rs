@@ -1,6 +1,7 @@
 use ftl_types::error::ErrorCode;
 use ftl_types::syscall::ERROR_RETVAL_BASE;
 use ftl_types::syscall::SYS_CONSOLE_WRITE;
+use ftl_types::syscall::SYS_X64_IOPL;
 
 use crate::arch::get_start_info;
 
@@ -20,6 +21,11 @@ fn syscall(
     } else {
         Ok(result)
     }
+}
+
+#[inline(always)]
+pub(super) fn syscall1(n: usize, a0: usize) -> Result<usize, ErrorCode> {
+    syscall(n, a0, 0, 0, 0, 0)
 }
 
 #[inline(always)]
@@ -45,4 +51,8 @@ pub(super) fn syscall4(
 
 pub fn sys_console_write(s: &[u8]) {
     syscall2(SYS_CONSOLE_WRITE, s.as_ptr() as usize, s.len());
+}
+
+pub fn sys_x64_iopl(enable: bool) -> Result<usize, ErrorCode> {
+    syscall1(SYS_X64_IOPL, enable as usize)
 }

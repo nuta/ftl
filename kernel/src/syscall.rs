@@ -8,6 +8,8 @@ use ftl_types::syscall::SYS_PCI_GET_BAR;
 use ftl_types::syscall::SYS_PCI_LOOKUP;
 #[cfg(target_arch = "x86_64")]
 use ftl_types::syscall::SYS_PCI_SET_BUSMASTER;
+#[cfg(target_arch = "x86_64")]
+use ftl_types::syscall::SYS_X64_IOPL;
 
 use crate::arch;
 use crate::shared_ref::SharedRef;
@@ -39,6 +41,8 @@ fn do_syscall(
         SYS_PCI_SET_BUSMASTER => arch::sys_pci_set_busmaster(a0, a1, a2),
         #[cfg(target_arch = "x86_64")]
         SYS_PCI_GET_BAR => arch::sys_pci_get_bar(a0, a1, a2),
+        #[cfg(target_arch = "x86_64")]
+        SYS_X64_IOPL => arch::sys_x64_iopl(&thread, a0),
         _ => {
             println!("unknown syscall: {}", n);
             Err(ErrorCode::UnknownSyscall)
