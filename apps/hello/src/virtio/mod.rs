@@ -102,6 +102,14 @@ impl<'a> VirtQueue<'a> {
             4096,
         );
         let used = (vaddr + used_offset) as *mut UsedElem;
+        let mut free_indicies = Vec::with_capacity(queue_size as usize);
+        for index in 0..queue_size {
+            free_indicies.push(index);
+        }
+        unsafe {
+            (*avail).flags = 0;
+            (*avail).idx = 0;
+        }
         Self {
             virtio,
             queue_index,
@@ -109,7 +117,7 @@ impl<'a> VirtQueue<'a> {
             descs,
             avail,
             used,
-            free_indicies: Vec::new(),
+            free_indicies,
         }
     }
 
