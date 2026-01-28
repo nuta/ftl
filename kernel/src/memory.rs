@@ -4,14 +4,22 @@ use core::ptr::NonNull;
 
 use ftl_arrayvec::ArrayVec;
 use ftl_bump_allocator::BumpAllocator;
+use ftl_types::error::ErrorCode;
+use ftl_utils::alignment::align_up;
 use ftl_utils::alignment::is_aligned;
 
 use crate::address::PAddr;
 use crate::address::VAddr;
+use crate::arch;
 use crate::arch::MIN_PAGE_SIZE;
 use crate::boot::BootInfo;
 use crate::boot::FreeRam;
+use crate::isolation::INKERNEL_ISOLATION;
+use crate::isolation::UserPtr;
+use crate::isolation::UserSlice;
+use crate::shared_ref::SharedRef;
 use crate::spinlock::SpinLock;
+use crate::thread::Thread;
 
 /// The physical memory allocator.
 pub static PAGE_ALLOCATOR: PageAllocator = PageAllocator::new();
@@ -128,6 +136,36 @@ unsafe impl GlobalAlloc for GlobalAllocator {
             self.inner.lock().free(nonnull, layout);
         }
     }
+}
+
+pub fn sys_dmabuf_alloc(
+    current: &SharedRef<Thread>,
+    a0: usize,
+    a1: usize,
+    a2: usize,
+) -> Result<usize, ErrorCode> {
+    let size = a0;
+    let vaddr_ptr = UserSlice::new(UserPtr::new(a1), size_of::<usize>())?;
+    let paddr_ptr = UserSlice::new(UserPtr::new(a2), size_of::<usize>())?;
+
+    // Allocate physical memory.
+    //
+    // TODO: Support constraints like alignment.
+    let Some(paddr) = PAGE_ALLOCATOR.alloc(align_up(size, MIN_PAGE_SIZE)) else {
+        return Err(ErrorCode::OutOfMemory);
+    };
+
+    // Map the allocated physical memory to the process's address space.
+    let isolation = current.process().isolation();
+    let vaddr = if SharedRef::ptr_eq(isolation, &INKERNEL_ISOLATION) {
+        arch::paddr2vaddr(paddr)
+    } else {
+        return Err(ErrorCode::Unsupported);
+    };
+
+    crate::isolation::write(isolation, vaddr_ptr, 0, vaddr.as_usize())?;
+    crate::isolation::write(isolation, paddr_ptr, 0, paddr.as_usize())?;
+    Ok(0)
 }
 
 /// A wrapper struct to make a type page-aligned.

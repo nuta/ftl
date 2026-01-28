@@ -27,6 +27,12 @@ fn main() {
         println!("getting BAR for {:x}:{:x}", entry.bus, entry.slot);
         let bar = ftl::pci::sys_pci_get_bar(entry.bus, entry.slot, 0).unwrap();
         println!("BAR: {:x}", bar);
+
+        println!("allocating dmabuf");
+        let mut vaddr = 0;
+        let mut paddr = 0;
+        ftl::dmabuf::sys_dmabuf_alloc(4096, &mut vaddr, &mut paddr).unwrap();
+        println!("DMABUF: {:x} -> {:x}", vaddr, paddr);
     }
 
     loop {

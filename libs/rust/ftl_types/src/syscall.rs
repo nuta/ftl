@@ -13,3 +13,4 @@ pub const SYS_CONSOLE_WRITE: usize = 1;
 pub const SYS_PCI_LOOKUP: usize = 2;
 pub const SYS_PCI_SET_BUSMASTER: usize = 3;
 pub const SYS_PCI_GET_BAR: usize = 4;
+pub const SYS_DMABUF_ALLOC: usize = 5;

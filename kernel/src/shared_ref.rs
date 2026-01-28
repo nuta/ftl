@@ -137,6 +137,11 @@ impl<T: ?Sized> SharedRef<T> {
         Self { ptr: this.ptr }
     }
 
+    /// Returns true if the two pointers point to the same object.
+    pub fn ptr_eq(a: &Self, b: &Self) -> bool {
+        core::ptr::addr_eq(a.ptr.as_ptr(), b.ptr.as_ptr())
+    }
+
     /// Returns a reference to the inner object.
     fn inner(&self) -> &RefCounted<T> {
         // SAFETY: The object will be kept alive as long as `self` is alive.

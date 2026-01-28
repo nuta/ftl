@@ -10,6 +10,7 @@ pub enum ErrorCode {
     OutOfMemory = 2,
     OutOfBounds = 3,
     UnknownSyscall = 4,
+    Unsupported = 5,
 }
 
 impl From<usize> for ErrorCode {
@@ -20,6 +21,7 @@ impl From<usize> for ErrorCode {
             2 => Self::OutOfMemory,
             3 => Self::OutOfBounds,
             4 => Self::UnknownSyscall,
+            5 => Self::Unsupported,
             _ => Self::Unknown,
         }
     }

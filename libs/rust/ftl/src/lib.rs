@@ -7,5 +7,6 @@ mod arch;
 mod panic;
 mod syscall;
 
+pub mod dmabuf;
 #[cfg(target_arch = "x86_64")]
 pub mod pci;
