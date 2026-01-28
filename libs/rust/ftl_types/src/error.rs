@@ -5,20 +5,21 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u8)]
 pub enum ErrorCode {
-    Unknown,
-    Unreachable,
-    OutOfMemory,
-    OutOfBounds,
-    UnknownSyscall,
+    Unknown = 0,
+    Unreachable = 1,
+    OutOfMemory = 2,
+    OutOfBounds = 3,
+    UnknownSyscall = 4,
 }
 
 impl From<usize> for ErrorCode {
     fn from(value: usize) -> Self {
         // TODO: Optimize this conversion.
         match value {
-            1 => Self::OutOfMemory,
-            2 => Self::OutOfBounds,
-            3 => Self::UnknownSyscall,
+            1 => Self::Unreachable,
+            2 => Self::OutOfMemory,
+            3 => Self::OutOfBounds,
+            4 => Self::UnknownSyscall,
             _ => Self::Unknown,
         }
     }
