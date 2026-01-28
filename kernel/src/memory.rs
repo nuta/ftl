@@ -5,7 +5,6 @@ use core::ptr::NonNull;
 use ftl_arrayvec::ArrayVec;
 use ftl_bump_allocator::BumpAllocator;
 use ftl_types::error::ErrorCode;
-use ftl_utils::alignment::align_up;
 use ftl_utils::alignment::is_aligned;
 
 use crate::address::PAddr;
@@ -148,10 +147,14 @@ pub fn sys_dmabuf_alloc(
     let vaddr_ptr = UserSlice::new(UserPtr::new(a1), size_of::<usize>())?;
     let paddr_ptr = UserSlice::new(UserPtr::new(a2), size_of::<usize>())?;
 
+    if !is_aligned(size, MIN_PAGE_SIZE) {
+        return Err(ErrorCode::InvalidArgument);
+    }
+
     // Allocate physical memory.
     //
     // TODO: Support constraints like alignment.
-    let Some(paddr) = PAGE_ALLOCATOR.alloc(align_up(size, MIN_PAGE_SIZE)) else {
+    let Some(paddr) = PAGE_ALLOCATOR.alloc(size) else {
         return Err(ErrorCode::OutOfMemory);
     };
 

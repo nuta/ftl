@@ -11,6 +11,7 @@ pub enum ErrorCode {
     OutOfBounds = 3,
     UnknownSyscall = 4,
     Unsupported = 5,
+    InvalidArgument = 6,
 }
 
 impl From<usize> for ErrorCode {
@@ -22,6 +23,7 @@ impl From<usize> for ErrorCode {
             3 => Self::OutOfBounds,
             4 => Self::UnknownSyscall,
             5 => Self::Unsupported,
+            6 => Self::InvalidArgument,
             _ => Self::Unknown,
         }
     }
