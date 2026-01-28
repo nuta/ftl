@@ -5,9 +5,7 @@ use core::mem::MaybeUninit;
 
 use ftl::pci::PciEntry;
 use ftl::println;
-use ftl_utils::alignment::align_up;
 
-use crate::virtio::Virtio;
 use crate::virtio::VirtioPci;
 
 mod virtio;
@@ -46,7 +44,6 @@ fn main() {
     const VIRTIO_NET_F_MAC: u32 = 1 << 5;
     let virtio = VirtioPci::new(entry.bus, entry.slot, iobase);
     let guest_features = virtio.initialize1();
-    virtio.initialize2(guest_features);
     assert!(
         guest_features & VIRTIO_NET_F_MAC != 0,
         "MAC feature not supported"
@@ -61,6 +58,8 @@ fn main() {
         "MAC address: {:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
         mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]
     );
+
+    virtio.initialize2();
 
     loop {
         unsafe { core::arch::asm!("hlt") }
