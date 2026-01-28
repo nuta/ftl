@@ -52,6 +52,10 @@ static mut TSS_ENTRIES: [MaybeUninit<Tss>; NUM_CPUS_MAX] =
 extern "C" fn rust_boot(start_info: PAddr) -> ! {
     super::console::init();
 
+    // SeaBIOS prints an escape sequence which disables line wrapping, and messes up
+    // your terminal. Revert it.
+    println!("\x1b[?7h\n");
+
     println!("\nBooting FTL...");
 
     // Enable FS/GS base.

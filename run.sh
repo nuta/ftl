@@ -30,8 +30,3 @@ qemu-system-x86_64 \
   -netdev user,id=net0 \
   -device virtio-net-pci,netdev=net0 \
   -object filter-dump,id=filter0,netdev=net0,file=network.pcap
-
-
-# SeaBIOS prints an escape sequence which disables line wrapping, and messes up
-# your terminal. Restore it.
-printf '\033[?7h'
