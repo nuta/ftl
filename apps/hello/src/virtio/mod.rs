@@ -9,7 +9,9 @@
 //! <https://ozlabs.org/~rusty/virtio-spec/virtio-0.9.5.pdf>
 
 use core::arch::asm;
-use core::sync::atomic::{fence, Ordering};
+use core::ptr::{read_volatile, write_volatile};
+use core::sync::atomic::Ordering;
+use core::sync::atomic::fence;
 
 use ftl::error::ErrorCode;
 use ftl::prelude::*;
@@ -48,6 +50,13 @@ struct UsedElem {
     len: u32,
 }
 
+#[repr(C)]
+struct Avail {
+    flags: u16,
+    idx: u16,
+    ring: [u16; 0],
+}
+
 #[derive(Debug)]
 pub enum Error {
     DmaBufAlloc(ErrorCode),
@@ -72,7 +81,7 @@ pub struct VirtQueue<'a> {
     queue_index: u16,
     queue_size: u16,
     descs: *mut Desc,
-    avail: *mut u16,
+    avail: *mut Avail,
     used: *mut UsedElem,
     free_indicies: Vec<u16>,
 }
@@ -86,9 +95,11 @@ impl<'a> VirtQueue<'a> {
     ) -> VirtQueue<'a> {
         let descs = vaddr as *mut Desc;
         let avail_offset = size_of::<Desc>() * queue_size as usize;
-        let avail = (vaddr + avail_offset) as *mut u16;
-        let used_offset =
-            align_up(avail_offset + size_of::<u16>() * (2 + queue_size as usize), 4096);
+        let avail = (vaddr + avail_offset) as *mut Avail;
+        let used_offset = align_up(
+            avail_offset + size_of::<u16>() * (2 + queue_size as usize),
+            4096,
+        );
         let used = (vaddr + used_offset) as *mut UsedElem;
         Self {
             virtio,
@@ -148,16 +159,20 @@ impl<'a> VirtQueue<'a> {
         }
 
         // Write the head index to the avail ring.
-        let avail_index = unsafe { self.avail.add(1).read() };
+        let avail_index = unsafe { read_volatile(&(*self.avail).idx) };
         let ring_index = (avail_index % self.queue_size) as usize;
         unsafe {
-            self.avail.add(2 + ring_index).write(head_index);
+            write_volatile(
+                (*self.avail).ring.as_mut_ptr().add(ring_index),
+                head_index,
+            );
         }
         fence(Ordering::Release);
         unsafe {
-            self.avail
-                .add(1)
-                .write(avail_index.wrapping_add(1));
+            write_volatile(
+                &mut (*self.avail).idx,
+                avail_index.wrapping_add(1),
+            );
         }
 
         Ok(())
