@@ -26,12 +26,9 @@ fn do_syscall(
 ) -> Result<usize, ErrorCode> {
     match n {
         SYS_CONSOLE_WRITE => {
+            // FIXME: Use UserSlice.
             let s = unsafe { slice::from_raw_parts(a0 as *const u8, a1) };
-            match core::str::from_utf8(s) {
-                Ok(s) => println!("[user] {}", s.trim_ascii_end()),
-                Err(_) => println!("[user] invalid UTF-8"),
-            }
-
+            arch::console_write(s);
             Ok(0)
         }
         SYS_DMABUF_ALLOC => crate::memory::sys_dmabuf_alloc(&thread, a0, a1, a2),
