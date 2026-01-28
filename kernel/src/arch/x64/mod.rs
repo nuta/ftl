@@ -4,6 +4,7 @@ mod cpuvar;
 mod idle;
 mod idt;
 mod ioport;
+mod local_apic;
 mod mp_table;
 mod pci;
 mod pic;
