@@ -33,6 +33,7 @@ name = "hello"
 version = "0.0.0"
 dependencies = [
  "ftl",
+ "ftl_utils",
 ]
 
 [[package]]

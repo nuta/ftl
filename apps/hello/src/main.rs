@@ -9,6 +9,7 @@ use core::sync::atomic::fence;
 
 use ftl::pci::PciEntry;
 use ftl::println;
+use ftl_utils::alignment::align_up;
 
 // Virtio legacy I/O port offsets
 const VIRTIO_PCI_HOST_FEATURES: u16 = 0;
@@ -225,7 +226,12 @@ fn send_packet(iobase: u16, vq: &mut Virtqueue, packet_data: &[u8]) {
         let total_len = core::mem::size_of::<VirtioNetHdr>() + packet_data.len();
         let mut pkt_vaddr = 0usize;
         let mut pkt_paddr = 0usize;
-        ftl::dmabuf::sys_dmabuf_alloc(total_len, &mut pkt_vaddr, &mut pkt_paddr).unwrap();
+        ftl::dmabuf::sys_dmabuf_alloc(
+            align_up(total_len, PAGE_SIZE),
+            &mut pkt_vaddr,
+            &mut pkt_paddr,
+        )
+        .unwrap();
 
         // Write virtio net header
         let hdr = pkt_vaddr as *mut VirtioNetHdr;
