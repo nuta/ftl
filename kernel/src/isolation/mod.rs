@@ -81,7 +81,7 @@ pub trait Isolation: Send + Sync {
 }
 
 pub static INKERNEL_ISOLATION: SharedRef<dyn Isolation> = {
-    static INNER: RefCounted<InKernelIsolation> = RefCounted::new(InKernelIsolation::new());
+    static INNER: RefCounted<InKernelIsolation> = RefCounted::new_static(InKernelIsolation::new());
     let isolation = SharedRef::new_static(&INNER);
     isolation as SharedRef<dyn Isolation>
 };

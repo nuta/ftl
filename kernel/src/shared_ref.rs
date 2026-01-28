@@ -24,9 +24,17 @@ pub struct RefCounted<T: ?Sized> {
 }
 
 impl<T> RefCounted<T> {
-    pub const fn new(value: T) -> Self {
+    const fn new(value: T) -> Self {
         Self {
             counter: AtomicUsize::new(1),
+            value,
+        }
+    }
+
+    pub const fn new_static(value: T) -> Self {
+        Self {
+            // TODO: Better way to guarantee the static reference won't be dropped.
+            counter: AtomicUsize::new(usize::MAX / 2),
             value,
         }
     }

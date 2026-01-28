@@ -20,7 +20,7 @@ impl Process {
 }
 
 pub static IDLE_PROCESS: SharedRef<Process> = {
-    static INNER: RefCounted<Process> = RefCounted::new(Process {
+    static INNER: RefCounted<Process> = RefCounted::new_static(Process {
         isolation: SharedRef::clone_static(&INKERNEL_ISOLATION),
     });
     let process = SharedRef::new_static(&INNER);
