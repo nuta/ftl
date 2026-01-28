@@ -6,6 +6,7 @@ mod idt;
 mod ioport;
 mod mp_table;
 mod pci;
+mod pic;
 mod pvh;
 mod syscall;
 mod thread;
