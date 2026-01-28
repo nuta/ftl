@@ -1,7 +1,6 @@
 use ftl_types::error::ErrorCode;
 use ftl_types::syscall::ERROR_RETVAL_BASE;
 use ftl_types::syscall::SYS_CONSOLE_WRITE;
-use ftl_types::syscall::SYS_PCI_LOOKUP;
 
 use crate::arch::get_start_info;
 
