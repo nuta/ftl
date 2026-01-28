@@ -9,7 +9,8 @@
 //! <https://ozlabs.org/~rusty/virtio-spec/virtio-0.9.5.pdf>
 
 use core::arch::asm;
-use core::ptr::{read_volatile, write_volatile};
+use core::ptr::read_volatile;
+use core::ptr::write_volatile;
 use core::sync::atomic::Ordering;
 use core::sync::atomic::fence;
 
@@ -162,17 +163,11 @@ impl<'a> VirtQueue<'a> {
         let avail_index = unsafe { read_volatile(&(*self.avail).idx) };
         let ring_index = (avail_index % self.queue_size) as usize;
         unsafe {
-            write_volatile(
-                (*self.avail).ring.as_mut_ptr().add(ring_index),
-                head_index,
-            );
+            write_volatile((*self.avail).ring.as_mut_ptr().add(ring_index), head_index);
         }
         fence(Ordering::Release);
         unsafe {
-            write_volatile(
-                &mut (*self.avail).idx,
-                avail_index.wrapping_add(1),
-            );
+            write_volatile(&mut (*self.avail).idx, avail_index.wrapping_add(1));
         }
 
         Ok(())
