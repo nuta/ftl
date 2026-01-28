@@ -6,3 +6,5 @@ edition.workspace = true
 
 [dependencies]
 ftl_types = { workspace = true }
+talc = { workspace = true }
+spin = { workspace = true }

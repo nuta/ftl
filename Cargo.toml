@@ -9,6 +9,7 @@ members = ["apps/hello", "kernel", "libs/rust/*"]
 
 [workspace.dependencies]
 talc = "4.4.3"
+spin = "0.10.0"
 
 ftl = { path = "libs/rust/ftl" }
 ftl_types = { path = "libs/rust/ftl_types" }

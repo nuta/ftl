@@ -38,6 +38,8 @@ extern "C" fn start() -> ! {
 
     apply_relocations(image_base, relocs, relocs_end);
 
+    crate::allocator::init();
+
     unsafe {
         asm!("call main", "ud2", options(noreturn));
     }
