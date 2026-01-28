@@ -10,6 +10,8 @@ use super::vmspace::KERNEL_BASE;
 use crate::address::PAddr;
 use crate::address::VAddr;
 use crate::arch::NUM_CPUS_MAX;
+use crate::arch::x64::console::SERIAL_IRQ;
+use crate::arch::x64::io_apic::use_ioapic;
 use crate::arch::x64::pvh;
 use crate::arch::x64::vmspace::vaddr2paddr;
 
@@ -122,6 +124,12 @@ extern "C" fn rust_boot(start_info: PAddr) -> ! {
     super::idt::init();
     super::pic::init();
     super::mp_table::init();
+
+    use_ioapic(|ioapic| {
+        ioapic
+            .enable_irq(SERIAL_IRQ)
+            .expect("failed to enable serial IRQ");
+    });
 
     let bootinfo = pvh::parse_start_info(start_info);
     crate::boot::boot(&bootinfo);

@@ -36,6 +36,8 @@ const COM1_MCR: u16 = COM1_DATA + 4;
 /// Line Status Register.
 const COM1_LSR: u16 = COM1_DATA + 5;
 
+pub(super) const SERIAL_IRQ: u32 = 4;
+
 /// Initializes the serial port.
 pub(super) fn init() {
     // Based on "Initialization" section in https://wiki.osdev.org/Serial_Ports

@@ -164,6 +164,6 @@ fn main() {
 
     println!("[virtio_net] sent an ARP request packet");
     loop {
-        unsafe { core::arch::asm!("hlt") }
+        unsafe { core::arch::asm!("sti; hlt") }
     }
 }
