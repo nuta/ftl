@@ -76,6 +76,9 @@ pub struct ProcessorEntry {
     reserved: [u8; 8],
 }
 
+const ENTRY_TYPE_PROCESSOR: u8 = 0;
+const ENTRY_TYPE_IO_APIC: u8 = 2;
+
 /// The I/O APIC entry.
 #[derive(Debug)]
 #[repr(C, packed)]
@@ -126,26 +129,29 @@ fn find_mpfp_table() -> Option<&'static MpPointerTable> {
     None
 }
 
-/// Loads the MP configuration table to locate CPUs and APICs.
+/// Loads the MP configuration table to locate CPUs and I/O APICs.
 pub fn init() {
     let mp_table = find_mpfp_table().expect("failed to locate MP floating pointer table");
     let mp_config_addr = mp_table.physical_addr_pointer as usize;
     let mp_config = unsafe { paddr2ptr::<MpConfigTable>(mp_config_addr) };
     let mut entry_addr = mp_config_addr + size_of::<MpConfigTable>();
+    let mut ioapic_paddr = None;
     for _ in 0..mp_config.entry_count {
         let type_byte = unsafe { paddr2ptr::<u8>(entry_addr) };
         let entry_size = match *type_byte {
-            0 => {
+            ENTRY_TYPE_PROCESSOR => {
                 let entry = unsafe { paddr2ptr::<ProcessorEntry>(entry_addr) };
                 let id = entry.local_apic_id;
                 println!("Processor: id={}", id);
                 20
             }
-            2 => {
+            ENTRY_TYPE_IO_APIC => {
                 let entry = unsafe { paddr2ptr::<IoApicEntry>(entry_addr) };
                 let id = entry.io_apic_id;
                 let addr = entry.io_apic_address;
                 println!("I/O APIC: id={}, address={:08x}", id, addr);
+                assert!(ioapic_paddr.is_none(), "multiple I/O APICs found");
+                ioapic_paddr = Some(PAddr::new(addr as usize));
                 8
             }
             _ => {
