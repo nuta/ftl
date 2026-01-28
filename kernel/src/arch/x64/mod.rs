@@ -4,6 +4,7 @@ mod cpuvar;
 mod idle;
 mod idt;
 mod ioport;
+mod mp_table;
 mod pci;
 mod pvh;
 mod syscall;

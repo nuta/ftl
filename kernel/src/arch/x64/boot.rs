@@ -120,6 +120,7 @@ extern "C" fn rust_boot(start_info: PAddr) -> ! {
     }
 
     super::idt::init();
+    super::mp_table::init();
 
     let bootinfo = pvh::parse_start_info(start_info);
     crate::boot::boot(&bootinfo);
