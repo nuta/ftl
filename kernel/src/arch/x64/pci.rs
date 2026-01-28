@@ -40,7 +40,12 @@ struct PciConfig {
 }
 
 fn get_addr(bus: u8, slot: u8, offset: usize) -> u32 {
-    (1 << 31) | ((bus as u32) << 16) | ((slot as u32) << 11) | (offset as u32)
+    let offset = (offset as u32) & 0xfc;
+    (1 << 31) | ((bus as u32) << 16) | ((slot as u32) << 11) | offset
+}
+
+fn get_data_port16(offset: usize) -> u16 {
+    PCI_IOPORT_DATA + ((offset & 0b10) as u16)
 }
 
 const PCI_IOPORT_ADDR: u16 = 0xcf8;
@@ -62,7 +67,7 @@ fn read_config16(bus: u8, slot: u8, offset: usize) -> u16 {
 
     unsafe {
         out32(PCI_IOPORT_ADDR, get_addr(bus, slot, offset));
-        in16(PCI_IOPORT_DATA)
+        in16(get_data_port16(offset))
     }
 }
 
@@ -82,7 +87,7 @@ fn write_config16(bus: u8, slot: u8, offset: usize, value: u16) {
 
     unsafe {
         out32(PCI_IOPORT_ADDR, get_addr(bus, slot, offset));
-        out16(PCI_IOPORT_DATA, value);
+        out16(get_data_port16(offset), value);
     }
 }
 
