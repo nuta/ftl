@@ -12,6 +12,7 @@ mod panic;
 
 pub mod dmabuf;
 pub mod error;
+pub mod prelude;
 pub mod syscall;
 
 #[cfg(target_arch = "x86_64")]
