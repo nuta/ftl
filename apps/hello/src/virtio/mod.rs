@@ -9,6 +9,7 @@
 //! <https://ozlabs.org/~rusty/virtio-spec/virtio-0.9.5.pdf>
 
 use core::arch::asm;
+use core::sync::atomic::{fence, Ordering};
 
 use ftl::error::ErrorCode;
 use ftl::prelude::*;
@@ -69,6 +70,7 @@ pub enum ChainEntry {
 pub struct VirtQueue<'a> {
     virtio: &'a VirtioPci,
     queue_index: u16,
+    queue_size: u16,
     descs: *mut Desc,
     avail: *mut u16,
     used: *mut UsedElem,
@@ -85,11 +87,13 @@ impl<'a> VirtQueue<'a> {
         let descs = vaddr as *mut Desc;
         let avail_offset = size_of::<Desc>() * queue_size as usize;
         let avail = (vaddr + avail_offset) as *mut u16;
-        let used_offset = align_up(avail_offset + size_of::<u16>() * queue_size as usize, 4096);
+        let used_offset =
+            align_up(avail_offset + size_of::<u16>() * (2 + queue_size as usize), 4096);
         let used = (vaddr + used_offset) as *mut UsedElem;
         Self {
             virtio,
             queue_index,
+            queue_size,
             descs,
             avail,
             used,
@@ -144,9 +148,16 @@ impl<'a> VirtQueue<'a> {
         }
 
         // Write the head index to the avail ring.
-        let avail_index = todo!();
+        let avail_index = unsafe { self.avail.add(1).read() };
+        let ring_index = (avail_index % self.queue_size) as usize;
         unsafe {
-            self.avail.offset(avail_index).write(head_index);
+            self.avail.add(2 + ring_index).write(head_index);
+        }
+        fence(Ordering::Release);
+        unsafe {
+            self.avail
+                .add(1)
+                .write(avail_index.wrapping_add(1));
         }
 
         Ok(())
