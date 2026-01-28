@@ -2,6 +2,8 @@ use core::hint::spin_loop;
 
 use super::ioport::in8;
 use super::ioport::out8;
+use crate::arch::x64::io_apic::use_ioapic;
+use crate::cpuvar::CpuVar;
 
 fn putchar(c: u8) {
     // Wait for the serial port to be ready to receive more data.
@@ -37,6 +39,19 @@ const COM1_MCR: u16 = COM1_DATA + 4;
 const COM1_LSR: u16 = COM1_DATA + 5;
 
 pub(super) const SERIAL_IRQ: u32 = 4;
+
+pub(super) fn handle_interrupt(cpuvar: &CpuVar) {
+    loop {
+        let ch = unsafe { in8(COM1_DATA) };
+        if ch == 0 {
+            break;
+        }
+
+        println!("serial interrupt: \x1b[1;91m{}\x1b[0m", ch as char);
+    }
+
+    cpuvar.arch.local_apic.acknowledge_irq();
+}
 
 /// Initializes the serial port.
 pub(super) fn init() {

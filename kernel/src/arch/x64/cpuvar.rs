@@ -13,7 +13,7 @@ static mut CPU_VARS: [MaybeUninit<crate::cpuvar::CpuVar>; NUM_CPUS_MAX] =
 #[repr(C)]
 pub struct CpuVar {
     magic: u64,
-    local_apic: LocalApic,
+    pub(super) local_apic: LocalApic,
 }
 
 impl CpuVar {

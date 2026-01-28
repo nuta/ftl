@@ -34,6 +34,7 @@ fn write(base: VAddr, reg: Reg, value: u32) {
 #[repr(usize)]
 enum Reg {
     TaskPriority = 0x80,
+    EndOfInterrupt = 0xb0,
     SpuriousInterruptVector = 0xf0,
 }
 
@@ -53,5 +54,9 @@ impl LocalApic {
         write(base, Reg::SpuriousInterruptVector, 1 << 8);
 
         Self { base }
+    }
+
+    pub fn acknowledge_irq(&self) {
+        write(self.base, Reg::EndOfInterrupt, 0);
     }
 }
