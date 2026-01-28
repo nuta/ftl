@@ -77,8 +77,7 @@ pub enum ChainEntry {
     Read { paddr: u64, len: u32 },
 }
 
-pub struct VirtQueue<'a> {
-    virtio: &'a VirtioPci,
+pub struct VirtQueue {
     queue_index: u16,
     queue_size: u16,
     descs: *mut Desc,
@@ -87,13 +86,8 @@ pub struct VirtQueue<'a> {
     free_indicies: Vec<u16>,
 }
 
-impl<'a> VirtQueue<'a> {
-    pub fn new(
-        virtio: &'a VirtioPci,
-        queue_index: u16,
-        queue_size: u16,
-        vaddr: usize,
-    ) -> VirtQueue<'a> {
+impl VirtQueue {
+    pub fn new(queue_index: u16, queue_size: u16, vaddr: VAddr) -> Self {
         let descs = vaddr as *mut Desc;
         let avail_offset = size_of::<Desc>() * queue_size as usize;
         let avail = (vaddr + avail_offset) as *mut Avail;
@@ -111,7 +105,6 @@ impl<'a> VirtQueue<'a> {
             (*avail).idx = 0;
         }
         Self {
-            virtio,
             queue_index,
             queue_size,
             descs,
@@ -251,7 +244,7 @@ impl VirtioPci {
         let pfn: u32 = (paddr / 4096).try_into().map_err(|_| Error::TooHighPAddr)?;
         self.out32(PCI_IOPORT_QUEUE_PFN, pfn);
 
-        Ok(VirtQueue::new(self, queue_index, queue_size, vaddr))
+        Ok(VirtQueue::new(queue_index, queue_size, vaddr))
     }
 
     pub fn read_device_config8(&self, offset: u16) -> u8 {

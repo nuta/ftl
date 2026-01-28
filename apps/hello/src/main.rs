@@ -157,7 +157,7 @@ fn main() {
         },
     ])
     .unwrap();
-    txq.notify();
+    txq.notify(virtio);
 
     loop {
         unsafe { core::arch::asm!("hlt") }
