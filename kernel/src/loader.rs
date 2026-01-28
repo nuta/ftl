@@ -35,6 +35,8 @@ struct Ehdr64 {
     shstrndx: u16,
 }
 
+const PT_LOAD: u32 = 1;
+
 #[repr(C)]
 struct Phdr64 {
     type_: u32,
@@ -85,6 +87,10 @@ fn load_elf(file: &initfs::File) -> Result<VAddr, ElfError> {
     // Calculate the size of the image.
     let mut image_size = 0;
     for phdr in phdrs {
+        if phdr.type_ != PT_LOAD {
+            continue;
+        }
+
         image_size = image_size.max(phdr.vaddr + phdr.memsz);
     }
 
@@ -104,6 +110,10 @@ fn load_elf(file: &initfs::File) -> Result<VAddr, ElfError> {
     // Copy the image into the allocated memory.
     let elf_file = unsafe { slice::from_raw_parts(file.data.as_ptr(), file.data.len()) };
     for phdr in phdrs {
+        if phdr.type_ != PT_LOAD {
+            continue;
+        }
+
         assert!(phdr.filesz <= phdr.memsz);
         let src_start = phdr.offset as usize;
         let dst_start = phdr.vaddr as usize;
