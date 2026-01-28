@@ -7,6 +7,9 @@ use ftl::pci::PciEntry;
 use ftl::println;
 use ftl_utils::alignment::align_up;
 
+use crate::virtio::PciTransport;
+use crate::virtio::Virtio;
+
 mod virtio;
 
 #[unsafe(no_mangle)]
@@ -39,6 +42,25 @@ fn main() {
     // Enable IOPL for direct I/O access
     ftl::syscall::sys_x64_iopl(true).unwrap();
     println!("IOPL enabled");
+
+    const VIRTIO_NET_F_MAC: u32 = 1 << 5;
+    let transport = PciTransport::new(entry.bus, entry.slot, iobase);
+    let guest_features = transport.initialize1();
+    transport.initialize2(guest_features);
+    assert!(
+        guest_features & VIRTIO_NET_F_MAC != 0,
+        "MAC feature not supported"
+    );
+    transport.write_guest_features(guest_features);
+
+    let mut mac = [0u8; 6];
+    for i in 0..6 {
+        mac[i] = transport.read_device_config8(i as u16);
+    }
+    println!(
+        "MAC address: {:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
+        mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]
+    );
 
     loop {
         unsafe { core::arch::asm!("hlt") }
