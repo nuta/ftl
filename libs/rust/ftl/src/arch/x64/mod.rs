@@ -11,3 +11,7 @@ pub fn get_start_info() -> &'static StartInfo {
         &*(start_info as *const StartInfo)
     }
 }
+
+pub fn min_page_size() -> usize {
+    get_start_info().min_page_size
+}

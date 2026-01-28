@@ -158,6 +158,7 @@ pub fn load(initfs: &InitFs) {
         let info_uninit = Box::leak(Box::new(MaybeUninit::<StartInfo>::uninit()));
         info_uninit.write(StartInfo {
             syscall: arch::direct_syscall_handler,
+            min_page_size: arch::MIN_PAGE_SIZE,
         });
         let start_info = info_uninit.as_ptr() as usize;
 
