@@ -53,13 +53,16 @@ fn main() {
         .unwrap();
 
     let devices = unsafe { entries.assume_init() };
-    println!("found {} virtio-net PCI devices", n);
+    println!("[virtio_net] found {} virtio-net PCI devices", n);
 
     debug_assert!(n > 0, "no virtio-net device found");
     debug_assert!(n <= 1, "multiple virtio-net devices found");
 
     let entry = devices[0];
-    println!("using device {:x}:{:x}", entry.bus, entry.slot);
+    println!(
+        "[virtio_net] using PCI device at {:x}:{:x}",
+        entry.bus, entry.slot
+    );
 
     // Enable bus mastering
     ftl::pci::sys_pci_set_busmaster(entry.bus, entry.slot, true).unwrap();
@@ -67,11 +70,11 @@ fn main() {
     // Get BAR0 (I/O port base for legacy virtio)
     let bar0 = ftl::pci::sys_pci_get_bar(entry.bus, entry.slot, 0).unwrap();
     let iobase = (bar0 & 0xfffffffc) as u16; // Mask off the I/O space indicator bit
-    println!("I/O base: {:#x}", iobase);
+    println!("[virtio_net] I/O base: {:#x}", iobase);
 
     // Enable IOPL for direct I/O access
     ftl::syscall::sys_x64_iopl(true).unwrap();
-    println!("IOPL enabled");
+    println!("[virtio_net] I/O port access enabled");
 
     const VIRTIO_NET_F_MAC: u32 = 1 << 5;
     let virtio = VirtioPci::new(entry.bus, entry.slot, iobase);
@@ -87,7 +90,7 @@ fn main() {
         mac[i] = virtio.read_device_config8(i as u16);
     }
     println!(
-        "MAC address: {:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
+        "[virtio_net] MAC address: {:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
         mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]
     );
 
@@ -159,6 +162,7 @@ fn main() {
     .unwrap();
     txq.notify(&virtio);
 
+    println!("[virtio_net] sent an ARP request packet");
     loop {
         unsafe { core::arch::asm!("hlt") }
     }
