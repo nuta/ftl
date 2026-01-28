@@ -4,6 +4,7 @@
 
 use core::ops::Range;
 
+use super::io_apic;
 use crate::address::PAddr;
 
 /// The MP floating pointer table.
@@ -135,7 +136,6 @@ pub fn init() {
     let mp_config_addr = mp_table.physical_addr_pointer as usize;
     let mp_config = unsafe { paddr2ptr::<MpConfigTable>(mp_config_addr) };
     let mut entry_addr = mp_config_addr + size_of::<MpConfigTable>();
-    let mut ioapic_paddr = None;
     for _ in 0..mp_config.entry_count {
         let type_byte = unsafe { paddr2ptr::<u8>(entry_addr) };
         let entry_size = match *type_byte {
@@ -147,11 +147,7 @@ pub fn init() {
             }
             ENTRY_TYPE_IO_APIC => {
                 let entry = unsafe { paddr2ptr::<IoApicEntry>(entry_addr) };
-                let id = entry.io_apic_id;
-                let addr = entry.io_apic_address;
-                println!("I/O APIC: id={}, address={:08x}", id, addr);
-                assert!(ioapic_paddr.is_none(), "multiple I/O APICs found");
-                ioapic_paddr = Some(PAddr::new(addr as usize));
+                io_apic::init(PAddr::new(entry.io_apic_address as usize));
                 8
             }
             _ => {

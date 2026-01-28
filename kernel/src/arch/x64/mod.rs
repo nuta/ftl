@@ -3,6 +3,7 @@ mod console;
 mod cpuvar;
 mod idle;
 mod idt;
+mod io_apic;
 mod ioport;
 mod local_apic;
 mod mp_table;
