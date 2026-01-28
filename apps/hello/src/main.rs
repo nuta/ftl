@@ -271,14 +271,14 @@ fn send_packet(iobase: u16, vq: &mut Virtqueue, packet_data: &[u8]) {
         let ring_idx = (avail_idx % vq.queue_size) as usize;
         write_volatile(ring_ptr.add(ring_idx), desc_idx);
 
-        // Memory barrier before updating idx
-        fence(Ordering::SeqCst);
+        // Memory barrier before updating idx (wmb - ensures descriptor writes are visible)
+        fence(Ordering::Release);
 
         // Update available index
         write_volatile(&mut (*avail).idx, avail_idx.wrapping_add(1));
 
-        // Memory barrier before notify
-        fence(Ordering::SeqCst);
+        // Memory barrier before notify (wmb - ensures idx update is visible)
+        fence(Ordering::Release);
 
         // Notify the device
         outw(iobase + VIRTIO_PCI_QUEUE_NOTIFY, TX_QUEUE);
