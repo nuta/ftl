@@ -1,5 +1,6 @@
 //! Application loader.
 use core::mem::MaybeUninit;
+use core::mem::size_of;
 use core::slice;
 
 use ftl_types::environ::StartInfo;
@@ -56,6 +57,11 @@ pub enum ElfError {
 /// Returns the entry point of the ELF file.
 fn load_elf(file: &initfs::File) -> Result<VAddr, ElfError> {
     // TODO: Is data guaranteed to be aligned?
+    assert!(
+        file.data.len() >= size_of::<Ehdr64>(),
+        "ELF file too small: {}",
+        file.name
+    );
     let ehdr = unsafe { &*(file.data.as_ptr() as *const Ehdr64) };
     if ehdr.magic[..4] != [0x7f, b'E', b'L', b'F'] {
         return Err(ElfError::NotAnElfFile);
@@ -63,8 +69,16 @@ fn load_elf(file: &initfs::File) -> Result<VAddr, ElfError> {
 
     // TODO: More checks: file type, bound checking, etc.
 
+    let phentsize = ehdr.phentsize as usize;
+    assert_eq!(phentsize, size_of::<Phdr64>());
+
+    let phnum = ehdr.phnum as usize;
+    let phoff = ehdr.phoff as usize;
+    let phdr_end = phoff + phentsize * phnum;
+    assert!(phdr_end <= file.data.len());
+
     let phdrs = unsafe {
-        let ptr = file.data.as_ptr().add(ehdr.phoff as usize) as *const Phdr64;
+        let ptr = file.data.as_ptr().add(phoff) as *const Phdr64;
         core::slice::from_raw_parts(ptr, ehdr.phnum as usize)
     };
 
@@ -90,12 +104,18 @@ fn load_elf(file: &initfs::File) -> Result<VAddr, ElfError> {
     // Copy the image into the allocated memory.
     let elf_file = unsafe { slice::from_raw_parts(file.data.as_ptr(), file.data.len()) };
     for phdr in phdrs {
+        assert!(phdr.filesz <= phdr.memsz);
+        let src_start = phdr.offset as usize;
+        let dst_start = phdr.vaddr as usize;
+        let src_end = src_start + phdr.filesz as usize;
+        let dst_end = dst_start + phdr.memsz as usize;
+
         println!(
             "{}: phdr: vaddr={:x}, filesz={:x}, memsz={:x}",
             file.name, phdr.vaddr, phdr.filesz, phdr.memsz
         );
-        let src_range = phdr.offset as usize..phdr.offset as usize + phdr.filesz as usize;
-        let dst_range = phdr.vaddr as usize..phdr.vaddr as usize + phdr.filesz as usize;
+        let src_range = src_start..src_end;
+        let dst_range = dst_start..dst_end;
         // TODO: Clear .bss section (filesz < range < memsz).
         image[dst_range].copy_from_slice(&elf_file[src_range]);
     }
