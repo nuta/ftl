@@ -87,7 +87,7 @@ pub struct VirtQueue {
 }
 
 impl VirtQueue {
-    pub fn new(queue_index: u16, queue_size: u16, vaddr: VAddr) -> Self {
+    pub fn new(queue_index: u16, queue_size: u16, vaddr: usize) -> Self {
         let descs = vaddr as *mut Desc;
         let avail_offset = size_of::<Desc>() * queue_size as usize;
         let avail = (vaddr + avail_offset) as *mut Avail;
@@ -174,8 +174,8 @@ impl VirtQueue {
         Ok(())
     }
 
-    pub fn notify(&self) {
-        self.virtio.out16(PCI_IOPORT_QUEUE_NOTIFY, self.queue_index);
+    pub fn notify(&self, virtio: &VirtioPci) {
+        virtio.out16(PCI_IOPORT_QUEUE_NOTIFY, self.queue_index);
     }
 }
 
