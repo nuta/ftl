@@ -348,17 +348,13 @@ fn main() {
         .unwrap();
 
     let devices = unsafe { entries.assume_init() };
-    println!("Found {} virtio-net PCI devices", n);
+    println!("found {} virtio-net PCI devices", n);
 
-    if n == 0 {
-        println!("No virtio-net device found!");
-        loop {
-            unsafe { core::arch::asm!("hlt") }
-        }
-    }
+    debug_assert!(n > 0, "no virtio-net device found");
+    debug_assert!(n <= 1, "multiple virtio-net devices found");
 
     let entry = devices[0];
-    println!("Using device {:x}:{:x}", entry.bus, entry.slot);
+    println!("using device {:x}:{:x}", entry.bus, entry.slot);
 
     // Enable bus mastering
     ftl::pci::sys_pci_set_busmaster(entry.bus, entry.slot, true).unwrap();
@@ -372,79 +368,6 @@ fn main() {
     ftl::syscall::sys_x64_iopl(true).unwrap();
     println!("IOPL enabled");
 
-    unsafe {
-        // Reset device
-        outb(iobase + VIRTIO_PCI_STATUS, 0);
-        println!("Device reset");
-
-        // Acknowledge device
-        outb(iobase + VIRTIO_PCI_STATUS, VIRTIO_STATUS_ACKNOWLEDGE);
-        println!("Device acknowledged");
-
-        // Tell device we're a driver
-        outb(
-            iobase + VIRTIO_PCI_STATUS,
-            VIRTIO_STATUS_ACKNOWLEDGE | VIRTIO_STATUS_DRIVER,
-        );
-        println!("Driver bit set");
-
-        // Read device features
-        let features = inl(iobase + VIRTIO_PCI_HOST_FEATURES);
-        println!("Device features: {:#x}", features);
-
-        // Accept features (we'll just accept MAC feature for now)
-        let guest_features = features & VIRTIO_NET_F_MAC;
-        outl(iobase + VIRTIO_PCI_GUEST_FEATURES, guest_features);
-        println!("Guest features: {:#x}", guest_features);
-
-        // Read MAC address (at config offset for net device)
-        let mut mac = [0u8; 6];
-        for i in 0..6 {
-            mac[i] = inb(iobase + VIRTIO_PCI_CONFIG + i as u16);
-        }
-        println!(
-            "MAC address: {:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
-            mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]
-        );
-
-        // Set up TX queue (queue 1)
-        let mut tx_vq = virtqueue_setup(iobase, TX_QUEUE).expect("Failed to set up TX queue");
-
-        // Mark driver ready
-        outb(
-            iobase + VIRTIO_PCI_STATUS,
-            VIRTIO_STATUS_ACKNOWLEDGE | VIRTIO_STATUS_DRIVER | VIRTIO_STATUS_DRIVER_OK,
-        );
-        println!("Device ready (DRIVER_OK set)");
-
-        // Build and send an ARP request
-        let mut packet = [0u8; 64]; // Minimum ethernet frame size
-        let src_ip = [10, 0, 2, 15]; // Typical QEMU user network guest IP
-        let target_ip = [10, 0, 2, 2]; // Typical QEMU user network gateway
-        let len = build_arp_request(&mut packet, mac, src_ip, target_ip);
-
-        println!("Sending ARP request...");
-        send_packet(iobase, &mut tx_vq, &packet[..len]);
-        println!("ARP request sent!");
-
-        // Wait a bit and check if packet was consumed
-        for _ in 0..100000 {
-            core::arch::asm!("pause");
-        }
-
-        let used = tx_vq.used_vaddr as *const VirtqUsed;
-        let used_idx = read_volatile(&(*used).idx);
-        println!(
-            "TX used idx: {}, last_used: {}",
-            used_idx, tx_vq.last_used_idx
-        );
-
-        if used_idx != tx_vq.last_used_idx {
-            println!("Packet was consumed by device!");
-        }
-    }
-
-    println!("Done!");
     loop {
         unsafe { core::arch::asm!("hlt") }
     }
