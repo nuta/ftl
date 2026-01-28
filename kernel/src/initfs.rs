@@ -3,6 +3,8 @@
 //! The format is a simple uncompressed tar archive.
 use core::slice;
 
+use ftl_utils::alignment::align_up;
+
 pub struct File {
     pub name: &'static str,
     pub data: &'static [u8],
@@ -104,6 +106,12 @@ impl Iterator for TarIter {
 
         let data = unsafe { slice::from_raw_parts(self.tarball.as_ptr().add(self.pos), size) };
         self.pos += size;
+
+        self.pos = align_up(self.pos, 512);
+        if self.pos >= self.tarball.len() {
+            self.eof = true;
+            return None;
+        }
 
         Some(File { name, data })
     }
