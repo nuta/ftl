@@ -42,7 +42,7 @@ const INTERRUPT_HANDLER_SIZE: u64 = 16;
 const IDT_ENTRY_DEFAULT: IdtEntry = IdtEntry {
     offset0: 0,
     selector: GDT_KERNEL_CS,
-    ist: 0,
+    ist: 1,          // Use IST1 for all exception/interrupt handlers
     gate_type: 0x8e, // interrupt gate
     offset1: 0,
     offset2: 0,

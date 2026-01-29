@@ -70,6 +70,9 @@ extern "C" fn rust_boot(start_info: PAddr) -> ! {
 
     let cpu_id = 0; // FIXME:
 
+    // The interrupt stack.
+    let ist1 = BSP_STACK.as_ptr() as u64 + KERNEL_STACK_SIZE as u64;
+
     // Build a TSS.
     let tss_vaddr = unsafe {
         let tss = &mut TSS_ENTRIES[cpu_id];
@@ -79,7 +82,7 @@ extern "C" fn rust_boot(start_info: PAddr) -> ! {
             rsp1: 0,
             rsp2: 0,
             reserved1: 0,
-            ist: [0; 7],
+            ist: [ist1, 0, 0, 0, 0, 0, 0],
             reserved2: 0,
             reserved3: 0,
             iomap_offset: offset_of!(Tss, io_permission_map) as u16,
