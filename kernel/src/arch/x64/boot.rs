@@ -56,7 +56,7 @@ extern "C" fn rust_boot(start_info: PAddr) -> ! {
     // your terminal. Revert it.
     println!("\x1b[?7h\n");
 
-    println!("\nBooting FTL...");
+    println!("Booting FTL...");
 
     // Enable FS/GS base.
     unsafe {
