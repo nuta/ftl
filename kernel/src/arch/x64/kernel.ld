@@ -4,6 +4,7 @@ KERNEL_BASE = 0xffff800000000000;
 
 SECTIONS {
     . = 0x100000 + KERNEL_BASE;
+    __kernel_memory = .;
 
     . = ALIGN(16);
     .text : AT(ADDR(.text) - KERNEL_BASE) {
@@ -24,4 +25,6 @@ SECTIONS {
     .bss : AT(ADDR(.bss) - KERNEL_BASE) {
         *(.bss .bss.*);
     }
+
+    __kernel_memory_end = .;
 }

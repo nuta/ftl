@@ -42,14 +42,9 @@ impl PageAllocator {
         let mut regions = self.regions.lock();
 
         for free_ram in free_rams {
-            let Some(end) = free_ram.base.as_usize().checked_add(free_ram.size) else {
-                println!("the size of the memory region overflows: {free_ram:?}");
-                return;
-            };
-
-            let allocator = BumpAllocator::new(free_ram.base.as_usize(), end);
+            let allocator = BumpAllocator::new(free_ram.start.as_usize(), free_ram.end.as_usize());
             if regions.try_push(allocator).is_err() {
-                println!("failed to add memory region: {free_ram:?}");
+                println!("too many free RAM regions");
                 return;
             }
         }

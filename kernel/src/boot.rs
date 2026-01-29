@@ -7,10 +7,9 @@ use crate::loader;
 use crate::memory;
 use crate::thread::return_to_user;
 
-#[derive(Debug)]
 pub struct FreeRam {
-    pub base: PAddr,
-    pub size: usize,
+    pub start: PAddr,
+    pub end: PAddr,
 }
 
 pub struct BootInfo {
