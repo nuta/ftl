@@ -80,6 +80,17 @@ pub fn thread_switch(thread: *const Thread) -> ! {
             "mov r13, [rsp + {r13_offset}]",
             "mov r14, [rsp + {r14_offset}]",
             "mov r15, [rsp + {r15_offset}]",
+            // The RSP points to the beginning of *const Thread, which is
+            // the beginning of an IRET stack frame.
+            //
+            // The instruction will restore RIP, RFLAGS, RSP, and segment
+            // registers (CS and SS), which means it jumps to the user's code
+            // and switches to the user's stack, at once.
+            //
+            // > IRET pops SS:RSP unconditionally off the interrupt stack frame
+            // > only when it is executed in 64-bit mode
+            // >
+            // > 7.14.3 IRET in IA-32e Mode
             "iretq",
             in(reg) thread,
             gsbase_offset = const offset_of!(Thread, gsbase),

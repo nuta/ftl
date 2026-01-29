@@ -79,6 +79,25 @@ idt_handlers:
 "#
 );
 
+/// The entry point of interrupt handlers.
+///
+/// # Stack frame
+///
+/// - vector
+/// - error code (0 if it's not an exception w/ error)
+/// - RIP
+/// - CS
+/// - RFLAGS
+/// - RSP
+/// - SS
+///
+/// Since we don't support 32-bit mode, we don't need to worry about SS:RSP,
+/// which is only pushed when the interrupt/exception occurs in the user mode:
+///
+/// > 64-bit mode also pushes SS:RSP unconditionally, rather than only on a CPL
+/// > change.
+/// >
+/// > 7.14.2 64-Bit Mode Stack Frame
 #[unsafe(naked)]
 #[unsafe(no_mangle)]
 extern "C" fn interrupt_entry() -> ! {
