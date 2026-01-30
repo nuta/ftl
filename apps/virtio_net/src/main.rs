@@ -42,6 +42,7 @@ struct Main {
 
 impl ftl::application::Application<Env> for Main {
     fn init(env: Env) -> Self {
+        println!("virtio_net: initializing");
         let virtio = virtio::VirtioPci::new(env.pci_bus, env.pci_slot, env.iobase);
         let rxq = virtio.setup_virtqueue(0).unwrap();
         let txq = virtio.setup_virtqueue(1).unwrap();
