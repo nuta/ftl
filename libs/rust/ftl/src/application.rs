@@ -18,8 +18,8 @@ use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use hashbrown::HashMap;
 
-use crate::buffer::Buffer;
-use crate::buffer::BufferMut;
+use crate::channel::Buffer;
+use crate::channel::BufferMut;
 use crate::channel::Channel;
 use crate::channel::Reply;
 use crate::channel::SendError;

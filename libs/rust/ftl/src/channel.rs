@@ -1,3 +1,5 @@
+use alloc::string::String;
+use alloc::vec::Vec;
 use core::fmt;
 
 use ftl_types::channel::MessageBody;
@@ -7,10 +9,22 @@ use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 
 use crate::application::Cookie;
-use crate::buffer::Buffer;
-use crate::buffer::BufferMut;
 use crate::handle::Handleable;
 use crate::handle::OwnedHandle;
+
+#[derive(Debug)]
+pub enum Buffer {
+    Static(&'static [u8]),
+    String(String),
+    Vec(Vec<u8>),
+}
+
+impl Buffer {}
+
+pub enum BufferMut {
+    String(String),
+    Vec(Vec<u8>),
+}
 
 /// A message constructor to send to a channel.
 pub enum Message {

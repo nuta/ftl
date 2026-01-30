@@ -12,7 +12,6 @@ mod arch;
 mod panic;
 
 pub mod application;
-pub mod buffer;
 pub mod channel;
 pub mod dmabuf;
 pub mod error;
