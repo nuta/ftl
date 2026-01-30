@@ -104,7 +104,7 @@ pub fn main<A: Application>(app: A) {
                         app.write_reply(&mut ctx, buf, inline.len);
                     }
                     _ => {
-                        todo!()
+                        println!("unknown message type: {}", msginfo.ty());
                     }
                 }
             }
