@@ -57,14 +57,6 @@ pub enum Cookie {
     BufferMut(BufferMut),
 }
 
-fn cookie_to_buffer_mut(cookie: usize) -> BufferMut {
-    todo!()
-}
-
-fn cookie_to_buffer(cookie: usize) -> Buffer {
-    todo!()
-}
-
 pub fn main<A: Application>(app: A) {
     let mut app = A::init();
     let mut sink = Sink::new().unwrap();
