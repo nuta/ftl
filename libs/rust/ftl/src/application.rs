@@ -66,6 +66,9 @@ pub fn main<A: Application>(app: A) {
                                 let written_len = todo!();
                                 app.write_reply(ch, written_len);
                             }
+                            _ => {
+                                println!("unknown message type: {:?}", msginfo.ty());
+                            }
                         }
                     }
                     Err(err) => {
