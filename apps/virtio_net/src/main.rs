@@ -4,31 +4,58 @@
 use ftl::application::Context;
 use ftl::application::OpenRequest;
 use ftl::application::ReadRequest;
+use ftl::application::WriteRequest;
 use ftl::channel::Channel;
+use ftl::dmabuf;
 use ftl::error::ErrorCode;
 use ftl::println;
 
 mod virtio;
 
+#[repr(C, packed)]
+struct VirtioNetHdr {
+    flags: u8,
+    gso_type: u8,
+    hdr_len: u16,
+    gso_size: u16,
+    csum_start: u16,
+    csum_offset: u16,
+}
+
 #[derive(serde::Deserialize)]
 struct Env {
-    bus: u8,
-    slot: u8,
+    pci_bus: u8,
+    pci_slot: u8,
     iobase: u16,
 }
 
 struct Main {
     virtio: virtio::VirtioPci,
+    rxq: virtio::VirtQueue,
+    txq: virtio::VirtQueue,
+    dmabufs: dmabuf::Pool,
+    pending_read: Option<ReadRequest>,
 }
 
 impl ftl::application::Application<Env> for Main {
     fn init(env: Env) -> Self {
-        let virtio = virtio::VirtioPci::new(env.bus, env.slot, env.iobase);
-        Self { virtio }
+        let virtio = virtio::VirtioPci::new(env.pci_bus, env.pci_slot, env.iobase);
+        Self {
+            virtio,
+            rxq: virtio.setup_virtqueue(0).unwrap(),
+            txq: virtio.setup_virtqueue(1).unwrap(),
+            dmabufs: dmabuf::Pool::new().unwrap(),
+            pending_read: None,
+        }
     }
 
-    fn open(&mut self, ctx: &mut Context<Channel>, req: OpenRequest) {
-        let (our_ch, their_ch) = match Channel::new() {
+    fn write(&mut self, ctx: &mut Context<Channel>, req: WriteRequest) {
+        if self.txq.is_full() {
+            req.error(ErrorCode::RetryLater);
+            return;
+        }
+
+        let (paddr, buf) = match self.dmabufs.alloc(req.len) {
             Ok(pair) => pair,
             Err(error) => {
                 req.error(error);
@@ -36,16 +63,28 @@ impl ftl::application::Application<Env> for Main {
             }
         };
 
-        if let Err(err) = ctx.add(our_ch) {
-            req.error(ErrorCode::RetryLater);
-            return;
-        }
+        req.read_data(buf, 0).unwrap();
+        self.txq
+            .push(&[ChainEntry::Write {
+                paddr,
+                len: req.len as u32,
+            }])
+            .unwrap();
 
-        req.complete(their_ch);
+        req.complete(req.len);
     }
 
     fn read(&mut self, ctx: &mut Context<Channel>, req: ReadRequest) {
-        // Pop a packet from the virtio queue.
+        if let Some(chain) = self.rxq.pop() {
+            // We have a pending RX packet. Reply immediately.
+            let buf = self.dmabufs.get_by_paddr(chain.descs[0].paddr).unwrap();
+            let packet = &buf[size_of::<VirtioNetHdr>()..chain.total_len as usize];
+            req.write_data(packet, 0).unwrap();
+            req.complete(chain.total_len as usize);
+        } else {
+            // No pending RX packet. Complete later.
+            self.pending_read = Some(req);
+        }
     }
 }
 

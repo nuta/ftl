@@ -16,3 +16,19 @@ pub fn sys_dmabuf_alloc(
     )?;
     Ok(())
 }
+
+pub struct Pool {}
+
+impl Pool {
+    pub fn new() -> Result<Self, ErrorCode> {
+        Ok(Self {})
+    }
+
+    pub fn alloc(&mut self, size: usize) -> Result<(PAddr, &mut [u8]), ErrorCode> {
+        todo!()
+    }
+
+    pub fn get_by_paddr(&self, paddr: PAddr) -> Option<&mut [u8]> {
+        todo!()
+    }
+}

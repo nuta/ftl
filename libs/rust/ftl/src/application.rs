@@ -192,7 +192,7 @@ impl ReadRequest {
         }
     }
 
-    pub fn read_data(&self, data: &mut [u8], offset: usize) -> Result<(), ErrorCode> {
+    pub fn write_data(&self, data: &[u8], offset: usize) -> Result<(), ErrorCode> {
         todo!()
     }
 
@@ -226,7 +226,7 @@ impl WriteRequest {
         }
     }
 
-    pub fn write_data(&self, data: &[u8], offset: usize) -> Result<(), ErrorCode> {
+    pub fn read_data(&self, data: &mut [u8], offset: usize) -> Result<(), ErrorCode> {
         todo!()
     }
 

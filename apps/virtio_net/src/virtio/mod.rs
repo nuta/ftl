@@ -77,6 +77,11 @@ pub enum ChainEntry {
     Read { paddr: u64, len: u32 },
 }
 
+pub struct UsedChain {
+    pub descs: Vec<ChainEntry>,
+    pub total_len: u32,
+}
+
 pub struct VirtQueue {
     queue_index: u16,
     queue_size: u16,
@@ -172,6 +177,10 @@ impl VirtQueue {
         }
 
         Ok(())
+    }
+
+    pub fn pop(&mut self) -> Option<UsedChain> {
+        todo!()
     }
 
     pub fn notify(&self, virtio: &VirtioPci) {
