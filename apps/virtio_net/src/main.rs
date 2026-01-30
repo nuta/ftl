@@ -56,7 +56,7 @@ impl ftl::application::Application<Env> for Main {
     }
 
     fn write(&mut self, ctx: &mut Context<Channel>, req: WriteRequest) {
-        if self.txq.is_full(3) {
+        if self.txq.is_full(2) {
             req.error(ErrorCode::RetryLater);
             return;
         }
@@ -75,15 +75,12 @@ impl ftl::application::Application<Env> for Main {
             return;
         }
 
-        self.txq
-            .push(&[
-                /* ------ TODO: virtio-net header here ------ */
-                ChainEntry::Read {
-                    paddr: daddr.as_usize() as u64,
-                    len: written_len as u32,
-                },
-            ])
-            .unwrap();
+        // TODO: Add virtio-net header
+        let chain = &[ChainEntry::Read {
+            paddr: daddr.as_usize() as u64,
+            len: written_len as u32,
+        }];
+        self.txq.push(chain).unwrap();
 
         req.complete(written_len);
     }
