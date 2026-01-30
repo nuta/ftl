@@ -1,5 +1,6 @@
 use core::fmt;
 
+use ftl_types::channel::MessageInfo;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use hashbrown::HashMap;
@@ -9,7 +10,12 @@ use crate::handle::Handleable;
 use crate::handle::OwnedHandle;
 
 pub enum Event {
-    Message(Message),
+    Message {
+        msginfo: MessageInfo,
+        handle: HandleId,
+        arg0: usize,
+        arg1: usize,
+    },
     Test,
 }
 
