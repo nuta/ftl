@@ -1,5 +1,8 @@
+use core::fmt;
+
 use ftl_types::error::ErrorCode;
 
+use crate::handle::Handleable;
 use crate::handle::OwnedHandle;
 
 pub struct Interrupt {

@@ -21,6 +21,7 @@ use crate::channel::Reply;
 use crate::channel::SendError;
 use crate::handle::Handleable;
 use crate::handle::OwnedHandle;
+use crate::interrupt::Interrupt;
 use crate::sink::Event;
 use crate::sink::Sink;
 

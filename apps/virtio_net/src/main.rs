@@ -6,9 +6,11 @@ use ftl::application::OpenRequest;
 use ftl::application::ReadRequest;
 use ftl::application::WriteRequest;
 use ftl::channel::Channel;
+use ftl::collections::vec_deque::VecDeque;
 use ftl::dmabuf;
 use ftl::dmabuf::DmaAddr;
 use ftl::error::ErrorCode;
+use ftl::interrupt::Interrupt;
 use ftl::println;
 
 use crate::virtio::ChainEntry;
@@ -37,7 +39,7 @@ struct Main {
     rxq: virtio::VirtQueue,
     txq: virtio::VirtQueue,
     dmabufs: dmabuf::Pool,
-    pending_read: Option<ReadRequest>,
+    pending_reads: VecDeque<ReadRequest>,
 }
 
 impl ftl::application::Application<Env> for Main {
@@ -51,7 +53,7 @@ impl ftl::application::Application<Env> for Main {
             rxq,
             txq,
             dmabufs: dmabuf::Pool::new().unwrap(),
-            pending_read: None,
+            pending_reads: VecDeque::new(),
         }
     }
 
@@ -86,11 +88,11 @@ impl ftl::application::Application<Env> for Main {
     }
 
     fn read(&mut self, ctx: &mut Context<Channel>, req: ReadRequest) {
-        self.pending_reads.push(req);
+        self.pending_reads.push_back(req);
         self.flush_rxq();
     }
 
-    fn interrupt(&mut self, ctx: &mut Context<Interrupt>, req: InterruptRequest) {
+    fn interrupt(&mut self, ctx: &mut Context<Interrupt>) {
         self.virtio.handle_interrupt();
         self.flush_rxq();
     }
@@ -100,7 +102,7 @@ impl Main {
     fn flush_rxq(&mut self) {
         while !self.rxq.is_empty() && !self.pending_reads.is_empty() {
             let chain = self.rxq.pop().unwrap();
-            let req = self.pending_reads.pop().unwrap();
+            let req = self.pending_reads.pop_front().unwrap();
 
             let ChainEntry::Read { paddr, len } = chain.descs[0] else {
                 println!("ignoring an unexpected descriptor");

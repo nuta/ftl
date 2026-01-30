@@ -119,6 +119,10 @@ impl VirtQueue {
         }
     }
 
+    pub fn is_empty(&self) -> bool {
+        todo!()
+    }
+
     pub fn is_full(&self, n: usize) -> bool {
         self.free_indicies.len() < n
     }
