@@ -9,8 +9,7 @@ use crate::handle::Handleable;
 use crate::handle::OwnedHandle;
 
 pub enum Event {
-    Message { msginfo: MessageInfo, len: usize },
-    Test,
+    Message { id: HandleId, msginfo: MessageInfo },
 }
 
 pub struct Sink {
@@ -18,6 +17,10 @@ pub struct Sink {
 }
 
 impl Sink {
+    pub fn new() -> Result<Self, ErrorCode> {
+        todo!()
+    }
+
     pub fn add<H: Handleable>(&mut self, handle: H) -> Result<(), ErrorCode> {
         todo!()
     }
