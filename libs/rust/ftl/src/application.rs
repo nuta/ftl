@@ -19,25 +19,37 @@ use crate::channel::BufferMut;
 use crate::channel::Channel;
 use crate::channel::Reply;
 use crate::channel::SendError;
+use crate::handle::Handleable;
 use crate::handle::OwnedHandle;
 use crate::sink::Event;
 use crate::sink::Sink;
 
-pub struct Context<'a, A: Application> {
-    session: &'a mut A::Session,
+pub struct Context<'a, T> {
+    sink: &'a mut Sink,
+    object: &'a Rc<T>,
+}
+
+impl<'a, T> Context<'a, T> {
+    pub fn add<H: Handleable>(&mut self, handle: H) -> Result<(), ErrorCode> {
+        self.sink.add(handle)
+    }
+
+    pub fn object(&self) -> &Rc<T> {
+        self.object
+    }
 }
 
 pub trait Application: Sized {
     type Session;
 
     fn init() -> Self;
-    fn open(&mut self, ctx: &mut Context<Self>, req: OpenRequest);
-    fn read(&mut self, ctx: &mut Context<Self>, req: ReadRequest);
-    fn write(&mut self, ctx: &mut Context<Self>, req: WriteRequest);
-    fn open_reply(&mut self, ctx: &mut Context<Self>, new_ch: Channel);
-    fn read_reply(&mut self, ctx: &mut Context<Self>, buf: BufferMut, len: usize);
-    fn write_reply(&mut self, ctx: &mut Context<Self>, buf: Buffer, len: usize);
-    fn error_reply(&mut self, ctx: &mut Context<Self>, error: ErrorCode);
+    fn open(&mut self, ctx: &mut Context<Channel>, req: OpenRequest);
+    fn read(&mut self, ctx: &mut Context<Channel>, req: ReadRequest);
+    fn write(&mut self, ctx: &mut Context<Channel>, req: WriteRequest);
+    fn open_reply(&mut self, ctx: &mut Context<Channel>, new_ch: Channel);
+    fn read_reply(&mut self, ctx: &mut Context<Channel>, buf: BufferMut, len: usize);
+    fn write_reply(&mut self, ctx: &mut Context<Channel>, buf: Buffer, len: usize);
+    fn error_reply(&mut self, ctx: &mut Context<Channel>, error: ErrorCode);
 }
 
 pub enum Cookie {
@@ -68,7 +80,10 @@ pub fn main<A: Application>(app: A) {
             } => {
                 let cookie: Box<Cookie> = unsafe { Box::from_raw(cookie as *mut Cookie) };
                 let (ch, session) = channels.get_mut(&id).unwrap();
-                let mut ctx = Context { session };
+                let mut ctx = Context {
+                    sink: &mut sink,
+                    object: ch,
+                };
                 match msginfo {
                     MessageInfo::OPEN => {
                         app.open(&mut ctx, OpenRequest::new(ch.clone(), txid));
