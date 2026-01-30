@@ -3,12 +3,8 @@ use alloc::rc::Rc;
 use alloc::vec::Vec;
 use core::marker::PhantomData;
 
-use ftl_types::channel::MSGTYPE_OPEN;
-use ftl_types::channel::MSGTYPE_OPEN_REPLY;
-use ftl_types::channel::MSGTYPE_READ;
-use ftl_types::channel::MSGTYPE_READ_REPLY;
-use ftl_types::channel::MSGTYPE_WRITE;
-use ftl_types::channel::MSGTYPE_WRITE_REPLY;
+use ftl_types::channel::ErrorReplyInline;
+use ftl_types::channel::MessageInfo;
 use ftl_types::channel::ReadInline;
 use ftl_types::channel::ReadReplyInline;
 use ftl_types::channel::TxId;
@@ -73,38 +69,42 @@ pub fn main<A: Application>(app: A) {
                 let cookie: Box<Cookie> = unsafe { Box::from_raw(cookie as *mut Cookie) };
                 let (ch, session) = channels.get_mut(&id).unwrap();
                 let mut ctx = Context { session };
-                match msginfo.ty() {
-                    MSGTYPE_OPEN => {
+                match msginfo {
+                    MessageInfo::OPEN => {
                         app.open(&mut ctx, OpenRequest::new(ch.clone(), txid));
                     }
-                    MSGTYPE_READ => {
+                    MessageInfo::READ => {
                         let inline = msg.inline::<ReadInline>();
                         app.read(&mut ctx, ReadRequest::new(ch.clone(), txid));
                     }
-                    MSGTYPE_WRITE => {
+                    MessageInfo::WRITE => {
                         let inline = msg.inline::<WriteInline>();
                         app.write(&mut ctx, WriteRequest::new(ch.clone(), txid));
                     }
-                    MSGTYPE_OPEN_REPLY => {
+                    MessageInfo::OPEN_REPLY => {
                         let new_ch = Channel::from_handle(OwnedHandle::from_raw(msg.handles[0]));
                         app.open_reply(&mut ctx, new_ch);
                     }
-                    MSGTYPE_READ_REPLY => {
+                    MessageInfo::READ_REPLY => {
                         let inline = msg.inline::<ReadReplyInline>();
                         let Cookie::BufferMut(buf) = *cookie else {
                             unreachable!()
                         };
                         app.read_reply(&mut ctx, buf, inline.len);
                     }
-                    MSGTYPE_WRITE_REPLY => {
+                    MessageInfo::WRITE_REPLY => {
                         let inline = msg.inline::<WriteReplyInline>();
                         let Cookie::Buffer(buf) = *cookie else {
                             unreachable!()
                         };
                         app.write_reply(&mut ctx, buf, inline.len);
                     }
+                    MessageInfo::ERROR_REPLY => {
+                        let inline = msg.inline::<ErrorReplyInline>();
+                        app.error_reply(&mut ctx, inline.error);
+                    }
                     _ => {
-                        println!("unknown message type: {}", msginfo.ty());
+                        println!("unknown message type: {:?}", msginfo);
                     }
                 }
             }

@@ -9,17 +9,39 @@ pub const MSGTYPE_READ_REPLY: u8 = 5;
 pub const MSGTYPE_WRITE: u8 = 6;
 pub const MSGTYPE_WRITE_REPLY: u8 = 7;
 
+/// A message info.
+///
+/// - The length of inline data (8 bits).
+/// - The message type (8 bits).
+/// - # of handles (2 bits).
+/// - # of out-of-line entries (2 bits).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(transparent)]
 pub struct MessageInfo(u32);
 
 impl MessageInfo {
-    pub const fn len(&self) -> usize {
-        todo!()
+    pub const OPEN: Self = Self::new(1, 0, 1, 0);
+    pub const OPEN_REPLY: Self = Self::new(2, 1, 0, 0);
+    pub const READ: Self = Self::new(3, 0, 1, size_of::<ReadInline>());
+    pub const READ_REPLY: Self = Self::new(4, 0, 0, size_of::<ReadReplyInline>());
+    pub const WRITE: Self = Self::new(5, 0, 1, size_of::<WriteInline>());
+    pub const WRITE_REPLY: Self = Self::new(6, 0, 0, size_of::<WriteReplyInline>());
+    pub const ERROR_REPLY: Self = Self::new(7, 0, 0, size_of::<ErrorReplyInline>());
+
+    const fn new(ty: u32, num_handles: u32, num_ools: u32, len: usize) -> Self {
+        Self(len as u32 | (ty << 8) | (num_handles << 16) | (num_ools << 18))
     }
 
-    pub const fn ty(&self) -> u8 {
-        todo!()
+    pub const fn len(&self) -> usize {
+        (self.0 & 0xff) as usize
+    }
+
+    pub const fn num_handles(&self) -> usize {
+        ((self.0 >> 16) & 0b11) as usize
+    }
+
+    pub const fn num_ools(&self) -> usize {
+        ((self.0 >> 18) & 0b11) as usize
     }
 }
 
