@@ -1,19 +1,18 @@
 use alloc::rc::Rc;
-
-use ftl_types::channel::CallId;
+use alloc::vec::Vec;
 
 use crate::buffer::Buffer;
 use crate::channel::Channel;
 
 pub struct Completer {
     ch: Rc<Channel>,
-    call_id: CallId,
 }
 
-pub struct ReadCompleter {}
-pub struct WriteCompleter {}
-
 pub trait Application {
-    fn read(&mut self, ch: &Rc<Channel>, buf: Buffer, len: usize, completer: ReadCompleter);
-    fn write(&mut self, ch: &Rc<Channel>, buf: Buffer, len: usize, completer: WriteCompleter);
+    fn open(&mut self, uri: &[u8], completer: Completer);
+    fn read(&mut self, ch: &Rc<Channel>, len: usize, completer: Completer);
+    fn write(&mut self, ch: &Rc<Channel>, buf: &[u8], completer: Completer);
+    fn open_reply(&mut self, ch: &Rc<Channel>, new_ch: Channel);
+    fn read_reply(&mut self, ch: &Rc<Channel>, buf: Vec<u8>);
+    fn write_reply(&mut self, ch: &Rc<Channel>, len: usize);
 }
