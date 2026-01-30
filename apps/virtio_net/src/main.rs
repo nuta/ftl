@@ -105,10 +105,8 @@ impl Main {
                 continue;
             };
 
-            let buf = self
-                .dmabufs
-                .get_by_daddr(DmaAddr::new(paddr as usize))
-                .unwrap();
+            let daddr = DmaAddr::new(paddr as usize);
+            let buf = self.dmabufs.get_by_daddr(daddr).unwrap();
             let packet = &buf[size_of::<VirtioNetHdr>()..chain.total_len as usize];
             req.write_data(packet, 0).unwrap();
             req.complete(chain.total_len as usize);
