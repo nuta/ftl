@@ -1,5 +1,6 @@
 use core::fmt;
 
+use ftl_types::channel::MessageBody;
 pub use ftl_types::channel::MessageInfo;
 use ftl_types::channel::TxId;
 use ftl_types::error::ErrorCode;
@@ -16,27 +17,26 @@ pub enum Message {
         /// The URI to open.
         uri: Buffer,
     },
-    OpenReply {
-        /// The new channel.
-        ch: Channel,
-    },
     Read {
         /// The offset to read from.
         offset: usize,
         /// The buffer to read into. The receiver will write this buffer up
         /// to the length of this buffer.
-        buf: Buffer,
-    },
-    ReadReply {
-        /// The number of bytes actually read.
-        len: usize,
+        buf: BufferMut,
     },
     Write {
         /// The offset to write to.
         offset: usize,
         /// The buffer to write from. The sender will read this buffer up to
         /// the length of this buffer.
-        buf: BufferMut,
+        buf: Buffer,
+    },
+}
+
+pub enum Reply {
+    OpenReply {
+        /// The new channel.
+        ch: Channel,
     },
     WriteReply {
         /// The number of bytes actually written.
@@ -59,6 +59,10 @@ pub struct Channel {
 
 impl Channel {
     pub fn send(&self, msg: Message) -> Result<(), SendError> {
+        todo!()
+    }
+
+    pub(crate) fn reply(&self, reply: Reply) -> Result<(), SendError> {
         todo!()
     }
 }
