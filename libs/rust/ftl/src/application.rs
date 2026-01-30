@@ -43,13 +43,38 @@ pub trait Application: Sized {
     type Session;
 
     fn init() -> Self;
-    fn open(&mut self, ctx: &mut Context<Channel>, req: OpenRequest);
-    fn read(&mut self, ctx: &mut Context<Channel>, req: ReadRequest);
-    fn write(&mut self, ctx: &mut Context<Channel>, req: WriteRequest);
-    fn open_reply(&mut self, ctx: &mut Context<Channel>, new_ch: Channel);
-    fn read_reply(&mut self, ctx: &mut Context<Channel>, buf: BufferMut, len: usize);
-    fn write_reply(&mut self, ctx: &mut Context<Channel>, buf: Buffer, len: usize);
-    fn error_reply(&mut self, ctx: &mut Context<Channel>, error: ErrorCode);
+
+    fn open(&mut self, ctx: &mut Context<Channel>, req: OpenRequest) {
+        println!("unhandled open");
+    }
+
+    fn read(&mut self, ctx: &mut Context<Channel>, req: ReadRequest) {
+        println!("unhandled read");
+    }
+
+    fn write(&mut self, ctx: &mut Context<Channel>, req: WriteRequest) {
+        println!("unhandled write");
+    }
+
+    fn open_reply(&mut self, ctx: &mut Context<Channel>, new_ch: Channel) {
+        println!("unhandled open_reply");
+    }
+
+    fn read_reply(&mut self, ctx: &mut Context<Channel>, buf: BufferMut, len: usize) {
+        println!("unhandled read_reply");
+    }
+
+    fn write_reply(&mut self, ctx: &mut Context<Channel>, buf: Buffer, len: usize) {
+        println!("unhandled write_reply");
+    }
+
+    fn error_reply(&mut self, ctx: &mut Context<Channel>, error: ErrorCode) {
+        println!("unhandled error_reply");
+    }
+
+    fn disconnected(&mut self, ctx: &mut Context<Channel>) {
+        println!("unhandled disconnected");
+    }
 }
 
 pub(crate) enum Cookie {
