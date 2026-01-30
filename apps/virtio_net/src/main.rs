@@ -76,10 +76,13 @@ impl ftl::application::Application<Env> for Main {
         }
 
         self.txq
-            .push(&[ChainEntry::Read {
-                paddr: daddr.as_usize() as u64,
-                len: written_len as u32,
-            }])
+            .push(&[
+                /* ------ TODO: virtio-net header here ------ */
+                ChainEntry::Read {
+                    paddr: daddr.as_usize() as u64,
+                    len: written_len as u32,
+                },
+            ])
             .unwrap();
 
         req.complete(written_len);
