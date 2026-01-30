@@ -75,12 +75,7 @@ impl Channel {
     }
 }
 
-fn sys_channel_send(
-    ch: HandleId,
-    info: MessageInfo,
-    msg: &MessageBody,
-    cookie: usize,
-) -> Result<TxId, ErrorCode> {
+fn sys_channel_send(ch: HandleId, info: MessageInfo, msg: &MessageBody) -> Result<TxId, ErrorCode> {
     todo!()
 }
 
