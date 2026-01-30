@@ -111,3 +111,10 @@ checksum = "a3ae828aa394de34c7de08f522d1b86bd1c182c668d27da69caadda00590f26d"
 dependencies = [
  "lock_api",
 ]
+
+[[package]]
+name = "virtio_net"
+version = "0.0.0"
+dependencies = [
+ "ftl",
+]

@@ -77,7 +77,15 @@ pub struct Channel {
 }
 
 impl Channel {
-    pub fn from_handle(handle: OwnedHandle) -> Self {
+    pub fn new() -> Result<(Self, Self), ErrorCode> {
+        let (handle1, handle2) = sys_channel_create()?;
+        Ok((
+            Self::from_handle(OwnedHandle::from_raw(handle1)),
+            Self::from_handle(OwnedHandle::from_raw(handle2)),
+        ))
+    }
+
+    pub(crate) fn from_handle(handle: OwnedHandle) -> Self {
         Self { handle }
     }
 
@@ -88,6 +96,10 @@ impl Channel {
     pub(crate) fn reply(&self, reply: Reply) -> Result<(), SendError> {
         todo!()
     }
+}
+
+fn sys_channel_create() -> Result<(HandleId, HandleId), ErrorCode> {
+    todo!()
 }
 
 fn sys_channel_send(

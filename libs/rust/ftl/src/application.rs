@@ -40,8 +40,6 @@ impl<'a, T> Context<'a, T> {
 }
 
 pub trait Application: Sized {
-    type Session;
-
     fn init() -> Self;
 
     fn open(&mut self, ctx: &mut Context<Channel>, req: OpenRequest) {
@@ -82,10 +80,10 @@ pub(crate) enum Cookie {
     BufferMut(BufferMut),
 }
 
-pub fn main<A: Application>(app: A) {
+pub fn main<A: Application>() {
     let mut app = A::init();
     let mut sink = Sink::new().unwrap();
-    let mut channels: HashMap<HandleId, (Rc<Channel>, A::Session)> = HashMap::new();
+    let mut channels: HashMap<HandleId, Rc<Channel>> = HashMap::new();
     loop {
         match sink.pop().expect("failed to read an event from sink") {
             Event::Message {
@@ -96,7 +94,7 @@ pub fn main<A: Application>(app: A) {
                 msg,
             } => {
                 let cookie: Box<Cookie> = unsafe { Box::from_raw(cookie as *mut Cookie) };
-                let (ch, session) = channels.get_mut(&id).unwrap();
+                let ch = channels.get_mut(&id).unwrap();
                 let mut ctx = Context {
                     sink: &mut sink,
                     object: ch,
@@ -107,11 +105,17 @@ pub fn main<A: Application>(app: A) {
                     }
                     MessageInfo::READ => {
                         let inline = msg.inline::<ReadInline>();
-                        app.read(&mut ctx, ReadRequest::new(ch.clone(), txid));
+                        app.read(
+                            &mut ctx,
+                            ReadRequest::new(ch.clone(), txid, inline.offset, inline.len),
+                        );
                     }
                     MessageInfo::WRITE => {
                         let inline = msg.inline::<WriteInline>();
-                        app.write(&mut ctx, WriteRequest::new(ch.clone(), txid));
+                        app.write(
+                            &mut ctx,
+                            WriteRequest::new(ch.clone(), txid, inline.offset, inline.len),
+                        );
                     }
                     MessageInfo::OPEN_REPLY => {
                         let new_ch = Channel::from_handle(OwnedHandle::from_raw(msg.handles[0]));
@@ -154,57 +158,83 @@ impl OpenRequest {
         Self { ch, txid }
     }
 
-    pub fn error(self, error: ErrorCode) -> Result<(), SendError> {
-        self.ch.reply(Reply::ErrorReply { error })
+    pub fn error(self, error: ErrorCode) {
+        if let Err(e) = self.ch.reply(Reply::ErrorReply { error }) {
+            println!("failed to send error reply: {:?}", e);
+        }
     }
 
-    pub fn complete(self, new_ch: Channel) -> Result<(), SendError> {
-        self.ch.reply(Reply::OpenReply { ch: new_ch })
+    pub fn complete(self, new_ch: Channel) {
+        if let Err(e) = self.ch.reply(Reply::OpenReply { ch: new_ch }) {
+            println!("failed to send open reply: {:?}", e);
+        }
     }
 }
 
 pub struct ReadRequest {
     ch: Rc<Channel>,
     txid: TxId,
+    pub offset: usize,
+    pub len: usize,
 }
 
 impl ReadRequest {
-    pub fn new(ch: Rc<Channel>, txid: TxId) -> Self {
-        Self { ch, txid }
+    pub fn new(ch: Rc<Channel>, txid: TxId, offset: usize, len: usize) -> Self {
+        Self {
+            ch,
+            txid,
+            offset,
+            len,
+        }
     }
 
     pub fn read_data(&self, data: &mut [u8], offset: usize) -> Result<(), ErrorCode> {
         todo!()
     }
 
-    pub fn error(self, error: ErrorCode) -> Result<(), SendError> {
-        self.ch.reply(Reply::ErrorReply { error })
+    pub fn error(self, error: ErrorCode) {
+        if let Err(e) = self.ch.reply(Reply::ErrorReply { error }) {
+            println!("failed to send error reply: {:?}", e);
+        }
     }
 
-    pub fn complete(self, len: usize) -> Result<(), SendError> {
-        self.ch.reply(Reply::ReadReply { len })
+    pub fn complete(self, len: usize) {
+        if let Err(e) = self.ch.reply(Reply::ReadReply { len }) {
+            println!("failed to send read reply: {:?}", e);
+        }
     }
 }
 
 pub struct WriteRequest {
     ch: Rc<Channel>,
     txid: TxId,
+    pub offset: usize,
+    pub len: usize,
 }
 
 impl WriteRequest {
-    pub fn new(ch: Rc<Channel>, txid: TxId) -> Self {
-        Self { ch, txid }
+    pub fn new(ch: Rc<Channel>, txid: TxId, offset: usize, len: usize) -> Self {
+        Self {
+            ch,
+            txid,
+            offset,
+            len,
+        }
     }
 
     pub fn write_data(&self, data: &[u8], offset: usize) -> Result<(), ErrorCode> {
         todo!()
     }
 
-    pub fn error(self, error: ErrorCode) -> Result<(), SendError> {
-        self.ch.reply(Reply::ErrorReply { error })
+    pub fn error(self, error: ErrorCode) {
+        if let Err(e) = self.ch.reply(Reply::ErrorReply { error }) {
+            println!("failed to send error reply: {:?}", e);
+        }
     }
 
-    pub fn complete(self, len: usize) -> Result<(), SendError> {
-        self.ch.reply(Reply::WriteReply { len })
+    pub fn complete(self, len: usize) {
+        if let Err(e) = self.ch.reply(Reply::WriteReply { len }) {
+            println!("failed to send write reply: {:?}", e);
+        }
     }
 }

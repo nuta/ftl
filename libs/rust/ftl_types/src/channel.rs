@@ -78,12 +78,14 @@ pub struct TxId(u32);
 #[repr(C)]
 pub struct ReadInline {
     pub offset: usize,
+    pub len: usize,
 }
 
 #[derive(Clone, Copy)]
 #[repr(C)]
 pub struct WriteInline {
     pub offset: usize,
+    pub len: usize,
 }
 
 #[derive(Clone, Copy)]
