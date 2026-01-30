@@ -6,3 +6,5 @@ edition.workspace = true
 
 [dependencies]
 ftl = { workspace = true }
+ftl_utils = { workspace = true }
+serde = { workspace = true }

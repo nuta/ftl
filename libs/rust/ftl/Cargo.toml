@@ -9,3 +9,4 @@ ftl_types = { workspace = true }
 talc = { workspace = true }
 spin = { workspace = true }
 hashbrown = { workspace = true }
+serde = { workspace = true }

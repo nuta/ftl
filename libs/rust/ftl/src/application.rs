@@ -39,8 +39,11 @@ impl<'a, T> Context<'a, T> {
     }
 }
 
-pub trait Application: Sized {
-    fn init() -> Self;
+pub trait Application<E>: Sized
+where
+    E: serde::de::DeserializeOwned,
+{
+    fn init(env: E) -> Self;
 
     fn open(&mut self, ctx: &mut Context<Channel>, req: OpenRequest) {
         println!("unhandled open");
@@ -80,8 +83,9 @@ pub(crate) enum Cookie {
     BufferMut(BufferMut),
 }
 
-pub fn main<A: Application>() {
-    let mut app = A::init();
+pub fn main<A: Application<E>, E: serde::de::DeserializeOwned>() {
+    let env = todo!();
+    let mut app = A::init(env);
     let mut sink = Sink::new().unwrap();
     let mut channels: HashMap<HandleId, Rc<Channel>> = HashMap::new();
     loop {

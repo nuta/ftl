@@ -11,6 +11,7 @@ members = ["apps/hello", "apps/virtio_net", "kernel", "libs/rust/*"]
 talc = "4.4.3"
 spin = "0.10.0"
 hashbrown = "0.16.1"
+serde = { version = "1.0.228", default-features = false, features = ["derive"] }
 
 ftl = { path = "libs/rust/ftl" }
 ftl_types = { path = "libs/rust/ftl_types" }
