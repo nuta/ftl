@@ -4,6 +4,7 @@ use ftl_types::error::ErrorCode;
 
 use crate::buffer::Buffer;
 use crate::buffer::BufferMut;
+use crate::handle::Handleable;
 use crate::handle::OwnedHandle;
 
 pub enum Message {
@@ -35,5 +36,11 @@ impl fmt::Debug for Channel {
         f.debug_tuple("Channel")
             .field(&self.handle.as_usize())
             .finish()
+    }
+}
+
+impl Handleable for Channel {
+    fn handle(&self) -> &OwnedHandle {
+        &self.handle
     }
 }

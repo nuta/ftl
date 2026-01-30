@@ -26,3 +26,7 @@ impl Drop for OwnedHandle {
         // TODO:
     }
 }
+
+pub trait Handleable {
+    fn handle(&self) -> &OwnedHandle;
+}
