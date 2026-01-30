@@ -62,6 +62,10 @@ pub struct Channel {
 }
 
 impl Channel {
+    pub fn from_handle(handle: OwnedHandle) -> Self {
+        Self { handle }
+    }
+
     pub fn send(&self, msg: Message) -> Result<(), SendError> {
         todo!()
     }
@@ -74,7 +78,8 @@ impl Channel {
 fn sys_channel_send(
     ch: HandleId,
     info: MessageInfo,
-    msg: *const MessageBody,
+    msg: &MessageBody,
+    cookie: usize,
 ) -> Result<TxId, ErrorCode> {
     todo!()
 }

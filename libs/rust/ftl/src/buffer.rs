@@ -4,6 +4,10 @@ pub struct Buffer {
     len: usize,
 }
 
+impl Buffer {}
+
 pub struct BufferMut {}
 
-impl Buffer {}
+pub(crate) struct BufferCookie {
+    usize: usize,
+}

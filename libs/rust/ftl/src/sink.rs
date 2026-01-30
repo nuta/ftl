@@ -1,6 +1,8 @@
 use core::fmt;
 
+use ftl_types::channel::MessageBody;
 use ftl_types::channel::MessageInfo;
+use ftl_types::channel::TxId;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 
@@ -9,7 +11,13 @@ use crate::handle::Handleable;
 use crate::handle::OwnedHandle;
 
 pub enum Event {
-    Message { id: HandleId, msginfo: MessageInfo },
+    Message {
+        id: HandleId,
+        msginfo: MessageInfo,
+        txid: TxId,
+        cookie: usize,
+        msg: MessageBody,
+    },
 }
 
 pub struct Sink {
