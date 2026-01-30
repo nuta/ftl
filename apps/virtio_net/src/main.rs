@@ -16,19 +16,8 @@ impl ftl::application::Application for Main {
     }
 
     fn open(&mut self, ctx: &mut Context<Channel>, req: OpenRequest) {
-        let (our_ch, their_ch) = match Channel::new() {
-            Ok((our_ch, their_ch)) => (our_ch, their_ch),
-            Err(error) => {
-                req.error(error);
-                return;
-            }
-        };
-
-        if let Err(err) = ctx.add(our_ch) {
-            println!("failed to add our channel: {:?}", err);
-            req.error(ErrorCode::Unreachable);
-        }
-
+        let (our_ch, their_ch) = Channel::new()?;
+        ctx.add(our_ch)?;
         req.complete(their_ch);
     }
 
@@ -37,6 +26,7 @@ impl ftl::application::Application for Main {
     }
 }
 
+#[unsafe(no_mangle)]
 fn main() {
     ftl::application::main::<Main>();
 }
