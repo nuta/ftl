@@ -14,6 +14,12 @@ cargo build \
   --manifest-path apps/hello/Cargo.toml \
   --target libs/rust/ftl/src/arch/$ARCH/user.json
 
+cargo build \
+  -Z build-std=core,alloc \
+  -Z build-std-features=compiler-builtins-mem \
+  --manifest-path apps/virtio_net/Cargo.toml \
+  --target libs/rust/ftl/src/arch/$ARCH/user.json
+
 cp target/kernel/debug/kernel ftl.elf
 
 bun mkinitfs.ts
