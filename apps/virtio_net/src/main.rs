@@ -7,6 +7,7 @@ use ftl::application::ReadRequest;
 use ftl::application::WriteRequest;
 use ftl::channel::Channel;
 use ftl::dmabuf;
+use ftl::dmabuf::DmaAddr;
 use ftl::error::ErrorCode;
 use ftl::println;
 
