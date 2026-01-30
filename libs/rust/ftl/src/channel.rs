@@ -22,14 +22,14 @@ pub enum Message {
         offset: usize,
         /// The buffer to read into. The receiver will write this buffer up
         /// to the length of this buffer.
-        buf: BufferMut,
+        data: BufferMut,
     },
     Write {
         /// The offset to write to.
         offset: usize,
         /// The buffer to write from. The sender will read this buffer up to
         /// the length of this buffer.
-        buf: Buffer,
+        data: Buffer,
     },
 }
 
@@ -37,6 +37,10 @@ pub enum Reply {
     OpenReply {
         /// The new channel.
         ch: Channel,
+    },
+    ReadReply {
+        /// The number of bytes actually read.
+        len: usize,
     },
     WriteReply {
         /// The number of bytes actually written.

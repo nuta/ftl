@@ -34,6 +34,51 @@ impl OpenRequest {
     }
 }
 
+pub struct ReadRequest {
+    ch: Rc<Channel>,
+    txid: TxId,
+}
+
+impl ReadRequest {
+    pub fn new(ch: Rc<Channel>, txid: TxId) -> Self {
+        Self { ch, txid }
+    }
+
+    pub fn read_data(&self, data: &mut [u8], offset: usize) -> Result<(), ErrorCode> {
+        todo!()
+    }
+
+    pub fn error(self, error: ErrorCode) -> Result<(), SendError> {
+        self.ch.reply(Reply::ErrorReply { error })
+    }
+
+    pub fn complete(self, len: usize) -> Result<(), SendError> {
+        self.ch.reply(Reply::ReadReply { len })
+    }
+}
+
+pub struct WriteRequest {
+    ch: Rc<Channel>,
+    txid: TxId,
+}
+
+impl WriteRequest {
+    pub fn new(ch: Rc<Channel>, txid: TxId) -> Self {
+        Self { ch, txid }
+    }
+
+    pub fn write_data(&self, data: &[u8], offset: usize) -> Result<(), ErrorCode> {
+        todo!()
+    }
+
+    pub fn error(self, error: ErrorCode) -> Result<(), SendError> {
+        self.ch.reply(Reply::ErrorReply { error })
+    }
+
+    pub fn complete(self, len: usize) -> Result<(), SendError> {
+        self.ch.reply(Reply::WriteReply { len })
+    }
+}
 pub trait Application {
     fn init() -> Self;
     fn open(&mut self, req: OpenRequest);
