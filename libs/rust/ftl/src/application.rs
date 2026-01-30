@@ -21,8 +21,8 @@ pub struct Completer {
 pub trait Application {
     fn init() -> Self;
     fn open(&mut self, ch: &Rc<Channel>, uri: &[u8], completer: Completer);
-    fn read(&mut self, ch: &Rc<Channel>, len: usize, completer: Completer);
-    fn write(&mut self, ch: &Rc<Channel>, buf: Vec<u8>, completer: Completer);
+    fn read(&mut self, ch: &Rc<Channel>, off: usize, len: usize, completer: Completer);
+    fn write(&mut self, ch: &Rc<Channel>, off: usize, buf: Vec<u8>, completer: Completer);
     fn open_reply(&mut self, ch: &Rc<Channel>, new_ch: Channel);
     fn read_reply(&mut self, ch: &Rc<Channel>, buf: Vec<u8>);
     fn write_reply(&mut self, ch: &Rc<Channel>, len: usize);
@@ -36,44 +36,6 @@ pub fn main<A: Application>(app: A) {
     loop {
         match sink.pop().expect("failed to read an event from sink") {
             Event::Message { id, msginfo } => {
-                let ch = channels.get_mut(&id).unwrap();
-                let mut buf = Vec::with_capacity(msginfo.len());
-                let mut handles = [HandleId::new(0); 1];
-
-                match ch.recv(&mut buf, &mut handles) {
-                    Ok(msginfo) => {
-                        // TODO: set len
-                        debug_assert_eq!(msginfo.len(), buf.len());
-
-                        match msginfo.ty() {
-                            MSGTYPE_ERROR_REPLY => {
-                                let error = todo!();
-                                app.error_reply(ch, error);
-                            }
-                            MSGTYPE_READ => {
-                                let completer = Completer { ch: Rc::clone(ch) };
-                                let len = todo!();
-                                app.read(ch, len, completer);
-                            }
-                            MSGTYPE_READ_REPLY => {
-                                app.read_reply(ch, buf);
-                            }
-                            MSGTYPE_WRITE => {
-                                let completer = Completer { ch: Rc::clone(ch) };
-                                app.write(ch, buf, completer);
-                            }
-                            MSGTYPE_WRITE_REPLY => {
-                                let written_len = todo!();
-                                app.write_reply(ch, written_len);
-                            }
-                            _ => {
-                                println!("unknown message type: {:?}", msginfo.ty());
-                            }
-                        }
-                    }
-                    Err(err) => {
-                        //
-                    }
                 }
             }
         }

@@ -1,6 +1,7 @@
 use core::fmt;
 
 pub use ftl_types::channel::MessageInfo;
+use ftl_types::channel::TxId;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 
@@ -9,14 +10,42 @@ use crate::buffer::BufferMut;
 use crate::handle::Handleable;
 use crate::handle::OwnedHandle;
 
-pub enum Message<'a> {
-    ErrorReply { error: ErrorCode },
-    Read { offset: usize, len: usize },
-    ReadReply { data: &'a [u8] },
-    Write { data: &'a [u8], offset: usize },
-    WriteReply { len: usize },
-    Open { uri: &'a [u8] },
-    OpenReply { ch: Channel },
+/// A message constructor to send to a channel.
+pub enum Message {
+    Open {
+        /// The URI to open.
+        uri: Buffer,
+    },
+    OpenReply {
+        /// The new channel.
+        ch: Channel,
+    },
+    Read {
+        /// The offset to read from.
+        offset: usize,
+        /// The buffer to read into. The receiver will write this buffer up
+        /// to the length of this buffer.
+        buf: Buffer,
+    },
+    ReadReply {
+        /// The number of bytes actually read.
+        len: usize,
+    },
+    Write {
+        /// The offset to write to.
+        offset: usize,
+        /// The buffer to write from. The sender will read this buffer up to
+        /// the length of this buffer.
+        buf: BufferMut,
+    },
+    WriteReply {
+        /// The number of bytes actually written.
+        len: usize,
+    },
+    ErrorReply {
+        /// The error code.
+        error: ErrorCode,
+    },
 }
 
 #[derive(Debug)]
@@ -32,30 +61,13 @@ impl Channel {
     pub fn send(&self, msg: Message) -> Result<(), SendError> {
         todo!()
     }
-
-    pub fn recv(
-        &self,
-        data: &mut [u8],
-        handles: &mut [HandleId],
-    ) -> Result<MessageInfo, ErrorCode> {
-        todo!()
-    }
 }
 
 fn sys_channel_send(
     ch: HandleId,
-    msginfo: MessageInfo,
-    data: &[u8],
-    handles: &[HandleId],
-) -> Result<(), ErrorCode> {
-    todo!()
-}
-
-fn sys_channel_recv(
-    ch: HandleId,
-    data: &mut [u8],
-    handles: &mut [HandleId],
-) -> Result<(), ErrorCode> {
+    info: MessageInfo,
+    msg: *const MessageBody,
+) -> Result<TxId, ErrorCode> {
     todo!()
 }
 

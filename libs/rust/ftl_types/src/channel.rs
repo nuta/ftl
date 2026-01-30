@@ -1,10 +1,4 @@
-pub const MSGTYPE_ERROR_REPLY: u8 = 1;
-pub const MSGTYPE_READ: u8 = 2;
-pub const MSGTYPE_READ_REPLY: u8 = 3;
-pub const MSGTYPE_WRITE: u8 = 4;
-pub const MSGTYPE_WRITE_REPLY: u8 = 5;
-pub const MSGTYPE_OPEN: u8 = 6;
-pub const MSGTYPE_OPEN_REPLY: u8 = 7;
+use crate::handle::HandleId;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(transparent)]
@@ -19,3 +13,23 @@ impl MessageInfo {
         todo!()
     }
 }
+
+const NUM_HANDLES_MAX: usize = 2;
+const NUM_OOLS_MAX: usize = 1;
+
+#[repr(C)]
+pub struct OutOfLine {
+    pub ptr: usize,
+    pub len: usize,
+}
+
+#[repr(C)]
+pub struct MessageBody {
+    pub handles: [HandleId; NUM_HANDLES_MAX],
+    pub ools: [OutOfLine; NUM_OOLS_MAX],
+    pub inlines: [u8],
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(transparent)]
+pub struct TxId(u32);
