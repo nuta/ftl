@@ -86,11 +86,20 @@ impl ftl::application::Application<Env> for Main {
     }
 
     fn read(&mut self, ctx: &mut Context<Channel>, req: ReadRequest) {
-        if let Some(chain) = self.rxq.pop() {
-            // We have a pending RX packet. Reply immediately.
+        self.pending_reads.push(req);
+        self.flush_rxq();
+    }
+}
+
+impl Main {
+    fn flush_rxq(&mut self) {
+        while !self.rxq.is_empty() && !self.pending_reads.is_empty() {
+            let chain = self.rxq.pop().unwrap();
+            let req = self.pending_reads.pop().unwrap();
+
             let ChainEntry::Read { paddr, len } = chain.descs[0] else {
-                println!("expected read-only descriptor");
-                return;
+                println!("ignoring an unexpected descriptor");
+                continue;
             };
 
             let buf = self
@@ -100,9 +109,6 @@ impl ftl::application::Application<Env> for Main {
             let packet = &buf[size_of::<VirtioNetHdr>()..chain.total_len as usize];
             req.write_data(packet, 0).unwrap();
             req.complete(chain.total_len as usize);
-        } else {
-            // No pending RX packet. Complete later.
-            self.pending_read = Some(req);
         }
     }
 }
