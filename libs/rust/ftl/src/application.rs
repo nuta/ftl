@@ -76,6 +76,10 @@ where
     fn disconnected(&mut self, ctx: &mut Context<Channel>) {
         println!("unhandled disconnected");
     }
+
+    fn interrupt(&mut self, ctx: &mut Context<Interrupt>) {
+        println!("unhandled interrupt");
+    }
 }
 
 pub(crate) enum Cookie {

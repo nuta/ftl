@@ -260,6 +260,10 @@ impl VirtioPci {
         Ok(VirtQueue::new(queue_index, queue_size, vaddr))
     }
 
+    pub fn handle_interrupt(&self) {
+        todo!()
+    }
+
     pub fn read_device_config8(&self, offset: u16) -> u8 {
         self.in8(PCI_IOPORT_CONFIG + offset)
     }

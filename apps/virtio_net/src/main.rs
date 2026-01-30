@@ -89,6 +89,11 @@ impl ftl::application::Application<Env> for Main {
         self.pending_reads.push(req);
         self.flush_rxq();
     }
+
+    fn interrupt(&mut self, ctx: &mut Context<Interrupt>, req: InterruptRequest) {
+        self.virtio.handle_interrupt();
+        self.flush_rxq();
+    }
 }
 
 impl Main {
