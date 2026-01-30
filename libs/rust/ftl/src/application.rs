@@ -82,8 +82,8 @@ impl WriteRequest {
 pub trait Application {
     fn init() -> Self;
     fn open(&mut self, req: OpenRequest);
-    // fn read(&mut self, req: Request<ReadReply>);
-    // fn write(&mut self, req: Request<WriteReply>);
+    fn read(&mut self, req: ReadRequest);
+    fn write(&mut self, req: WriteRequest);
     fn open_reply(&mut self, new_ch: Channel);
     fn read_reply(&mut self, buf: BufferMut, len: usize);
     fn write_reply(&mut self, buf: Buffer, len: usize);
