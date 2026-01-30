@@ -52,7 +52,7 @@ pub trait Application: Sized {
     fn error_reply(&mut self, ctx: &mut Context<Channel>, error: ErrorCode);
 }
 
-pub enum Cookie {
+pub(crate) enum Cookie {
     Buffer(Buffer),
     BufferMut(BufferMut),
 }
