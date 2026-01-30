@@ -1,13 +1,16 @@
+use alloc::string::String;
+use alloc::vec::Vec;
+
 #[derive(Debug)]
-pub struct Buffer {
-    ptr: *mut u8,
-    len: usize,
+pub enum Buffer {
+    Static(&'static [u8]),
+    String(String),
+    Vec(Vec<u8>),
 }
 
 impl Buffer {}
 
-pub struct BufferMut {}
-
-pub(crate) struct BufferCookie {
-    usize: usize,
+pub enum BufferMut {
+    String(String),
+    Vec(Vec<u8>),
 }

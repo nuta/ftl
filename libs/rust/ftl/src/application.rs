@@ -18,7 +18,6 @@ use ftl_types::handle::HandleId;
 use hashbrown::HashMap;
 
 use crate::buffer::Buffer;
-use crate::buffer::BufferCookie;
 use crate::buffer::BufferMut;
 use crate::channel::Channel;
 use crate::channel::Reply;
@@ -44,6 +43,14 @@ pub trait Application: Sized {
     fn error_reply(&mut self, ctx: &mut Context<Self>, error: ErrorCode);
 }
 
+fn cookie_to_buffer_mut(cookie: usize) -> BufferMut {
+    todo!()
+}
+
+fn cookie_to_buffer(cookie: usize) -> Buffer {
+    todo!()
+}
+
 pub fn main<A: Application>(app: A) {
     let mut app = A::init();
     let mut sink = Sink::new().unwrap();
@@ -58,7 +65,7 @@ pub fn main<A: Application>(app: A) {
                 msg,
             } => {
                 let (ch, session) = channels.get_mut(&id).unwrap();
-                let ctx = Context { session };
+                let mut ctx = Context { session };
                 match msginfo.ty() {
                     MSGTYPE_OPEN => {
                         app.open(&mut ctx, OpenRequest::new(ch.clone(), txid));
@@ -77,13 +84,16 @@ pub fn main<A: Application>(app: A) {
                     }
                     MSGTYPE_READ_REPLY => {
                         let inline = msg.inline::<ReadReplyInline>();
-                        let cookie = BufferCookie::from_raw(cookie);
-                        app.read_reply(&mut ctx, cookie.buf, inline.len);
+                        let buf = cookie_to_buffer_mut(cookie);
+                        app.read_reply(&mut ctx, buf, inline.len);
                     }
                     MSGTYPE_WRITE_REPLY => {
                         let inline = msg.inline::<WriteReplyInline>();
-                        let cookie = BufferCookie::from_raw(cookie);
-                        app.write_reply(&mut ctx, cookie.buf, inline.len);
+                        let buf = cookie_to_buffer(cookie);
+                        app.write_reply(&mut ctx, buf, inline.len);
+                    }
+                    _ => {
+                        todo!()
                     }
                 }
             }
