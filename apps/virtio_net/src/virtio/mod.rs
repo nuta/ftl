@@ -119,10 +119,14 @@ impl VirtQueue {
         }
     }
 
+    pub fn is_full(&self, n: usize) -> bool {
+        self.free_indicies.len() < n
+    }
+
     pub fn push(&mut self, chain: &[ChainEntry]) -> Result<(), Error> {
         assert!(chain.len() > 0);
 
-        if chain.len() > self.free_indicies.len() {
+        if self.is_full(chain.len()) {
             return Err(Error::VirtQueueFull);
         }
 

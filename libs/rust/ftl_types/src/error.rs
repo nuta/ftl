@@ -13,6 +13,7 @@ pub enum ErrorCode {
     Unsupported = 5,
     InvalidArgument = 6,
     RetryLater = 7,
+    BadBuffer = 8,
 }
 
 impl From<usize> for ErrorCode {
@@ -26,6 +27,7 @@ impl From<usize> for ErrorCode {
             5 => Self::Unsupported,
             6 => Self::InvalidArgument,
             7 => Self::RetryLater,
+            8 => Self::BadBuffer,
             _ => Self::Unknown,
         }
     }

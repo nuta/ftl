@@ -10,6 +10,8 @@ use ftl::dmabuf;
 use ftl::error::ErrorCode;
 use ftl::println;
 
+use crate::virtio::ChainEntry;
+
 mod virtio;
 
 #[repr(C, packed)]
@@ -40,22 +42,25 @@ struct Main {
 impl ftl::application::Application<Env> for Main {
     fn init(env: Env) -> Self {
         let virtio = virtio::VirtioPci::new(env.pci_bus, env.pci_slot, env.iobase);
+        let rxq = virtio.setup_virtqueue(0).unwrap();
+        let txq = virtio.setup_virtqueue(1).unwrap();
         Self {
             virtio,
-            rxq: virtio.setup_virtqueue(0).unwrap(),
-            txq: virtio.setup_virtqueue(1).unwrap(),
+            rxq,
+            txq,
             dmabufs: dmabuf::Pool::new().unwrap(),
             pending_read: None,
         }
     }
 
     fn write(&mut self, ctx: &mut Context<Channel>, req: WriteRequest) {
-        if self.txq.is_full() {
+        if self.txq.is_full(3) {
             req.error(ErrorCode::RetryLater);
             return;
         }
 
-        let (paddr, buf) = match self.dmabufs.alloc(req.len) {
+        let written_len = req.len;
+        let (daddr, buf) = match self.dmabufs.alloc(written_len) {
             Ok(pair) => pair,
             Err(error) => {
                 req.error(error);
@@ -63,21 +68,33 @@ impl ftl::application::Application<Env> for Main {
             }
         };
 
-        req.read_data(buf, 0).unwrap();
+        if let Err(error) = req.read_data(buf, 0) {
+            req.error(ErrorCode::BadBuffer);
+            return;
+        }
+
         self.txq
-            .push(&[ChainEntry::Write {
-                paddr,
-                len: req.len as u32,
+            .push(&[ChainEntry::Read {
+                paddr: daddr.as_usize() as u64,
+                len: written_len as u32,
             }])
             .unwrap();
 
-        req.complete(req.len);
+        req.complete(written_len);
     }
 
     fn read(&mut self, ctx: &mut Context<Channel>, req: ReadRequest) {
         if let Some(chain) = self.rxq.pop() {
             // We have a pending RX packet. Reply immediately.
-            let buf = self.dmabufs.get_by_paddr(chain.descs[0].paddr).unwrap();
+            let ChainEntry::Read { paddr, len } = chain.descs[0] else {
+                println!("expected read-only descriptor");
+                return;
+            };
+
+            let buf = self
+                .dmabufs
+                .get_by_daddr(DmaAddr::new(paddr as usize))
+                .unwrap();
             let packet = &buf[size_of::<VirtioNetHdr>()..chain.total_len as usize];
             req.write_data(packet, 0).unwrap();
             req.complete(chain.total_len as usize);
