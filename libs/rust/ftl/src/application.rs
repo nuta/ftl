@@ -1,3 +1,4 @@
+use alloc::boxed::Box;
 use alloc::rc::Rc;
 use alloc::vec::Vec;
 use core::marker::PhantomData;
@@ -43,6 +44,11 @@ pub trait Application: Sized {
     fn error_reply(&mut self, ctx: &mut Context<Self>, error: ErrorCode);
 }
 
+pub enum Cookie {
+    Buffer(Buffer),
+    BufferMut(BufferMut),
+}
+
 fn cookie_to_buffer_mut(cookie: usize) -> BufferMut {
     todo!()
 }
@@ -64,6 +70,7 @@ pub fn main<A: Application>(app: A) {
                 cookie,
                 msg,
             } => {
+                let cookie: Box<Cookie> = unsafe { Box::from_raw(cookie as *mut Cookie) };
                 let (ch, session) = channels.get_mut(&id).unwrap();
                 let mut ctx = Context { session };
                 match msginfo.ty() {
@@ -84,12 +91,16 @@ pub fn main<A: Application>(app: A) {
                     }
                     MSGTYPE_READ_REPLY => {
                         let inline = msg.inline::<ReadReplyInline>();
-                        let buf = cookie_to_buffer_mut(cookie);
+                        let Cookie::BufferMut(buf) = *cookie else {
+                            unreachable!()
+                        };
                         app.read_reply(&mut ctx, buf, inline.len);
                     }
                     MSGTYPE_WRITE_REPLY => {
                         let inline = msg.inline::<WriteReplyInline>();
-                        let buf = cookie_to_buffer(cookie);
+                        let Cookie::Buffer(buf) = *cookie else {
+                            unreachable!()
+                        };
                         app.write_reply(&mut ctx, buf, inline.len);
                     }
                     _ => {

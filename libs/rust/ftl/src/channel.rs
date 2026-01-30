@@ -6,6 +6,7 @@ use ftl_types::channel::TxId;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 
+use crate::application::Cookie;
 use crate::buffer::Buffer;
 use crate::buffer::BufferMut;
 use crate::handle::Handleable;
@@ -75,7 +76,12 @@ impl Channel {
     }
 }
 
-fn sys_channel_send(ch: HandleId, info: MessageInfo, msg: &MessageBody) -> Result<TxId, ErrorCode> {
+fn sys_channel_send(
+    ch: HandleId,
+    info: MessageInfo,
+    msg: &MessageBody,
+    cookie: Cookie,
+) -> Result<(), ErrorCode> {
     todo!()
 }
 
