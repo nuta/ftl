@@ -1,8 +1,11 @@
 use core::any::Any;
 
 use ftl_types::error::ErrorCode;
+use ftl_types::sink::Event;
+use ftl_types::sink::EventType;
 
 use crate::shared_ref::SharedRef;
+use crate::sink::EventEmitter;
 
 /// A set of allowed operations on a kernel object.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -57,6 +60,10 @@ impl AnyHandle {
         let rights = self.0.rights;
         Some(Handle { object, rights })
     }
+
+    pub fn authorize(self, required: HandleRight) -> Result<SharedRef<dyn Handleable>, ErrorCode> {
+        self.0.authorize(required)
+    }
 }
 
 impl<T: Handleable> From<Handle<T>> for AnyHandle {
@@ -68,4 +75,12 @@ impl<T: Handleable> From<Handle<T>> for AnyHandle {
     }
 }
 
-pub trait Handleable: Any + Send + Sync {}
+pub trait Handleable: Any + Send + Sync {
+    fn set_event_emitter(&self, _emitter: Option<EventEmitter>) -> Result<(), ErrorCode> {
+        Err(ErrorCode::Unsupported)
+    }
+
+    fn read_event(&self) -> Result<Option<(EventType, Event)>, ErrorCode> {
+        Err(ErrorCode::Unsupported)
+    }
+}

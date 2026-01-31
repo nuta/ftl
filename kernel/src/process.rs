@@ -60,10 +60,13 @@ impl HandleTable {
         Ok(id)
     }
 
+    // TODO: Can we return a reference instead of a clone?
+    pub fn get_any(&self, id: HandleId) -> Option<AnyHandle> {
+        self.handles.get(&id.as_usize()).cloned()
+    }
+
     pub fn get<T: Handleable>(&self, id: HandleId) -> Result<Handle<T>, ErrorCode> {
-        self.handles
-            .get(&id.as_usize())
-            .cloned()
+        self.get_any(id)
             .ok_or(ErrorCode::HandleNotFound)?
             .downcast::<T>()
             .ok_or(ErrorCode::InvalidHandle)

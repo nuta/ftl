@@ -8,6 +8,9 @@ use ftl_types::channel::NUM_HANDLES_MAX;
 use ftl_types::channel::NUM_OOLS_MAX;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
+use ftl_types::sink::Event;
+use ftl_types::sink::EventType;
+use ftl_types::sink::MessageEvent;
 
 use crate::handle::AnyHandle;
 use crate::handle::Handle;
@@ -18,6 +21,7 @@ use crate::isolation::UserPtr;
 use crate::isolation::UserSlice;
 use crate::process::HandleTable;
 use crate::shared_ref::SharedRef;
+use crate::sink::EventEmitter;
 use crate::spinlock::SpinLock;
 use crate::thread::Thread;
 
@@ -32,6 +36,7 @@ struct Message {
 struct Mutable {
     peer: Option<SharedRef<Channel>>,
     queue: VecDeque<Message>,
+    emitter: Option<EventEmitter>,
 }
 
 pub struct Channel {
@@ -44,12 +49,14 @@ impl Channel {
             mutable: SpinLock::new(Mutable {
                 peer: None,
                 queue: VecDeque::new(),
+                emitter: None,
             }),
         })?;
         let ch1 = SharedRef::new(Self {
             mutable: SpinLock::new(Mutable {
                 peer: Some(ch0.clone()),
                 queue: VecDeque::new(),
+                emitter: None,
             }),
         })?;
         ch0.mutable.lock().peer = Some(ch1.clone());
@@ -78,7 +85,7 @@ impl Channel {
             mutable.peer.as_ref().ok_or(ErrorCode::PeerClosed)?.clone()
         };
 
-        let mut body: MessageBody = crate::isolation::read(isolation, body_slice, 0)?;
+        let body: MessageBody = crate::isolation::read(isolation, body_slice, 0)?;
 
         let mut handles = ArrayVec::new();
         for i in 0..info.num_handles() {
@@ -122,7 +129,28 @@ impl Channel {
     }
 }
 
-impl Handleable for Channel {}
+impl Handleable for Channel {
+    fn set_event_emitter(&self, emitter: Option<EventEmitter>) -> Result<(), ErrorCode> {
+        let mut mutable = self.mutable.lock();
+        mutable.emitter = emitter;
+        Ok(())
+    }
+
+    fn read_event(&self) -> Result<Option<(EventType, Event)>, ErrorCode> {
+        let mut mutable = self.mutable.lock();
+        let Some(message) = mutable.queue.pop_front() else {
+            return Ok(None);
+        };
+
+        let event = MessageEvent {
+            info: message.info,
+            cookie: message.cookie,
+            body: message.body,
+        };
+
+        Ok(Some((EventType::MESSAGE, Event { message: event })))
+    }
+}
 
 pub fn sys_channel_create(current: &SharedRef<Thread>, a0: usize) -> Result<usize, ErrorCode> {
     let ids = UserSlice::new(UserPtr::new(a0), size_of::<[HandleId; 2]>())?;

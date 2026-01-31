@@ -124,7 +124,7 @@ pub fn sys_pci_lookup(
                     break 'outer;
                 }
 
-                crate::isolation::write(isolation, slice, index, entry)?;
+                crate::isolation::write(isolation, slice, index * size_of::<PciEntry>(), entry)?;
                 index += 1;
             }
         }

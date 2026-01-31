@@ -66,7 +66,7 @@ impl UserSlice {
 pub fn read<'a, T: Copy>(
     isolation: &SharedRef<dyn Isolation>,
     slice: UserSlice,
-    index: usize,
+    offset: usize,
 ) -> Result<T, ErrorCode> {
     debug_assert!(
         size_of::<T>() <= 256,
@@ -75,7 +75,6 @@ pub fn read<'a, T: Copy>(
 
     let mut buf = MaybeUninit::<T>::uninit();
 
-    let offset = index * size_of::<T>();
     let subslice = slice.subslice(offset, size_of::<T>())?;
     let slice =
         unsafe { core::slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, size_of::<T>()) };
@@ -87,10 +86,9 @@ pub fn read<'a, T: Copy>(
 pub fn write<T: Copy>(
     isolation: &SharedRef<dyn Isolation>,
     slice: UserSlice,
-    index: usize,
+    offset: usize,
     value: T,
 ) -> Result<(), ErrorCode> {
-    let offset = index * size_of::<T>();
     let subslice = slice.subslice(offset, size_of::<T>())?;
     let bytes =
         unsafe { core::slice::from_raw_parts(&raw const value as *const u8, size_of::<T>()) };
