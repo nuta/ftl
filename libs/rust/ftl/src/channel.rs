@@ -9,7 +9,10 @@ use ftl_types::channel::MessageBody;
 use ftl_types::channel::MessageInfo;
 use ftl_types::channel::NUM_HANDLES_MAX;
 use ftl_types::channel::NUM_OOLS_MAX;
+use ftl_types::channel::OpenInline;
 use ftl_types::channel::OutOfLine;
+use ftl_types::channel::ReadInline;
+use ftl_types::channel::WriteInline;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use ftl_types::syscall::SYS_CHANNEL_CREATE;
@@ -129,10 +132,21 @@ impl Channel {
             }
             Message::Read { offset, data } => {
                 body.ools[0] = data.to_ool();
+                // FIXME: Ugly unsafe code. Alignment is not guaranteed.
+                let inline = unsafe { &mut *(body.inline.as_mut_ptr() as *mut ReadInline) };
+                *inline = ReadInline {
+                    offset,
+                    len: body.ools[0].len, // TODO: Should we add len field to Message?
+                };
                 (MessageInfo::READ, Cookie::BufferMut(data))
             }
             Message::Write { offset, data } => {
                 body.ools[0] = data.to_ool();
+                let inline = unsafe { &mut *(body.inline.as_mut_ptr() as *mut WriteInline) };
+                *inline = WriteInline {
+                    offset,
+                    len: body.ools[0].len,
+                };
                 (MessageInfo::WRITE, Cookie::Buffer(data))
             }
         };
