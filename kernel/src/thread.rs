@@ -22,11 +22,7 @@ pub enum Promise {
 }
 
 impl Promise {
-    pub fn poll(
-        &self,
-        current: &CurrentThread,
-        thread: &SharedRef<Thread>,
-    ) -> Option<Result<usize, ErrorCode>> {
+    pub fn poll(&self, thread: &SharedRef<Thread>) -> Option<Result<usize, ErrorCode>> {
         match self {
             Promise::SinkWait { sink, buf } => {
                 let process = thread.process();
@@ -37,10 +33,7 @@ impl Promise {
                         // Still not ready.
                         None
                     }
-                    Err(error) => {
-                        unsafe { current.set_syscall_result(Err(error)) };
-                        Some(Err(error))
-                    }
+                    Err(error) => Some(Err(error)),
                 }
             }
         }
@@ -55,6 +48,17 @@ enum State {
 
 struct Mutable {
     state: State,
+}
+
+fn encode_syscall_result(retval: Result<usize, ErrorCode>) -> usize {
+    match retval {
+        Ok(retval) if retval >= ERROR_RETVAL_BASE => {
+            println!("invalid syscall return value: {:x}", retval);
+            ERROR_RETVAL_BASE + ErrorCode::Unreachable as usize
+        }
+        Ok(retval) => retval,
+        Err(error) => ERROR_RETVAL_BASE + error as usize,
+    }
 }
 
 #[repr(C)]
@@ -97,6 +101,17 @@ impl Thread {
         mutable.state = State::Blocked(promise);
     }
 
+    fn set_syscall_result(&self, retval: Result<usize, ErrorCode>) {
+        let raw = encode_syscall_result(retval);
+
+        // SAFETY: This is called only for threads that are not running on any
+        // CPU, so mutating the saved register state is safe here.
+        unsafe {
+            let arch = core::ptr::addr_of!(self.arch) as *mut arch::Thread;
+            (*arch).set_syscall_result(raw);
+        }
+    }
+
     pub fn unblock(self: SharedRef<Self>) {
         // Evaluate the promsie again in Thread::poll.
         SCHEDULER.push(self);
@@ -104,14 +119,16 @@ impl Thread {
 
     /// Attempts to resolve the blocked state, and returns `true` if the
     /// thread is now runnable.
-    pub fn poll(self: &SharedRef<Self>, current: &CurrentThread) -> bool {
-        let mutable = self.mutable.lock();
+    pub fn poll(self: &SharedRef<Self>) -> bool {
+        let mut mutable = self.mutable.lock();
         match &mutable.state {
             State::Runnable => true,
             State::Idle => false,
             State::Blocked(promise) => {
-                if let Some(result) = promise.poll(current, self) {
-                    unsafe { current.set_syscall_result(result) };
+                if let Some(result) = promise.poll(self) {
+                    mutable.state = State::Runnable;
+                    drop(mutable);
+                    self.set_syscall_result(result);
                     true
                 } else {
                     false
@@ -186,15 +203,7 @@ impl CurrentThread {
     /// This function must be called only from the CPU which is running the
     /// thread.
     pub unsafe fn set_syscall_result(&self, retval: Result<usize, ErrorCode>) {
-        let raw = match retval {
-            Ok(retval) if retval >= ERROR_RETVAL_BASE => {
-                println!("invalid syscall return value: {:x}", retval);
-                ERROR_RETVAL_BASE + ErrorCode::Unreachable as usize
-            }
-            Ok(retval) => retval,
-            Err(error) => ERROR_RETVAL_BASE + error as usize,
-        };
-
+        let raw = encode_syscall_result(retval);
         // I wish there was a better way to do this...
         unsafe {
             (*self.arch_thread()).set_syscall_result(raw);
@@ -212,7 +221,7 @@ fn schedule() -> Option<*const arch::Thread> {
     }
 
     while let Some(thread) = SCHEDULER.pop() {
-        if thread.poll(current) {
+        if thread.poll() {
             current.update(thread);
             let arch_thread = current.arch_thread();
             return Some(arch_thread);
