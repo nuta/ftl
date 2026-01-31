@@ -59,6 +59,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "ping"
+version = "0.0.0"
+dependencies = [
+ "ftl",
+ "ftl_types",
+]
+
+[[package]]
+name = "pong"
+version = "0.0.0"
+dependencies = [
+ "ftl",
+ "ftl_types",
+]
+
+[[package]]
 name = "scopeguard"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

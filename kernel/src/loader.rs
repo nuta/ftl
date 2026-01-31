@@ -1,20 +1,26 @@
 //! Application loader.
+use alloc::vec::Vec;
 use core::mem::MaybeUninit;
 use core::mem::size_of;
 use core::slice;
 
 use ftl_types::environ::StartInfo;
+use ftl_types::handle::HandleId;
 use ftl_utils::alignment::align_up;
 
 use crate::address::VAddr;
 use crate::arch;
 use crate::arch::MIN_PAGE_SIZE;
+use crate::channel::Channel;
+use crate::handle::Handle;
+use crate::handle::HandleRight;
 use crate::initfs;
 use crate::initfs::InitFs;
 use crate::isolation::INKERNEL_ISOLATION;
 use crate::memory::PAGE_ALLOCATOR;
 use crate::process::Process;
 use crate::scheduler::SCHEDULER;
+use crate::shared_ref::SharedRef;
 use crate::thread::Thread;
 
 #[repr(C)]
@@ -142,29 +148,51 @@ fn load_elf(file: &initfs::File) -> Result<VAddr, ElfError> {
     Ok(entry)
 }
 
+fn spawn_app(file: &initfs::File, channel: SharedRef<Channel>) -> SharedRef<Thread> {
+    let entry = load_elf(file).expect("failed to load ELF file");
+
+    let stack_size = 1024 * 1024;
+    let stack_bottom_paddr = PAGE_ALLOCATOR
+        .alloc(align_up(stack_size, MIN_PAGE_SIZE))
+        .expect("failed to allocate stack");
+    let stack_bottom_vaddr = arch::paddr2vaddr(stack_bottom_paddr);
+    let sp = stack_bottom_vaddr.as_usize() + stack_size;
+
+    use alloc::boxed::Box;
+
+    let info_uninit = Box::leak(Box::new(MaybeUninit::<StartInfo>::uninit()));
+    info_uninit.write(StartInfo {
+        syscall: arch::direct_syscall_handler,
+        min_page_size: arch::MIN_PAGE_SIZE,
+    });
+    let start_info = info_uninit.as_ptr() as usize;
+
+    let process = Process::new(INKERNEL_ISOLATION.clone()).expect("failed to create process");
+
+    // Insert the channel handle first. Since HandleTable starts with next_id=1,
+    // the first insert will always get ID 1.
+    let handle = Handle::new(channel, HandleRight::ALL);
+    let id = process
+        .handle_table()
+        .lock()
+        .insert(handle)
+        .expect("failed to insert channel handle");
+    assert_eq!(id, HandleId::from_raw(1), "channel handle must be ID 1");
+
+    Thread::new(process, entry.as_usize(), sp, start_info).expect("failed to create thread")
+}
+
 pub fn load(initfs: &InitFs) {
-    for file in initfs.iter() {
-        let entry = load_elf(&file).expect("failed to load ELF file");
+    let files: Vec<_> = initfs.iter().collect();
+    assert!(files.len() >= 2, "need at least 2 apps for ping-pong");
 
-        let stack_size = 1024 * 1024;
-        let stack_bottom_paddr = PAGE_ALLOCATOR
-            .alloc(align_up(stack_size, MIN_PAGE_SIZE))
-            .expect("failed to allocate stack");
-        let stack_bottom_vaddr = arch::paddr2vaddr(stack_bottom_paddr);
-        let sp = stack_bottom_vaddr.as_usize() + stack_size;
+    // Create a channel pair for ping-pong communication.
+    let (ch0, ch1) = Channel::new().expect("failed to create channel");
 
-        use alloc::boxed::Box;
+    // Spawn first app with ch0, second app with ch1.
+    let thread0 = spawn_app(&files[0], ch0);
+    let thread1 = spawn_app(&files[1], ch1);
 
-        let info_uninit = Box::leak(Box::new(MaybeUninit::<StartInfo>::uninit()));
-        info_uninit.write(StartInfo {
-            syscall: arch::direct_syscall_handler,
-            min_page_size: arch::MIN_PAGE_SIZE,
-        });
-        let start_info = info_uninit.as_ptr() as usize;
-
-        let process = Process::new(INKERNEL_ISOLATION.clone()).expect("failed to create process");
-        let thread = Thread::new(process, entry.as_usize(), sp, start_info)
-            .expect("failed to create thread");
-        SCHEDULER.push(thread);
-    }
+    SCHEDULER.push(thread0);
+    SCHEDULER.push(thread1);
 }

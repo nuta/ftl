@@ -11,7 +11,13 @@ cargo build \
 cargo build \
   -Z build-std=core,alloc \
   -Z build-std-features=compiler-builtins-mem \
-  --manifest-path apps/hello/Cargo.toml \
+  --manifest-path apps/ping/Cargo.toml \
+  --target libs/rust/ftl/src/arch/$ARCH/user.json
+
+cargo build \
+  -Z build-std=core,alloc \
+  -Z build-std-features=compiler-builtins-mem \
+  --manifest-path apps/pong/Cargo.toml \
   --target libs/rust/ftl/src/arch/$ARCH/user.json
 
 cp target/kernel/debug/kernel ftl.elf

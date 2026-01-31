@@ -1,12 +1,12 @@
 use alloc::collections::btree_set::BTreeSet;
 use alloc::collections::vec_deque::VecDeque;
-use core::mem::offset_of;
 
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use ftl_types::sink::Event;
 use ftl_types::sink::EventHeader;
 
+use crate::handle::Handle;
 use crate::handle::HandleRight;
 use crate::handle::Handleable;
 use crate::isolation::Isolation;
@@ -112,7 +112,7 @@ impl Sink {
 
             let header = EventHeader { ty, id: handle_id };
             crate::isolation::write(isolation, buf, 0, header)?;
-            crate::isolation::write(isolation, buf, offset_of!(Event, message), event)?;
+            crate::isolation::write(isolation, buf, size_of::<EventHeader>(), event)?;
 
             return Ok(true);
         }
@@ -123,6 +123,17 @@ impl Sink {
 }
 
 impl Handleable for Sink {}
+
+pub fn sys_sink_create(current: &SharedRef<Thread>) -> Result<SyscallResult, ErrorCode> {
+    let sink = Sink::new()?;
+    let handle = Handle::new(sink, HandleRight::ALL);
+
+    let process = current.process();
+    let mut handle_table = process.handle_table().lock();
+    let id = handle_table.insert(handle)?;
+
+    Ok(SyscallResult::Return(id.as_usize()))
+}
 
 pub fn sys_sink_add(current: &SharedRef<Thread>, a0: usize, a1: usize) -> Result<usize, ErrorCode> {
     let sink_id = HandleId::from_raw(a0);
@@ -150,7 +161,10 @@ pub fn sys_sink_wait(
     a1: usize,
 ) -> Result<SyscallResult, ErrorCode> {
     let sink_id = HandleId::from_raw(a0);
-    let buf = UserSlice::new(UserPtr::new(a1), size_of::<Event>())?;
+    let buf = UserSlice::new(
+        UserPtr::new(a1),
+        size_of::<EventHeader>() + size_of::<Event>(),
+    )?;
 
     let process = current.process();
     let mut handle_table = process.handle_table().lock();

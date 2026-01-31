@@ -4,15 +4,13 @@ use alloc::vec::Vec;
 use core::fmt;
 use core::mem::MaybeUninit;
 
-use ftl_types::channel::INLINE_LEN_MAX;
+use ftl_types::channel::CallId;
 use ftl_types::channel::MessageBody;
 use ftl_types::channel::MessageInfo;
-use ftl_types::channel::NUM_HANDLES_MAX;
-use ftl_types::channel::NUM_OOLS_MAX;
-use ftl_types::channel::OpenInline;
 use ftl_types::channel::OutOfLine;
 use ftl_types::channel::ReadInline;
 use ftl_types::channel::WriteInline;
+use ftl_types::channel::WriteReplyInline;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use ftl_types::syscall::SYS_CHANNEL_CREATE;
@@ -21,7 +19,7 @@ use ftl_types::syscall::SYS_CHANNEL_SEND;
 use crate::handle::Handleable;
 use crate::handle::OwnedHandle;
 use crate::syscall::syscall1;
-use crate::syscall::syscall4;
+use crate::syscall::syscall5;
 
 pub enum Buffer {
     Static(&'static [u8]),
@@ -105,6 +103,14 @@ pub(crate) enum Cookie {
     BufferMut(BufferMut),
 }
 
+/// A reply message to send back to the caller.
+pub enum Reply {
+    WriteReply {
+        /// The number of bytes written.
+        len: usize,
+    },
+}
+
 pub struct Channel {
     handle: OwnedHandle,
 }
@@ -119,6 +125,16 @@ impl Channel {
 
     fn from_handle(handle: OwnedHandle) -> Self {
         Self { handle }
+    }
+
+    /// Create a Channel from a raw handle ID.
+    ///
+    /// # Safety
+    /// The caller must ensure that the handle ID refers to a valid Channel.
+    pub unsafe fn from_raw_id(id: HandleId) -> Self {
+        Self {
+            handle: OwnedHandle::from_raw(id),
+        }
     }
 
     pub fn send(&self, message: Message) -> Result<(), ErrorCode> {
@@ -152,7 +168,24 @@ impl Channel {
         };
 
         let cookie = Box::into_raw(Box::new(cookie)) as usize;
-        sys_channel_send(self.handle.id(), info, &body, cookie)?;
+        sys_channel_send(self.handle.id(), info, &body, cookie, CallId::new(0))?;
+        Ok(())
+    }
+
+    /// Send a reply to a call.
+    pub fn reply(&self, call_id: CallId, reply: Reply) -> Result<(), ErrorCode> {
+        let body = MaybeUninit::<MessageBody>::uninit();
+        let mut body = unsafe { body.assume_init() };
+
+        let info = match reply {
+            Reply::WriteReply { len } => {
+                let inline = unsafe { &mut *(body.inline.as_mut_ptr() as *mut WriteReplyInline) };
+                *inline = WriteReplyInline { len };
+                MessageInfo::WRITE_REPLY
+            }
+        };
+
+        sys_channel_send(self.handle.id(), info, &body, 0, call_id)?;
         Ok(())
     }
 }
@@ -185,13 +218,15 @@ pub fn sys_channel_send(
     info: MessageInfo,
     body: &MessageBody,
     cookie: usize,
+    call_id: CallId,
 ) -> Result<(), ErrorCode> {
-    syscall4(
+    syscall5(
         SYS_CHANNEL_SEND,
         ch.as_usize(),
         info.as_u32() as usize,
         body as *const MessageBody as usize,
         cookie,
+        call_id.as_u32() as usize,
     )?;
     Ok(())
 }

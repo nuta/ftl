@@ -24,22 +24,27 @@ fn syscall(
 }
 
 #[inline(always)]
-pub(super) fn syscall1(n: usize, a0: usize) -> Result<usize, ErrorCode> {
+pub(crate) fn syscall0(n: usize) -> Result<usize, ErrorCode> {
+    syscall(n, 0, 0, 0, 0, 0)
+}
+
+#[inline(always)]
+pub(crate) fn syscall1(n: usize, a0: usize) -> Result<usize, ErrorCode> {
     syscall(n, a0, 0, 0, 0, 0)
 }
 
 #[inline(always)]
-pub(super) fn syscall2(n: usize, a0: usize, a1: usize) -> Result<usize, ErrorCode> {
+pub(crate) fn syscall2(n: usize, a0: usize, a1: usize) -> Result<usize, ErrorCode> {
     syscall(n, a0, a1, 0, 0, 0)
 }
 
 #[inline(always)]
-pub(super) fn syscall3(n: usize, a0: usize, a1: usize, a2: usize) -> Result<usize, ErrorCode> {
+pub(crate) fn syscall3(n: usize, a0: usize, a1: usize, a2: usize) -> Result<usize, ErrorCode> {
     syscall(n, a0, a1, a2, 0, 0)
 }
 
 #[inline(always)]
-pub(super) fn syscall4(
+pub(crate) fn syscall4(
     n: usize,
     a0: usize,
     a1: usize,
@@ -47,6 +52,18 @@ pub(super) fn syscall4(
     a3: usize,
 ) -> Result<usize, ErrorCode> {
     syscall(n, a0, a1, a2, a3, 0)
+}
+
+#[inline(always)]
+pub(crate) fn syscall5(
+    n: usize,
+    a0: usize,
+    a1: usize,
+    a2: usize,
+    a3: usize,
+    a4: usize,
+) -> Result<usize, ErrorCode> {
+    syscall(n, a0, a1, a2, a3, a4)
 }
 
 pub fn sys_console_write(s: &[u8]) {

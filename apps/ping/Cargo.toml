@@ -1,0 +1,10 @@
+[package]
+name = "ping"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+
+[dependencies]
+ftl = { workspace = true }
+ftl_types = { workspace = true }
+

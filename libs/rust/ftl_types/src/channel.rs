@@ -21,7 +21,7 @@ impl MessageInfo {
         num_ools: u32,
         inline_len: usize,
     ) -> Self {
-        debug_assert!(kind < 0b111);
+        debug_assert!(kind <= 0b111);
         debug_assert!(num_handles <= NUM_HANDLES_MAX as u32);
         debug_assert!(num_ools <= NUM_OOLS_MAX as u32);
         debug_assert!(inline_len <= INLINE_LEN_MAX);
