@@ -14,12 +14,12 @@ impl MessageInfo {
     pub const WRITE: Self = Self::new(6, 0, 1, size_of::<WriteInline>());
     pub const WRITE_REPLY: Self = Self::new(7, 0, 0, size_of::<WriteReplyInline>());
 
-    const fn new(ty: u32, num_handles: u32, num_ools: u32, inline_len: usize) -> Self {
-        debug_assert!(ty < 0b1111);
+    const fn new(kind: u32, num_handles: u32, num_ools: u32, inline_len: usize) -> Self {
+        debug_assert!(kind < 0b1111);
         debug_assert!(num_handles <= NUM_HANDLES_MAX as u32);
         debug_assert!(num_ools <= NUM_OOLS_MAX as u32);
         debug_assert!(inline_len <= INLINE_LEN_MAX);
-        Self((ty << 12) | (num_handles << 10 | (num_ools << 8) | (inline_len as u32)))
+        Self((kind << 12) | (num_handles << 10 | (num_ools << 8) | (inline_len as u32)))
     }
 
     pub const fn as_u32(self) -> u32 {
@@ -28,6 +28,10 @@ impl MessageInfo {
 
     pub const fn from_raw(raw: u32) -> Self {
         Self(raw)
+    }
+
+    pub const fn kind(self) -> u32 {
+        (self.0 >> 12) & 0b1111
     }
 
     pub const fn num_handles(self) -> usize {

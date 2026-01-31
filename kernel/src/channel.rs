@@ -111,10 +111,11 @@ impl Channel {
         });
 
         println!(
-            "enqueued a message: {} OOLs, {} handles, {} bytes",
+            "enqueued a message: kind={}, {} OOLs, {} handles, {} bytes",
+            info.kind(),
             info.num_ools(),
             info.num_handles(),
-            body.inline.len()
+            info.inline_len()
         );
 
         Ok(())
