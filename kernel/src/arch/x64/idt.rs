@@ -91,8 +91,8 @@ idt_handlers:
 /// - RSP
 /// - SS
 ///
-/// Since we don't support 32-bit mode, we don't need to worry about SS:RSP,
-/// which is only pushed when the interrupt/exception occurs in the user mode:
+/// Since we don't support 32-bit mode, SS and RSP are always there as per the
+/// SDM:
 ///
 /// > 64-bit mode also pushes SS:RSP unconditionally, rather than only on a CPL
 /// > change.
