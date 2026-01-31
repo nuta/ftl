@@ -20,9 +20,7 @@ impl Scheduler {
     /// Picks the next thread to run.
     pub fn pop(&self) -> Option<SharedRef<Thread>> {
         let mut runqueue = self.runqueue.lock();
-        // FIXME: do not add back
         let thread = runqueue.pop_front()?;
-        runqueue.push_back(thread.clone());
         Some(thread)
     }
 

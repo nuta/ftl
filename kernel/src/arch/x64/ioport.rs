@@ -4,6 +4,7 @@ use ftl_types::error::ErrorCode;
 
 use crate::isolation::INKERNEL_ISOLATION;
 use crate::shared_ref::SharedRef;
+use crate::syscall::SyscallResult;
 use crate::thread::Thread;
 
 pub(super) unsafe fn out8(port: u16, value: u8) {
@@ -54,13 +55,13 @@ pub(super) unsafe fn in32(port: u16) -> u32 {
     value
 }
 
-pub fn sys_x64_iopl(thread: &SharedRef<Thread>, a0: usize) -> Result<usize, ErrorCode> {
+pub fn sys_x64_iopl(thread: &SharedRef<Thread>, a0: usize) -> Result<SyscallResult, ErrorCode> {
     let _enable = a0 != 0;
 
     let isolation = thread.process().isolation();
     if SharedRef::ptr_eq(isolation, &INKERNEL_ISOLATION) {
         // The thread is running in kernel mode. No need to change the IOPL.
-        Ok(0)
+        Ok(SyscallResult::Return(0))
     } else {
         // The thread is running in user mode or something else. I guess we
         // won't need this. IOPL also enables STI/CLI instructions, which is

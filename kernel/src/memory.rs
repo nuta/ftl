@@ -18,6 +18,7 @@ use crate::isolation::UserPtr;
 use crate::isolation::UserSlice;
 use crate::shared_ref::SharedRef;
 use crate::spinlock::SpinLock;
+use crate::syscall::SyscallResult;
 use crate::thread::Thread;
 
 /// The physical memory allocator.
@@ -137,7 +138,7 @@ pub fn sys_dmabuf_alloc(
     a0: usize,
     a1: usize,
     a2: usize,
-) -> Result<usize, ErrorCode> {
+) -> Result<SyscallResult, ErrorCode> {
     let size = a0;
     let vaddr_ptr = UserSlice::new(UserPtr::new(a1), size_of::<usize>())?;
     let paddr_ptr = UserSlice::new(UserPtr::new(a2), size_of::<usize>())?;
@@ -161,9 +162,9 @@ pub fn sys_dmabuf_alloc(
         return Err(ErrorCode::Unsupported);
     };
 
-    crate::isolation::write(isolation, vaddr_ptr, 0, vaddr.as_usize())?;
-    crate::isolation::write(isolation, paddr_ptr, 0, paddr.as_usize())?;
-    Ok(0)
+    crate::isolation::write(isolation, &vaddr_ptr, 0, vaddr.as_usize())?;
+    crate::isolation::write(isolation, &paddr_ptr, 0, paddr.as_usize())?;
+    Ok(SyscallResult::Return(0))
 }
 
 /// A wrapper struct to make a type page-aligned.

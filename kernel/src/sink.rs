@@ -15,6 +15,8 @@ use crate::isolation::UserSlice;
 use crate::process::HandleTable;
 use crate::shared_ref::SharedRef;
 use crate::spinlock::SpinLock;
+use crate::syscall::SyscallResult;
+use crate::thread::Promise;
 use crate::thread::Thread;
 
 pub struct EventEmitter {
@@ -36,6 +38,7 @@ struct Mutable {
     /// The queue of handles IDs that are ready to be notified.
     ready_queue: VecDeque<usize>,
     ready_set: BTreeSet<usize>,
+    waiters: VecDeque<SharedRef<Thread>>,
 }
 
 pub struct Sink {
@@ -48,6 +51,7 @@ impl Sink {
             mutable: SpinLock::new(Mutable {
                 ready_queue: VecDeque::new(),
                 ready_set: BTreeSet::new(),
+                waiters: VecDeque::new(),
             }),
         })
     }
@@ -74,14 +78,19 @@ impl Sink {
 
         mutable.ready_queue.push_back(id.as_usize());
         mutable.ready_set.insert(id.as_usize());
+
+        if let Some(waiter) = mutable.waiters.pop_front() {
+            waiter.unblock();
+        }
     }
 
-    fn wait(
-        &self,
+    pub fn wait(
+        self: &SharedRef<Self>,
+        current: &SharedRef<Thread>,
         isolation: &SharedRef<dyn Isolation>,
         handle_table: &mut HandleTable,
-        buf: UserSlice,
-    ) -> Result<(), ErrorCode> {
+        buf: &UserSlice,
+    ) -> Result<bool, ErrorCode> {
         let mut mutable = self.mutable.lock();
         while let Some(id) = mutable.ready_queue.pop_front() {
             mutable.ready_set.remove(&id);
@@ -105,11 +114,11 @@ impl Sink {
             crate::isolation::write(isolation, buf, 0, header)?;
             crate::isolation::write(isolation, buf, offset_of!(Event, message), event)?;
 
-            return Ok(());
+            return Ok(true);
         }
 
-        // No ready events. Block the current thread.
-        todo!();
+        mutable.waiters.push_back(current.clone());
+        Ok(false)
     }
 }
 
@@ -139,17 +148,20 @@ pub fn sys_sink_wait(
     current: &SharedRef<Thread>,
     a0: usize,
     a1: usize,
-) -> Result<usize, ErrorCode> {
+) -> Result<SyscallResult, ErrorCode> {
     let sink_id = HandleId::from_raw(a0);
     let buf = UserSlice::new(UserPtr::new(a1), size_of::<Event>())?;
 
     let process = current.process();
     let mut handle_table = process.handle_table().lock();
-
-    handle_table
+    let sink = handle_table
         .get::<Sink>(sink_id)?
-        .authorize(HandleRight::READ)?
-        .wait(process.isolation(), &mut handle_table, buf)?;
+        .authorize(HandleRight::READ)?;
 
-    Ok(0)
+    let done = sink.wait(current, process.isolation(), &mut handle_table, &buf)?;
+    if done {
+        Ok(SyscallResult::Return(0))
+    } else {
+        Ok(SyscallResult::Blocked(Promise::SinkWait { sink, buf }))
+    }
 }

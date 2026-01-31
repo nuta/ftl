@@ -4,7 +4,7 @@ pub fn idle() -> ! {
     println!("entering idle loop");
     loop {
         unsafe {
-            asm!("hlt");
+            asm!("swapgs; sti; hlt");
         }
     }
 }

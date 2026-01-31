@@ -10,6 +10,7 @@ use crate::arch::x64::ioport::out16;
 use crate::isolation::UserPtr;
 use crate::isolation::UserSlice;
 use crate::shared_ref::SharedRef;
+use crate::syscall::SyscallResult;
 use crate::thread::Thread;
 
 #[repr(C, packed)]
@@ -107,7 +108,7 @@ pub fn sys_pci_lookup(
     a1: usize,
     a2: usize,
     a3: usize,
-) -> Result<usize, ErrorCode> {
+) -> Result<SyscallResult, ErrorCode> {
     let buf = UserPtr::new(a0);
     let n = a1;
     let vendor = a2 as u16;
@@ -124,16 +125,16 @@ pub fn sys_pci_lookup(
                     break 'outer;
                 }
 
-                crate::isolation::write(isolation, slice, index * size_of::<PciEntry>(), entry)?;
+                crate::isolation::write(isolation, &slice, index * size_of::<PciEntry>(), entry)?;
                 index += 1;
             }
         }
     }
 
-    Ok(index)
+    Ok(SyscallResult::Return(index))
 }
 
-pub fn sys_pci_set_busmaster(a0: usize, a1: usize, a2: usize) -> Result<usize, ErrorCode> {
+pub fn sys_pci_set_busmaster(a0: usize, a1: usize, a2: usize) -> Result<SyscallResult, ErrorCode> {
     let bus = a0 as u8;
     let slot = a1 as u8;
     let enable = a2 != 0;
@@ -146,10 +147,10 @@ pub fn sys_pci_set_busmaster(a0: usize, a1: usize, a2: usize) -> Result<usize, E
     }
 
     write_config16(bus, slot, offset_of!(PciConfig, command), value);
-    Ok(0)
+    Ok(SyscallResult::Return(0))
 }
 
-pub fn sys_pci_get_bar(a0: usize, a1: usize, a2: usize) -> Result<usize, ErrorCode> {
+pub fn sys_pci_get_bar(a0: usize, a1: usize, a2: usize) -> Result<SyscallResult, ErrorCode> {
     let bus = a0 as u8;
     let slot = a1 as u8;
     let bar = a2 as u8;
@@ -160,5 +161,5 @@ pub fn sys_pci_get_bar(a0: usize, a1: usize, a2: usize) -> Result<usize, ErrorCo
 
     let offset = offset_of!(PciConfig, bar) + (bar as usize * size_of::<u32>());
     let value = read_config32(bus, slot, offset);
-    Ok(value as usize)
+    Ok(SyscallResult::Return(value as usize))
 }

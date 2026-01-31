@@ -65,7 +65,7 @@ impl UserSlice {
 
 pub fn read<'a, T: Copy>(
     isolation: &SharedRef<dyn Isolation>,
-    slice: UserSlice,
+    slice: &UserSlice,
     offset: usize,
 ) -> Result<T, ErrorCode> {
     debug_assert!(
@@ -79,13 +79,13 @@ pub fn read<'a, T: Copy>(
     let slice =
         unsafe { core::slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, size_of::<T>()) };
 
-    isolation.read_bytes(subslice, slice)?;
+    isolation.read_bytes(&subslice, slice)?;
     Ok(unsafe { buf.assume_init() })
 }
 
 pub fn write<T: Copy>(
     isolation: &SharedRef<dyn Isolation>,
-    slice: UserSlice,
+    slice: &UserSlice,
     offset: usize,
     value: T,
 ) -> Result<(), ErrorCode> {
@@ -93,12 +93,12 @@ pub fn write<T: Copy>(
     let bytes =
         unsafe { core::slice::from_raw_parts(&raw const value as *const u8, size_of::<T>()) };
 
-    isolation.write_bytes(subslice, bytes)
+    isolation.write_bytes(&subslice, bytes)
 }
 
 pub trait Isolation: Send + Sync {
-    fn read_bytes(&self, slice: UserSlice, buf: &mut [u8]) -> Result<(), ErrorCode>;
-    fn write_bytes(&self, slice: UserSlice, buf: &[u8]) -> Result<(), ErrorCode>;
+    fn read_bytes(&self, slice: &UserSlice, buf: &mut [u8]) -> Result<(), ErrorCode>;
+    fn write_bytes(&self, slice: &UserSlice, buf: &[u8]) -> Result<(), ErrorCode>;
 }
 
 pub static INKERNEL_ISOLATION: SharedRef<dyn Isolation> = {
@@ -118,7 +118,7 @@ impl InKernelIsolation {
 }
 
 impl Isolation for InKernelIsolation {
-    fn read_bytes(&self, slice: UserSlice, buf: &mut [u8]) -> Result<(), ErrorCode> {
+    fn read_bytes(&self, slice: &UserSlice, buf: &mut [u8]) -> Result<(), ErrorCode> {
         let src = slice.start.0 as *const u8;
         unsafe {
             core::ptr::copy_nonoverlapping(src, buf.as_mut_ptr(), slice.len());
@@ -126,7 +126,7 @@ impl Isolation for InKernelIsolation {
         Ok(())
     }
 
-    fn write_bytes(&self, slice: UserSlice, buf: &[u8]) -> Result<(), ErrorCode> {
+    fn write_bytes(&self, slice: &UserSlice, buf: &[u8]) -> Result<(), ErrorCode> {
         let dst = slice.start.0 as *mut u8;
         unsafe {
             core::ptr::copy_nonoverlapping(buf.as_ptr(), dst, slice.len());

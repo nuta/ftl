@@ -26,6 +26,7 @@ use crate::process::HandleTable;
 use crate::shared_ref::SharedRef;
 use crate::sink::EventEmitter;
 use crate::spinlock::SpinLock;
+use crate::syscall::SyscallResult;
 use crate::thread::Thread;
 
 struct Ool {
@@ -95,7 +96,7 @@ impl Channel {
         isolation: &SharedRef<dyn Isolation>,
         handle_table: &mut HandleTable,
         info: MessageInfo,
-        body_slice: UserSlice,
+        body_slice: &UserSlice,
         cookie: usize,
         call_id: CallId,
     ) -> Result<(), ErrorCode> {
@@ -256,7 +257,10 @@ impl Handleable for Channel {
     }
 }
 
-pub fn sys_channel_create(current: &SharedRef<Thread>, a0: usize) -> Result<usize, ErrorCode> {
+pub fn sys_channel_create(
+    current: &SharedRef<Thread>,
+    a0: usize,
+) -> Result<SyscallResult, ErrorCode> {
     let ids = UserSlice::new(UserPtr::new(a0), size_of::<[HandleId; 2]>())?;
 
     let (ch0, ch1) = Channel::new()?;
@@ -269,9 +273,9 @@ pub fn sys_channel_create(current: &SharedRef<Thread>, a0: usize) -> Result<usiz
     let id1 = handle_table.insert(handle1)?;
 
     let isolation = process.isolation();
-    crate::isolation::write(isolation, ids, 0, [id0, id1])?;
+    crate::isolation::write(isolation, &ids, 0, [id0, id1])?;
 
-    Ok(0)
+    Ok(SyscallResult::Return(0))
 }
 
 pub fn sys_channel_send(
@@ -281,7 +285,7 @@ pub fn sys_channel_send(
     a2: usize,
     a3: usize,
     a4: usize,
-) -> Result<usize, ErrorCode> {
+) -> Result<SyscallResult, ErrorCode> {
     let handle_id = HandleId::from_raw(a0);
     let info = MessageInfo::from_raw(a1 as u32);
     let body = UserSlice::new(UserPtr::new(a2), size_of::<MessageBody>())?;
@@ -298,9 +302,10 @@ pub fn sys_channel_send(
         process.isolation(),
         &mut handle_table,
         info,
-        body,
+        &body,
         cookie,
         call_id,
     )?;
-    Ok(0)
+
+    Ok(SyscallResult::Return(0))
 }

@@ -6,15 +6,62 @@ use ftl_types::syscall::ERROR_RETVAL_BASE;
 use ftl_utils::static_assert;
 
 use crate::arch;
+use crate::isolation::UserSlice;
 use crate::process::IDLE_PROCESS;
 use crate::process::Process;
 use crate::scheduler::SCHEDULER;
 use crate::shared_ref::SharedRef;
+use crate::sink::Sink;
+use crate::spinlock::SpinLock;
+
+pub enum Promise {
+    SinkWait {
+        sink: SharedRef<Sink>,
+        buf: UserSlice,
+    },
+}
+
+impl Promise {
+    pub fn poll(
+        &self,
+        current: &CurrentThread,
+        thread: &SharedRef<Thread>,
+    ) -> Option<Result<usize, ErrorCode>> {
+        match self {
+            Promise::SinkWait { sink, buf } => {
+                let process = thread.process();
+                let mut handle_table = process.handle_table().lock();
+                match sink.wait(thread, process.isolation(), &mut handle_table, buf) {
+                    Ok(true) => Some(Ok(0)),
+                    Ok(false) => {
+                        // Still not ready.
+                        None
+                    }
+                    Err(error) => {
+                        unsafe { current.set_syscall_result(Err(error)) };
+                        Some(Err(error))
+                    }
+                }
+            }
+        }
+    }
+}
+
+enum State {
+    Runnable,
+    Blocked(Promise),
+    Idle,
+}
+
+struct Mutable {
+    state: State,
+}
 
 #[repr(C)]
 pub struct Thread {
     pub arch: arch::Thread,
     process: SharedRef<Process>,
+    mutable: SpinLock<Mutable>,
 }
 
 impl Thread {
@@ -27,6 +74,9 @@ impl Thread {
         SharedRef::new(Self {
             arch: arch::Thread::new(entry, sp, start_info),
             process,
+            mutable: SpinLock::new(Mutable {
+                state: State::Runnable,
+            }),
         })
     }
 
@@ -34,11 +84,40 @@ impl Thread {
         SharedRef::new(Self {
             arch: arch::Thread::new_idle(),
             process: IDLE_PROCESS.clone(),
+            mutable: SpinLock::new(Mutable { state: State::Idle }),
         })
     }
 
     pub fn process(&self) -> &SharedRef<Process> {
         &self.process
+    }
+
+    pub fn block_on(&self, promise: Promise) {
+        let mut mutable = self.mutable.lock();
+        mutable.state = State::Blocked(promise);
+    }
+
+    pub fn unblock(self: SharedRef<Self>) {
+        // Evaluate the promsie again in Thread::poll.
+        SCHEDULER.push(self);
+    }
+
+    /// Attempts to resolve the blocked state, and returns `true` if the
+    /// thread is now runnable.
+    pub fn poll(self: &SharedRef<Self>, current: &CurrentThread) -> bool {
+        let mutable = self.mutable.lock();
+        match &mutable.state {
+            State::Runnable => true,
+            State::Idle => false,
+            State::Blocked(promise) => {
+                if let Some(result) = promise.poll(current, self) {
+                    unsafe { current.set_syscall_result(result) };
+                    true
+                } else {
+                    false
+                }
+            }
+        }
     }
 }
 
@@ -124,13 +203,23 @@ impl CurrentThread {
 }
 
 fn schedule() -> Option<*const arch::Thread> {
-    let thread = SCHEDULER.pop()?;
     let cpuvar = arch::get_cpuvar();
+    let current = &cpuvar.current_thread;
+    let current_thread = current.thread();
+    if matches!(current_thread.mutable.lock().state, State::Runnable) {
+        // The current thread is runnable. Push it back to the scheduler.
+        SCHEDULER.push(current_thread);
+    }
 
-    cpuvar.current_thread.update(thread);
+    while let Some(thread) = SCHEDULER.pop() {
+        if thread.poll(current) {
+            current.update(thread);
+            let arch_thread = current.arch_thread();
+            return Some(arch_thread);
+        }
+    }
 
-    let arch_thread = cpuvar.current_thread.arch_thread();
-    Some(arch_thread)
+    None
 }
 
 /// Jumps to a thread.

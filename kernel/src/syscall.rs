@@ -16,8 +16,14 @@ use ftl_types::syscall::SYS_X64_IOPL;
 
 use crate::arch;
 use crate::shared_ref::SharedRef;
+use crate::thread::Promise;
 use crate::thread::Thread;
 use crate::thread::return_to_user;
+
+pub enum SyscallResult {
+    Return(usize),
+    Blocked(Promise),
+}
 
 fn do_syscall(
     thread: &SharedRef<Thread>,
@@ -27,13 +33,13 @@ fn do_syscall(
     a2: usize,
     a3: usize,
     a4: usize,
-) -> Result<usize, ErrorCode> {
+) -> Result<SyscallResult, ErrorCode> {
     match n {
         SYS_CONSOLE_WRITE => {
             // FIXME: Use UserSlice.
             let s = unsafe { slice::from_raw_parts(a0 as *const u8, a1) };
             arch::console_write(s);
-            Ok(0)
+            Ok(SyscallResult::Return(0))
         }
         SYS_CHANNEL_CREATE => crate::channel::sys_channel_create(thread, a0),
         SYS_CHANNEL_SEND => crate::channel::sys_channel_send(thread, a0, a1, a2, a3, a4),
@@ -64,7 +70,16 @@ pub extern "C" fn syscall_handler(
 ) -> ! {
     let current = &arch::get_cpuvar().current_thread;
     let thread = current.thread();
-    let result = do_syscall(&thread, n, a0, a1, a2, a3, a4);
-    unsafe { current.set_syscall_result(result) };
+    match do_syscall(&thread, n, a0, a1, a2, a3, a4) {
+        Ok(SyscallResult::Return(retval)) => {
+            unsafe { current.set_syscall_result(Ok(retval)) };
+        }
+        Ok(SyscallResult::Blocked(promise)) => {
+            thread.block_on(promise);
+        }
+        Err(error) => {
+            unsafe { current.set_syscall_result(Err(error)) };
+        }
+    }
     return_to_user();
 }
