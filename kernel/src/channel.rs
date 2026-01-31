@@ -1,6 +1,9 @@
+use alloc::collections::btree_map::BTreeMap;
 use alloc::collections::vec_deque::VecDeque;
+use core::mem::MaybeUninit;
 
 use ftl_arrayvec::ArrayVec;
+use ftl_types::channel::CallId;
 use ftl_types::channel::INLINE_LEN_MAX;
 use ftl_types::channel::MessageBody;
 use ftl_types::channel::MessageInfo;
@@ -25,18 +28,37 @@ use crate::sink::EventEmitter;
 use crate::spinlock::SpinLock;
 use crate::thread::Thread;
 
-struct Message {
-    info: MessageInfo,
-    handles: ArrayVec<AnyHandle, NUM_HANDLES_MAX>,
-    ools: ArrayVec<(SharedRef<dyn Isolation>, UserSlice), NUM_OOLS_MAX>,
-    inline: [u8; INLINE_LEN_MAX],
+struct Ool {
+    isolation: SharedRef<dyn Isolation>,
+    slice: UserSlice,
+}
+
+enum Message {
+    Call {
+        call_id: CallId,
+        info: MessageInfo,
+        handles: ArrayVec<AnyHandle, NUM_HANDLES_MAX>,
+        inline: [u8; INLINE_LEN_MAX],
+    },
+    Reply {
+        cookie: usize,
+        info: MessageInfo,
+        handles: ArrayVec<AnyHandle, NUM_HANDLES_MAX>,
+        inline: [u8; INLINE_LEN_MAX],
+    },
+}
+
+struct Call {
     cookie: usize,
+    ools: ArrayVec<Ool, NUM_OOLS_MAX>,
 }
 
 struct Mutable {
     peer: Option<SharedRef<Channel>>,
     queue: VecDeque<Message>,
     emitter: Option<EventEmitter>,
+    calls: BTreeMap<u32 /* call id */, Call>,
+    next_call_id: u32,
 }
 
 pub struct Channel {
@@ -50,6 +72,8 @@ impl Channel {
                 peer: None,
                 queue: VecDeque::new(),
                 emitter: None,
+                calls: BTreeMap::new(),
+                next_call_id: 1,
             }),
         })?;
         let ch1 = SharedRef::new(Self {
@@ -57,6 +81,8 @@ impl Channel {
                 peer: Some(ch0.clone()),
                 queue: VecDeque::new(),
                 emitter: None,
+                calls: BTreeMap::new(),
+                next_call_id: 1,
             }),
         })?;
         ch0.mutable.lock().peer = Some(ch1.clone());
@@ -71,6 +97,7 @@ impl Channel {
         info: MessageInfo,
         body_slice: UserSlice,
         cookie: usize,
+        call_id: CallId,
     ) -> Result<(), ErrorCode> {
         if info.num_handles() > NUM_HANDLES_MAX {
             return Err(ErrorCode::InvalidMessage);
@@ -80,10 +107,8 @@ impl Channel {
             return Err(ErrorCode::InvalidMessage);
         }
 
-        let peer = {
-            let mutable = self.mutable.lock();
-            mutable.peer.as_ref().ok_or(ErrorCode::PeerClosed)?.clone()
-        };
+        let mut mutable = self.mutable.lock();
+        let peer = mutable.peer.as_ref().ok_or(ErrorCode::PeerClosed)?.clone();
 
         let body: MessageBody = crate::isolation::read(isolation, body_slice, 0)?;
 
@@ -97,26 +122,71 @@ impl Channel {
                 unreachable!();
             }
         }
+        let call = if info.is_call() {
+            None
+        } else {
+            Some(
+                mutable
+                    .calls
+                    .remove(&call_id.as_u32())
+                    .ok_or(ErrorCode::InvalidMessage)?,
+            )
+        };
 
-        let mut ools = ArrayVec::new();
-        for i in 0..info.num_ools() {
-            let ptr = UserPtr::new(body.ools[i].addr);
-            let slice = UserSlice::new(ptr, body.ools[i].len)?;
-            if ools.try_push((isolation.clone(), slice)).is_err() {
-                // We've checked the # of ools in the MessageInfo above.
-                unreachable!();
-            }
-        }
+        // Drop the lock before acquiring the peer's lock. Otherwise, we may
+        // deadlock since the lock order is not guaranteed.
+        drop(mutable);
 
         let mut peer_mutable = peer.mutable.lock();
-        peer_mutable.queue.push_back(Message {
-            info,
-            handles,
-            ools,
-            inline: body.inline,
-            cookie,
-        });
 
+        let message = if info.is_call() {
+            let call_id: CallId = CallId::new(peer_mutable.next_call_id);
+            assert!(!peer_mutable.calls.contains_key(&call_id.as_u32())); // FIXME: Retry with a different ID
+            peer_mutable.next_call_id += 1; // FIXME: wrapping around
+
+            let mut ools = ArrayVec::new();
+            for i in 0..info.num_ools() {
+                let ptr = UserPtr::new(body.ools[i].addr);
+                // FIXME: We should not fail here.
+                let slice = UserSlice::new(ptr, body.ools[i].len)?;
+                let ool = Ool {
+                    isolation: isolation.clone(),
+                    slice,
+                };
+
+                if ools.try_push(ool).is_err() {
+                    // We've checked the # of ools in the MessageInfo above.
+                    unreachable!();
+                }
+            }
+
+            peer_mutable.calls.insert(
+                call_id.as_u32(),
+                Call {
+                    cookie: cookie,
+                    ools: ools,
+                },
+            );
+
+            Message::Call {
+                call_id,
+                info,
+                handles,
+                inline: body.inline,
+            }
+        } else {
+            Message::Reply {
+                cookie: call.unwrap().cookie, // TODO: refactor
+                info,
+                handles,
+                inline: body.inline,
+            }
+        };
+
+        peer_mutable.queue.push_back(message);
+        if let Some(ref emitter) = peer_mutable.emitter {
+            emitter.notify();
+        }
         println!(
             "enqueued a message: kind={}, {} OOLs, {} handles, {} bytes",
             info.kind(),
@@ -136,17 +206,51 @@ impl Handleable for Channel {
         Ok(())
     }
 
-    fn read_event(&self) -> Result<Option<(EventType, Event)>, ErrorCode> {
+    fn read_event(
+        &self,
+        handle_table: &mut HandleTable,
+    ) -> Result<Option<(EventType, Event)>, ErrorCode> {
         let mut mutable = self.mutable.lock();
-        let Some(message) = mutable.queue.pop_front() else {
+        let Some(mut message) = mutable.queue.pop_front() else {
             return Ok(None);
         };
 
-        let event = MessageEvent {
-            info: message.info,
-            cookie: message.cookie,
-            body: message.body,
+        // FIXME: Ugly unsafe code. This leaks kernel memory.
+        let event = MaybeUninit::<MessageEvent>::uninit();
+        let mut event = unsafe { event.assume_init() };
+
+        let (info, mut handles, inline) = match message {
+            Message::Call {
+                call_id,
+                info,
+                handles,
+                inline,
+            } => {
+                event.call_id = call_id;
+                (info, handles, inline)
+            }
+            Message::Reply {
+                cookie,
+                info,
+                handles,
+                inline,
+            } => {
+                event.cookie = cookie;
+                (info, handles, inline)
+            }
         };
+
+        let inline_len = info.inline_len();
+        event.info = info;
+        event.body.inline[..inline_len].copy_from_slice(&inline[..inline_len]);
+
+        // Move handles to our process.
+        debug_assert_eq!(handles.len(), info.num_handles());
+        for i in 0..info.num_handles() {
+            let handle = handles.pop().unwrap();
+            let id = handle_table.insert(handle)?; // TODO: What if this fails?
+            event.body.handles[i] = id;
+        }
 
         Ok(Some((EventType::MESSAGE, Event { message: event })))
     }
@@ -176,11 +280,13 @@ pub fn sys_channel_send(
     a1: usize,
     a2: usize,
     a3: usize,
+    a4: usize,
 ) -> Result<usize, ErrorCode> {
     let handle_id = HandleId::from_raw(a0);
     let info = MessageInfo::from_raw(a1 as u32);
     let body = UserSlice::new(UserPtr::new(a2), size_of::<MessageBody>())?;
     let cookie = a3;
+    let call_id = CallId::new(a4 as u32);
 
     let process = current.process();
     let mut handle_table = process.handle_table().lock();
@@ -188,6 +294,13 @@ pub fn sys_channel_send(
         .get::<Channel>(handle_id)?
         .authorize(HandleRight::WRITE)?;
 
-    ch.send(process.isolation(), &mut handle_table, info, body, cookie)?;
+    ch.send(
+        process.isolation(),
+        &mut handle_table,
+        info,
+        body,
+        cookie,
+        call_id,
+    )?;
     Ok(0)
 }

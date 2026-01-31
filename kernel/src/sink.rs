@@ -79,7 +79,7 @@ impl Sink {
     fn pop(
         &self,
         isolation: &SharedRef<dyn Isolation>,
-        handle_table: &HandleTable,
+        handle_table: &mut HandleTable,
         buf: UserSlice,
     ) -> Result<(), ErrorCode> {
         let mut mutable = self.mutable.lock();
@@ -96,7 +96,7 @@ impl Sink {
             // TODO: This authorize is not necessary because we already checked
             //       when adding the object to the sink.
             let handle = object.authorize(HandleRight::READ)?;
-            let Some((ty, event)) = handle.read_event()? else {
+            let Some((ty, event)) = handle.read_event(handle_table)? else {
                 // The object has no events to report.
                 continue;
             };
@@ -140,12 +140,12 @@ pub fn sys_sink_pop(current: &SharedRef<Thread>, a0: usize, a1: usize) -> Result
     let buf = UserSlice::new(UserPtr::new(a1), size_of::<Event>())?;
 
     let process = current.process();
-    let handle_table = process.handle_table().lock();
+    let mut handle_table = process.handle_table().lock();
 
     handle_table
         .get::<Sink>(sink_id)?
         .authorize(HandleRight::READ)?
-        .pop(process.isolation(), &handle_table, buf)?;
+        .pop(process.isolation(), &mut handle_table, buf)?;
 
     Ok(0)
 }

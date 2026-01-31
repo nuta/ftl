@@ -1,3 +1,4 @@
+use crate::channel::CallId;
 use crate::channel::MessageBody;
 use crate::channel::MessageInfo;
 use crate::handle::HandleId;
@@ -27,5 +28,6 @@ pub struct EventHeader {
 pub struct MessageEvent {
     pub info: MessageInfo,
     pub cookie: usize,
+    pub call_id: CallId,
     pub body: MessageBody,
 }

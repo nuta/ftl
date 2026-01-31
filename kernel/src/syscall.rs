@@ -25,6 +25,7 @@ fn do_syscall(
     a1: usize,
     a2: usize,
     a3: usize,
+    a4: usize,
 ) -> Result<usize, ErrorCode> {
     match n {
         SYS_CONSOLE_WRITE => {
@@ -34,7 +35,7 @@ fn do_syscall(
             Ok(0)
         }
         SYS_CHANNEL_CREATE => crate::channel::sys_channel_create(thread, a0),
-        SYS_CHANNEL_SEND => crate::channel::sys_channel_send(thread, a0, a1, a2, a3),
+        SYS_CHANNEL_SEND => crate::channel::sys_channel_send(thread, a0, a1, a2, a3, a4),
         SYS_DMABUF_ALLOC => crate::memory::sys_dmabuf_alloc(thread, a0, a1, a2),
         #[cfg(target_arch = "x86_64")]
         SYS_PCI_LOOKUP => arch::sys_pci_lookup(thread, a0, a1, a2, a3),
@@ -56,12 +57,12 @@ pub extern "C" fn syscall_handler(
     a1: usize,
     a2: usize,
     a3: usize,
-    _a4: usize,
+    a4: usize,
     n: usize,
 ) -> ! {
     let current = &arch::get_cpuvar().current_thread;
     let thread = current.thread();
-    let result = do_syscall(&thread, n, a0, a1, a2, a3);
+    let result = do_syscall(&thread, n, a0, a1, a2, a3, a4);
     unsafe { current.set_syscall_result(result) };
     return_to_user();
 }
