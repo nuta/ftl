@@ -164,8 +164,8 @@ impl Channel {
             peer_mutable.calls.insert(
                 call_id.as_u32(),
                 Call {
-                    cookie: cookie,
-                    ools: ools,
+                    cookie,
+                    ools,
                 },
             );
 
@@ -212,7 +212,7 @@ impl Handleable for Channel {
         handle_table: &mut HandleTable,
     ) -> Result<Option<(EventType, Event)>, ErrorCode> {
         let mut mutable = self.mutable.lock();
-        let Some(mut message) = mutable.queue.pop_front() else {
+        let Some(message) = mutable.queue.pop_front() else {
             return Ok(None);
         };
 
