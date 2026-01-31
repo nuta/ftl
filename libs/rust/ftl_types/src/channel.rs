@@ -25,55 +25,73 @@ impl MessageInfo {
     pub const fn as_u32(self) -> u32 {
         self.0
     }
+
+    pub const fn from_raw(raw: u32) -> Self {
+        Self(raw)
+    }
+
+    pub const fn num_handles(self) -> usize {
+        ((self.0 >> 10) & 0b11) as usize
+    }
+
+    pub const fn num_ools(self) -> usize {
+        ((self.0 >> 8) & 0b11) as usize
+    }
+
+    pub const fn inline_len(self) -> usize {
+        (self.0 & 0xff) as usize
+    }
 }
 
-const NUM_HANDLES_MAX: usize = 2;
-const NUM_OOLS_MAX: usize = 2;
-const INLINE_LEN_MAX: usize =
+pub const NUM_HANDLES_MAX: usize = 2;
+pub const NUM_OOLS_MAX: usize = 2;
+pub const INLINE_LEN_MAX: usize =
     128 - size_of::<[HandleId; NUM_HANDLES_MAX]>() - size_of::<[OutOfLine; NUM_OOLS_MAX]>();
 
+#[derive(Clone, Copy)]
 #[repr(C)]
 pub struct OutOfLine {
-    addr: usize,
-    len: usize,
+    pub addr: usize,
+    pub len: usize,
 }
 
+#[derive(Clone, Copy)]
 #[repr(C)]
 pub struct MessageBody {
-    handles: [HandleId; NUM_HANDLES_MAX],
-    ools: [OutOfLine; NUM_OOLS_MAX],
-    inline: [u8; INLINE_LEN_MAX],
+    pub handles: [HandleId; NUM_HANDLES_MAX],
+    pub ools: [OutOfLine; NUM_OOLS_MAX],
+    pub inline: [u8; INLINE_LEN_MAX],
 }
 
 #[repr(C)]
-struct ErrorReplyInline {
-    error: ErrorCode,
+pub struct ErrorReplyInline {
+    pub error: ErrorCode,
 }
 
 #[repr(C)]
-struct OpenInline {}
+pub struct OpenInline {}
 
 #[repr(C)]
-struct OpenReplyInline {}
+pub struct OpenReplyInline {}
 
 #[repr(C)]
-struct ReadInline {
-    offset: usize,
-    len: usize,
+pub struct ReadInline {
+    pub offset: usize,
+    pub len: usize,
 }
 
 #[repr(C)]
-struct ReadReplyInline {
-    len: usize,
+pub struct ReadReplyInline {
+    pub len: usize,
 }
 
 #[repr(C)]
-struct WriteInline {
-    offset: usize,
-    len: usize,
+pub struct WriteInline {
+    pub offset: usize,
+    pub len: usize,
 }
 
 #[repr(C)]
-struct WriteReplyInline {
-    len: usize,
+pub struct WriteReplyInline {
+    pub len: usize,
 }

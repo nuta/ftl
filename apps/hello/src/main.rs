@@ -4,7 +4,9 @@
 use core::mem::MaybeUninit;
 use core::mem::size_of;
 
+use ftl::channel::Buffer;
 use ftl::channel::Channel;
+use ftl::channel::Message;
 use ftl::pci::PciEntry;
 use ftl::println;
 
@@ -166,7 +168,13 @@ fn main() {
     println!("[virtio_net] sent an ARP request packet");
 
     println!("creating channel");
-    println!("channel created: {:#?}", Channel::new());
+    let (ch0, ch1) = Channel::new().unwrap();
+    println!("channel created: {:?}", (&ch0, &ch1));
+    ch0.send(Message::Write {
+        offset: 0,
+        data: Buffer::Static(b"Hello, world!"),
+    })
+    .unwrap();
 
     loop {
         unsafe { core::arch::asm!("sti; hlt") }

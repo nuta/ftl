@@ -2,6 +2,7 @@ use core::slice;
 
 use ftl_types::error::ErrorCode;
 use ftl_types::syscall::SYS_CHANNEL_CREATE;
+use ftl_types::syscall::SYS_CHANNEL_SEND;
 use ftl_types::syscall::SYS_CONSOLE_WRITE;
 use ftl_types::syscall::SYS_DMABUF_ALLOC;
 #[cfg(target_arch = "x86_64")]
@@ -33,6 +34,7 @@ fn do_syscall(
             Ok(0)
         }
         SYS_CHANNEL_CREATE => crate::channel::sys_channel_create(thread, a0),
+        SYS_CHANNEL_SEND => crate::channel::sys_channel_send(thread, a0, a1, a2, a3),
         SYS_DMABUF_ALLOC => crate::memory::sys_dmabuf_alloc(thread, a0, a1, a2),
         #[cfg(target_arch = "x86_64")]
         SYS_PCI_LOOKUP => arch::sys_pci_lookup(thread, a0, a1, a2, a3),

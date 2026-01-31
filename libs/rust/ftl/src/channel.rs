@@ -1,13 +1,106 @@
+use alloc::boxed::Box;
+use alloc::string::String;
+use alloc::vec::Vec;
 use core::fmt;
 use core::mem::MaybeUninit;
 
+use ftl_types::channel::INLINE_LEN_MAX;
+use ftl_types::channel::MessageBody;
+use ftl_types::channel::MessageInfo;
+use ftl_types::channel::NUM_HANDLES_MAX;
+use ftl_types::channel::NUM_OOLS_MAX;
+use ftl_types::channel::OutOfLine;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use ftl_types::syscall::SYS_CHANNEL_CREATE;
+use ftl_types::syscall::SYS_CHANNEL_SEND;
 
 use crate::handle::Handleable;
 use crate::handle::OwnedHandle;
 use crate::syscall::syscall1;
+use crate::syscall::syscall4;
+
+pub enum Buffer {
+    Static(&'static [u8]),
+    String(String),
+    Vec(Vec<u8>),
+}
+
+impl Buffer {
+    fn to_ool(&self) -> OutOfLine {
+        match self {
+            Buffer::Static(b) => {
+                OutOfLine {
+                    addr: b.as_ptr() as usize,
+                    len: b.len(),
+                }
+            }
+            Buffer::String(s) => {
+                OutOfLine {
+                    addr: s.as_ptr() as usize,
+                    len: s.len(),
+                }
+            }
+            Buffer::Vec(v) => {
+                OutOfLine {
+                    addr: v.as_ptr() as usize,
+                    len: v.len(),
+                }
+            }
+        }
+    }
+}
+
+pub enum BufferMut {
+    String(String),
+    Vec(Vec<u8>),
+}
+
+impl BufferMut {
+    fn to_ool(&self) -> OutOfLine {
+        match self {
+            BufferMut::String(s) => {
+                OutOfLine {
+                    addr: s.as_ptr() as usize,
+                    len: s.len(),
+                }
+            }
+            BufferMut::Vec(v) => {
+                OutOfLine {
+                    addr: v.as_ptr() as usize,
+                    len: v.len(),
+                }
+            }
+        }
+    }
+}
+
+/// A message constructor to send to a channel.
+pub enum Message {
+    Open {
+        /// The URI to open.
+        uri: Buffer,
+    },
+    Read {
+        /// The offset to read from.
+        offset: usize,
+        /// The buffer to read into. The receiver will write this buffer up
+        /// to the length of this buffer.
+        data: BufferMut,
+    },
+    Write {
+        /// The offset to write to.
+        offset: usize,
+        /// The buffer to write from. The sender will read this buffer up to
+        /// the length of this buffer.
+        data: Buffer,
+    },
+}
+
+pub(crate) enum Cookie {
+    Buffer(Buffer),
+    BufferMut(BufferMut),
+}
 
 pub struct Channel {
     handle: OwnedHandle,
@@ -23,6 +116,30 @@ impl Channel {
 
     fn from_handle(handle: OwnedHandle) -> Self {
         Self { handle }
+    }
+
+    pub fn send(&self, message: Message) -> Result<(), ErrorCode> {
+        let body = MaybeUninit::<MessageBody>::uninit();
+        // TODO: Double check the safety of this.
+        let mut body = unsafe { body.assume_init() };
+        let (info, cookie) = match message {
+            Message::Open { uri } => {
+                body.ools[0] = uri.to_ool();
+                (MessageInfo::OPEN, Cookie::Buffer(uri))
+            }
+            Message::Read { offset, data } => {
+                body.ools[0] = data.to_ool();
+                (MessageInfo::READ, Cookie::BufferMut(data))
+            }
+            Message::Write { offset, data } => {
+                body.ools[0] = data.to_ool();
+                (MessageInfo::WRITE, Cookie::Buffer(data))
+            }
+        };
+
+        let cookie = Box::into_raw(Box::new(cookie)) as usize;
+        sys_channel_send(self.handle.id(), info, &body, cookie)?;
+        Ok(())
     }
 }
 
@@ -47,4 +164,20 @@ fn sys_channel_create() -> Result<(OwnedHandle, OwnedHandle), ErrorCode> {
     let handle0 = OwnedHandle::from_raw(id0);
     let handle1 = OwnedHandle::from_raw(id1);
     Ok((handle0, handle1))
+}
+
+pub fn sys_channel_send(
+    ch: HandleId,
+    info: MessageInfo,
+    body: &MessageBody,
+    cookie: usize,
+) -> Result<(), ErrorCode> {
+    syscall4(
+        SYS_CHANNEL_SEND,
+        ch.as_usize(),
+        info.as_u32() as usize,
+        body as *const MessageBody as usize,
+        cookie,
+    )?;
+    Ok(())
 }

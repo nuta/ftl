@@ -16,3 +16,4 @@ pub const SYS_PCI_GET_BAR: usize = 4;
 pub const SYS_DMABUF_ALLOC: usize = 5;
 pub const SYS_X64_IOPL: usize = 6;
 pub const SYS_CHANNEL_CREATE: usize = 7;
+pub const SYS_CHANNEL_SEND: usize = 8;

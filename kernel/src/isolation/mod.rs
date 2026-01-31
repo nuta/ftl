@@ -1,3 +1,5 @@
+use core::mem::MaybeUninit;
+
 use ftl_types::error::ErrorCode;
 
 use crate::shared_ref::RefCounted;
@@ -59,6 +61,27 @@ impl UserSlice {
 
         Ok(Self { start, end })
     }
+}
+
+pub fn read<'a, T: Copy>(
+    isolation: &SharedRef<dyn Isolation>,
+    slice: UserSlice,
+    index: usize,
+) -> Result<T, ErrorCode> {
+    debug_assert!(
+        size_of::<T>() <= 256,
+        "T is too large and will consume too much stack"
+    );
+
+    let mut buf = MaybeUninit::<T>::uninit();
+
+    let offset = index * size_of::<T>();
+    let subslice = slice.subslice(offset, size_of::<T>())?;
+    let slice =
+        unsafe { core::slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, size_of::<T>()) };
+
+    isolation.read_bytes(subslice, slice)?;
+    Ok(unsafe { buf.assume_init() })
 }
 
 pub fn write<T: Copy>(

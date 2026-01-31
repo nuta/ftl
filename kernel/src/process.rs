@@ -1,10 +1,11 @@
 use alloc::collections::btree_map::BTreeMap;
-use core::cmp::Ordering;
 
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 
 use crate::handle::AnyHandle;
+use crate::handle::Handle;
+use crate::handle::Handleable;
 use crate::isolation::INKERNEL_ISOLATION;
 use crate::isolation::Isolation;
 use crate::shared_ref::RefCounted;
@@ -57,6 +58,21 @@ impl HandleTable {
         self.next_id += 1;
         self.handles.insert(id.as_usize(), object.into());
         Ok(id)
+    }
+
+    pub fn get<T: Handleable>(&self, id: HandleId) -> Result<Handle<T>, ErrorCode> {
+        self.handles
+            .get(&id.as_usize())
+            .cloned()
+            .ok_or(ErrorCode::HandleNotFound)?
+            .downcast::<T>()
+            .ok_or(ErrorCode::InvalidHandle)
+    }
+
+    pub fn remove(&mut self, id: HandleId) -> Result<AnyHandle, ErrorCode> {
+        self.handles
+            .remove(&id.as_usize())
+            .ok_or(ErrorCode::HandleNotFound)
     }
 }
 

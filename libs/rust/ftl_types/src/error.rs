@@ -14,6 +14,10 @@ pub enum ErrorCode {
     InvalidArgument = 6,
     NotAllowed = 7,
     TooManyHandles = 8,
+    HandleNotFound = 9,
+    InvalidHandle = 10,
+    PeerClosed = 11,
+    InvalidMessage = 12,
 }
 
 impl From<usize> for ErrorCode {
@@ -28,6 +32,10 @@ impl From<usize> for ErrorCode {
             6 => Self::InvalidArgument,
             7 => Self::NotAllowed,
             8 => Self::TooManyHandles,
+            9 => Self::HandleNotFound,
+            10 => Self::InvalidHandle,
+            11 => Self::PeerClosed,
+            12 => Self::InvalidMessage,
             _ => Self::Unknown,
         }
     }
