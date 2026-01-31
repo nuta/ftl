@@ -10,6 +10,7 @@ use ftl_types::syscall::SYS_PCI_GET_BAR;
 use ftl_types::syscall::SYS_PCI_LOOKUP;
 #[cfg(target_arch = "x86_64")]
 use ftl_types::syscall::SYS_PCI_SET_BUSMASTER;
+use ftl_types::syscall::SYS_SINK_WAIT;
 #[cfg(target_arch = "x86_64")]
 use ftl_types::syscall::SYS_X64_IOPL;
 
@@ -36,6 +37,7 @@ fn do_syscall(
         }
         SYS_CHANNEL_CREATE => crate::channel::sys_channel_create(thread, a0),
         SYS_CHANNEL_SEND => crate::channel::sys_channel_send(thread, a0, a1, a2, a3, a4),
+        SYS_SINK_WAIT => crate::sink::sys_sink_wait(thread, a0, a1),
         SYS_DMABUF_ALLOC => crate::memory::sys_dmabuf_alloc(thread, a0, a1, a2),
         #[cfg(target_arch = "x86_64")]
         SYS_PCI_LOOKUP => arch::sys_pci_lookup(thread, a0, a1, a2, a3),

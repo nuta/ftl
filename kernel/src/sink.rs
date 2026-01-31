@@ -76,7 +76,7 @@ impl Sink {
         mutable.ready_set.insert(id.as_usize());
     }
 
-    fn pop(
+    fn wait(
         &self,
         isolation: &SharedRef<dyn Isolation>,
         handle_table: &mut HandleTable,
@@ -135,7 +135,11 @@ pub fn sys_sink_add(current: &SharedRef<Thread>, a0: usize, a1: usize) -> Result
     Ok(0)
 }
 
-pub fn sys_sink_pop(current: &SharedRef<Thread>, a0: usize, a1: usize) -> Result<usize, ErrorCode> {
+pub fn sys_sink_wait(
+    current: &SharedRef<Thread>,
+    a0: usize,
+    a1: usize,
+) -> Result<usize, ErrorCode> {
     let sink_id = HandleId::from_raw(a0);
     let buf = UserSlice::new(UserPtr::new(a1), size_of::<Event>())?;
 
@@ -145,7 +149,7 @@ pub fn sys_sink_pop(current: &SharedRef<Thread>, a0: usize, a1: usize) -> Result
     handle_table
         .get::<Sink>(sink_id)?
         .authorize(HandleRight::READ)?
-        .pop(process.isolation(), &mut handle_table, buf)?;
+        .wait(process.isolation(), &mut handle_table, buf)?;
 
     Ok(0)
 }
