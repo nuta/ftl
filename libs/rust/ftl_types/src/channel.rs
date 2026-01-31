@@ -1,0 +1,79 @@
+use crate::error::ErrorCode;
+use crate::handle::HandleId;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(transparent)]
+pub struct MessageInfo(u32);
+
+impl MessageInfo {
+    pub const ERROR_REPLY: Self = Self::new(1, 0, 0, size_of::<ErrorReplyInline>());
+    pub const OPEN: Self = Self::new(2, 0, 1, size_of::<OpenInline>());
+    pub const OPEN_REPLY: Self = Self::new(3, 1, 0, size_of::<OpenReplyInline>());
+    pub const READ: Self = Self::new(4, 0, 1, size_of::<ReadInline>());
+    pub const READ_REPLY: Self = Self::new(5, 0, 0, size_of::<ReadReplyInline>());
+    pub const WRITE: Self = Self::new(6, 0, 1, size_of::<WriteInline>());
+    pub const WRITE_REPLY: Self = Self::new(7, 0, 0, size_of::<WriteReplyInline>());
+
+    const fn new(ty: u32, num_handles: u32, num_ools: u32, inline_len: usize) -> Self {
+        debug_assert!(ty < 0b1111);
+        debug_assert!(num_handles <= NUM_HANDLES_MAX as u32);
+        debug_assert!(num_ools <= NUM_OOLS_MAX as u32);
+        debug_assert!(inline_len <= INLINE_LEN_MAX);
+        Self((ty << 12) | (num_handles << 10 | (num_ools << 8) | (inline_len as u32)))
+    }
+
+    pub const fn as_u32(self) -> u32 {
+        self.0
+    }
+}
+
+const NUM_HANDLES_MAX: usize = 2;
+const NUM_OOLS_MAX: usize = 2;
+const INLINE_LEN_MAX: usize =
+    128 - size_of::<[HandleId; NUM_HANDLES_MAX]>() - size_of::<[OutOfLine; NUM_OOLS_MAX]>();
+
+#[repr(C)]
+pub struct OutOfLine {
+    addr: usize,
+    len: usize,
+}
+
+#[repr(C)]
+pub struct MessageBody {
+    handles: [HandleId; NUM_HANDLES_MAX],
+    ools: [OutOfLine; NUM_OOLS_MAX],
+    inline: [u8; INLINE_LEN_MAX],
+}
+
+#[repr(C)]
+struct ErrorReplyInline {
+    error: ErrorCode,
+}
+
+#[repr(C)]
+struct OpenInline {}
+
+#[repr(C)]
+struct OpenReplyInline {}
+
+#[repr(C)]
+struct ReadInline {
+    offset: usize,
+    len: usize,
+}
+
+#[repr(C)]
+struct ReadReplyInline {
+    len: usize,
+}
+
+#[repr(C)]
+struct WriteInline {
+    offset: usize,
+    len: usize,
+}
+
+#[repr(C)]
+struct WriteReplyInline {
+    len: usize,
+}

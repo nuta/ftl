@@ -12,6 +12,8 @@ pub enum ErrorCode {
     UnknownSyscall = 4,
     Unsupported = 5,
     InvalidArgument = 6,
+    NotAllowed = 7,
+    TooManyHandles = 8,
 }
 
 impl From<usize> for ErrorCode {
@@ -24,6 +26,8 @@ impl From<usize> for ErrorCode {
             4 => Self::UnknownSyscall,
             5 => Self::Unsupported,
             6 => Self::InvalidArgument,
+            7 => Self::NotAllowed,
+            8 => Self::TooManyHandles,
             _ => Self::Unknown,
         }
     }

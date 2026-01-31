@@ -4,6 +4,7 @@
 use core::mem::MaybeUninit;
 use core::mem::size_of;
 
+use ftl::channel::Channel;
 use ftl::pci::PciEntry;
 use ftl::println;
 
@@ -163,6 +164,10 @@ fn main() {
     txq.notify(&virtio);
 
     println!("[virtio_net] sent an ARP request packet");
+
+    println!("creating channel");
+    println!("channel created: {:#?}", Channel::new());
+
     loop {
         unsafe { core::arch::asm!("sti; hlt") }
     }
