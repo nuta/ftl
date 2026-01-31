@@ -31,15 +31,15 @@ fn do_syscall(
             arch::console_write(s);
             Ok(0)
         }
-        SYS_DMABUF_ALLOC => crate::memory::sys_dmabuf_alloc(&thread, a0, a1, a2),
+        SYS_DMABUF_ALLOC => crate::memory::sys_dmabuf_alloc(thread, a0, a1, a2),
         #[cfg(target_arch = "x86_64")]
-        SYS_PCI_LOOKUP => arch::sys_pci_lookup(&thread, a0, a1, a2, a3),
+        SYS_PCI_LOOKUP => arch::sys_pci_lookup(thread, a0, a1, a2, a3),
         #[cfg(target_arch = "x86_64")]
         SYS_PCI_SET_BUSMASTER => arch::sys_pci_set_busmaster(a0, a1, a2),
         #[cfg(target_arch = "x86_64")]
         SYS_PCI_GET_BAR => arch::sys_pci_get_bar(a0, a1, a2),
         #[cfg(target_arch = "x86_64")]
-        SYS_X64_IOPL => arch::sys_x64_iopl(&thread, a0),
+        SYS_X64_IOPL => arch::sys_x64_iopl(thread, a0),
         _ => {
             println!("unknown syscall: {}", n);
             Err(ErrorCode::UnknownSyscall)

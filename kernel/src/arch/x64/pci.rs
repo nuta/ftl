@@ -71,16 +71,6 @@ fn read_config16(bus: u8, slot: u8, offset: usize) -> u16 {
     }
 }
 
-fn write_config32(bus: u8, slot: u8, offset: usize, value: u32) {
-    debug_assert!(offset & 0b11 == 0, "offset must be aligned to 4 bytes");
-    debug_assert!(offset < 0xff, "offset is out of range");
-
-    unsafe {
-        out32(PCI_IOPORT_ADDR, get_addr(bus, slot, offset));
-        out32(PCI_IOPORT_DATA, value);
-    }
-}
-
 fn write_config16(bus: u8, slot: u8, offset: usize, value: u16) {
     debug_assert!(offset & 0b01 == 0, "offset must be aligned to 2 bytes");
     debug_assert!(offset < 0xff, "offset is out of range");

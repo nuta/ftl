@@ -36,7 +36,6 @@ fn redir_reg_high(irq: u32) -> u32 {
 
 const REG_IOAPICVER: u32 = 0x01;
 const REDIR_TABLE_BASE: u32 = 0x10;
-const MASK_BIT: u32 = 1 << 16;
 const IRQ_VECTOR_BASE: u32 = 32;
 
 pub struct IoApic {
@@ -47,7 +46,7 @@ pub struct IoApic {
 impl IoApic {
     fn init(base: VAddr) -> Self {
         let ver = read_ioapic(base, REG_IOAPICVER);
-        let num_entries = ((ver >> 16) & 0xff) as u32;
+        let num_entries = (ver >> 16) & 0xff;
         Self { base, num_entries }
     }
 

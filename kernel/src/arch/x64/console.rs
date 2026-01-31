@@ -2,7 +2,6 @@ use core::hint::spin_loop;
 
 use super::ioport::in8;
 use super::ioport::out8;
-use crate::arch::x64::io_apic::use_ioapic;
 use crate::cpuvar::CpuVar;
 
 fn putchar(c: u8) {

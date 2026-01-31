@@ -72,7 +72,7 @@ pub fn write<T: Copy>(
     let bytes =
         unsafe { core::slice::from_raw_parts(&raw const value as *const u8, size_of::<T>()) };
 
-    isolation.write_bytes(subslice, &bytes)
+    isolation.write_bytes(subslice, bytes)
 }
 
 pub trait Isolation: Send + Sync {
