@@ -45,7 +45,7 @@ impl MessageInfo {
     }
 
     pub const fn kind(self) -> u32 {
-        (self.0 >> 12) & 0b111
+        (self.0 >> 13) & 0b111
     }
 
     pub const fn num_handles(self) -> usize {
