@@ -149,7 +149,7 @@ pub trait Application {
 }
 
 pub fn run<A: Application>() {
-    let mut sink = Sink::new().unwrap();
+    let sink = Sink::new().unwrap();
     let mut objects = HashMap::new();
     let mut app = A::init(&mut Context::new(&sink, &mut objects));
     loop {

@@ -31,7 +31,7 @@ impl Application for Main {
         Self { counter: 0 }
     }
 
-    fn write_reply(&mut self, ctx: &mut Context, ch: &Rc<Channel>, buf: Buffer, len: usize) {
+    fn write_reply(&mut self, _ctx: &mut Context, ch: &Rc<Channel>, _buf: Buffer, len: usize) {
         println!("[ping] received write reply: {} bytes written", len);
         ch.send(Message::Write {
             offset: 0,

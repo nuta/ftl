@@ -214,7 +214,7 @@ impl Channel {
         let src_isolation = &ool.isolation;
         let src_slice = &ool.slice;
 
-        let mut requested_len = min(dst_slice.len(), src_slice.len().saturating_sub(offset));
+        let requested_len = min(dst_slice.len(), src_slice.len().saturating_sub(offset));
         let mut off = 0;
         while off < requested_len {
             // TODO: Do not zero the memory.

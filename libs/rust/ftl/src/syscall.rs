@@ -67,7 +67,7 @@ pub(super) fn syscall5(
 }
 
 pub fn sys_console_write(s: &[u8]) {
-    syscall2(SYS_CONSOLE_WRITE, s.as_ptr() as usize, s.len());
+    let _ = syscall2(SYS_CONSOLE_WRITE, s.as_ptr() as usize, s.len());
 }
 
 pub fn sys_x64_iopl(enable: bool) -> Result<usize, ErrorCode> {

@@ -3,15 +3,11 @@
 
 use ftl::application::Application;
 use ftl::application::Context;
-use ftl::application::ReadCompleter;
 use ftl::application::WriteCompleter;
 use ftl::channel::Channel;
-use ftl::channel::Reply;
 use ftl::handle::HandleId;
 use ftl::handle::OwnedHandle;
 use ftl::println;
-use ftl::sink::Event;
-use ftl::sink::Sink;
 
 struct Main {}
 
@@ -23,7 +19,7 @@ impl Application for Main {
         Self {}
     }
 
-    fn write(&mut self, ctx: &mut Context, completer: WriteCompleter, offset: usize, len: usize) {
+    fn write(&mut self, _ctx: &mut Context, completer: WriteCompleter, offset: usize, _len: usize) {
         let mut buf = [0; 512];
         let len = completer.read_data(offset, &mut buf).unwrap();
         println!(
