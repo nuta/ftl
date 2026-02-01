@@ -22,11 +22,7 @@ pub enum Promise {
 }
 
 impl Promise {
-    pub fn poll(
-        &self,
-        current: &CurrentThread,
-        thread: &SharedRef<Thread>,
-    ) -> Option<Result<usize, ErrorCode>> {
+    pub fn poll(&self, thread: &SharedRef<Thread>) -> Option<Result<usize, ErrorCode>> {
         match self {
             Promise::SinkWait { sink, buf } => {
                 let process = thread.process();
@@ -37,10 +33,7 @@ impl Promise {
                         // Still not ready.
                         None
                     }
-                    Err(error) => {
-                        unsafe { current.set_syscall_result(Err(error)) };
-                        Some(Err(error))
-                    }
+                    Err(error) => Some(Err(error)),
                 }
             }
         }
@@ -105,12 +98,14 @@ impl Thread {
     /// Attempts to resolve the blocked state, and returns `true` if the
     /// thread is now runnable.
     pub fn poll(self: &SharedRef<Self>, current: &CurrentThread) -> bool {
-        let mutable = self.mutable.lock();
+        let mut mutable = self.mutable.lock();
         match &mutable.state {
             State::Runnable => true,
             State::Idle => false,
             State::Blocked(promise) => {
-                if let Some(result) = promise.poll(current, self) {
+                if let Some(result) = promise.poll(self) {
+                    mutable.state = State::Runnable;
+                    drop(mutable);
                     unsafe { current.set_syscall_result(result) };
                     true
                 } else {
