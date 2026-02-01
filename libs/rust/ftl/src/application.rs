@@ -16,6 +16,7 @@ use crate::channel::Channel;
 use crate::channel::Cookie;
 use crate::channel::Reply;
 use crate::handle::Handleable;
+use crate::interrupt::Interrupt;
 use crate::sink::Event;
 use crate::sink::Sink;
 
@@ -87,6 +88,7 @@ impl WriteCompleter {
 
 enum Object {
     Channel(Rc<Channel>),
+    Interrupt(Rc<Interrupt>),
 }
 
 pub struct Context<'a> {
@@ -103,6 +105,14 @@ impl<'a> Context<'a> {
         let ch = ch.into();
         self.sink.add(ch.as_ref())?;
         self.objects.insert(ch.handle().id(), Object::Channel(ch));
+        Ok(())
+    }
+
+    pub fn add_interrupt<T: Into<Rc<Interrupt>>>(&mut self, interrupt: T) -> Result<(), ErrorCode> {
+        let interrupt = interrupt.into();
+        self.sink.add(interrupt.as_ref())?;
+        self.objects
+            .insert(interrupt.handle().id(), Object::Interrupt(interrupt));
         Ok(())
     }
 }
@@ -130,6 +140,11 @@ pub trait Application {
     #[allow(unused)]
     fn write_reply(&mut self, ctx: &mut Context, ch: &Rc<Channel>, buf: Buffer, len: usize) {
         println!("received an unexpected message: write reply");
+    }
+
+    #[allow(unused)]
+    fn irq(&mut self, ctx: &mut Context, interrupt: &Rc<Interrupt>, irq: u8) {
+        println!("received an unexpected irq: {irq}");
     }
 }
 
@@ -197,6 +212,15 @@ pub fn run<A: Application>() {
                     }
                     _ => panic!("unexpected message info: {:?}", info),
                 }
+            }
+            Event::Irq { handle_id, irq } => {
+                let interrupt = match objects.get(&handle_id) {
+                    Some(Object::Interrupt(interrupt)) => interrupt.clone(),
+                    _ => panic!("unknown handle id from sink: {:?}", handle_id),
+                };
+
+                let mut ctx = Context::new(&sink, &mut objects);
+                app.irq(&mut ctx, &interrupt, irq);
             }
         }
     }

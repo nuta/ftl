@@ -26,31 +26,31 @@ fn write_ioapic(base: VAddr, reg: u32, value: u32) {
     }
 }
 
-fn redir_reg_low(irq: u32) -> u32 {
-    REDIR_TABLE_BASE + irq * 2
+fn redir_reg_low(irq: u8) -> u32 {
+    REDIR_TABLE_BASE + (irq as u32) * 2
 }
 
-fn redir_reg_high(irq: u32) -> u32 {
+fn redir_reg_high(irq: u8) -> u32 {
     redir_reg_low(irq) + 1
 }
 
 const REG_IOAPICVER: u32 = 0x01;
 const REDIR_TABLE_BASE: u32 = 0x10;
-const IRQ_VECTOR_BASE: u32 = 32;
+pub(super) const IRQ_VECTOR_BASE: u8 = 32;
 
 pub struct IoApic {
     base: VAddr,
-    num_entries: u32,
+    num_entries: u8,
 }
 
 impl IoApic {
     fn init(base: VAddr) -> Self {
         let ver = read_ioapic(base, REG_IOAPICVER);
-        let num_entries = (ver >> 16) & 0xff;
+        let num_entries = ((ver >> 16) & 0xff) as u8;
         Self { base, num_entries }
     }
 
-    pub fn enable_irq(&mut self, irq: u32) -> Result<(), ErrorCode> {
+    pub fn enable_irq(&mut self, irq: u8) -> Result<(), ErrorCode> {
         if irq >= self.num_entries {
             return Err(ErrorCode::OutOfBounds);
         }
@@ -58,7 +58,7 @@ impl IoApic {
         let vector = IRQ_VECTOR_BASE + irq;
 
         // Unkased, edge-triggered, active-high, "fixed" delivery.
-        write_ioapic(self.base, redir_reg_low(irq), vector);
+        write_ioapic(self.base, redir_reg_low(irq) as u32, vector as u32);
         // Destination: BSP (APIC ID 0)
         write_ioapic(self.base, redir_reg_high(irq), 0);
 
@@ -83,4 +83,14 @@ pub fn init(base: PAddr) {
     let base = super::paddr2vaddr(base);
     let ioapic = IoApic::init(base);
     *lock = Some(ioapic);
+}
+
+pub fn interrupt_acquire(irq: u8) -> Result<(), ErrorCode> {
+    let mut lock = IOAPIC.lock();
+    let ioapic = lock.as_mut().expect("I/O APIC is not initialized");
+    ioapic.enable_irq(irq)
+}
+
+pub fn interrupt_acknowledge(_irq: u8) {
+    super::get_cpuvar().arch.local_apic.acknowledge_irq();
 }

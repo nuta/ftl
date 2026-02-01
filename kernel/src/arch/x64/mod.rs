@@ -29,4 +29,7 @@ pub use thread::thread_switch;
 pub use vmspace::MIN_PAGE_SIZE;
 pub use vmspace::paddr2vaddr;
 
+pub use io_apic::interrupt_acquire;
+pub use io_apic::interrupt_acknowledge;
+
 pub(super) const NUM_CPUS_MAX: usize = 16;

@@ -8,6 +8,7 @@ pub struct EventType(u32);
 
 impl EventType {
     pub const MESSAGE: Self = Self(1);
+    pub const IRQ: Self = Self(2);
 }
 
 #[derive(Clone, Copy)]
@@ -19,8 +20,15 @@ pub struct RawEvent {
 
 #[derive(Clone, Copy)]
 #[repr(C)]
+pub struct IrqEvent {
+    pub irq: u8,
+}
+
+#[derive(Clone, Copy)]
+#[repr(C)]
 pub union EventBody {
     pub message: MessageEvent,
+    pub irq: IrqEvent,
 }
 
 #[derive(Clone, Copy)]

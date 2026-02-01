@@ -6,9 +6,8 @@ use core::mem::offset_of;
 use super::boot::GDT_KERNEL_CS;
 use crate::address::VAddr;
 use crate::arch::Thread;
-use crate::arch::get_cpuvar;
-use crate::arch::x64::console;
 use crate::arch::x64::console::SERIAL_IRQ;
+use crate::arch::x64::io_apic::IRQ_VECTOR_BASE;
 use crate::arch::x64::vmspace::vaddr2paddr;
 use crate::cpuvar::CpuVar;
 use crate::spinlock::SpinLock;
@@ -198,9 +197,13 @@ extern "C" fn handle_interrupt(vector: u8, error_code: u64) -> ! {
         _ => "Unknown Exception",
     };
 
-    let cpuvar = get_cpuvar();
-    if vector == 32 + SERIAL_IRQ as u8 {
-        console::handle_interrupt(cpuvar);
+    if vector >= IRQ_VECTOR_BASE {
+        let irq = vector - IRQ_VECTOR_BASE;
+        if irq == SERIAL_IRQ {
+            super::console::handle_interrupt();
+        } else {
+            crate::interrupt::notify_irq(irq);
+        }
     } else {
         panic!("unhandled interrupt ({vector}): {vector_str}, error_code={error_code:#x}");
     }

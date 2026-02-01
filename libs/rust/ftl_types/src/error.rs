@@ -18,6 +18,7 @@ pub enum ErrorCode {
     InvalidHandle = 10,
     PeerClosed = 11,
     InvalidMessage = 12,
+    AlreadyExists = 13,
 }
 
 impl From<usize> for ErrorCode {
@@ -36,6 +37,7 @@ impl From<usize> for ErrorCode {
             10 => Self::InvalidHandle,
             11 => Self::PeerClosed,
             12 => Self::InvalidMessage,
+            13 => Self::AlreadyExists,
             _ => Self::Unknown,
         }
     }

@@ -22,3 +22,5 @@ pub const SYS_SINK_WAIT: usize = 10;
 pub const SYS_SINK_CREATE: usize = 11;
 pub const SYS_CHANNEL_OOL_READ: usize = 12;
 pub const SYS_CHANNEL_OOL_WRITE: usize = 13;
+pub const SYS_INTERRUPT_ACQUIRE: usize = 14;
+pub const SYS_INTERRUPT_ACKNOWLEDGE: usize = 15;

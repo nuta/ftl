@@ -17,6 +17,7 @@ mod channel;
 mod cpuvar;
 mod handle;
 mod initfs;
+mod interrupt;
 mod isolation;
 mod loader;
 mod memory;

@@ -36,6 +36,10 @@ pub enum Event {
         handles: ArrayVec<OwnedHandle, NUM_HANDLES_MAX>,
         inline: [u8; INLINE_LEN_MAX],
     },
+    Irq {
+        handle_id: HandleId,
+        irq: u8,
+    },
 }
 
 pub struct Sink {
@@ -89,6 +93,13 @@ impl Sink {
                         handles,
                         inline: message.body.inline,
                     }
+                }
+            }
+            EventType::IRQ => {
+                let irq_event = unsafe { &raw.body.irq };
+                Event::Irq {
+                    handle_id: raw.header.id,
+                    irq: irq_event.irq,
                 }
             }
             _ => {

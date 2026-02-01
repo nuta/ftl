@@ -37,9 +37,9 @@ const COM1_MCR: u16 = COM1_DATA + 4;
 /// Line Status Register.
 const COM1_LSR: u16 = COM1_DATA + 5;
 
-pub(super) const SERIAL_IRQ: u32 = 4;
+pub(super) const SERIAL_IRQ: u8 = 4;
 
-pub(super) fn handle_interrupt(cpuvar: &CpuVar) {
+pub(super) fn handle_interrupt() {
     loop {
         let ch = unsafe { in8(COM1_DATA) };
         if ch == 0 {
@@ -49,6 +49,7 @@ pub(super) fn handle_interrupt(cpuvar: &CpuVar) {
         println!("serial interrupt: \x1b[1;91m{}\x1b[0m", ch as char);
     }
 
+    let cpuvar = super::get_cpuvar();
     cpuvar.arch.local_apic.acknowledge_irq();
 }
 

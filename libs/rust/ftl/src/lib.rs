@@ -21,5 +21,6 @@ pub mod sink;
 pub mod syscall;
 
 pub mod channel;
+pub mod interrupt;
 #[cfg(target_arch = "x86_64")]
 pub mod pci;

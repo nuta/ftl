@@ -7,6 +7,8 @@ use ftl_types::syscall::SYS_CHANNEL_OOL_WRITE;
 use ftl_types::syscall::SYS_CHANNEL_SEND;
 use ftl_types::syscall::SYS_CONSOLE_WRITE;
 use ftl_types::syscall::SYS_DMABUF_ALLOC;
+use ftl_types::syscall::SYS_INTERRUPT_ACKNOWLEDGE;
+use ftl_types::syscall::SYS_INTERRUPT_ACQUIRE;
 #[cfg(target_arch = "x86_64")]
 use ftl_types::syscall::SYS_PCI_GET_BAR;
 use ftl_types::syscall::SYS_PCI_LOOKUP;
@@ -61,6 +63,8 @@ fn do_syscall(
         SYS_PCI_GET_BAR => arch::sys_pci_get_bar(a0, a1, a2),
         #[cfg(target_arch = "x86_64")]
         SYS_X64_IOPL => arch::sys_x64_iopl(thread, a0),
+        SYS_INTERRUPT_ACQUIRE => crate::interrupt::sys_interrupt_acquire(thread, a0),
+        SYS_INTERRUPT_ACKNOWLEDGE => crate::interrupt::sys_interrupt_acknowledge(thread, a0),
         _ => {
             println!("unknown syscall: {}", n);
             Err(ErrorCode::UnknownSyscall)
