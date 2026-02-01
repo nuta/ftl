@@ -6,3 +6,10 @@ edition.workspace = true
 
 [dependencies]
 ftl = { workspace = true }
+smoltcp = { workspace = true, default-features = false, features = [
+    "log",
+    "alloc",
+    "medium-ethernet",
+    "socket-tcp",
+    "proto-ipv4",
+] }
