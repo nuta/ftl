@@ -19,3 +19,4 @@ pub const SYS_CHANNEL_CREATE: usize = 7;
 pub const SYS_CHANNEL_SEND: usize = 8;
 pub const SYS_SINK_ADD: usize = 9;
 pub const SYS_SINK_WAIT: usize = 10;
+pub const SYS_SINK_CREATE: usize = 11;
