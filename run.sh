@@ -2,17 +2,21 @@
 set -eu
 
 ARCH=x64
+APPS=(ping pong)
+
 cargo build \
   -Z build-std=core,alloc \
   -Z build-std-features=compiler-builtins-mem \
   --manifest-path kernel/Cargo.toml \
   --target kernel/src/arch/$ARCH/kernel.json
 
-cargo build \
-  -Z build-std=core,alloc \
-  -Z build-std-features=compiler-builtins-mem \
-  --manifest-path apps/hello/Cargo.toml \
-  --target libs/rust/ftl/src/arch/$ARCH/user.json
+for app in "${APPS[@]}"; do
+  cargo build \
+    -Z build-std=core,alloc \
+    -Z build-std-features=compiler-builtins-mem \
+    --manifest-path apps/$app/Cargo.toml \
+    --target libs/rust/ftl/src/arch/$ARCH/user.json
+done
 
 cp target/kernel/debug/kernel ftl.elf
 

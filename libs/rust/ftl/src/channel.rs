@@ -137,7 +137,8 @@ impl Channel {
         Ok((ch0, ch1))
     }
 
-    fn from_handle(handle: OwnedHandle) -> Self {
+    // TODO: Make this private
+    pub fn from_handle(handle: OwnedHandle) -> Self {
         Self { handle }
     }
 
@@ -176,6 +177,7 @@ impl Channel {
         Ok(())
     }
 
+    // TODO: Make this private
     pub fn reply(&self, call_id: CallId, reply: Reply) -> Result<(), ErrorCode> {
         let body = MaybeUninit::<MessageBody>::uninit();
         // TODO: Double check the safety of this.

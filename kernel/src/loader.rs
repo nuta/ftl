@@ -1,4 +1,5 @@
 //! Application loader.
+use alloc::vec;
 use core::mem::MaybeUninit;
 use core::mem::size_of;
 use core::slice;
@@ -9,6 +10,9 @@ use ftl_utils::alignment::align_up;
 use crate::address::VAddr;
 use crate::arch;
 use crate::arch::MIN_PAGE_SIZE;
+use crate::channel::Channel;
+use crate::handle::Handle;
+use crate::handle::HandleRight;
 use crate::initfs;
 use crate::initfs::InitFs;
 use crate::isolation::INKERNEL_ISOLATION;
@@ -142,29 +146,47 @@ fn load_elf(file: &initfs::File) -> Result<VAddr, ElfError> {
     Ok(entry)
 }
 
+pub fn load_app(file: &initfs::File, ch: Handle<Channel>) {
+    let entry = load_elf(&file).expect("failed to load ELF file");
+
+    let stack_size = 1024 * 1024;
+    let stack_bottom_paddr = PAGE_ALLOCATOR
+        .alloc(align_up(stack_size, MIN_PAGE_SIZE))
+        .expect("failed to allocate stack");
+    let stack_bottom_vaddr = arch::paddr2vaddr(stack_bottom_paddr);
+    let sp = stack_bottom_vaddr.as_usize() + stack_size;
+
+    use alloc::boxed::Box;
+
+    let info_uninit = Box::leak(Box::new(MaybeUninit::<StartInfo>::uninit()));
+    info_uninit.write(StartInfo {
+        syscall: arch::direct_syscall_handler,
+        min_page_size: arch::MIN_PAGE_SIZE,
+    });
+    let start_info = info_uninit.as_ptr() as usize;
+
+    let process = Process::new(INKERNEL_ISOLATION.clone()).expect("failed to create process");
+
+    {
+        let mut handle_table = process.handle_table().lock();
+        let id = handle_table
+            .insert(ch)
+            .expect("failed to insert channel handle");
+        assert_eq!(id.as_usize(), 1);
+    }
+
+    let thread =
+        Thread::new(process, entry.as_usize(), sp, start_info).expect("failed to create thread");
+
+    SCHEDULER.push(thread);
+}
+
 pub fn load(initfs: &InitFs) {
+    let (ch0, ch1) = Channel::new().expect("failed to create ping-pong channel");
+    let mut ping_pong_ch = vec![ch0, ch1];
     for file in initfs.iter() {
-        let entry = load_elf(&file).expect("failed to load ELF file");
-
-        let stack_size = 1024 * 1024;
-        let stack_bottom_paddr = PAGE_ALLOCATOR
-            .alloc(align_up(stack_size, MIN_PAGE_SIZE))
-            .expect("failed to allocate stack");
-        let stack_bottom_vaddr = arch::paddr2vaddr(stack_bottom_paddr);
-        let sp = stack_bottom_vaddr.as_usize() + stack_size;
-
-        use alloc::boxed::Box;
-
-        let info_uninit = Box::leak(Box::new(MaybeUninit::<StartInfo>::uninit()));
-        info_uninit.write(StartInfo {
-            syscall: arch::direct_syscall_handler,
-            min_page_size: arch::MIN_PAGE_SIZE,
-        });
-        let start_info = info_uninit.as_ptr() as usize;
-
-        let process = Process::new(INKERNEL_ISOLATION.clone()).expect("failed to create process");
-        let thread = Thread::new(process, entry.as_usize(), sp, start_info)
-            .expect("failed to create thread");
-        SCHEDULER.push(thread);
+        // FIXME: Implement dynamic handle allocation & service discovery.
+        let handle = Handle::new(ping_pong_ch.pop().unwrap(), HandleRight::ALL);
+        load_app(&file, handle);
     }
 }

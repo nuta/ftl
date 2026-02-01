@@ -1,11 +1,13 @@
 use core::fmt;
 
-use ftl_types::handle::HandleId;
+// TODO: Make this private
+pub use ftl_types::handle::HandleId;
 
 pub struct OwnedHandle(HandleId);
 
 impl OwnedHandle {
-    pub(crate) fn from_raw(id: HandleId) -> Self {
+    // TODO: Make this private
+    pub const fn from_raw(id: HandleId) -> Self {
         Self(id)
     }
 
