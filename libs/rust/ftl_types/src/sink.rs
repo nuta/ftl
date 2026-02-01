@@ -12,7 +12,14 @@ impl EventType {
 
 #[derive(Clone, Copy)]
 #[repr(C)]
-pub union Event {
+pub struct RawEvent {
+    pub header: EventHeader,
+    pub body: EventBody,
+}
+
+#[derive(Clone, Copy)]
+#[repr(C)]
+pub union EventBody {
     pub message: MessageEvent,
 }
 

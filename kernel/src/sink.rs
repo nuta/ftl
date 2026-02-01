@@ -3,7 +3,7 @@ use alloc::collections::vec_deque::VecDeque;
 
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
-use ftl_types::sink::Event;
+use ftl_types::sink::EventBody;
 use ftl_types::sink::EventHeader;
 
 use crate::handle::Handle;
@@ -167,7 +167,7 @@ pub fn sys_sink_wait(
     let sink_id = HandleId::from_raw(a0);
     let buf = UserSlice::new(
         UserPtr::new(a1),
-        size_of::<EventHeader>() + size_of::<Event>(),
+        size_of::<EventHeader>() + size_of::<EventBody>(),
     )?;
 
     let process = current.process();

@@ -1,7 +1,7 @@
 use core::any::Any;
 
 use ftl_types::error::ErrorCode;
-use ftl_types::sink::Event;
+use ftl_types::sink::EventBody;
 use ftl_types::sink::EventType;
 
 use crate::process::HandleTable;
@@ -84,7 +84,7 @@ pub trait Handleable: Any + Send + Sync {
     fn read_event(
         &self,
         _handle_table: &mut HandleTable,
-    ) -> Result<Option<(EventType, Event)>, ErrorCode> {
+    ) -> Result<Option<(EventType, EventBody)>, ErrorCode> {
         Err(ErrorCode::Unsupported)
     }
 }

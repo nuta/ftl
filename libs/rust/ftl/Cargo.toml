@@ -6,5 +6,6 @@ edition.workspace = true
 
 [dependencies]
 ftl_types = { workspace = true }
+ftl_arrayvec = { workspace = true }
 talc = { workspace = true }
 spin = { workspace = true }

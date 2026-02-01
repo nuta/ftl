@@ -24,6 +24,11 @@ fn syscall(
 }
 
 #[inline(always)]
+pub(super) fn syscall0(n: usize) -> Result<usize, ErrorCode> {
+    syscall(n, 0, 0, 0, 0, 0)
+}
+
+#[inline(always)]
 pub(super) fn syscall1(n: usize, a0: usize) -> Result<usize, ErrorCode> {
     syscall(n, a0, 0, 0, 0, 0)
 }

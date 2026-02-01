@@ -14,6 +14,7 @@ pub mod dmabuf;
 pub mod error;
 pub mod handle;
 pub mod prelude;
+pub mod sink;
 pub mod syscall;
 
 pub mod channel;

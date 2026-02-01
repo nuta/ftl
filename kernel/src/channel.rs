@@ -11,7 +11,7 @@ use ftl_types::channel::NUM_HANDLES_MAX;
 use ftl_types::channel::NUM_OOLS_MAX;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
-use ftl_types::sink::Event;
+use ftl_types::sink::EventBody;
 use ftl_types::sink::EventType;
 use ftl_types::sink::MessageEvent;
 
@@ -206,7 +206,7 @@ impl Handleable for Channel {
     fn read_event(
         &self,
         handle_table: &mut HandleTable,
-    ) -> Result<Option<(EventType, Event)>, ErrorCode> {
+    ) -> Result<Option<(EventType, EventBody)>, ErrorCode> {
         let mut mutable = self.mutable.lock();
         let Some(message) = mutable.queue.pop_front() else {
             return Ok(None);
@@ -249,7 +249,7 @@ impl Handleable for Channel {
             event.body.handles[i] = id;
         }
 
-        Ok(Some((EventType::MESSAGE, Event { message: event })))
+        Ok(Some((EventType::MESSAGE, EventBody { message: event })))
     }
 }
 

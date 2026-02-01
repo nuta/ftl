@@ -6,6 +6,7 @@ version = 4
 name = "ftl"
 version = "0.0.0"
 dependencies = [
+ "ftl_arrayvec",
  "ftl_types",
  "spin",
  "talc",
