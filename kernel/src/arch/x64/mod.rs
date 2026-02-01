@@ -21,6 +21,7 @@ pub use cpuvar::set_cpuvar;
 pub use idle::idle;
 pub use ioport::sys_x64_iopl;
 pub use pci::sys_pci_get_bar;
+pub use pci::sys_pci_get_interrupt_line;
 pub use pci::sys_pci_lookup;
 pub use pci::sys_pci_set_busmaster;
 pub use syscall::direct_syscall_handler;

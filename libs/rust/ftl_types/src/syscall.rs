@@ -24,3 +24,4 @@ pub const SYS_CHANNEL_OOL_READ: usize = 12;
 pub const SYS_CHANNEL_OOL_WRITE: usize = 13;
 pub const SYS_INTERRUPT_ACQUIRE: usize = 14;
 pub const SYS_INTERRUPT_ACKNOWLEDGE: usize = 15;
+pub const SYS_PCI_GET_INTERRUPT_LINE: usize = 16;

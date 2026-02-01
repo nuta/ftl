@@ -5,6 +5,7 @@ use ftl_types::pci::PciEntry;
 
 use super::ioport::in32;
 use super::ioport::out32;
+use crate::arch::x64::ioport::in8;
 use crate::arch::x64::ioport::in16;
 use crate::arch::x64::ioport::out16;
 use crate::isolation::UserPtr;
@@ -33,7 +34,7 @@ struct PciConfig {
     subsystem_id: u16,
     expansion_rom: u32,
     capabilities_pointer: u8,
-    reserved: [u32; 7],
+    reserved: [u8; 7],
     interrupt_line: u8,
     interrupt_pin: u8,
     min_grant: u8,
@@ -49,8 +50,22 @@ fn get_data_port16(offset: usize) -> u16 {
     PCI_IOPORT_DATA + ((offset & 0b10) as u16)
 }
 
+fn get_data_port8(offset: usize) -> u16 {
+    PCI_IOPORT_DATA + ((offset & 0b01) as u16)
+}
+
 const PCI_IOPORT_ADDR: u16 = 0xcf8;
 const PCI_IOPORT_DATA: u16 = 0xcfc;
+
+fn read_config8(bus: u8, slot: u8, offset: usize) -> u8 {
+    debug_assert!(offset < 0xff, "offset is out of range");
+
+    unsafe {
+        out32(PCI_IOPORT_ADDR, get_addr(bus, slot, offset));
+        let value = in8(get_data_port8(offset));
+        value
+    }
+}
 
 fn read_config32(bus: u8, slot: u8, offset: usize) -> u32 {
     debug_assert!(offset & 0b11 == 0, "offset must be aligned to 4 bytes");
@@ -161,5 +176,13 @@ pub fn sys_pci_get_bar(a0: usize, a1: usize, a2: usize) -> Result<SyscallResult,
 
     let offset = offset_of!(PciConfig, bar) + (bar as usize * size_of::<u32>());
     let value = read_config32(bus, slot, offset);
+    Ok(SyscallResult::Return(value as usize))
+}
+
+pub fn sys_pci_get_interrupt_line(a0: usize, a1: usize) -> Result<SyscallResult, ErrorCode> {
+    let bus = a0 as u8;
+    let slot = a1 as u8;
+
+    let value = read_config8(bus, slot, offset_of!(PciConfig, interrupt_line));
     Ok(SyscallResult::Return(value as usize))
 }
