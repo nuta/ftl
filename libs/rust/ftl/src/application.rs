@@ -2,6 +2,8 @@ use alloc::rc::Rc;
 
 use ftl_types::channel::CallId;
 use ftl_types::channel::MessageInfo;
+use ftl_types::channel::OpenInline;
+use ftl_types::channel::OpenReplyInline;
 use ftl_types::channel::ReadInline;
 use ftl_types::channel::ReadReplyInline;
 use ftl_types::channel::WriteInline;
@@ -19,6 +21,34 @@ use crate::handle::Handleable;
 use crate::interrupt::Interrupt;
 use crate::sink::Event;
 use crate::sink::Sink;
+
+pub struct OpenCompleter {
+    ch: Rc<Channel>,
+    call_id: CallId,
+}
+
+impl OpenCompleter {
+    fn new(channel: Rc<Channel>, call_id: CallId) -> Self {
+        Self {
+            ch: channel,
+            call_id,
+        }
+    }
+
+    pub fn error(self, error: ErrorCode) {
+        let reply = Reply::ErrorReply { error };
+        if let Err(err) = self.ch.reply(self.call_id, reply) {
+            println!("failed to complete open: {err:?}");
+        }
+    }
+
+    pub fn complete(self, ch: Channel) {
+        let reply = Reply::OpenReply { ch };
+        if let Err(err) = self.ch.reply(self.call_id, reply) {
+            println!("failed to complete open: {err:?}");
+        }
+    }
+}
 
 pub struct ReadCompleter {
     ch: Rc<Channel>,
@@ -121,6 +151,12 @@ pub trait Application {
     fn init(ctx: &mut Context) -> Self;
 
     #[allow(unused)]
+    fn open(&mut self, ctx: &mut Context, completer: OpenCompleter) {
+        println!("received an unexpected message: open");
+        completer.error(ErrorCode::Unsupported)
+    }
+
+    #[allow(unused)]
     fn read(&mut self, ctx: &mut Context, completer: ReadCompleter, offset: usize, len: usize) {
         println!("received an unexpected message: read");
         completer.error(ErrorCode::Unsupported)
@@ -130,6 +166,11 @@ pub trait Application {
     fn write(&mut self, ctx: &mut Context, completer: WriteCompleter, offset: usize, len: usize) {
         println!("received an unexpected message: write");
         completer.error(ErrorCode::Unsupported)
+    }
+
+    #[allow(unused)]
+    fn open_reply(&mut self, ctx: &mut Context, ch: &Rc<Channel>, uri: Buffer, new_ch: Channel) {
+        println!("received an unexpected message: open reply");
     }
 
     #[allow(unused)]
@@ -169,6 +210,11 @@ pub fn run<A: Application>() {
 
                 let mut ctx = Context::new(&sink, &mut objects);
                 match info {
+                    MessageInfo::OPEN => {
+                        let inline = unsafe { &*(inline.as_ptr() as *const OpenInline) };
+                        let completer = OpenCompleter::new(ch, call_id);
+                        app.open(&mut ctx, completer);
+                    }
                     MessageInfo::READ => {
                         let inline = unsafe { &*(inline.as_ptr() as *const ReadInline) };
                         let completer = ReadCompleter::new(ch, call_id);
@@ -186,7 +232,7 @@ pub fn run<A: Application>() {
                 ch_id,
                 info,
                 cookie,
-                handles,
+                mut handles,
                 inline,
             } => {
                 let ch = match objects.get(&ch_id) {
@@ -196,6 +242,14 @@ pub fn run<A: Application>() {
 
                 let mut ctx = Context::new(&sink, &mut objects);
                 match info {
+                    MessageInfo::OPEN_REPLY => {
+                        let inline = unsafe { &*(inline.as_ptr() as *const OpenReplyInline) };
+                        let Cookie::Buffer(uri) = *cookie else {
+                            panic!("unexpected cookie type");
+                        };
+                        let new_ch = Channel::from_handle(handles.pop().unwrap());
+                        app.open_reply(&mut ctx, &ch, uri, new_ch);
+                    }
                     MessageInfo::READ_REPLY => {
                         let inline = unsafe { &*(inline.as_ptr() as *const ReadReplyInline) };
                         let Cookie::BufferMut(buf) = *cookie else {
