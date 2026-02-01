@@ -1,7 +1,8 @@
 const archive = new Bun.Archive({
     // "hello.elf": await Bun.file("target/user/debug/hello").arrayBuffer(),
-    "ping.elf": await Bun.file("target/user/debug/ping").arrayBuffer(),
-    "pong.elf": await Bun.file("target/user/debug/pong").arrayBuffer(),
+    // "ping.elf": await Bun.file("target/user/debug/ping").arrayBuffer(),
+    // "pong.elf": await Bun.file("target/user/debug/pong").arrayBuffer(),
+    "virtio_net.elf": await Bun.file("target/user/debug/virtio_net").arrayBuffer(),
 })
 
 await Bun.write("initfs.tar", archive);

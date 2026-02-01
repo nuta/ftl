@@ -5,7 +5,7 @@ edition = "2024"
 
 [workspace]
 resolver = "2"
-members = ["apps/hello", "apps/ping", "apps/pong", "kernel", "libs/rust/*"]
+members = ["apps/hello", "apps/ping", "apps/pong", "apps/virtio_net", "kernel", "libs/rust/*"]
 
 [workspace.dependencies]
 talc = "4.4.3"

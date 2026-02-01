@@ -2,7 +2,7 @@
 set -eu
 
 ARCH=x64
-APPS=(ping pong)
+APPS=(virtio_net)
 
 cargo build \
   -Z build-std=core,alloc \

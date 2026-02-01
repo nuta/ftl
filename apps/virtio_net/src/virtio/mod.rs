@@ -46,6 +46,7 @@ struct Desc {
 }
 
 #[repr(C, packed)]
+#[derive(Clone, Copy)]
 struct UsedElem {
     id: u32,
     len: u32,
@@ -56,6 +57,13 @@ struct Avail {
     flags: u16,
     idx: u16,
     ring: [u16; 0],
+}
+
+#[repr(C)]
+struct Used {
+    flags: u16,
+    idx: u16,
+    ring: [UsedElem; 0],
 }
 
 #[derive(Debug)]
@@ -77,13 +85,22 @@ pub enum ChainEntry {
     Read { paddr: u64, len: u32 },
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct HeadId(pub u16);
+
+pub struct UsedChain {
+    pub head: HeadId,
+    pub total_len: u32,
+}
+
 pub struct VirtQueue {
     queue_index: u16,
     queue_size: u16,
     descs: *mut Desc,
     avail: *mut Avail,
-    used: *mut UsedElem,
+    used: *mut Used,
     free_indicies: Vec<u16>,
+    last_used_idx: u16,
 }
 
 impl VirtQueue {
@@ -95,7 +112,7 @@ impl VirtQueue {
             avail_offset + size_of::<u16>() * (2 + queue_size as usize),
             4096,
         );
-        let used = (vaddr + used_offset) as *mut UsedElem;
+        let used = (vaddr + used_offset) as *mut Used;
         let mut free_indicies = Vec::with_capacity(queue_size as usize);
         for index in 0..queue_size {
             free_indicies.push(index);
@@ -111,10 +128,16 @@ impl VirtQueue {
             avail,
             used,
             free_indicies,
+            last_used_idx: 0,
         }
     }
 
-    pub fn push(&mut self, chain: &[ChainEntry]) -> Result<(), Error> {
+    pub fn queue_size(&self) -> usize {
+        self.queue_size as usize
+    }
+
+    /// Push a descriptor chain to the available ring.
+    pub fn push(&mut self, chain: &[ChainEntry]) -> Result<HeadId, Error> {
         assert!(chain.len() > 0);
 
         if chain.len() > self.free_indicies.len() {
@@ -171,7 +194,29 @@ impl VirtQueue {
             write_volatile(&mut (*self.avail).idx, avail_index.wrapping_add(1));
         }
 
-        Ok(())
+        Ok(HeadId(head_index))
+    }
+
+    /// Pops a used descriptor chain (i.e. a complete request).
+    pub fn pop(&mut self) -> Option<UsedChain> {
+        fence(Ordering::Acquire);
+
+        let used_idx = unsafe { read_volatile(&(*self.used).idx) };
+        if self.last_used_idx == used_idx {
+            return None;
+        }
+
+        let index = (self.last_used_idx % self.queue_size) as usize;
+        let elem = unsafe { read_volatile((*self.used).ring.as_ptr().add(index)) };
+        self.last_used_idx = self.last_used_idx.wrapping_add(1);
+
+        // Return the descriptor to the free pool.
+        self.free_indicies.push(elem.id as u16);
+
+        Some(UsedChain {
+            head: HeadId(elem.id as u16),
+            total_len: elem.len,
+        })
     }
 
     pub fn notify(&self, virtio: &VirtioPci) {
@@ -249,6 +294,11 @@ impl VirtioPci {
 
     pub fn read_device_config8(&self, offset: u16) -> u8 {
         self.in8(PCI_IOPORT_CONFIG + offset)
+    }
+
+    /// Reads and clears the ISR status register.
+    pub fn read_isr(&self) -> u8 {
+        self.in8(PCI_IOPORT_ISR)
     }
 
     fn out32(&self, port: u16, value: u32) {
