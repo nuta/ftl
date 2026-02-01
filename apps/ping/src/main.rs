@@ -6,6 +6,7 @@ use ftl::channel::Channel;
 use ftl::channel::Message;
 use ftl::handle::HandleId;
 use ftl::handle::OwnedHandle;
+use ftl::prelude::*;
 use ftl::println;
 use ftl::sink::Event;
 use ftl::sink::Sink;
@@ -18,11 +19,12 @@ fn main() {
 
     let sink = Sink::new().unwrap();
     sink.add(&ch).unwrap();
-    loop {
+    for i in 0.. {
         println!("[ping] sending message");
+        let text = format!("Hello, world! {}", i);
         ch.send(Message::Write {
             offset: 0,
-            data: Buffer::Static(b"Hello, world!"),
+            data: Buffer::String(text),
         })
         .unwrap();
 

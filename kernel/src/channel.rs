@@ -1,5 +1,6 @@
 use alloc::collections::btree_map::BTreeMap;
 use alloc::collections::vec_deque::VecDeque;
+use core::cmp::min;
 use core::mem::MaybeUninit;
 
 use ftl_arrayvec::ArrayVec;
@@ -194,6 +195,86 @@ impl Channel {
 
         Ok(())
     }
+
+    pub fn read_ool(
+        &self,
+        dst_isolation: &SharedRef<dyn Isolation>,
+        call_id: CallId,
+        index: usize,
+        offset: usize,
+        dst_slice: &UserSlice,
+    ) -> Result<usize, ErrorCode> {
+        let mutable = self.mutable.lock();
+        let call = mutable
+            .calls
+            .get(&call_id.as_u32())
+            .ok_or(ErrorCode::InvalidArgument)?;
+
+        let ool = call.ools.get(index).ok_or(ErrorCode::InvalidArgument)?;
+        let src_isolation = &ool.isolation;
+        let src_slice = &ool.slice;
+
+        let mut requested_len = min(dst_slice.len(), src_slice.len().saturating_sub(offset));
+        let mut off = 0;
+        while off < requested_len {
+            // TODO: Do not zero the memory.
+            let mut tmp = [0; 512];
+
+            // Copy from the sender process' memory into the kernel's memory.
+            let copy_len = min(requested_len - off, tmp.len());
+            src_isolation.read_bytes(
+                &src_slice.subslice(offset + off, copy_len)?,
+                &mut tmp[..copy_len],
+            )?;
+
+            // Copy into the receiver (current) process' memory.
+            dst_isolation.write_bytes(&dst_slice.subslice(off, copy_len)?, &tmp[..copy_len])?;
+
+            off += copy_len;
+        }
+
+        Ok(off)
+    }
+
+    pub fn write_ool(
+        &self,
+        src_isolation: &SharedRef<dyn Isolation>,
+        call_id: CallId,
+        index: usize,
+        offset: usize,
+        src_slice: &UserSlice,
+    ) -> Result<usize, ErrorCode> {
+        let mutable = self.mutable.lock();
+        let call = mutable
+            .calls
+            .get(&call_id.as_u32())
+            .ok_or(ErrorCode::InvalidArgument)?;
+
+        let ool = call.ools.get(index).ok_or(ErrorCode::InvalidArgument)?;
+        let dst_isolation = &ool.isolation;
+        let dst_slice = &ool.slice;
+
+        let requested_len = min(src_slice.len(), dst_slice.len().saturating_sub(offset));
+        let mut off = 0;
+        while off < requested_len {
+            // TODO: Do not zero the memory.
+            let mut tmp = [0; 512];
+
+            // Copy from the receiver (current) process' memory into the kernel's memory.
+            let copy_len = min(requested_len - off, tmp.len());
+            src_isolation.read_bytes(&src_slice.subslice(off, copy_len)?, &mut tmp[..copy_len])?;
+
+            // Copy into the sender process' memory.
+            dst_isolation.write_bytes(
+                &dst_slice.subslice(offset + off, copy_len)?,
+                &tmp[..copy_len],
+            )?;
+
+            off += copy_len;
+        }
+
+        Ok(off)
+    }
 }
 
 impl Handleable for Channel {
@@ -304,4 +385,52 @@ pub fn sys_channel_send(
     )?;
 
     Ok(SyscallResult::Return(0))
+}
+
+pub fn sys_channel_ool_read(
+    current: &SharedRef<Thread>,
+    a0: usize,
+    a1: usize,
+    a2: usize,
+    a3: usize,
+    a4: usize,
+) -> Result<SyscallResult, ErrorCode> {
+    let handle_id = HandleId::from_raw(a0);
+    let call_id = CallId::new((a1 >> 4) as u32);
+    let index = a1 & 0b1111;
+    let offset = a2;
+    let buf = UserSlice::new(UserPtr::new(a3), a4)?;
+
+    let process = current.process();
+    let handle_table = process.handle_table().lock();
+    let ch = handle_table
+        .get::<Channel>(handle_id)?
+        .authorize(HandleRight::READ)?;
+
+    let read_len = ch.read_ool(process.isolation(), call_id, index, offset, &buf)?;
+    Ok(SyscallResult::Return(read_len))
+}
+
+pub fn sys_channel_ool_write(
+    current: &SharedRef<Thread>,
+    a0: usize,
+    a1: usize,
+    a2: usize,
+    a3: usize,
+    a4: usize,
+) -> Result<SyscallResult, ErrorCode> {
+    let handle_id = HandleId::from_raw(a0);
+    let call_id = CallId::new((a1 >> 4) as u32);
+    let index = a1 & 0b1111;
+    let offset = a2;
+    let buf = UserSlice::new(UserPtr::new(a3), a4)?;
+
+    let process = current.process();
+    let handle_table = process.handle_table().lock();
+    let ch = handle_table
+        .get::<Channel>(handle_id)?
+        .authorize(HandleRight::WRITE)?;
+
+    let written_len = ch.write_ool(process.isolation(), call_id, index, offset, &buf)?;
+    Ok(SyscallResult::Return(written_len))
 }

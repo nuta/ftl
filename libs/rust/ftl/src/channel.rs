@@ -16,6 +16,8 @@ use ftl_types::channel::WriteReplyInline;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use ftl_types::syscall::SYS_CHANNEL_CREATE;
+use ftl_types::syscall::SYS_CHANNEL_OOL_READ;
+use ftl_types::syscall::SYS_CHANNEL_OOL_WRITE;
 use ftl_types::syscall::SYS_CHANNEL_SEND;
 
 use crate::handle::Handleable;
@@ -207,6 +209,26 @@ impl Channel {
         sys_channel_send(self.handle.id(), info, &body, 0, call_id)?;
         Ok(())
     }
+
+    pub fn ool_read(
+        &self,
+        call_id: CallId,
+        index: usize,
+        offset: usize,
+        buf: &mut [u8],
+    ) -> Result<usize, ErrorCode> {
+        sys_channel_ool_read(self.handle.id(), call_id, index, offset, buf)
+    }
+
+    pub fn ool_write(
+        &self,
+        call_id: CallId,
+        index: usize,
+        offset: usize,
+        buf: &[u8],
+    ) -> Result<usize, ErrorCode> {
+        sys_channel_ool_write(self.handle.id(), call_id, index, offset, buf)
+    }
 }
 
 impl fmt::Debug for Channel {
@@ -248,4 +270,46 @@ pub fn sys_channel_send(
         call_id.as_u32() as usize,
     )?;
     Ok(())
+}
+
+pub fn sys_channel_ool_read(
+    ch: HandleId,
+    call_id: CallId,
+    index: usize,
+    offset: usize,
+    buf: &mut [u8],
+) -> Result<usize, ErrorCode> {
+    // FIXME: Define call ID & ool index ranges.
+    debug_assert!(index < 16);
+    debug_assert!(call_id.as_u32() < 0xfff_ffff);
+
+    syscall5(
+        SYS_CHANNEL_OOL_READ,
+        ch.as_usize(),
+        (call_id.as_u32() as usize) << 4 | index,
+        offset,
+        buf.as_ptr() as usize,
+        buf.len(),
+    )
+}
+
+pub fn sys_channel_ool_write(
+    ch: HandleId,
+    call_id: CallId,
+    index: usize,
+    offset: usize,
+    buf: &[u8],
+) -> Result<usize, ErrorCode> {
+    // FIXME: Define call ID & ool index ranges.
+    debug_assert!(index < 16);
+    debug_assert!(call_id.as_u32() < 0xfff_ffff);
+
+    syscall5(
+        SYS_CHANNEL_OOL_WRITE,
+        ch.as_usize(),
+        (call_id.as_u32() as usize) << 4 | index,
+        offset,
+        buf.as_ptr() as usize,
+        buf.len(),
+    )
 }

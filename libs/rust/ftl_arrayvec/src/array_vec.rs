@@ -44,6 +44,15 @@ impl<T, const N: usize> ArrayVec<T, N> {
         self.len
     }
 
+    pub const fn get(&self, index: usize) -> Option<&T> {
+        if index >= self.len {
+            return None;
+        }
+
+        // SAFETY: index < self.len guarantees that the slot is initialized.
+        Some(unsafe { &self.elems[index].assume_init_ref() })
+    }
+
     pub const fn as_slice(&self) -> &[T] {
         let ptr = self.elems.as_ptr();
 

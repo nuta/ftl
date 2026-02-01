@@ -27,6 +27,12 @@ fn main() {
                 inline,
             } => {
                 println!("[pong] received call message: {:?}", info);
+                let mut buf = [0; 512];
+                let len = ch.ool_read(call_id, 0, 0, &mut buf).unwrap();
+                println!(
+                    "[pong] OOL read ({len} bytes): {:?}",
+                    core::str::from_utf8(&buf[..len])
+                );
                 ch.reply(call_id, Reply::WriteReply { len: 13 }).unwrap();
             }
             _ => {
