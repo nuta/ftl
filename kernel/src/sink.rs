@@ -135,7 +135,11 @@ pub fn sys_sink_create(current: &SharedRef<Thread>) -> Result<SyscallResult, Err
     Ok(SyscallResult::Return(id.as_usize()))
 }
 
-pub fn sys_sink_add(current: &SharedRef<Thread>, a0: usize, a1: usize) -> Result<usize, ErrorCode> {
+pub fn sys_sink_add(
+    current: &SharedRef<Thread>,
+    a0: usize,
+    a1: usize,
+) -> Result<SyscallResult, ErrorCode> {
     let sink_id = HandleId::from_raw(a0);
     let object_id = HandleId::from_raw(a1);
 
@@ -152,7 +156,7 @@ pub fn sys_sink_add(current: &SharedRef<Thread>, a0: usize, a1: usize) -> Result
         .authorize(HandleRight::WRITE)?
         .add(object_id, object)?;
 
-    Ok(0)
+    Ok(SyscallResult::Return(0))
 }
 
 pub fn sys_sink_wait(
