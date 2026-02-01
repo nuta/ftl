@@ -1,3 +1,4 @@
+use alloc::boxed::Box;
 use core::fmt;
 use core::mem::MaybeUninit;
 
@@ -14,6 +15,7 @@ use ftl_types::syscall::SYS_SINK_ADD;
 use ftl_types::syscall::SYS_SINK_CREATE;
 use ftl_types::syscall::SYS_SINK_WAIT;
 
+use crate::channel::Cookie;
 use crate::handle::Handleable;
 use crate::handle::OwnedHandle;
 use crate::syscall::syscall0;
@@ -21,14 +23,16 @@ use crate::syscall::syscall2;
 
 pub enum Event {
     CallMessage {
+        ch_id: HandleId,
         info: MessageInfo,
         call_id: CallId,
         handles: ArrayVec<OwnedHandle, NUM_HANDLES_MAX>,
         inline: [u8; INLINE_LEN_MAX],
     },
     ReplyMessage {
+        ch_id: HandleId,
         info: MessageInfo,
-        cookie: usize,
+        cookie: Box<Cookie>,
         handles: ArrayVec<OwnedHandle, NUM_HANDLES_MAX>,
         inline: [u8; INLINE_LEN_MAX],
     },
@@ -69,15 +73,19 @@ impl Sink {
                 // TODO: Do not copy the entire inline array.
                 if info.is_call() {
                     Event::CallMessage {
+                        ch_id: raw.header.id,
                         info,
                         call_id: message.call_id,
                         handles,
                         inline: message.body.inline,
                     }
                 } else {
+                    // FIXME: Cookie is not guaranteed to be Box<Cookie>.
+                    let cookie = unsafe { Cookie::from_raw(message.cookie) };
                     Event::ReplyMessage {
+                        ch_id: raw.header.id,
                         info,
-                        cookie: message.cookie,
+                        cookie,
                         handles,
                         inline: message.body.inline,
                     }

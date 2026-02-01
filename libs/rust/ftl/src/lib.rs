@@ -2,6 +2,8 @@
 
 extern crate alloc;
 
+pub use alloc::rc;
+
 #[macro_use]
 pub mod print;
 
@@ -10,6 +12,7 @@ pub mod allocator;
 mod arch;
 mod panic;
 
+pub mod application;
 pub mod dmabuf;
 pub mod error;
 pub mod handle;

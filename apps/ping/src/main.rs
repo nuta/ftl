@@ -1,6 +1,8 @@
 #![no_std]
 #![no_main]
 
+use ftl::application::Application;
+use ftl::application::Context;
 use ftl::channel::Buffer;
 use ftl::channel::Channel;
 use ftl::channel::Message;
@@ -8,39 +10,39 @@ use ftl::handle::HandleId;
 use ftl::handle::OwnedHandle;
 use ftl::prelude::*;
 use ftl::println;
-use ftl::sink::Event;
-use ftl::sink::Sink;
+use ftl::rc::Rc;
 
-#[unsafe(no_mangle)]
-fn main() {
-    println!("[ping] started");
-    let ch_id = HandleId::from_raw(1);
-    let ch = Channel::from_handle(OwnedHandle::from_raw(ch_id));
+struct Main {
+    counter: usize,
+}
 
-    let sink = Sink::new().unwrap();
-    sink.add(&ch).unwrap();
-    for i in 0.. {
-        println!("[ping] sending message");
-        let text = format!("Hello, world! {}", i);
+impl Application for Main {
+    fn init(ctx: &mut Context) -> Self {
+        let ch_id = HandleId::from_raw(1);
+        let ch = Channel::from_handle(OwnedHandle::from_raw(ch_id));
+
         ch.send(Message::Write {
             offset: 0,
-            data: Buffer::String(text),
+            data: Buffer::Static(b"Hello, world!"),
         })
         .unwrap();
 
-        let event = sink.wait().unwrap();
-        match event {
-            Event::ReplyMessage {
-                info,
-                cookie,
-                handles,
-                inline,
-            } => {
-                println!("[ping] received reply message: {:?}", info);
-            }
-            _ => {
-                panic!("[ping] received unexpected event");
-            }
-        }
+        ctx.add_channel(ch).unwrap();
+        Self { counter: 0 }
     }
+
+    fn write_reply(&mut self, ctx: &mut Context, ch: &Rc<Channel>, buf: Buffer, len: usize) {
+        println!("[ping] received write reply: {} bytes written", len);
+        ch.send(Message::Write {
+            offset: 0,
+            data: Buffer::String(format!("Ping({})", self.counter)),
+        })
+        .unwrap();
+        self.counter += 1;
+    }
+}
+
+#[unsafe(no_mangle)]
+fn main() {
+    ftl::application::run::<Main>();
 }

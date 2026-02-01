@@ -127,6 +127,16 @@ pub(crate) enum Cookie {
     BufferMut(BufferMut),
 }
 
+impl Cookie {
+    pub(crate) fn into_raw(self) -> usize {
+        Box::into_raw(Box::new(self)) as usize
+    }
+
+    pub(crate) unsafe fn from_raw(raw: usize) -> Box<Self> {
+        unsafe { Box::from_raw(raw as *mut Self) }
+    }
+}
+
 pub struct Channel {
     handle: OwnedHandle,
 }
@@ -174,8 +184,13 @@ impl Channel {
             }
         };
 
-        let cookie = Box::into_raw(Box::new(cookie)) as usize;
-        sys_channel_send(self.handle.id(), info, &body, cookie, CallId::new(0))?;
+        sys_channel_send(
+            self.handle.id(),
+            info,
+            &body,
+            cookie.into_raw(),
+            CallId::new(0),
+        )?;
         Ok(())
     }
 
