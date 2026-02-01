@@ -197,9 +197,7 @@ impl CurrentThread {
     }
 }
 
-fn schedule() -> Option<*const arch::Thread> {
-    let cpuvar = arch::get_cpuvar();
-    let current = &cpuvar.current_thread;
+fn schedule(current: &CurrentThread) -> Option<*const arch::Thread> {
     let current_thread = current.thread();
     if matches!(current_thread.mutable.lock().state, State::Runnable) {
         // The current thread is runnable. Push it back to the scheduler.
@@ -225,7 +223,14 @@ fn schedule() -> Option<*const arch::Thread> {
 /// Unlike traditional operating systems, this function never returns due to
 /// its single stack design.
 pub fn return_to_user() -> ! {
-    let Some(thread) = schedule() else {
+    let cpuvar = arch::get_cpuvar();
+    let current = &cpuvar.current_thread;
+    let Some(thread) = schedule(current) else {
+        // Update the current thread. Otherwise, the interrupt handler would
+        // overwrite the user's system call context (registers) with the idle
+        // thread's context.
+        current.update(cpuvar.idle_thread.clone());
+
         // No threads to run. Enter the idle loop.
         arch::idle();
     };
