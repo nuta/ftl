@@ -6,12 +6,8 @@ use core::mem::MaybeUninit;
 
 use ftl_types::channel::CallId;
 use ftl_types::channel::ErrorReplyInline;
-use ftl_types::channel::INLINE_LEN_MAX;
 use ftl_types::channel::MessageBody;
 use ftl_types::channel::MessageInfo;
-use ftl_types::channel::NUM_HANDLES_MAX;
-use ftl_types::channel::NUM_OOLS_MAX;
-use ftl_types::channel::OpenInline;
 use ftl_types::channel::OutOfLine;
 use ftl_types::channel::ReadInline;
 use ftl_types::channel::ReadReplyInline;
@@ -25,7 +21,6 @@ use ftl_types::syscall::SYS_CHANNEL_SEND;
 use crate::handle::Handleable;
 use crate::handle::OwnedHandle;
 use crate::syscall::syscall1;
-use crate::syscall::syscall4;
 use crate::syscall::syscall5;
 
 pub enum Buffer {
