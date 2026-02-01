@@ -161,13 +161,9 @@ impl Channel {
                 }
             }
 
-            peer_mutable.calls.insert(
-                call_id.as_u32(),
-                Call {
-                    cookie,
-                    ools,
-                },
-            );
+            peer_mutable
+                .calls
+                .insert(call_id.as_u32(), Call { cookie, ools });
 
             Message::Call {
                 call_id,
