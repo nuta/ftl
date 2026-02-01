@@ -127,6 +127,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "tcpip"
+version = "0.0.0"
+dependencies = [
+ "ftl",
+]
+
+[[package]]
 name = "virtio_net"
 version = "0.0.0"
 dependencies = [
