@@ -1,6 +1,5 @@
 use alloc::collections::btree_set::BTreeSet;
 use alloc::collections::vec_deque::VecDeque;
-use core::mem::offset_of;
 
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
@@ -112,7 +111,7 @@ impl Sink {
 
             let header = EventHeader { ty, id: handle_id };
             crate::isolation::write(isolation, buf, 0, header)?;
-            crate::isolation::write(isolation, buf, offset_of!(Event, message), event)?;
+            crate::isolation::write(isolation, buf, size_of::<EventHeader>(), event)?;
 
             return Ok(true);
         }
@@ -150,7 +149,10 @@ pub fn sys_sink_wait(
     a1: usize,
 ) -> Result<SyscallResult, ErrorCode> {
     let sink_id = HandleId::from_raw(a0);
-    let buf = UserSlice::new(UserPtr::new(a1), size_of::<Event>())?;
+    let buf = UserSlice::new(
+        UserPtr::new(a1),
+        size_of::<EventHeader>() + size_of::<Event>(),
+    )?;
 
     let process = current.process();
     let mut handle_table = process.handle_table().lock();
