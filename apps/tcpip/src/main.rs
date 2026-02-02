@@ -233,12 +233,12 @@ impl Main {
                         }
                         tcp::State::Established | tcp::State::FinWait1 | tcp::State::FinWait2 => {
                             if socket.can_recv() {
-                                todo!("socket readable");
+                                tcp_readable(socket, &mut state.borrow_mut());
                             }
                         }
                         tcp::State::CloseWait => {
                             if socket.can_recv() {
-                                todo!("socket readable");
+                                tcp_readable(socket, &mut state.borrow_mut());
                             } else {
                                 todo!("socket start closing");
                             }
