@@ -122,12 +122,7 @@ struct Main {
 }
 
 impl Main {
-    pub fn tcp_listen(
-        &mut self,
-        ctx: &mut Context,
-        endpoint: IpListenEndpoint,
-    ) -> Result<Channel, ErrorCode> {
-        let (our_ch, their_ch) = Channel::new()?;
+    fn do_tcp_listen(&mut self, endpoint: IpListenEndpoint) -> Result<SocketHandle, ErrorCode> {
         let rx_buf = tcp::SocketBuffer::new(vec![0; TCP_BUFFER_SIZE]);
         let tx_buf = tcp::SocketBuffer::new(vec![0; TCP_BUFFER_SIZE]);
         let mut socket = tcp::Socket::new(rx_buf, tx_buf);
@@ -147,6 +142,16 @@ impl Main {
         }
 
         let handle = self.sockets.add(socket);
+        Ok(handle)
+    }
+
+    pub fn tcp_listen(
+        &mut self,
+        ctx: &mut Context,
+        endpoint: IpListenEndpoint,
+    ) -> Result<Channel, ErrorCode> {
+        let (our_ch, their_ch) = Channel::new()?;
+        let handle = self.do_tcp_listen(ctx, endpoint)?;
         let ch_id = our_ch.handle().id();
         ctx.add_channel(our_ch)?;
         self.handle2socket.insert(ch_id, handle);
@@ -161,12 +166,41 @@ impl Main {
         Ok(their_ch)
     }
 
+    pub fn tcp_accept(
+        &mut self,
+        ctx: &mut Context,
+        accepted_handle: SocketHandle,
+        endpoint: IpListenEndpoint,
+    ) -> Result<Channel, ErrorCode> {
+        let (our_ch, their_ch) = Channel::new()?;
+        let ch_id = our_ch.handle().id();
+        ctx.add_channel(our_ch)?;
+
+        // Create a new listen socket.
+        let new_listen_handle = self.do_tcp_listen(endpoint)?;
+
+        let socket = self.sockets.get_mut(handle);
+        let new_handle = self.sockets.add(socket);
+
+        // Replace the accepted socket's state.
+        self.states.insert(
+            accepted_handle,
+            State::TcpConn {
+                handle,
+                pending_reads: VecDeque::new(),
+            },
+        );
+
+        Ok(their_ch)
+    }
+
     pub fn poll(&mut self) {
         use smoltcp::socket::Socket;
         use smoltcp::socket::tcp::State;
 
         let now = self.smol_clock.now();
         let result = self.iface.poll(now, &mut self.device, &mut self.sockets);
+        let mut accepted_sockets = Vec::new();
         for (handle, socket) in self.sockets.iter_mut() {
             let state = self.states.get_mut(&handle).unwrap();
             match socket {
@@ -176,7 +210,17 @@ impl Main {
                             // No state changes.
                         }
                         State::SynReceived => {
-                            todo!("socket accept");
+                            let State::TcpListener {
+                                pending_accepts, ..
+                            } = state
+                            else {
+                                unreachable!();
+                            };
+
+                            // Check if we can accept a new connection.
+                            if let Some(completer) = pending_accepts.pop_front() {
+                                accepted_sockets.push((handle, completer));
+                            }
                         }
                         State::Established | State::FinWait1 | State::FinWait2 => {
                             if socket.can_recv() {
@@ -200,6 +244,11 @@ impl Main {
                     }
                 }
             }
+        }
+
+        for (handle, completer) in accepted_sockets {
+            let new_ch = self.tcp_accept(handle);
+            completer.complete(new_ch);
         }
     }
 }
