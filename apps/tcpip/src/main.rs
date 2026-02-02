@@ -1,5 +1,6 @@
 #![no_std]
 #![no_main]
+#![allow(unused)]
 
 use ftl::application::Application;
 use ftl::application::Context;
@@ -112,6 +113,7 @@ impl SmolClock {
 }
 
 struct Main {
+    smol_clock: SmolClock,
     sockets: SocketSet<'static>,
     states: HashMap<HandleId, State>,
     device: Device,
@@ -155,6 +157,47 @@ impl Main {
         );
 
         Ok(their_ch)
+    }
+
+    pub fn poll(&mut self) {
+        use smoltcp::socket::Socket;
+        use smoltcp::socket::tcp::State;
+
+        let now = self.smol_clock.now();
+        let result = self.iface.poll(now, &mut self.device, &mut self.sockets);
+        for (handle, socket) in self.sockets.iter_mut() {
+            match socket {
+                Socket::Tcp(socket) => {
+                    match socket.state() {
+                        State::Listen | State::SynSent => {
+                            // No state changes.
+                        }
+                        State::SynReceived => {
+                            todo!("socket accept");
+                        }
+                        State::Established | State::FinWait1 | State::FinWait2 => {
+                            if socket.can_recv() {
+                                todo!("socket readable");
+                            }
+                        }
+                        State::CloseWait => {
+                            if socket.can_recv() {
+                                todo!("socket readable");
+                            } else {
+                                todo!("socket start closing");
+                            }
+                        }
+                        State::Closing | State::LastAck => {
+                            // Waiting for the peer to acknowledge the close.
+                        }
+                        State::TimeWait | State::Closed => {
+                            // The socket has been closed by both sides.
+                            todo!("socket destroyed");
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -220,6 +263,7 @@ impl Application for Main {
         });
 
         Self {
+            smol_clock: SmolClock::new(),
             sockets: SocketSet::new(Vec::new()),
             states: HashMap::new(),
             device: Device::new(),
@@ -250,16 +294,11 @@ impl Application for Main {
         };
 
         match state {
-            State::TcpConn {
-                handle,
-                pending_reads,
-                ..
-            } => {
+            State::TcpConn { pending_reads, .. } => {
                 pending_reads.push_back(completer);
             }
             State::TcpListener {
-                handle,
-                pending_accepts,
+                pending_accepts, ..
             } => {
                 completer.error(ErrorCode::Unsupported);
             }
@@ -274,16 +313,11 @@ impl Application for Main {
         };
 
         match state {
-            State::TcpConn {
-                handle,
-                pending_writes,
-                ..
-            } => {
+            State::TcpConn { pending_writes, .. } => {
                 pending_writes.push_back(completer);
             }
             State::TcpListener {
-                handle,
-                pending_accepts,
+                pending_accepts, ..
             } => {
                 completer.error(ErrorCode::Unsupported);
             }
