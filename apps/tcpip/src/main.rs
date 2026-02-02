@@ -214,9 +214,10 @@ impl Main {
                             // No state changes.
                         }
                         tcp::State::SynReceived => {
+                            let mut state_borrow = state.borrow_mut();
                             let State::TcpListener {
                                 pending_accepts, ..
-                            } = state
+                            } = &mut *state_borrow
                             else {
                                 unreachable!();
                             };
@@ -366,17 +367,13 @@ impl Application for Main {
         };
 
         let mut state_borrow = state.borrow_mut();
-        match *state_borrow {
-            State::TcpConn {
-                mut pending_reads, ..
-            } => {
+        match &mut *state_borrow {
+            State::TcpConn { pending_reads, .. } => {
                 pending_reads.push_back(completer);
                 drop(state_borrow);
                 self.poll(ctx);
             }
-            State::TcpListener {
-                pending_accepts, ..
-            } => {
+            State::TcpListener { .. } => {
                 completer.error(ErrorCode::Unsupported);
             }
         }
@@ -390,17 +387,15 @@ impl Application for Main {
         };
 
         let mut state_borrow = state.borrow_mut();
-        match *state_borrow {
+        match &mut *state_borrow {
             State::TcpConn {
-                mut pending_writes, ..
+                pending_writes, ..
             } => {
                 pending_writes.push_back(completer);
                 drop(state_borrow);
                 self.poll(ctx);
             }
-            State::TcpListener {
-                pending_accepts, ..
-            } => {
+            State::TcpListener { .. } => {
                 completer.error(ErrorCode::Unsupported);
             }
         }
