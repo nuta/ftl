@@ -265,12 +265,34 @@ impl Main {
     }
 }
 
-fn tcp_readable(socket: &tcp::Socket, state: &mut State) {
+fn tcp_readable(socket: &mut tcp::Socket, state: &mut State) {
     let State::TcpConn { pending_reads, .. } = state else {
         unreachable!();
     };
 
-    todo!();
+    let mut offset = 0;
+    while let Some(completer) = pending_reads.pop_front() {
+        debug_assert!(socket.can_recv());
+        socket.recv(|buf| {
+            // Documentation:
+            //
+            // > Call f with the largest contiguous slice of octets in the receive
+            // > buffer, and dequeue the amount of elements returned by f.
+            let read_len = match completer.write_data(offset, buf) {
+                Ok(len) => {
+                    completer.complete(len);
+                    len
+                }
+                Err(error) => {
+                    println!("failed to write data to read completer: {:?}", error);
+                    completer.error(error);
+                    0
+                }
+            };
+
+            (read_len, () /* retrun value of rec */)
+        });
+    }
 }
 
 fn parse_uri(completer: &OpenCompleter) -> Result<Uri, ErrorCode> {
@@ -388,9 +410,7 @@ impl Application for Main {
 
         let mut state_borrow = state.borrow_mut();
         match &mut *state_borrow {
-            State::TcpConn {
-                pending_writes, ..
-            } => {
+            State::TcpConn { pending_writes, .. } => {
                 pending_writes.push_back(completer);
                 drop(state_borrow);
                 self.poll(ctx);
