@@ -154,7 +154,7 @@ impl Main {
         endpoint: IpListenEndpoint,
     ) -> Result<Channel, ErrorCode> {
         let (our_ch, their_ch) = Channel::new()?;
-        let handle = self.do_tcp_listen(ctx, endpoint)?;
+        let handle = self.do_tcp_listen(endpoint)?;
         let ch_id = our_ch.handle().id();
         ctx.add_channel(our_ch)?;
 
@@ -199,22 +199,21 @@ impl Main {
         Ok(their_ch)
     }
 
-    pub fn poll(&mut self) {
+    pub fn poll(&mut self, ctx: &mut Context) {
         use smoltcp::socket::Socket;
-        use smoltcp::socket::tcp::State;
 
         let now = self.smol_clock.now();
         let result = self.iface.poll(now, &mut self.device, &mut self.sockets);
         let mut accepted_sockets = Vec::new();
         for (handle, socket) in self.sockets.iter_mut() {
-            let state = self.states_by_handle.get(handle).unwrap();
+            let state = self.states_by_handle.get(&handle).unwrap();
             match socket {
                 Socket::Tcp(socket) => {
                     match socket.state() {
-                        State::Listen | State::SynSent => {
+                        tcp::State::Listen | tcp::State::SynSent => {
                             // No state changes.
                         }
-                        State::SynReceived => {
+                        tcp::State::SynReceived => {
                             let State::TcpListener {
                                 pending_accepts, ..
                             } = state
@@ -224,25 +223,29 @@ impl Main {
 
                             // Check if we can accept a new connection.
                             if let Some(completer) = pending_accepts.pop_front() {
-                                accepted_sockets.push((handle, completer));
+                                accepted_sockets.push((
+                                    handle,
+                                    socket.listen_endpoint(),
+                                    completer,
+                                ));
                             }
                         }
-                        State::Established | State::FinWait1 | State::FinWait2 => {
+                        tcp::State::Established | tcp::State::FinWait1 | tcp::State::FinWait2 => {
                             if socket.can_recv() {
                                 todo!("socket readable");
                             }
                         }
-                        State::CloseWait => {
+                        tcp::State::CloseWait => {
                             if socket.can_recv() {
                                 todo!("socket readable");
                             } else {
                                 todo!("socket start closing");
                             }
                         }
-                        State::Closing | State::LastAck => {
+                        tcp::State::Closing | tcp::State::LastAck => {
                             // Waiting for the peer to acknowledge the close.
                         }
-                        State::TimeWait | State::Closed => {
+                        tcp::State::TimeWait | tcp::State::Closed => {
                             // The socket has been closed by both sides.
                             todo!("socket destroyed");
                         }
@@ -251,9 +254,12 @@ impl Main {
             }
         }
 
-        for (handle, completer) in accepted_sockets {
-            let new_ch = self.tcp_accept(handle);
-            completer.complete(new_ch);
+        for (handle, endpoint, completer) in accepted_sockets {
+            match self.tcp_accept(ctx, handle, endpoint) {
+                Ok(new_ch) => completer.complete(new_ch),
+
+                Err(error) => completer.error(error),
+            }
         }
     }
 }
@@ -359,10 +365,14 @@ impl Application for Main {
             return;
         };
 
-        match state {
-            State::TcpConn { pending_reads, .. } => {
+        let mut state_borrow = state.borrow_mut();
+        match *state_borrow {
+            State::TcpConn {
+                mut pending_reads, ..
+            } => {
                 pending_reads.push_back(completer);
-                self.poll();
+                drop(state_borrow);
+                self.poll(ctx);
             }
             State::TcpListener {
                 pending_accepts, ..
@@ -379,10 +389,14 @@ impl Application for Main {
             return;
         };
 
-        match state {
-            State::TcpConn { pending_writes, .. } => {
+        let mut state_borrow = state.borrow_mut();
+        match *state_borrow {
+            State::TcpConn {
+                mut pending_writes, ..
+            } => {
                 pending_writes.push_back(completer);
-                self.poll();
+                drop(state_borrow);
+                self.poll(ctx);
             }
             State::TcpListener {
                 pending_accepts, ..
