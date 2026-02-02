@@ -166,6 +166,7 @@ impl Main {
         let now = self.smol_clock.now();
         let result = self.iface.poll(now, &mut self.device, &mut self.sockets);
         for (handle, socket) in self.sockets.iter_mut() {
+            let state = self.states.get_mut(&handle).unwrap();
             match socket {
                 Socket::Tcp(socket) => {
                     match socket.state() {
@@ -199,6 +200,14 @@ impl Main {
             }
         }
     }
+}
+
+fn tcp_readable(socket: &tcp::Socket, state: &mut State) {
+    let State::TcpConn { pending_reads, .. } = state else {
+        unreachable!();
+    };
+
+    todo!();
 }
 
 fn parse_uri(completer: &OpenCompleter) -> Result<Uri, ErrorCode> {
@@ -296,6 +305,7 @@ impl Application for Main {
         match state {
             State::TcpConn { pending_reads, .. } => {
                 pending_reads.push_back(completer);
+                self.poll();
             }
             State::TcpListener {
                 pending_accepts, ..
@@ -315,6 +325,7 @@ impl Application for Main {
         match state {
             State::TcpConn { pending_writes, .. } => {
                 pending_writes.push_back(completer);
+                self.poll();
             }
             State::TcpListener {
                 pending_accepts, ..
