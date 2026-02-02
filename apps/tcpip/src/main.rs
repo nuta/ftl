@@ -115,7 +115,8 @@ impl SmolClock {
 struct Main {
     smol_clock: SmolClock,
     sockets: SocketSet<'static>,
-    states: HashMap<HandleId, State>,
+    handle2socket: HashMap<HandleId, SocketHandle>,
+    states: HashMap<SocketHandle, State>,
     device: Device,
     iface: Interface,
 }
@@ -146,10 +147,11 @@ impl Main {
         }
 
         let handle = self.sockets.add(socket);
-        let handle_id = our_ch.handle().id();
+        let ch_id = our_ch.handle().id();
         ctx.add_channel(our_ch)?;
+        self.handle2socket.insert(ch_id, handle);
         self.states.insert(
-            handle_id,
+            handle,
             State::TcpListener {
                 handle,
                 pending_accepts: VecDeque::new(),
@@ -274,6 +276,7 @@ impl Application for Main {
         Self {
             smol_clock: SmolClock::new(),
             sockets: SocketSet::new(Vec::new()),
+            handle2socket: HashMap::new(),
             states: HashMap::new(),
             device: Device::new(),
             iface: iface,
@@ -296,13 +299,13 @@ impl Application for Main {
     }
 
     fn read(&mut self, ctx: &mut Context, completer: ReadCompleter, offset: usize, len: usize) {
-        let Some(state) = self.states.get_mut(&ctx.handle_id()) else {
-            println!("state not found for {:?}", ctx.handle_id());
+        let Some(handle) = self.handle2socket.get(&ctx.handle_id()) else {
+            println!("socket handle not found for {:?}", ctx.handle_id());
             completer.error(ErrorCode::InvalidArgument);
             return;
         };
 
-        match state {
+        match self.states.get_mut(handle).unwrap() {
             State::TcpConn { pending_reads, .. } => {
                 pending_reads.push_back(completer);
                 self.poll();
@@ -316,13 +319,13 @@ impl Application for Main {
     }
 
     fn write(&mut self, ctx: &mut Context, completer: WriteCompleter, offset: usize, len: usize) {
-        let Some(state) = self.states.get_mut(&ctx.handle_id()) else {
-            println!("state not found for {:?}", ctx.handle_id());
+        let Some(handle) = self.handle2socket.get(&ctx.handle_id()) else {
+            println!("socket handle not found for {:?}", ctx.handle_id());
             completer.error(ErrorCode::InvalidArgument);
             return;
         };
 
-        match state {
+        match self.states.get_mut(handle).unwrap() {
             State::TcpConn { pending_writes, .. } => {
                 pending_writes.push_back(completer);
                 self.poll();
