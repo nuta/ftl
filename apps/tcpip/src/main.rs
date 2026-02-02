@@ -22,12 +22,20 @@ use smoltcp::socket::tcp;
 use smoltcp::socket::tcp::ListenError;
 use smoltcp::wire::EthernetAddress;
 use smoltcp::wire::HardwareAddress;
+use smoltcp::wire::IpCidr;
 use smoltcp::wire::IpListenEndpoint;
 use smoltcp::wire::Ipv4Address;
+use smoltcp::wire::Ipv4Cidr;
 
-struct RxToken<'a> {}
+enum Uri {
+    TcpListen(IpListenEndpoint),
+}
 
-impl<'a> smoltcp::phy::RxToken<'a> for RxToken<'a> {
+const TCP_BUFFER_SIZE: usize = 4096;
+
+struct RxToken {}
+
+impl smoltcp::phy::RxToken for RxToken {
     fn consume<R, F>(self, f: F) -> R
     where
         F: FnOnce(&[u8]) -> R,
@@ -56,8 +64,8 @@ impl Device {
 }
 
 impl smoltcp::phy::Device for Device {
-    type RxToken<'a> = RxToken<'a>;
-    type TxToken = TxToken;
+    type RxToken<'a> = RxToken;
+    type TxToken<'a> = TxToken;
 
     fn receive(
         &mut self,
@@ -136,9 +144,10 @@ impl Main {
         }
 
         let handle = self.sockets.add(socket);
+        let handle_id = our_ch.handle().id();
         ctx.add_channel(our_ch)?;
         self.states.insert(
-            our_ch.handle().id(),
+            handle_id,
             State::TcpListener {
                 handle,
                 pending_accepts: VecDeque::new(),
@@ -169,7 +178,7 @@ fn parse_uri(completer: &OpenCompleter) -> Result<Uri, ErrorCode> {
                 return Err(ErrorCode::InvalidArgument);
             };
 
-            let Ok(addr) = addr_str.parse::<Ipv4Addr>() else {
+            let Ok(addr) = addr_str.parse::<Ipv4Address>() else {
                 return Err(ErrorCode::InvalidArgument);
             };
 
@@ -182,9 +191,7 @@ fn parse_uri(completer: &OpenCompleter) -> Result<Uri, ErrorCode> {
             } else {
                 // TODO: We don't support listening on specific addresses for now.
                 return Err(ErrorCode::InvalidArgument);
-            }
-
-            let endpoint = IpListenEndpoint::new(addr, port);
+            };
             Ok(Uri::TcpListen(endpoint))
         }
         _ => {
@@ -199,9 +206,10 @@ impl Application for Main {
         println!("TODO TODO TODO: fill in the MAC address");
         let hwaddr = [0u8; 6];
         let gw_ip = Ipv4Address::new(10, 0, 2, 1);
+        let our_ip = IpCidr::Ipv4(Ipv4Cidr::new(Ipv4Address::new(10, 0, 2, 15), 24));
 
         let smol_clock = SmolClock::new();
-        let hwaddr = HardwareAddress::Ethernet(EthernetAddress::from_bytes(hwaddr));
+        let hwaddr = HardwareAddress::Ethernet(EthernetAddress::from_bytes(&hwaddr));
         let config = smoltcp::iface::Config::new(hwaddr);
         let mut device = Device::new();
         let mut iface = Interface::new(config, &mut device, smol_clock.now());
@@ -242,10 +250,17 @@ impl Application for Main {
         };
 
         match state {
-            State::TcpConn { handle, pending_reads, .. } => {
+            State::TcpConn {
+                handle,
+                pending_reads,
+                ..
+            } => {
                 pending_reads.push_back(completer);
             }
-            State::TcpListener { handle, pending_accepts } => {
+            State::TcpListener {
+                handle,
+                pending_accepts,
+            } => {
                 completer.error(ErrorCode::Unsupported);
             }
         }
@@ -259,10 +274,17 @@ impl Application for Main {
         };
 
         match state {
-            State::TcpConn { handle, , pending_writes, .. } => {
+            State::TcpConn {
+                handle,
+                pending_writes,
+                ..
+            } => {
                 pending_writes.push_back(completer);
             }
-            State::TcpListener { handle, pending_accepts } => {
+            State::TcpListener {
+                handle,
+                pending_accepts,
+            } => {
                 completer.error(ErrorCode::Unsupported);
             }
         }
