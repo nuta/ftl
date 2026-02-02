@@ -9,12 +9,16 @@ use ftl::application::Context;
 use ftl::application::OpenCompleter;
 use ftl::application::ReadCompleter;
 use ftl::application::WriteCompleter;
+use ftl::channel::Buffer;
+use ftl::channel::BufferMut;
 use ftl::channel::Channel;
+use ftl::channel::Message;
 use ftl::collections::HashMap;
 use ftl::collections::VecDeque;
 use ftl::error::ErrorCode;
 use ftl::handle::HandleId;
 use ftl::handle::Handleable;
+use ftl::handle::OwnedHandle;
 use ftl::prelude::*;
 use ftl::println;
 use ftl::rc::Rc;
@@ -36,50 +40,141 @@ enum Uri {
 }
 
 const TCP_BUFFER_SIZE: usize = 4096;
+const NET_RX_BUFFER_SIZE: usize = 1514;
+const RX_QUEUE_SIZE: usize = 1;
 
-struct RxToken {}
+struct RxToken {
+    buffer: Vec<u8>,
+}
 
 impl smoltcp::phy::RxToken for RxToken {
     fn consume<R, F>(self, f: F) -> R
     where
         F: FnOnce(&[u8]) -> R,
     {
-        todo!()
+        f(&self.buffer)
     }
 }
 
-struct TxToken {}
+struct TxToken<'a> {
+    ch: &'a Channel,
+}
 
-impl smoltcp::phy::TxToken for TxToken {
+impl smoltcp::phy::TxToken for TxToken<'_> {
     fn consume<R, F>(self, len: usize, f: F) -> R
     where
         F: FnOnce(&mut [u8]) -> R,
     {
-        todo!()
+        let mut buf = vec![0u8; len];
+        let result = f(&mut buf);
+
+        let msg = Message::Write {
+            offset: 0,
+            data: Buffer::Vec(buf),
+        };
+
+        if let Err(error) = self.ch.send(msg) {
+            // TODO: Add a semaphore to limit the number of inflight writes.
+            println!("failed to send packet: {:?}", error);
+        }
+
+        result
     }
 }
 
-struct Device {}
+struct Device {
+    ch: Rc<Channel>,
+    rx_queue: VecDeque<Vec<u8>>,
+    inflight_reads: usize,
+}
 
 impl Device {
     fn new() -> Self {
-        Self {}
+        let ch_id = HandleId::from_raw(1);
+        let ch = Rc::new(Channel::from_handle(OwnedHandle::from_raw(ch_id)));
+        Self {
+            ch,
+            rx_queue: VecDeque::new(),
+            inflight_reads: 0,
+        }
+    }
+
+    fn channel(&self) -> Rc<Channel> {
+        self.ch.clone()
+    }
+
+    fn handle_id(&self) -> HandleId {
+        self.ch.handle().id()
+    }
+
+    fn on_read_reply(&mut self, buf: BufferMut, len: usize) {
+        debug_assert!(self.inflight_reads > 0);
+        self.inflight_reads -= 1;
+
+        if len == 0 {
+            self.fill_rx();
+            return;
+        }
+
+        let packet = match buf {
+            BufferMut::Vec(mut data) => {
+                let len = len.min(data.len());
+                data.truncate(len);
+                data
+            }
+            _ => unreachable!(),
+        };
+
+        self.rx_queue.push_back(packet);
+        self.fill_rx();
+    }
+
+    fn fill_rx(&mut self) {
+        while self.rx_queue.len() + self.inflight_reads < RX_QUEUE_SIZE {
+            let msg = Message::Read {
+                offset: 0,
+                data: BufferMut::Vec(vec![0u8; NET_RX_BUFFER_SIZE]),
+            };
+
+            match self.ch.send(msg) {
+                Ok(()) => {
+                    self.inflight_reads += 1;
+                }
+                Err(error) => {
+                    println!("failed to send a packet to drivers: {:?}", error);
+                    break;
+                }
+            }
+        }
     }
 }
 
 impl smoltcp::phy::Device for Device {
     type RxToken<'a> = RxToken;
-    type TxToken<'a> = TxToken;
+    type TxToken<'a> = TxToken<'a>;
 
     fn receive(
         &mut self,
         timestamp: smoltcp::time::Instant,
     ) -> Option<(Self::RxToken<'_>, Self::TxToken<'_>)> {
-        todo!()
+        if let Some(packet) = self.rx_queue.pop_front() {
+            let rx = RxToken { buffer: packet };
+            let tx = TxToken {
+                ch: self.ch.as_ref(),
+            };
+            Some((rx, tx))
+        } else {
+            if self.inflight_reads == 0 {
+                self.fill_rx();
+            }
+            None
+        }
     }
 
     fn transmit(&mut self, timestamp: smoltcp::time::Instant) -> Option<Self::TxToken<'_>> {
-        todo!()
+        Some(TxToken {
+            ch: self.ch.as_ref(),
+        })
     }
 
     fn capabilities(&self) -> DeviceCapabilities {
@@ -207,6 +302,7 @@ impl Main {
         let now = self.smol_clock.now();
         let result = self.iface.poll(now, &mut self.device, &mut self.sockets);
         let mut accepted_sockets = Vec::new();
+        let mut destroyed_sockets = Vec::new();
         for (handle, socket) in self.sockets.iter_mut() {
             let state = self.states_by_handle.get(&handle).unwrap();
             match socket {
@@ -250,7 +346,7 @@ impl Main {
                         }
                         tcp::State::TimeWait | tcp::State::Closed => {
                             // The socket has been closed by both sides.
-                            todo!("socket destroyed");
+                            destroyed_sockets.push(handle);
                         }
                     }
                 }
@@ -260,9 +356,13 @@ impl Main {
         for (handle, endpoint, completer) in accepted_sockets {
             match self.tcp_accept(ctx, handle, endpoint) {
                 Ok(new_ch) => completer.complete(new_ch),
-
                 Err(error) => completer.error(error),
             }
+        }
+
+        for handle in destroyed_sockets {
+            self.sockets.remove(handle);
+            self.states_by_handle.remove(&handle);
         }
     }
 }
@@ -426,7 +526,10 @@ impl Application for Main {
         let smol_clock = SmolClock::new();
         let hwaddr = HardwareAddress::Ethernet(EthernetAddress::from_bytes(&hwaddr));
         let config = smoltcp::iface::Config::new(hwaddr);
+
         let mut device = Device::new();
+        ctx.add_channel(device.channel()).unwrap();
+
         let mut iface = Interface::new(config, &mut device, smol_clock.now());
 
         iface.routes_mut().add_default_ipv4_route(gw_ip).unwrap();
@@ -439,7 +542,7 @@ impl Application for Main {
             sockets: SocketSet::new(Vec::new()),
             states_by_ch: HashMap::new(),
             states_by_handle: HashMap::new(),
-            device: Device::new(),
+            device,
             iface: iface,
         }
     }
@@ -499,6 +602,25 @@ impl Application for Main {
         }
     }
 
+    fn read_reply(&mut self, ctx: &mut Context, _ch: &Rc<Channel>, buf: BufferMut, len: usize) {
+        if ctx.handle_id() == self.device.handle_id() {
+            // TODO: Use State.
+            self.device.on_read_reply(buf, len);
+            self.poll(ctx);
+            return;
+        }
+
+        println!("unexpected read reply on {:?}", ctx.handle_id());
+    }
+
+    fn write_reply(&mut self, ctx: &mut Context, _ch: &Rc<Channel>, _buf: Buffer, _len: usize) {
+        if ctx.handle_id() == self.device.handle_id() {
+            return;
+        }
+
+        println!("unexpected write reply on {:?}", ctx.handle_id());
+    }
+
     fn peer_closed(&mut self, ctx: &mut Context, _ch: &Rc<Channel>) {
         let Some(state) = self.states_by_ch.get(&ctx.handle_id()) else {
             println!("state not found for {:?}", ctx.handle_id());
@@ -514,19 +636,11 @@ impl Application for Main {
                 ..
             } => {
                 *channel_closed = true;
-                for completer in pending_reads.drain(..) {
-                    completer.error(ErrorCode::PeerClosed);
-                }
-                for completer in pending_writes.drain(..) {
-                    completer.error(ErrorCode::PeerClosed);
-                }
             }
             State::TcpListener {
                 pending_accepts, ..
             } => {
-                for completer in pending_accepts.drain(..) {
-                    completer.error(ErrorCode::PeerClosed);
-                }
+                // Nothing t odo.
             }
         }
 
