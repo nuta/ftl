@@ -233,6 +233,40 @@ impl Application for Main {
             }
         }
     }
+
+    fn read(&mut self, ctx: &mut Context, completer: ReadCompleter, offset: usize, len: usize) {
+        let Some(state) = self.states.get_mut(&ctx.handle_id()) else {
+            println!("state not found for {:?}", ctx.handle_id());
+            completer.error(ErrorCode::InvalidArgument);
+            return;
+        };
+
+        match state {
+            State::TcpConn { handle, pending_reads, .. } => {
+                pending_reads.push_back(completer);
+            }
+            State::TcpListener { handle, pending_accepts } => {
+                completer.error(ErrorCode::Unsupported);
+            }
+        }
+    }
+
+    fn write(&mut self, ctx: &mut Context, completer: WriteCompleter, offset: usize, len: usize) {
+        let Some(state) = self.states.get_mut(&ctx.handle_id()) else {
+            println!("state not found for {:?}", ctx.handle_id());
+            completer.error(ErrorCode::InvalidArgument);
+            return;
+        };
+
+        match state {
+            State::TcpConn { handle, , pending_writes, .. } => {
+                pending_writes.push_back(completer);
+            }
+            State::TcpListener { handle, pending_accepts } => {
+                completer.error(ErrorCode::Unsupported);
+            }
+        }
+    }
 }
 
 #[unsafe(no_mangle)]
