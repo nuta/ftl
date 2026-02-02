@@ -36,6 +36,9 @@ pub enum Event {
         handles: ArrayVec<OwnedHandle, NUM_HANDLES_MAX>,
         inline: [u8; INLINE_LEN_MAX],
     },
+    ChannelClosed {
+        ch_id: HandleId,
+    },
     Irq {
         handle_id: HandleId,
         irq: u8,
@@ -102,6 +105,9 @@ impl Sink {
                     irq: irq_event.irq,
                 }
             }
+            EventType::CHANNEL_CLOSED => Event::ChannelClosed {
+                ch_id: raw.header.id,
+            },
             _ => {
                 return Err(ErrorCode::Unsupported);
             }

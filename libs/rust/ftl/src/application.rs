@@ -196,6 +196,11 @@ pub trait Application {
     fn irq(&mut self, ctx: &mut Context, interrupt: &Rc<Interrupt>, irq: u8) {
         println!("received an unexpected irq: {irq}");
     }
+
+    #[allow(unused)]
+    fn peer_closed(&mut self, ctx: &mut Context, ch: &Rc<Channel>) {
+        println!("received an unexpected message: peer closed");
+    }
 }
 
 pub fn run<A: Application>() {
@@ -288,6 +293,15 @@ pub fn run<A: Application>() {
 
                 let mut ctx = Context::new(&sink, &mut objects, handle_id);
                 app.irq(&mut ctx, &interrupt, irq);
+            }
+            Event::ChannelClosed { ch_id } => {
+                let ch = match objects.get(&ch_id) {
+                    Some(Object::Channel(ch)) => ch.clone(),
+                    _ => panic!("unknown handle id from sink: {:?}", ch_id),
+                };
+
+                let mut ctx = Context::new(&sink, &mut objects, ch.handle().id());
+                app.peer_closed(&mut ctx, &ch);
             }
         }
     }

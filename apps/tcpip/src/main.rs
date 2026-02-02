@@ -95,6 +95,7 @@ enum State {
         handle: SocketHandle,
         pending_reads: VecDeque<ReadCompleter>,
         pending_writes: VecDeque<WriteCompleter>,
+        channel_closed: bool,
     },
     TcpListener {
         handle: SocketHandle,
@@ -185,6 +186,7 @@ impl Main {
             handle: accepted_handle,
             pending_reads: VecDeque::new(),
             pending_writes: VecDeque::new(),
+            channel_closed: false,
         }));
 
         // Replace the accepted socket's state.
@@ -209,12 +211,12 @@ impl Main {
             let state = self.states_by_handle.get(&handle).unwrap();
             match socket {
                 Socket::Tcp(socket) => {
+                    let mut state_borrow = state.borrow_mut();
                     match socket.state() {
                         tcp::State::Listen | tcp::State::SynSent => {
                             // No state changes.
                         }
                         tcp::State::SynReceived => {
-                            let mut state_borrow = state.borrow_mut();
                             let State::TcpListener {
                                 pending_accepts, ..
                             } = &mut *state_borrow
@@ -232,18 +234,16 @@ impl Main {
                             }
                         }
                         tcp::State::Established | tcp::State::FinWait1 | tcp::State::FinWait2 => {
-                            let mut state = state.borrow_mut();
                             if socket.can_recv() {
-                                tcp_readable(socket, &mut state);
+                                tcp_readable(socket, &mut state_borrow);
                             }
 
                             if socket.can_send() {
-                                tcp_writable(socket, &mut state);
+                                tcp_writable(socket, &mut state_borrow);
                             }
                         }
                         tcp::State::CloseWait => {
-                            let mut state = state.borrow_mut();
-                            tcp_peer_closed(socket, &mut state);
+                            tcp_peer_closed(socket, &mut state_borrow);
                         }
                         tcp::State::Closing | tcp::State::LastAck => {
                             // Waiting for the peer to acknowledge the close.
@@ -333,36 +333,39 @@ fn tcp_peer_closed(socket: &mut tcp::Socket, state: &mut State) {
         tcp_readable(socket, state);
     }
 
+    if socket.can_send() {
+        tcp_writable(socket, state);
+    }
+
     let State::TcpConn {
         pending_reads,
         pending_writes,
+        channel_closed,
         ..
     } = state
     else {
         unreachable!();
     };
 
-    if !socket.can_recv() {
-        // No more data to read since the peer closed the connection. Complete
-        // all pending reads.
-        for completer in pending_reads.drain(..) {
-            completer.complete(0);
-        }
-    }
-
-    if !pending_writes.is_empty() {
-        if socket.can_send() {
-            tcp_writable(socket, state);
-        }
-
-        // We still have pending writes to send. Do not close the socket
-        // until we finish sending them.
-        //
-        // FIXME: Keep the socket open until the channel is closed.
+    if !*channel_closed {
+        // Keep the socket open until the channel is closed so we can continue
+        // sending data after the peer's FIN (half-close).
         return;
     }
 
+    // No more data to read since the peer closed the connection. Complete
+    // all pending reads.
     debug_assert!(!socket.can_recv());
+    for completer in pending_reads.drain(..) {
+        completer.complete(0);
+    }
+
+    if !pending_writes.is_empty() {
+        debug_assert!(!socket.can_send());
+        // We still have pending writes to send. Do not close the socket yet.
+        return;
+    }
+
     debug_assert!(pending_reads.is_empty());
     debug_assert!(pending_writes.is_empty());
 
@@ -494,6 +497,41 @@ impl Application for Main {
                 completer.error(ErrorCode::Unsupported);
             }
         }
+    }
+
+    fn peer_closed(&mut self, ctx: &mut Context, _ch: &Rc<Channel>) {
+        let Some(state) = self.states_by_ch.get(&ctx.handle_id()) else {
+            println!("state not found for {:?}", ctx.handle_id());
+            return;
+        };
+
+        let mut state_borrow = state.borrow_mut();
+        match &mut *state_borrow {
+            State::TcpConn {
+                pending_reads,
+                pending_writes,
+                channel_closed,
+                ..
+            } => {
+                *channel_closed = true;
+                for completer in pending_reads.drain(..) {
+                    completer.error(ErrorCode::PeerClosed);
+                }
+                for completer in pending_writes.drain(..) {
+                    completer.error(ErrorCode::PeerClosed);
+                }
+            }
+            State::TcpListener {
+                pending_accepts, ..
+            } => {
+                for completer in pending_accepts.drain(..) {
+                    completer.error(ErrorCode::PeerClosed);
+                }
+            }
+        }
+
+        drop(state_borrow);
+        self.poll(ctx);
     }
 }
 

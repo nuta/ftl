@@ -14,6 +14,7 @@ use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use ftl_types::sink::EventBody;
 use ftl_types::sink::EventType;
+use ftl_types::sink::ChannelClosedEvent;
 use ftl_types::sink::MessageEvent;
 
 use crate::handle::AnyHandle;
@@ -61,6 +62,7 @@ struct Mutable {
     emitter: Option<EventEmitter>,
     calls: BTreeMap<u32 /* call id */, Call>,
     next_call_id: u32,
+    peer_closed_notified: bool,
 }
 
 pub struct Channel {
@@ -76,6 +78,7 @@ impl Channel {
                 emitter: None,
                 calls: BTreeMap::new(),
                 next_call_id: 1,
+                peer_closed_notified: false,
             }),
         })?;
         let ch1 = SharedRef::new(Self {
@@ -85,6 +88,7 @@ impl Channel {
                 emitter: None,
                 calls: BTreeMap::new(),
                 next_call_id: 1,
+                peer_closed_notified: false,
             }),
         })?;
         ch0.mutable.lock().peer = Some(ch1.clone());
@@ -290,6 +294,16 @@ impl Handleable for Channel {
     ) -> Result<Option<(EventType, EventBody)>, ErrorCode> {
         let mut mutable = self.mutable.lock();
         let Some(message) = mutable.queue.pop_front() else {
+            if mutable.peer.is_none() && !mutable.peer_closed_notified {
+                mutable.peer_closed_notified = true;
+                return Ok(Some((
+                    EventType::CHANNEL_CLOSED,
+                    EventBody {
+                        channel_closed: ChannelClosedEvent { _reserved: 0 },
+                    },
+                )));
+            }
+
             return Ok(None);
         };
 
