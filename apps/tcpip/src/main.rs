@@ -232,16 +232,18 @@ impl Main {
                             }
                         }
                         tcp::State::Established | tcp::State::FinWait1 | tcp::State::FinWait2 => {
+                            let mut state = state.borrow_mut();
                             if socket.can_recv() {
-                                tcp_readable(socket, &mut state.borrow_mut());
+                                tcp_readable(socket, &mut state);
+                            }
+
+                            if socket.can_send() {
+                                tcp_writable(socket, &mut state);
                             }
                         }
                         tcp::State::CloseWait => {
-                            if socket.can_recv() {
-                                tcp_readable(socket, &mut state.borrow_mut());
-                            } else {
-                                todo!("socket start closing");
-                            }
+                            let mut state = state.borrow_mut();
+                            tcp_peer_closed(socket, &mut state);
                         }
                         tcp::State::Closing | tcp::State::LastAck => {
                             // Waiting for the peer to acknowledge the close.
@@ -270,7 +272,6 @@ fn tcp_readable(socket: &mut tcp::Socket, state: &mut State) {
         unreachable!();
     };
 
-    let mut offset = 0;
     while let Some(completer) = pending_reads.pop_front() {
         debug_assert!(socket.can_recv());
         socket.recv(|buf| {
@@ -278,8 +279,9 @@ fn tcp_readable(socket: &mut tcp::Socket, state: &mut State) {
             //
             // > Call f with the largest contiguous slice of octets in the receive
             // > buffer, and dequeue the amount of elements returned by f.
-            let read_len = match completer.write_data(offset, buf) {
+            let read_len = match completer.write_data(0, buf) {
                 Ok(len) => {
+                    // TODO: Reuse the completer if the entire buffer was written.
                     completer.complete(len);
                     len
                 }
@@ -290,9 +292,82 @@ fn tcp_readable(socket: &mut tcp::Socket, state: &mut State) {
                 }
             };
 
-            (read_len, () /* retrun value of rec */)
+            (read_len, () /* retrun value of recv */)
         });
     }
+}
+
+fn tcp_writable(socket: &mut tcp::Socket, state: &mut State) {
+    let State::TcpConn { pending_writes, .. } = state else {
+        unreachable!();
+    };
+
+    while let Some(completer) = pending_writes.pop_front() {
+        debug_assert!(socket.can_send());
+        socket.send(|buf| {
+            // Documentation:
+            //
+            // > Call f with the largest contiguous slice of octets in the
+            // > transmit buffer, and enqueue the amount of elements returned
+            // > by f.
+            let write_len = match completer.read_data(0, buf) {
+                Ok(len) => {
+                    // TODO: Reuse the completer if the entire buffer was written.
+                    completer.complete(len);
+                    len
+                }
+                Err(error) => {
+                    println!("failed to read data from write completer: {:?}", error);
+                    completer.error(error);
+                    0
+                }
+            };
+
+            (write_len, () /* return value of send */)
+        });
+    }
+}
+
+fn tcp_peer_closed(socket: &mut tcp::Socket, state: &mut State) {
+    if socket.can_recv() {
+        tcp_readable(socket, state);
+    }
+
+    let State::TcpConn {
+        pending_reads,
+        pending_writes,
+        ..
+    } = state
+    else {
+        unreachable!();
+    };
+
+    if !socket.can_recv() {
+        // No more data to read since the peer closed the connection. Complete
+        // all pending reads.
+        for completer in pending_reads.drain(..) {
+            completer.complete(0);
+        }
+    }
+
+    if !pending_writes.is_empty() {
+        if socket.can_send() {
+            tcp_writable(socket, state);
+        }
+
+        // We still have pending writes to send. Do not close the socket
+        // until we finish sending them.
+        //
+        // FIXME: Keep the socket open until the channel is closed.
+        return;
+    }
+
+    debug_assert!(!socket.can_recv());
+    debug_assert!(pending_reads.is_empty());
+    debug_assert!(pending_writes.is_empty());
+
+    // It's safe to close the socket now. Send a FIN packet to the peer.
+    socket.close();
 }
 
 fn parse_uri(completer: &OpenCompleter) -> Result<Uri, ErrorCode> {
