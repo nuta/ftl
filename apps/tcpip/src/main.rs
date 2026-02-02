@@ -178,7 +178,7 @@ fn parse_uri(completer: &OpenCompleter) -> Result<Uri, ErrorCode> {
                 return Err(ErrorCode::InvalidArgument);
             };
 
-            let Ok(addr) = addr_str.parse::<Ipv4Address>() else {
+            let Ok(addr) = addr_str.parse::<core::net::IpAddr>() else {
                 return Err(ErrorCode::InvalidArgument);
             };
 
