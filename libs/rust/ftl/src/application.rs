@@ -35,6 +35,10 @@ impl OpenCompleter {
         }
     }
 
+    pub fn read_uri(&self, offset: usize, uri: &mut [u8]) -> Result<usize, ErrorCode> {
+        self.ch.ool_read(self.call_id, 0, offset, uri)
+    }
+
     pub fn error(self, error: ErrorCode) {
         let reply = Reply::ErrorReply { error };
         if let Err(err) = self.ch.reply(self.call_id, reply) {

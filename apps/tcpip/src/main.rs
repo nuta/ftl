@@ -6,8 +6,12 @@ use ftl::application::Context;
 use ftl::application::OpenCompleter;
 use ftl::application::ReadCompleter;
 use ftl::application::WriteCompleter;
+use ftl::channel::Channel;
+use ftl::collections::HashMap;
 use ftl::collections::VecDeque;
+use ftl::error::ErrorCode;
 use ftl::handle::HandleId;
+use ftl::handle::Handleable;
 use ftl::prelude::*;
 use ftl::println;
 use smoltcp::iface::Interface;
@@ -15,6 +19,11 @@ use smoltcp::iface::SocketHandle;
 use smoltcp::iface::SocketSet;
 use smoltcp::phy::DeviceCapabilities;
 use smoltcp::socket::tcp;
+use smoltcp::socket::tcp::ListenError;
+use smoltcp::wire::EthernetAddress;
+use smoltcp::wire::HardwareAddress;
+use smoltcp::wire::IpListenEndpoint;
+use smoltcp::wire::Ipv4Address;
 
 struct RxToken<'a> {}
 
@@ -71,12 +80,12 @@ impl smoltcp::phy::Device for Device {
 
 enum State {
     TcpConn {
-        socket: SocketHandle,
+        handle: SocketHandle,
         pending_reads: VecDeque<ReadCompleter>,
         pending_writes: VecDeque<WriteCompleter>,
     },
     TcpListener {
-        socket: SocketHandle,
+        handle: SocketHandle,
         pending_accepts: VecDeque<OpenCompleter>,
     },
 }
@@ -102,20 +111,86 @@ struct Main {
 }
 
 impl Main {
-    pub fn tcp_listen(&mut self) -> SocketHandle {
+    pub fn tcp_listen(
+        &mut self,
+        ctx: &mut Context,
+        endpoint: IpListenEndpoint,
+    ) -> Result<Channel, ErrorCode> {
+        let (our_ch, their_ch) = Channel::new()?;
         let rx_buf = tcp::SocketBuffer::new(vec![0; TCP_BUFFER_SIZE]);
         let tx_buf = tcp::SocketBuffer::new(vec![0; TCP_BUFFER_SIZE]);
         let mut socket = tcp::Socket::new(rx_buf, tx_buf);
-        let socket = self.sockets.add(socket);
+
+        socket.set_nagle_enabled(false);
+        socket.set_ack_delay(None);
+
+        match socket.listen(endpoint) {
+            Ok(_) => {}
+            Err(ListenError::Unaddressable) => {
+                return Err(ErrorCode::InvalidArgument);
+            }
+            Err(e) => {
+                println!("unexpected listen error: {:?}", e);
+                return Err(ErrorCode::Unreachable);
+            }
+        }
+
+        let handle = self.sockets.add(socket);
+        ctx.add_channel(our_ch)?;
         self.states.insert(
-            socket,
+            our_ch.handle().id(),
             State::TcpListener {
-                socket,
+                handle,
                 pending_accepts: VecDeque::new(),
             },
         );
 
-        socket
+        Ok(their_ch)
+    }
+}
+
+fn parse_uri(completer: &OpenCompleter) -> Result<Uri, ErrorCode> {
+    let mut buf = [0; 256];
+    let len = completer.read_uri(0, &mut buf)?;
+
+    let Ok(uri) = core::str::from_utf8(&buf[..len]) else {
+        return Err(ErrorCode::InvalidArgument);
+    };
+
+    // Split "tcp-listen:0.0.0.0:8080" into "tcp-listen" and "0.0.0.0:8080".
+    let Some((scheme, rest)) = uri.split_once(':') else {
+        return Err(ErrorCode::InvalidArgument);
+    };
+
+    match scheme {
+        "tcp-listen" => {
+            // Split "0.0.0.0:8080" into "0.0.0.0" and "8080".
+            let Some((addr_str, port_str)) = rest.split_once(':') else {
+                return Err(ErrorCode::InvalidArgument);
+            };
+
+            let Ok(addr) = addr_str.parse::<Ipv4Addr>() else {
+                return Err(ErrorCode::InvalidArgument);
+            };
+
+            let Ok(port) = port_str.parse::<u16>() else {
+                return Err(ErrorCode::InvalidArgument);
+            };
+
+            let endpoint = if addr.is_unspecified() {
+                IpListenEndpoint { addr: None, port }
+            } else {
+                // TODO: We don't support listening on specific addresses for now.
+                return Err(ErrorCode::InvalidArgument);
+            }
+
+            let endpoint = IpListenEndpoint::new(addr, port);
+            Ok(Uri::TcpListen(endpoint))
+        }
+        _ => {
+            // Unknown scheme.
+            Err(ErrorCode::InvalidArgument)
+        }
     }
 }
 
@@ -145,8 +220,18 @@ impl Application for Main {
     }
 
     fn open(&mut self, ctx: &mut Context, completer: OpenCompleter) {
-        println!("received an unexpected message: open");
-        completer.error(ErrorCode::Unsupported)
+        match parse_uri(&completer) {
+            Ok(Uri::TcpListen(endpoint)) => {
+                match self.tcp_listen(ctx, endpoint) {
+                    Ok(new_ch) => completer.complete(new_ch),
+                    Err(error) => completer.error(error),
+                }
+            }
+            Err(error) => {
+                println!("invalid URI: {:?}", error);
+                completer.error(ErrorCode::InvalidArgument)
+            }
+        }
     }
 }
 
