@@ -124,11 +124,16 @@ enum Object {
 pub struct Context<'a> {
     sink: &'a Sink,
     objects: &'a mut HashMap<HandleId, Object>,
+    id: HandleId,
 }
 
 impl<'a> Context<'a> {
-    fn new(sink: &'a Sink, objects: &'a mut HashMap<HandleId, Object>) -> Self {
-        Self { sink, objects }
+    fn new(sink: &'a Sink, objects: &'a mut HashMap<HandleId, Object>, id: HandleId) -> Self {
+        Self { sink, objects, id }
+    }
+
+    pub fn handle_id(&self) -> HandleId {
+        self.id
     }
 
     pub fn add_channel<T: Into<Rc<Channel>>>(&mut self, ch: T) -> Result<(), ErrorCode> {
@@ -192,7 +197,11 @@ pub trait Application {
 pub fn run<A: Application>() {
     let sink = Sink::new().unwrap();
     let mut objects = HashMap::new();
-    let mut app = A::init(&mut Context::new(&sink, &mut objects));
+    let mut app = A::init(&mut Context::new(
+        &sink,
+        &mut objects,
+        HandleId::from_raw(0),
+    ) /* FIXME: */);
     loop {
         let event = sink.wait().unwrap();
         match event {
@@ -208,7 +217,7 @@ pub fn run<A: Application>() {
                     _ => panic!("unknown handle id from sink: {:?}", ch_id),
                 };
 
-                let mut ctx = Context::new(&sink, &mut objects);
+                let mut ctx = Context::new(&sink, &mut objects, ch.handle().id());
                 match info {
                     MessageInfo::OPEN => {
                         let inline = unsafe { &*(inline.as_ptr() as *const OpenInline) };
@@ -240,7 +249,7 @@ pub fn run<A: Application>() {
                     _ => panic!("unknown handle id from sink: {:?}", ch_id),
                 };
 
-                let mut ctx = Context::new(&sink, &mut objects);
+                let mut ctx = Context::new(&sink, &mut objects, ch.handle().id());
                 match info {
                     MessageInfo::OPEN_REPLY => {
                         let inline = unsafe { &*(inline.as_ptr() as *const OpenReplyInline) };
@@ -273,7 +282,7 @@ pub fn run<A: Application>() {
                     _ => panic!("unknown handle id from sink: {:?}", handle_id),
                 };
 
-                let mut ctx = Context::new(&sink, &mut objects);
+                let mut ctx = Context::new(&sink, &mut objects, handle_id);
                 app.irq(&mut ctx, &interrupt, irq);
             }
         }
