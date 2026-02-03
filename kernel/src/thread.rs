@@ -97,7 +97,7 @@ impl Thread {
 
     /// Attempts to resolve the blocked state, and returns `true` if the
     /// thread is now runnable.
-    pub fn poll(self: &SharedRef<Self>, current: &CurrentThread) -> bool {
+    pub fn poll(self: &SharedRef<Self>) -> bool {
         let mut mutable = self.mutable.lock();
         match &mutable.state {
             State::Runnable => true,
@@ -112,6 +112,30 @@ impl Thread {
                     false
                 }
             }
+        }
+    }
+
+    /// Sets the system call return value for this thread.
+    ///
+    /// # Safety
+    ///
+    /// This function must be called only when the thread is not running on
+    /// another CPU. FIXME: Guarantee this!
+    pub unsafe fn set_syscall_result(&self, retval: Result<usize, ErrorCode>) {
+        // Encode the return value.
+        let raw = match retval {
+            Ok(retval) if retval >= ERROR_RETVAL_BASE => {
+                println!("invalid syscall return value: {:x}", retval);
+                ERROR_RETVAL_BASE + ErrorCode::Unreachable as usize
+            }
+            Ok(retval) => retval,
+            Err(error) => ERROR_RETVAL_BASE + error as usize,
+        };
+
+        // FIXME: Terrible hack
+        let arch_thread = &self.arch as *const arch::Thread as *mut arch::Thread;
+        unsafe {
+            (*arch_thread).set_syscall_result(raw);
         }
     }
 }
@@ -201,11 +225,11 @@ fn schedule(current: &CurrentThread) -> Option<*const arch::Thread> {
     let current_thread = current.thread();
     if matches!(current_thread.mutable.lock().state, State::Runnable) {
         // The current thread is runnable. Push it back to the scheduler.
-        SCHEDULER.push_front(current_thread);
+        SCHEDULER.push(current_thread);
     }
 
     while let Some(thread) = SCHEDULER.pop() {
-        if thread.poll(current) {
+        if thread.poll() {
             current.update(thread);
             let arch_thread = current.arch_thread();
             return Some(arch_thread);
