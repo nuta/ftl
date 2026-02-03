@@ -76,9 +76,8 @@ impl Application for Main {
 
         // Look up virtio-net PCI device
         let mut entries: MaybeUninit<[PciEntry; 10]> = MaybeUninit::uninit();
-        let n =
-            ftl::pci::sys_pci_lookup(entries.as_mut_ptr() as *mut PciEntry, 10, 0x1af4, 0x1000)
-                .unwrap();
+        let n = ftl::pci::sys_pci_lookup(entries.as_mut_ptr() as *mut PciEntry, 10, 0x1af4, 0x1000)
+            .unwrap();
 
         let devices =
             unsafe { core::slice::from_raw_parts(entries.as_ptr() as *const PciEntry, n) };
@@ -199,10 +198,13 @@ impl Application for Main {
                     continue;
                 };
 
+                println!("[virtio_net] received packet: {} bytes", used.total_len);
                 let total_len = used.total_len as usize;
                 if total_len > header_len {
-                    let payload_len =
-                        min(total_len - header_len, RX_BUFFER_SIZE.saturating_sub(header_len));
+                    let payload_len = min(
+                        total_len - header_len,
+                        RX_BUFFER_SIZE.saturating_sub(header_len),
+                    );
                     let mut packet = vec![0u8; payload_len];
                     unsafe {
                         let payload_ptr = (rx.vaddr + header_len) as *const u8;
@@ -243,13 +245,7 @@ impl Application for Main {
         self.flush_reads();
     }
 
-    fn write(
-        &mut self,
-        ctx: &mut Context,
-        completer: WriteCompleter,
-        _offset: usize,
-        len: usize,
-    ) {
+    fn write(&mut self, ctx: &mut Context, completer: WriteCompleter, _offset: usize, len: usize) {
         if ctx.handle_id() != self.net_ch_id {
             completer.error(ErrorCode::InvalidArgument);
             return;
@@ -269,7 +265,8 @@ impl Application for Main {
             return;
         }
         data.truncate(read_len);
-        self.pending_writes.push_back(PendingWrite { completer, data });
+        self.pending_writes
+            .push_back(PendingWrite { completer, data });
         self.flush_writes();
     }
 }
@@ -287,6 +284,8 @@ impl Main {
                     continue;
                 }
             };
+
+            println!("[virtio_net] wrote {} bytes to read completer", write_len);
             completer.complete(write_len);
         }
     }
