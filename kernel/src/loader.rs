@@ -1,5 +1,7 @@
 //! Application loader.
+use alloc::collections::btree_map::BTreeMap;
 use alloc::vec;
+use alloc::vec::Vec;
 use core::mem::MaybeUninit;
 use core::mem::size_of;
 use core::slice;
@@ -19,6 +21,7 @@ use crate::isolation::INKERNEL_ISOLATION;
 use crate::memory::PAGE_ALLOCATOR;
 use crate::process::Process;
 use crate::scheduler::SCHEDULER;
+use crate::shared_ref::SharedRef;
 use crate::thread::Thread;
 
 #[repr(C)]
@@ -146,7 +149,7 @@ fn load_elf(file: &initfs::File) -> Result<VAddr, ElfError> {
     Ok(entry)
 }
 
-pub fn load_app(file: &initfs::File, ch: Handle<Channel>) {
+pub fn load_app(file: &initfs::File, mut handles: Vec<SharedRef<Channel>>) {
     let entry = load_elf(&file).expect("failed to load ELF file");
 
     let stack_size = 1024 * 1024;
@@ -169,10 +172,12 @@ pub fn load_app(file: &initfs::File, ch: Handle<Channel>) {
 
     {
         let mut handle_table = process.handle_table().lock();
-        let id = handle_table
-            .insert(ch)
-            .expect("failed to insert channel handle");
-        assert_eq!(id.as_usize(), 1);
+        for (i, handle) in handles.drain(..).enumerate() {
+            let id = handle_table
+                .insert(Handle::new(handle, HandleRight::ALL))
+                .expect("failed to insert channel handle");
+            assert_eq!(id.as_usize(), i + 1);
+        }
     }
 
     let thread =
@@ -182,11 +187,21 @@ pub fn load_app(file: &initfs::File, ch: Handle<Channel>) {
 }
 
 pub fn load(initfs: &InitFs) {
-    let (ch0, ch1) = Channel::new().expect("failed to create ping-pong channel");
-    let mut ping_pong_ch = vec![ch0, ch1];
+    // FIXME: Implement dynamic handle allocation & service discovery.
+    let (tcpip_driver_ch0, tcpip_driver_ch1) =
+        Channel::new().expect("failed to create ping-pong channel");
+    let (tcpip_http_ch0, tcpip_http_ch1) =
+        Channel::new().expect("failed to create ping-pong channel");
+    let mut handles_map = BTreeMap::new();
+    handles_map.insert("virtio_net", vec![tcpip_driver_ch0]);
+    handles_map.insert("tcpip", vec![tcpip_driver_ch1, tcpip_http_ch0]);
+    handles_map.insert("http_server", vec![tcpip_http_ch1]);
+
     for file in initfs.iter() {
-        // FIXME: Implement dynamic handle allocation & service discovery.
-        let handle = Handle::new(ping_pong_ch.pop().unwrap(), HandleRight::ALL);
-        load_app(&file, handle);
+        println!("loading app: {}", file.name);
+        let handles = handles_map
+            .remove(file.name)
+            .expect("app is not defined in the manifest");
+        load_app(&file, handles);
     }
 }
