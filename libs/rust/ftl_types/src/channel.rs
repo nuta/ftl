@@ -8,7 +8,7 @@ pub struct MessageInfo(u32);
 impl MessageInfo {
     pub const ERROR_REPLY: Self = Self::new(1, false, 0, 0, size_of::<ErrorReplyInline>());
     pub const OPEN: Self = Self::new(2, true, 0, 1, size_of::<OpenInline>());
-    pub const OPEN_REPLY: Self = Self::new(3, false, 0, 0, size_of::<OpenReplyInline>());
+    pub const OPEN_REPLY: Self = Self::new(3, false, 1, 0, size_of::<OpenReplyInline>());
     pub const READ: Self = Self::new(4, true, 0, 1, size_of::<ReadInline>());
     pub const READ_REPLY: Self = Self::new(5, false, 0, 0, size_of::<ReadReplyInline>());
     pub const WRITE: Self = Self::new(6, true, 0, 1, size_of::<WriteInline>());

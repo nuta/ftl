@@ -2,6 +2,7 @@ use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::fmt;
+use core::mem;
 use core::mem::MaybeUninit;
 
 use ftl_types::channel::CallId;
@@ -207,6 +208,7 @@ impl Channel {
             }
             Reply::OpenReply { ch } => {
                 body.handles[0] = ch.handle.id();
+                mem::forget(ch); // Will be moved by the kernel. Don't drop it.
                 MessageInfo::OPEN_REPLY
             }
             Reply::ReadReply { len } => {
