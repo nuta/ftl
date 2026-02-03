@@ -2,7 +2,7 @@
 set -eu
 
 ARCH=x64
-APPS=(virtio_net tcpip)
+APPS=(virtio_net tcpip http_server)
 
 cargo build \
   -Z build-std=core,alloc \
