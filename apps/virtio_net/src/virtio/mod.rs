@@ -16,6 +16,7 @@ use core::sync::atomic::fence;
 
 use ftl::error::ErrorCode;
 use ftl::prelude::*;
+use ftl::println;
 use ftl_utils::alignment::align_up;
 
 const PCI_IOPORT_DEVICE_FEATURES: u16 = 0;
@@ -210,8 +211,24 @@ impl VirtQueue {
         let elem = unsafe { read_volatile((*self.used).ring.as_ptr().add(index)) };
         self.last_used_idx = self.last_used_idx.wrapping_add(1);
 
-        // Return the descriptor to the free pool.
-        self.free_indicies.push(elem.id as u16);
+        // Return all descriptors in the chain to the free pool.
+        let mut index = elem.id as u16;
+        let mut count = 0;
+        loop {
+            if count >= self.queue_size {
+                // Too long chain. This should never happen, but it's not
+                // critical enough to panic. Just log it.
+                println!("virtio: too long chain detected");
+                break;
+            }
+
+            self.free_indicies.push(index);
+            let desc = unsafe { read_volatile(self.descs.add(index as usize)) };
+            if desc.flags & DESC_F_NEXT == 0 {
+                break;
+            }
+            index = desc.next;
+        }
 
         Some(UsedChain {
             head: HeadId(elem.id as u16),
