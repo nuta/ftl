@@ -104,6 +104,8 @@ impl Sink {
             let Some(object) = handle_table.get_any(handle_id) else {
                 // The object has been removed from the handle table.
                 // TODO: What if the ID is reused?
+                mutable.ready_queue.pop_front();
+                mutable.ready_set.remove(&handle_id.as_usize());
                 continue;
             };
 

@@ -12,9 +12,9 @@ use ftl_types::channel::NUM_HANDLES_MAX;
 use ftl_types::channel::NUM_OOLS_MAX;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
+use ftl_types::sink::ChannelClosedEvent;
 use ftl_types::sink::EventBody;
 use ftl_types::sink::EventType;
-use ftl_types::sink::ChannelClosedEvent;
 use ftl_types::sink::MessageEvent;
 
 use crate::handle::AnyHandle;

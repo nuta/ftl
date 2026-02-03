@@ -308,14 +308,21 @@ impl Main {
     }
 
     pub fn poll(&mut self, ctx: &mut Context) {
-        let now = self.smol_clock.now();
         loop {
+            let now = self.smol_clock.now();
             let result = self.iface.poll(now, &mut self.device, &mut self.sockets);
             self.do_poll(ctx);
-            match result {
-                PollResult::SocketStateChanged => continue,
-                PollResult::None => break,
+            if matches!(result, PollResult::SocketStateChanged) {
+                continue;
             }
+
+            // We may have queued data while handling sockets. Poll once more to flush.
+            let now = self.smol_clock.now();
+            let result = self.iface.poll(now, &mut self.device, &mut self.sockets);
+            if matches!(result, PollResult::SocketStateChanged) {
+                continue;
+            }
+            break;
         }
     }
 
@@ -358,6 +365,7 @@ impl Main {
                         }
                         tcp::State::Established | tcp::State::FinWait1 | tcp::State::FinWait2 => {
                             tcp_read_write(socket, &mut state_borrow);
+                            tcp_channel_closed(socket, &mut state_borrow);
                         }
                         tcp::State::CloseWait => {
                             tcp_read_write(socket, &mut state_borrow);
@@ -459,6 +467,30 @@ fn tcp_read_write(socket: &mut tcp::Socket, state: &mut State) {
     }
 }
 
+fn tcp_channel_closed(socket: &mut tcp::Socket, state: &mut State) {
+    let State::TcpConn {
+        pending_writes,
+        channel_closed,
+        ..
+    } = state
+    else {
+        unreachable!();
+    };
+
+    if !*channel_closed {
+        return;
+    }
+
+    if !pending_writes.is_empty() {
+        // Still have application data to enqueue.
+        return;
+    }
+
+    // Initiate a local close (FIN) when the channel is closed.
+    println!("[tcpip] initiating FIN (channel closed)");
+    socket.close();
+}
+
 fn tcp_peer_closed(socket: &mut tcp::Socket, state: &mut State) {
     let State::TcpConn {
         pending_reads,
@@ -493,6 +525,7 @@ fn tcp_peer_closed(socket: &mut tcp::Socket, state: &mut State) {
     debug_assert!(pending_writes.is_empty());
 
     // It's safe to close the socket now. Send a FIN packet to the peer.
+    println!("[tcpip] closing socket (peer closed)");
     socket.close();
 }
 
