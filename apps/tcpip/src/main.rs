@@ -186,10 +186,13 @@ impl smoltcp::phy::Device for Device {
 }
 
 enum State {
+    Driver,
+    Control,
     TcpConn {
         handle: SocketHandle,
         pending_reads: VecDeque<ReadCompleter>,
         pending_writes: VecDeque<WriteCompleter>,
+        channel_id: HandleId,
         channel_closed: bool,
     },
     TcpListener {
@@ -281,6 +284,7 @@ impl Main {
             handle: accepted_handle,
             pending_reads: VecDeque::new(),
             pending_writes: VecDeque::new(),
+            channel_id: new_ch_id,
             channel_closed: false,
         }));
 
@@ -330,15 +334,10 @@ impl Main {
                             }
                         }
                         tcp::State::Established | tcp::State::FinWait1 | tcp::State::FinWait2 => {
-                            if socket.can_recv() {
-                                tcp_readable(socket, &mut state_borrow);
-                            }
-
-                            if socket.can_send() {
-                                tcp_writable(socket, &mut state_borrow);
-                            }
+                            tcp_read_write(socket, &mut state_borrow);
                         }
                         tcp::State::CloseWait => {
+                            tcp_read_write(socket, &mut state_borrow);
                             tcp_peer_closed(socket, &mut state_borrow);
                         }
                         tcp::State::Closing | tcp::State::LastAck => {
@@ -346,7 +345,8 @@ impl Main {
                         }
                         tcp::State::TimeWait | tcp::State::Closed => {
                             // The socket has been closed by both sides.
-                            destroyed_sockets.push(handle);
+                            let channel_id = tcp_destroyed(&mut state_borrow);
+                            destroyed_sockets.push((handle, channel_id));
                         }
                     }
                 }
@@ -360,20 +360,30 @@ impl Main {
             }
         }
 
-        for handle in destroyed_sockets {
+        for (handle, channel_id) in destroyed_sockets {
             self.sockets.remove(handle);
             self.states_by_handle.remove(&handle);
+            if let Err(error) = ctx.remove(channel_id) {
+                println!("failed to remove channel: {:?}", error);
+            }
         }
     }
 }
 
-fn tcp_readable(socket: &mut tcp::Socket, state: &mut State) {
-    let State::TcpConn { pending_reads, .. } = state else {
+fn tcp_read_write(socket: &mut tcp::Socket, state: &mut State) {
+    let State::TcpConn {
+        pending_reads,
+        pending_writes,
+        ..
+    } = state
+    else {
         unreachable!();
     };
 
-    while let Some(completer) = pending_reads.pop_front() {
-        debug_assert!(socket.can_recv());
+    while socket.can_recv() {
+        let Some(completer) = pending_reads.pop_front() else {
+            break;
+        };
         socket.recv(|buf| {
             // Documentation:
             //
@@ -395,15 +405,11 @@ fn tcp_readable(socket: &mut tcp::Socket, state: &mut State) {
             (read_len, () /* retrun value of recv */)
         });
     }
-}
 
-fn tcp_writable(socket: &mut tcp::Socket, state: &mut State) {
-    let State::TcpConn { pending_writes, .. } = state else {
-        unreachable!();
-    };
-
-    while let Some(completer) = pending_writes.pop_front() {
-        debug_assert!(socket.can_send());
+    while socket.can_send() {
+        let Some(completer) = pending_writes.pop_front() else {
+            break;
+        };
         socket.send(|buf| {
             // Documentation:
             //
@@ -429,14 +435,6 @@ fn tcp_writable(socket: &mut tcp::Socket, state: &mut State) {
 }
 
 fn tcp_peer_closed(socket: &mut tcp::Socket, state: &mut State) {
-    if socket.can_recv() {
-        tcp_readable(socket, state);
-    }
-
-    if socket.can_send() {
-        tcp_writable(socket, state);
-    }
-
     let State::TcpConn {
         pending_reads,
         pending_writes,
@@ -471,6 +469,28 @@ fn tcp_peer_closed(socket: &mut tcp::Socket, state: &mut State) {
 
     // It's safe to close the socket now. Send a FIN packet to the peer.
     socket.close();
+}
+
+fn tcp_destroyed(state: &mut State) -> HandleId {
+    let State::TcpConn {
+        pending_reads,
+        pending_writes,
+        channel_id,
+        ..
+    } = state
+    else {
+        unreachable!();
+    };
+
+    for completer in pending_reads.drain(..) {
+        completer.complete(0);
+    }
+
+    for completer in pending_writes.drain(..) {
+        completer.error(ErrorCode::PeerClosed);
+    }
+
+    *channel_id
 }
 
 fn parse_uri(completer: &OpenCompleter) -> Result<Uri, ErrorCode> {
@@ -538,7 +558,7 @@ impl Application for Main {
         });
 
         Self {
-            smol_clock: SmolClock::new(),
+            smol_clock,
             sockets: SocketSet::new(Vec::new()),
             states_by_ch: HashMap::new(),
             states_by_handle: HashMap::new(),
@@ -548,16 +568,35 @@ impl Application for Main {
     }
 
     fn open(&mut self, ctx: &mut Context, completer: OpenCompleter) {
-        match parse_uri(&completer) {
-            Ok(Uri::TcpListen(endpoint)) => {
-                match self.tcp_listen(ctx, endpoint) {
-                    Ok(new_ch) => completer.complete(new_ch),
-                    Err(error) => completer.error(error),
+        let Some(state) = self.states_by_ch.get(&ctx.handle_id()) else {
+            completer.error(ErrorCode::InvalidArgument);
+            return;
+        };
+
+        let mut state_borrow = state.borrow_mut();
+        match &mut *state_borrow {
+            State::TcpListener {
+                pending_accepts, ..
+            } => {
+                pending_accepts.push_back(completer);
+            }
+            State::Control => {
+                drop(state_borrow);
+                match parse_uri(&completer) {
+                    Ok(Uri::TcpListen(endpoint)) => {
+                        match self.tcp_listen(ctx, endpoint) {
+                            Ok(new_ch) => completer.complete(new_ch),
+                            Err(error) => completer.error(error),
+                        }
+                    }
+                    Err(error) => {
+                        println!("invalid URI: {:?}", error);
+                        completer.error(ErrorCode::InvalidArgument)
+                    }
                 }
             }
-            Err(error) => {
-                println!("invalid URI: {:?}", error);
-                completer.error(ErrorCode::InvalidArgument)
+            State::TcpConn { .. } | State::Driver => {
+                completer.error(ErrorCode::Unsupported);
             }
         }
     }
@@ -577,6 +616,9 @@ impl Application for Main {
                 self.poll(ctx);
             }
             State::TcpListener { .. } => {
+                completer.error(ErrorCode::Unsupported);
+            }
+            State::Driver | State::Control => {
                 completer.error(ErrorCode::Unsupported);
             }
         }
@@ -599,18 +641,29 @@ impl Application for Main {
             State::TcpListener { .. } => {
                 completer.error(ErrorCode::Unsupported);
             }
+            State::Driver | State::Control => {
+                completer.error(ErrorCode::Unsupported);
+            }
         }
     }
 
     fn read_reply(&mut self, ctx: &mut Context, _ch: &Rc<Channel>, buf: BufferMut, len: usize) {
-        if ctx.handle_id() == self.device.handle_id() {
-            // TODO: Use State.
-            self.device.on_read_reply(buf, len);
-            self.poll(ctx);
-            return;
-        }
+        let mut state = self
+            .states_by_ch
+            .get(&ctx.handle_id())
+            .unwrap()
+            .borrow_mut();
 
-        println!("unexpected read reply on {:?}", ctx.handle_id());
+        match &mut *state {
+            State::Driver => {
+                drop(state);
+                self.device.on_read_reply(buf, len);
+                self.poll(ctx);
+            }
+            _ => {
+                println!("unexpected read reply");
+            }
+        }
     }
 
     fn write_reply(&mut self, ctx: &mut Context, _ch: &Rc<Channel>, _buf: Buffer, _len: usize) {
@@ -641,6 +694,12 @@ impl Application for Main {
                 pending_accepts, ..
             } => {
                 // Nothing t odo.
+            }
+            State::Driver => {
+                todo!("handle driver peer closed");
+            }
+            State::Control => {
+                // Nothing to do.
             }
         }
 
