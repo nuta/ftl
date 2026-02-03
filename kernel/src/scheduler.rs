@@ -28,4 +28,10 @@ impl Scheduler {
     pub fn push(&self, thread: SharedRef<Thread>) {
         self.runqueue.lock().push_back(thread);
     }
+
+    /// Pushes a runnable thread to the front of the runqueue, so that it willl
+    /// be picked first.
+    pub fn push_front(&self, thread: SharedRef<Thread>) {
+        self.runqueue.lock().push_front(thread);
+    }
 }

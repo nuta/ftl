@@ -201,7 +201,7 @@ fn schedule(current: &CurrentThread) -> Option<*const arch::Thread> {
     let current_thread = current.thread();
     if matches!(current_thread.mutable.lock().state, State::Runnable) {
         // The current thread is runnable. Push it back to the scheduler.
-        SCHEDULER.push(current_thread);
+        SCHEDULER.push_front(current_thread);
     }
 
     while let Some(thread) = SCHEDULER.pop() {
