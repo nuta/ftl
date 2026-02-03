@@ -13,6 +13,7 @@ pub mod arch;
 mod panic;
 
 pub mod application;
+pub mod collections;
 pub mod dmabuf;
 pub mod error;
 pub mod handle;
