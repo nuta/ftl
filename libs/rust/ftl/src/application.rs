@@ -154,6 +154,12 @@ impl<'a> Context<'a> {
             .insert(interrupt.handle().id(), Object::Interrupt(interrupt));
         Ok(())
     }
+
+    pub fn remove(&mut self, id: HandleId) -> Result<(), ErrorCode> {
+        self.sink.remove(id)?;
+        self.objects.remove(&id);
+        Ok(())
+    }
 }
 
 pub trait Application {
