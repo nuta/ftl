@@ -92,13 +92,13 @@ pub extern "C" fn syscall_handler(
     let thread = current.thread();
     match do_syscall(&thread, n, a0, a1, a2, a3, a4) {
         Ok(SyscallResult::Return(retval)) => {
-            unsafe { current.set_syscall_result(Ok(retval)) };
+            unsafe { thread.set_syscall_result(Ok(retval)) };
         }
         Ok(SyscallResult::Blocked(promise)) => {
             thread.block_on(promise);
         }
         Err(error) => {
-            unsafe { current.set_syscall_result(Err(error)) };
+            unsafe { thread.set_syscall_result(Err(error)) };
         }
     }
     return_to_user();
