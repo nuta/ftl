@@ -5,12 +5,22 @@ edition = "2024"
 
 [workspace]
 resolver = "2"
-members = ["apps/hello", "apps/ping", "apps/pong", "apps/virtio_net", "kernel", "libs/rust/*"]
+members = [
+    "apps/hello",
+    "apps/ping",
+    "apps/pong",
+    "apps/tcpip",
+    "apps/virtio_net",
+    "kernel",
+    "libs/rust/*",
+]
 
 [workspace.dependencies]
 talc = "4.4.3"
 spin = "0.10.0"
 hashbrown = "0.16.1"
+smoltcp = { version = "0.12.0", default-features = false }
+httparse = { version = "1.10.1", default-features = false }
 
 ftl = { path = "libs/rust/ftl" }
 ftl_types = { path = "libs/rust/ftl_types" }
