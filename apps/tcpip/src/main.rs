@@ -24,6 +24,7 @@ use ftl::prelude::*;
 use ftl::println;
 use ftl::rc::Rc;
 use smoltcp::iface::Interface;
+use smoltcp::iface::PollResult;
 use smoltcp::iface::SocketHandle;
 use smoltcp::iface::SocketSet;
 use smoltcp::phy::DeviceCapabilities;
@@ -307,10 +308,20 @@ impl Main {
     }
 
     pub fn poll(&mut self, ctx: &mut Context) {
+        let now = self.smol_clock.now();
+        loop {
+            let result = self.iface.poll(now, &mut self.device, &mut self.sockets);
+            self.do_poll(ctx);
+            match result {
+                PollResult::SocketStateChanged => continue,
+                PollResult::None => break,
+            }
+        }
+    }
+
+    fn do_poll(&mut self, ctx: &mut Context) {
         use smoltcp::socket::Socket;
 
-        let now = self.smol_clock.now();
-        let result = self.iface.poll(now, &mut self.device, &mut self.sockets);
         let mut accepted_sockets = Vec::new();
         let mut destroyed_sockets = Vec::new();
         for (handle, socket) in self.sockets.iter_mut() {
@@ -323,21 +334,26 @@ impl Main {
                             // No state changes.
                         }
                         tcp::State::SynReceived => {
-                            let State::TcpListener {
-                                pending_accepts, ..
-                            } = &mut *state_borrow
-                            else {
-                                println!("[tcpip] unexpected state: {:?}", *state_borrow);
-                                unreachable!();
-                            };
-
-                            // Check if we can accept a new connection.
-                            if let Some(completer) = pending_accepts.pop_front() {
-                                accepted_sockets.push((
-                                    handle,
-                                    socket.listen_endpoint(),
-                                    completer,
-                                ));
+                            match &mut *state_borrow {
+                                State::TcpListener {
+                                    pending_accepts, ..
+                                } => {
+                                    // Check if we can accept a new connection.
+                                    if let Some(completer) = pending_accepts.pop_front() {
+                                        accepted_sockets.push((
+                                            handle,
+                                            socket.listen_endpoint(),
+                                            completer,
+                                        ));
+                                    }
+                                }
+                                State::TcpConn { .. } => {
+                                    // Handshake in progress for an accepted socket.
+                                }
+                                _ => {
+                                    println!("[tcpip] unexpected state: {:?}", *state_borrow);
+                                    unreachable!();
+                                }
                             }
                         }
                         tcp::State::Established | tcp::State::FinWait1 | tcp::State::FinWait2 => {
