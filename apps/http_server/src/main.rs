@@ -26,7 +26,7 @@ use httparse::EMPTY_HEADER;
 use httparse::Request;
 use httparse::Status;
 
-const LISTEN_PORT: u16 = 8080;
+const LISTEN_PORT: u16 = 80;
 const READ_BUFFER_SIZE: usize = 2048;
 const MAX_HEADERS: usize = 16;
 const INDEX_RESPONSE: &[u8] = b"HTTP/1.1 200 OK\r\nContent-Length: 96\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n<!doctype html><html><head><title>FTL</title></head><body><h1>FTL HTTP server</h1></body></html>";
@@ -256,6 +256,7 @@ impl Application for Main {
         );
 
         if is_control {
+            println!("[http] opened a listen port: {:?}", new_id);
             self.channels
                 .insert(new_id, ChannelState::Listener { ch: new_ch.clone() });
             self.request_accept(&new_ch);

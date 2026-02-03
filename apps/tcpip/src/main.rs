@@ -3,6 +3,7 @@
 #![allow(unused)]
 
 use core::cell::RefCell;
+use core::fmt;
 
 use ftl::application::Application;
 use ftl::application::Context;
@@ -195,6 +196,17 @@ enum State {
     },
 }
 
+impl fmt::Debug for State {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            State::Driver => write!(f, "Driver"),
+            State::Control => write!(f, "Control"),
+            State::TcpConn { .. } => write!(f, "TcpConn"),
+            State::TcpListener { .. } => write!(f, "TcpListener"),
+        }
+    }
+}
+
 struct SmolClock {}
 
 impl SmolClock {
@@ -315,6 +327,7 @@ impl Main {
                                 pending_accepts, ..
                             } = &mut *state_borrow
                             else {
+                                println!("[tcpip] unexpected state: {:?}", *state_borrow);
                                 unreachable!();
                             };
 
