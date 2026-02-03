@@ -345,7 +345,6 @@ impl Main {
                         }
                         tcp::State::TimeWait | tcp::State::Closed => {
                             // The socket has been closed by both sides.
-                            let channel_id = tcp_destroyed(&mut state_borrow);
                             destroyed_sockets.push((handle, channel_id));
                         }
                     }
@@ -469,28 +468,6 @@ fn tcp_peer_closed(socket: &mut tcp::Socket, state: &mut State) {
 
     // It's safe to close the socket now. Send a FIN packet to the peer.
     socket.close();
-}
-
-fn tcp_destroyed(state: &mut State) -> HandleId {
-    let State::TcpConn {
-        pending_reads,
-        pending_writes,
-        channel_id,
-        ..
-    } = state
-    else {
-        unreachable!();
-    };
-
-    for completer in pending_reads.drain(..) {
-        completer.complete(0);
-    }
-
-    for completer in pending_writes.drain(..) {
-        completer.error(ErrorCode::PeerClosed);
-    }
-
-    *channel_id
 }
 
 fn parse_uri(completer: &OpenCompleter) -> Result<Uri, ErrorCode> {
