@@ -7,6 +7,7 @@ use ftl_types::syscall::SYS_CHANNEL_OOL_WRITE;
 use ftl_types::syscall::SYS_CHANNEL_SEND;
 use ftl_types::syscall::SYS_CONSOLE_WRITE;
 use ftl_types::syscall::SYS_DMABUF_ALLOC;
+use ftl_types::syscall::SYS_HANDLE_CLOSE;
 use ftl_types::syscall::SYS_INTERRUPT_ACKNOWLEDGE;
 use ftl_types::syscall::SYS_INTERRUPT_ACQUIRE;
 #[cfg(target_arch = "x86_64")]
@@ -49,6 +50,7 @@ fn do_syscall(
             arch::console_write(s);
             Ok(SyscallResult::Return(0))
         }
+        SYS_HANDLE_CLOSE => crate::handle::sys_handle_close(thread, a0),
         SYS_CHANNEL_CREATE => crate::channel::sys_channel_create(thread, a0),
         SYS_CHANNEL_SEND => crate::channel::sys_channel_send(thread, a0, a1, a2, a3, a4),
         SYS_CHANNEL_OOL_READ => crate::channel::sys_channel_ool_read(thread, a0, a1, a2, a3, a4),
