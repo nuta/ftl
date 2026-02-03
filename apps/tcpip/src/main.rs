@@ -366,9 +366,12 @@ impl Main {
                                 }
                             }
                         }
-                        tcp::State::Established | tcp::State::FinWait1 | tcp::State::FinWait2 => {
+                        tcp::State::Established => {
                             tcp_read_write(socket, &mut state_borrow);
                             tcp_channel_closed(socket, &mut state_borrow);
+                        }
+                        tcp::State::FinWait1 | tcp::State::FinWait2 => {
+                            tcp_read_write(socket, &mut state_borrow);
                         }
                         tcp::State::CloseWait => {
                             tcp_read_write(socket, &mut state_borrow);
@@ -470,6 +473,7 @@ fn tcp_read_write(socket: &mut tcp::Socket, state: &mut State) {
     }
 }
 
+// TODO: Merge this into tcp_read_write?
 fn tcp_channel_closed(socket: &mut tcp::Socket, state: &mut State) {
     let State::TcpConn {
         pending_writes,
