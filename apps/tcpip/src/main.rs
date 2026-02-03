@@ -518,8 +518,7 @@ fn parse_uri(completer: &OpenCompleter) -> Result<Uri, ErrorCode> {
 
 impl Application for Main {
     fn init(ctx: &mut Context) -> Self {
-        println!("TODO TODO TODO: fill in the MAC address");
-        let hwaddr = [0u8; 6];
+        let hwaddr = [0x52, 0x54, 0x00, 0x12, 0x34, 0x56];
         let gw_ip = Ipv4Address::new(10, 0, 2, 1);
         let our_ip = IpCidr::Ipv4(Ipv4Cidr::new(Ipv4Address::new(10, 0, 2, 15), 24));
 
