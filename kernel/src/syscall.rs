@@ -7,6 +7,7 @@ use ftl_types::syscall::SYS_CHANNEL_OOL_WRITE;
 use ftl_types::syscall::SYS_CHANNEL_SEND;
 use ftl_types::syscall::SYS_CONSOLE_WRITE;
 use ftl_types::syscall::SYS_DMABUF_ALLOC;
+use ftl_types::syscall::SYS_HANDLE_CLOSE;
 use ftl_types::syscall::SYS_INTERRUPT_ACKNOWLEDGE;
 use ftl_types::syscall::SYS_INTERRUPT_ACQUIRE;
 #[cfg(target_arch = "x86_64")]
@@ -18,6 +19,7 @@ use ftl_types::syscall::SYS_PCI_LOOKUP;
 use ftl_types::syscall::SYS_PCI_SET_BUSMASTER;
 use ftl_types::syscall::SYS_SINK_ADD;
 use ftl_types::syscall::SYS_SINK_CREATE;
+use ftl_types::syscall::SYS_SINK_REMOVE;
 use ftl_types::syscall::SYS_SINK_WAIT;
 #[cfg(target_arch = "x86_64")]
 use ftl_types::syscall::SYS_X64_IOPL;
@@ -49,12 +51,14 @@ fn do_syscall(
             arch::console_write(s);
             Ok(SyscallResult::Return(0))
         }
+        SYS_HANDLE_CLOSE => crate::handle::sys_handle_close(thread, a0),
         SYS_CHANNEL_CREATE => crate::channel::sys_channel_create(thread, a0),
         SYS_CHANNEL_SEND => crate::channel::sys_channel_send(thread, a0, a1, a2, a3, a4),
         SYS_CHANNEL_OOL_READ => crate::channel::sys_channel_ool_read(thread, a0, a1, a2, a3, a4),
         SYS_CHANNEL_OOL_WRITE => crate::channel::sys_channel_ool_write(thread, a0, a1, a2, a3, a4),
         SYS_SINK_CREATE => crate::sink::sys_sink_create(thread),
         SYS_SINK_ADD => crate::sink::sys_sink_add(thread, a0, a1),
+        SYS_SINK_REMOVE => crate::sink::sys_sink_remove(thread, a0, a1),
         SYS_SINK_WAIT => crate::sink::sys_sink_wait(thread, a0, a1),
         SYS_DMABUF_ALLOC => crate::memory::sys_dmabuf_alloc(thread, a0, a1, a2),
         #[cfg(target_arch = "x86_64")]

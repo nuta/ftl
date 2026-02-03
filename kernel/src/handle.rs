@@ -1,12 +1,15 @@
 use core::any::Any;
 
 use ftl_types::error::ErrorCode;
+use ftl_types::handle::HandleId;
 use ftl_types::sink::EventBody;
 use ftl_types::sink::EventType;
 
 use crate::process::HandleTable;
 use crate::shared_ref::SharedRef;
 use crate::sink::EventEmitter;
+use crate::syscall::SyscallResult;
+use crate::thread::Thread;
 
 /// A set of allowed operations on a kernel object.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -87,4 +90,17 @@ pub trait Handleable: Any + Send + Sync {
     ) -> Result<Option<(EventType, EventBody)>, ErrorCode> {
         Err(ErrorCode::Unsupported)
     }
+}
+
+pub fn sys_handle_close(
+    current: &SharedRef<Thread>,
+    a0: usize,
+) -> Result<SyscallResult, ErrorCode> {
+    let handle_id = HandleId::from_raw(a0);
+
+    let process = current.process();
+    let mut handle_table = process.handle_table().lock();
+    handle_table.remove(handle_id)?;
+
+    Ok(SyscallResult::Return(0))
 }

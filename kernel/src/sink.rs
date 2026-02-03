@@ -69,6 +69,13 @@ impl Sink {
         Ok(())
     }
 
+    fn remove(&self, id: HandleId) -> Result<(), ErrorCode> {
+        let mut mutable = self.mutable.lock();
+        mutable.ready_set.remove(&id.as_usize());
+        mutable.ready_queue.remove(id.as_usize());
+        Ok(())
+    }
+
     fn enqueue(&self, id: HandleId) {
         let mut mutable = self.mutable.lock();
         if mutable.ready_set.contains(&id.as_usize()) {
@@ -155,6 +162,24 @@ pub fn sys_sink_add(
         .get::<Sink>(sink_id)?
         .authorize(HandleRight::WRITE)?
         .add(object_id, object)?;
+
+    Ok(SyscallResult::Return(0))
+}
+
+pub fn sys_sink_remove(
+    current: &SharedRef<Thread>,
+    a0: usize,
+    a1: usize,
+) -> Result<SyscallResult, ErrorCode> {
+    let sink_id = HandleId::from_raw(a0);
+    let object_id = HandleId::from_raw(a1);
+
+    let process = current.process();
+    let mut handle_table = process.handle_table().lock();
+    handle_table
+        .get::<Sink>(sink_id)?
+        .authorize(HandleRight::WRITE)?
+        .remove(object_id)?;
 
     Ok(SyscallResult::Return(0))
 }
