@@ -345,7 +345,10 @@ impl Main {
                         }
                         tcp::State::TimeWait | tcp::State::Closed => {
                             // The socket has been closed by both sides.
-                            destroyed_sockets.push((handle, channel_id));
+                            let State::TcpConn { channel_id, .. } = &mut *state_borrow else {
+                                unreachable!();
+                            };
+                            destroyed_sockets.push((handle, *channel_id));
                         }
                     }
                 }
