@@ -9,6 +9,7 @@ pub struct EventType(u32);
 impl EventType {
     pub const MESSAGE: Self = Self(1);
     pub const IRQ: Self = Self(2);
+    pub const PEER_CLOSED: Self = Self(3);
 }
 
 #[derive(Clone, Copy)]
@@ -26,9 +27,14 @@ pub struct IrqEvent {
 
 #[derive(Clone, Copy)]
 #[repr(C)]
+pub struct PeerClosedEvent {}
+
+#[derive(Clone, Copy)]
+#[repr(C)]
 pub union EventBody {
     pub message: MessageEvent,
     pub irq: IrqEvent,
+    pub peer_closed: PeerClosedEvent,
 }
 
 #[derive(Clone, Copy)]

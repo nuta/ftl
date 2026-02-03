@@ -15,6 +15,7 @@ use ftl_types::handle::HandleId;
 use ftl_types::sink::EventBody;
 use ftl_types::sink::EventType;
 use ftl_types::sink::MessageEvent;
+use ftl_types::sink::PeerClosedEvent;
 
 use crate::handle::AnyHandle;
 use crate::handle::Handle;
@@ -61,6 +62,7 @@ struct Mutable {
     emitter: Option<EventEmitter>,
     calls: BTreeMap<u32 /* call id */, Call>,
     next_call_id: u32,
+    peer_closed_notified: bool, // TODO: State: Connected(peer_ch), PeerClosed, Draining /* notified */
 }
 
 pub struct Channel {
@@ -76,6 +78,7 @@ impl Channel {
                 emitter: None,
                 calls: BTreeMap::new(),
                 next_call_id: 1,
+                peer_closed_notified: false,
             }),
         })?;
         let ch1 = SharedRef::new(Self {
@@ -85,6 +88,7 @@ impl Channel {
                 emitter: None,
                 calls: BTreeMap::new(),
                 next_call_id: 1,
+                peer_closed_notified: false,
             }),
         })?;
         ch0.mutable.lock().peer = Some(ch1.clone());
@@ -284,12 +288,41 @@ impl Handleable for Channel {
         Ok(())
     }
 
+    fn close(&self) {
+        // Take the peer to decrement its reference count.
+        let peer = {
+            let mut mutable = self.mutable.lock();
+            mutable.peer.take()
+        };
+
+        let Some(peer) = peer else {
+            // The peer already cleared our peer field. Do nothing.
+            return;
+        };
+
+        let mut peer_mutable = peer.mutable.lock();
+        peer_mutable.peer = None;
+        if let Some(ref emitter) = peer_mutable.emitter {
+            emitter.notify();
+        }
+    }
+
     fn read_event(
         &self,
         handle_table: &mut HandleTable,
     ) -> Result<Option<(EventType, EventBody)>, ErrorCode> {
         let mut mutable = self.mutable.lock();
         let Some(message) = mutable.queue.pop_front() else {
+            if mutable.peer.is_none() && !mutable.peer_closed_notified {
+                mutable.peer_closed_notified = true;
+                return Ok(Some((
+                    EventType::PEER_CLOSED,
+                    EventBody {
+                        peer_closed: PeerClosedEvent {},
+                    },
+                )));
+            }
+
             return Ok(None);
         };
 

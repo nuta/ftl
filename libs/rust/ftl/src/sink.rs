@@ -37,6 +37,9 @@ pub enum Event {
         handles: ArrayVec<OwnedHandle, NUM_HANDLES_MAX>,
         inline: [u8; INLINE_LEN_MAX],
     },
+    PeerClosed {
+        ch_id: HandleId,
+    },
     Irq {
         handle_id: HandleId,
         irq: u8,
@@ -106,6 +109,11 @@ impl Sink {
                 Event::Irq {
                     handle_id: raw.header.id,
                     irq: irq_event.irq,
+                }
+            }
+            EventType::PEER_CLOSED => {
+                Event::PeerClosed {
+                    ch_id: raw.header.id,
                 }
             }
             _ => {

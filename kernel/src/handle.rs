@@ -5,6 +5,7 @@ use ftl_types::handle::HandleId;
 use ftl_types::sink::EventBody;
 use ftl_types::sink::EventType;
 
+use crate::channel::Channel;
 use crate::process::HandleTable;
 use crate::shared_ref::SharedRef;
 use crate::sink::EventEmitter;
@@ -82,6 +83,10 @@ impl<T: Handleable> From<Handle<T>> for AnyHandle {
 pub trait Handleable: Any + Send + Sync {
     fn set_event_emitter(&self, _emitter: Option<EventEmitter>) -> Result<(), ErrorCode> {
         Err(ErrorCode::Unsupported)
+    }
+
+    fn close(&self) {
+        // Do nothing by default.
     }
 
     fn read_event(
