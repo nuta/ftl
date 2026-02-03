@@ -7,13 +7,23 @@ use core::mem::size_of;
 
 use ftl::application::Application;
 use ftl::application::Context;
+use ftl::application::ReadCompleter;
+use ftl::application::WriteCompleter;
+use ftl::arch::min_page_size;
+use ftl::channel::Channel;
+use ftl::collections::VecDeque;
+use ftl::error::ErrorCode;
+use ftl::handle::HandleId;
+use ftl::handle::OwnedHandle;
 use ftl::interrupt::Interrupt;
 use ftl::pci::PciEntry;
 use ftl::prelude::*;
 use ftl::println;
 use ftl::rc::Rc;
+use ftl_utils::alignment::align_up;
 
 use crate::virtio::ChainEntry;
+use crate::virtio::Error as VirtioError;
 use crate::virtio::VirtQueue;
 use crate::virtio::VirtioPci;
 
@@ -29,45 +39,37 @@ struct VirtioNetHdr {
     csum_offset: u16,
 }
 
-#[repr(C, packed)]
-struct EthernetHeader {
-    dst: [u8; 6],
-    src: [u8; 6],
-    ethertype: u16,
-}
-
-#[repr(C, packed)]
-struct ArpPacket {
-    htype: u16,
-    ptype: u16,
-    hlen: u8,
-    plen: u8,
-    oper: u16,
-    sha: [u8; 6],
-    spa: [u8; 4],
-    tha: [u8; 6],
-    tpa: [u8; 4],
-}
-
-const ETHERTYPE_ARP: u16 = 0x0806;
-const ETHERTYPE_IPV4: u16 = 0x0800;
-const ARP_HTYPE_ETHERNET: u16 = 1;
-const ARP_OP_REQUEST: u16 = 1;
-const ARP_OP_REPLY: u16 = 2;
 const MIN_ETH_FRAME: usize = 60;
 const RX_BUFFER_SIZE: usize = 1514 + size_of::<VirtioNetHdr>();
+const TX_BUFFER_SIZE: usize = RX_BUFFER_SIZE;
 
-struct RxRequest {
+struct OngoingRx {
     vaddr: usize,
     paddr: usize,
+}
+
+struct OngoingTx {
+    vaddr: usize,
+    paddr: usize,
+    size: usize,
+}
+
+struct PendingWrite {
+    completer: WriteCompleter,
+    data: Vec<u8>,
 }
 
 struct Main {
     virtio: VirtioPci,
     rxq: VirtQueue,
     txq: VirtQueue,
-    mac: [u8; 6],
-    pending_rxs: Vec<Option<RxRequest>>,
+    ongoing_rxs: Vec<Option<OngoingRx>>,
+    ongoing_txs: Vec<Option<OngoingTx>>,
+    free_txs: Vec<OngoingTx>,
+    pending_reads: VecDeque<ReadCompleter>,
+    pending_writes: VecDeque<PendingWrite>,
+    rx_queue: VecDeque<Vec<u8>>,
+    net_ch_id: HandleId,
 }
 
 impl Application for Main {
@@ -79,7 +81,8 @@ impl Application for Main {
         let n = ftl::pci::sys_pci_lookup(entries.as_mut_ptr() as *mut PciEntry, 10, 0x1af4, 0x1000)
             .unwrap();
 
-        let devices = unsafe { entries.assume_init() };
+        let devices =
+            unsafe { core::slice::from_raw_parts(entries.as_ptr() as *const PciEntry, n) };
         println!("[virtio_net] found {} virtio-net PCI devices", n);
 
         assert!(n > 0, "no virtio-net device found");
@@ -133,10 +136,19 @@ impl Application for Main {
         let mut rxq = virtio.setup_virtqueue(0).unwrap();
         let mut txq = virtio.setup_virtqueue(1).unwrap();
 
+        let ch_id = HandleId::from_raw(1);
+        let ch = Channel::from_handle(OwnedHandle::from_raw(ch_id));
+        ctx.add_channel(ch).unwrap();
+
         // Initialize pending_rxs with None for each possible descriptor
-        let mut pending_rxs: Vec<Option<RxRequest>> = Vec::with_capacity(rxq.queue_size());
+        let mut pending_rxs: Vec<Option<OngoingRx>> = Vec::with_capacity(rxq.queue_size());
         for _ in 0..rxq.queue_size() {
             pending_rxs.push(None);
+        }
+
+        let mut pending_txs: Vec<Option<OngoingTx>> = Vec::with_capacity(txq.queue_size());
+        for _ in 0..txq.queue_size() {
+            pending_txs.push(None);
         }
 
         // Allocate RX buffers.
@@ -154,7 +166,7 @@ impl Application for Main {
                 .unwrap();
 
             // Track which buffer is associated with this descriptor
-            pending_rxs[head.0 as usize] = Some(RxRequest { vaddr, paddr });
+            pending_rxs[head.0 as usize] = Some(OngoingRx { vaddr, paddr });
         }
         rxq.notify(&virtio);
         println!("[virtio_net] RX buffers prepared");
@@ -163,15 +175,17 @@ impl Application for Main {
         virtio.initialize2();
         println!("[virtio_net] virtio device initialized");
 
-        println!("[virtio_net] sent ARP request");
-        test_tx_packet(&virtio, &mut txq, mac);
-
         Self {
             virtio,
             rxq,
             txq,
-            mac,
-            pending_rxs,
+            ongoing_rxs: pending_rxs,
+            ongoing_txs: pending_txs,
+            free_txs: Vec::new(),
+            pending_reads: VecDeque::new(),
+            pending_writes: VecDeque::new(),
+            rx_queue: VecDeque::new(),
+            net_ch_id: ch_id,
         }
     }
 
@@ -179,13 +193,31 @@ impl Application for Main {
         let isr = self.virtio.read_isr();
         if isr & 1 != 0 {
             // Process received packets.
+            let header_len = size_of::<VirtioNetHdr>();
             while let Some(used) = self.rxq.pop() {
-                let Some(rx) = self.pending_rxs[used.head.0 as usize].take() else {
+                let Some(rx) = self.ongoing_rxs[used.head.0 as usize].take() else {
                     println!("missing a RX request for {:?}", used.head);
                     continue;
                 };
 
-                test_rx_packet(&rx, used.total_len);
+                println!("[virtio_net] received packet: {} bytes", used.total_len);
+                let total_len = used.total_len as usize;
+                if total_len > header_len {
+                    let payload_len = min(
+                        total_len - header_len,
+                        RX_BUFFER_SIZE.saturating_sub(header_len),
+                    );
+                    let mut packet = vec![0u8; payload_len];
+                    unsafe {
+                        let payload_ptr = (rx.vaddr + header_len) as *const u8;
+                        core::ptr::copy_nonoverlapping(
+                            payload_ptr,
+                            packet.as_mut_ptr(),
+                            payload_len,
+                        );
+                    }
+                    self.rx_queue.push_back(packet);
+                }
 
                 // Re-add the buffer to the RX queue.
                 let chain = &[ChainEntry::Write {
@@ -193,98 +225,153 @@ impl Application for Main {
                     len: RX_BUFFER_SIZE as u32,
                 }];
                 let head = self.rxq.push(chain).unwrap();
-                self.pending_rxs[head.0 as usize] = Some(rx);
+                self.ongoing_rxs[head.0 as usize] = Some(rx);
             }
 
             self.rxq.notify(&self.virtio);
+
+            self.poll_reads();
+            self.poll_writes();
         }
 
         interrupt.acknowledge().unwrap();
     }
-}
 
-fn test_tx_packet(virtio: &VirtioPci, txq: &mut VirtQueue, mac: [u8; 6]) {
-    // Send ARP request
-    let sender_ip = [10, 0, 2, 15];
-    let target_ip = [10, 0, 2, 2];
+    fn read(&mut self, ctx: &mut Context, completer: ReadCompleter, _offset: usize, _len: usize) {
+        if ctx.handle_id() != self.net_ch_id {
+            completer.error(ErrorCode::InvalidArgument);
+            return;
+        }
 
-    let mut tx_vaddr = 0usize;
-    let mut tx_paddr = 0usize;
-    ftl::dmabuf::sys_dmabuf_alloc(4096, &mut tx_vaddr, &mut tx_paddr).unwrap();
-    let packet_ptr = tx_vaddr as *mut u8;
-
-    unsafe {
-        let hdr_ptr = packet_ptr as *mut VirtioNetHdr;
-        hdr_ptr.write(VirtioNetHdr {
-            flags: 0,
-            gso_type: 0,
-            hdr_len: 0,
-            gso_size: 0,
-            csum_start: 0,
-            csum_offset: 0,
-        });
-
-        let payload_ptr = packet_ptr.add(size_of::<VirtioNetHdr>());
-        core::ptr::write_bytes(payload_ptr, 0, MIN_ETH_FRAME);
-
-        let eth_ptr = payload_ptr as *mut EthernetHeader;
-        eth_ptr.write(EthernetHeader {
-            dst: [0xff; 6],
-            src: mac,
-            ethertype: u16::to_be(ETHERTYPE_ARP),
-        });
-
-        let arp_ptr = payload_ptr.add(size_of::<EthernetHeader>()) as *mut ArpPacket;
-        arp_ptr.write(ArpPacket {
-            htype: u16::to_be(ARP_HTYPE_ETHERNET),
-            ptype: u16::to_be(ETHERTYPE_IPV4),
-            hlen: 6,
-            plen: 4,
-            oper: u16::to_be(ARP_OP_REQUEST),
-            sha: mac,
-            spa: sender_ip,
-            tha: [0; 6],
-            tpa: target_ip,
-        });
+        self.pending_reads.push_back(completer);
+        self.poll_reads();
     }
 
-    let header_len = size_of::<VirtioNetHdr>() as u32;
-    let payload_len = MIN_ETH_FRAME as u32;
-    let payload_paddr = tx_paddr + size_of::<VirtioNetHdr>();
+    fn write(&mut self, ctx: &mut Context, completer: WriteCompleter, _offset: usize, len: usize) {
+        if ctx.handle_id() != self.net_ch_id {
+            completer.error(ErrorCode::InvalidArgument);
+            return;
+        }
 
-    txq.push(&[
-        ChainEntry::Read {
-            paddr: tx_paddr as u64,
-            len: header_len,
-        },
-        ChainEntry::Read {
-            paddr: payload_paddr as u64,
-            len: payload_len,
-        },
-    ])
-    .unwrap();
-    txq.notify(&virtio);
+        let mut data = vec![0u8; len];
+        let read_len = match completer.read_data(0, &mut data) {
+            Ok(len) => len,
+            Err(error) => {
+                println!("[virtio_net] failed to read tx data: {:?}", error);
+                completer.error(error);
+                return;
+            }
+        };
+
+        if read_len == 0 {
+            println!("[virtio_net] no data to write");
+            completer.complete(0);
+            return;
+        }
+
+        data.truncate(read_len);
+        self.pending_writes
+            .push_back(PendingWrite { completer, data });
+        self.poll_writes();
+    }
 }
 
-fn test_rx_packet(rx_req: &RxRequest, len: u32) {
-    unsafe {
-        let packet_ptr = rx_req.vaddr as *const u8;
-        let payload_ptr = packet_ptr.add(size_of::<VirtioNetHdr>());
-        let eth = &*(payload_ptr as *const EthernetHeader);
-        let ethertype = u16::from_be(eth.ethertype);
+impl Main {
+    fn poll_reads(&mut self) {
+        while !self.pending_reads.is_empty() && !self.rx_queue.is_empty() {
+            let packet = self.rx_queue.pop_front().unwrap();
+            let completer = self.pending_reads.pop_front().unwrap();
+            let write_len = match completer.write_data(0, &packet) {
+                Ok(len) => len,
+                Err(error) => {
+                    println!("[virtio_net] failed to write rx data: {:?}", error);
+                    completer.error(error);
+                    continue;
+                }
+            };
 
-        if ethertype == ETHERTYPE_ARP {
-            let arp = &*(payload_ptr.add(size_of::<EthernetHeader>()) as *const ArpPacket);
-            let oper = u16::from_be(arp.oper);
-
-            if oper == ARP_OP_REPLY {
-                println!("\x1b[1;32m[virtio_net] ARP reply received!\x1b[0m");
-            } else {
-                println!("[virtio_net] ARP packet, oper={}", oper);
-            }
-        } else {
-            println!("[virtio_net] received ethertype={:#06x}", ethertype);
+            println!("[virtio_net] wrote {} bytes to read completer", write_len);
+            completer.complete(write_len);
         }
+    }
+
+    fn poll_writes(&mut self) {
+        while let Some(pending) = self.pending_writes.pop_front() {
+            match self.send_packet(&pending.data) {
+                Ok(()) => pending.completer.complete(pending.data.len()),
+                Err(VirtioError::VirtQueueFull) => {
+                    self.pending_writes.push_front(pending);
+                    break;
+                }
+                Err(error) => {
+                    println!("[virtio_net] failed to send tx: {:?}", error);
+                    pending.completer.error(ErrorCode::Unreachable);
+                }
+            }
+        }
+    }
+
+    fn send_packet(&mut self, data: &[u8]) -> Result<(), VirtioError> {
+        while let Some(used) = self.txq.pop() {
+            // TODO: Merge into allocate_tx_buffer
+            if let Some(buf) = self.ongoing_txs[used.head.0 as usize].take() {
+                self.free_txs.push(buf);
+            }
+        }
+
+        let header_len = size_of::<VirtioNetHdr>();
+        let payload_len = data.len().max(MIN_ETH_FRAME);
+        let total_len = header_len + payload_len;
+        let mut tx = self.allocate_tx_buffer(total_len)?;
+
+        unsafe {
+            let hdr_ptr = tx.vaddr as *mut VirtioNetHdr;
+            hdr_ptr.write(VirtioNetHdr {
+                flags: 0,
+                gso_type: 0,
+                hdr_len: 0,
+                gso_size: 0,
+                csum_start: 0,
+                csum_offset: 0,
+            });
+
+            let payload_ptr = (tx.vaddr + header_len) as *mut u8;
+            core::ptr::write_bytes(payload_ptr, 0, payload_len);
+            core::ptr::copy_nonoverlapping(data.as_ptr(), payload_ptr, data.len());
+        }
+
+        let head = match self.txq.push(&[
+            ChainEntry::Read {
+                paddr: tx.paddr as u64,
+                len: header_len as u32,
+            },
+            ChainEntry::Read {
+                paddr: (tx.paddr + header_len) as u64,
+                len: payload_len as u32,
+            },
+        ]) {
+            Ok(head) => head,
+            Err(error) => {
+                self.free_txs.push(tx);
+                return Err(error);
+            }
+        };
+        self.ongoing_txs[head.0 as usize] = Some(tx);
+        self.txq.notify(&self.virtio);
+        Ok(())
+    }
+
+    fn allocate_tx_buffer(&mut self, min_size: usize) -> Result<OngoingTx, VirtioError> {
+        if let Some(index) = self.free_txs.iter().position(|buf| buf.size >= min_size) {
+            return Ok(self.free_txs.swap_remove(index));
+        }
+
+        let size = align_up(TX_BUFFER_SIZE.max(min_size), min_page_size());
+        let mut vaddr = 0usize;
+        let mut paddr = 0usize;
+        ftl::dmabuf::sys_dmabuf_alloc(size, &mut vaddr, &mut paddr)
+            .map_err(VirtioError::DmaBufAlloc)?;
+        Ok(OngoingTx { vaddr, paddr, size })
     }
 }
 
