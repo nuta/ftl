@@ -1,7 +1,11 @@
 use core::fmt;
 
+use ftl_types::error::ErrorCode;
 // TODO: Make this private
 pub use ftl_types::handle::HandleId;
+use ftl_types::syscall::SYS_HANDLE_CLOSE;
+
+use crate::syscall::syscall1;
 
 pub struct OwnedHandle(HandleId);
 
@@ -16,6 +20,15 @@ impl OwnedHandle {
     }
 }
 
+impl Drop for OwnedHandle {
+    fn drop(&mut self) {
+        println!("dropping handle: {:?}", self);
+        if let Err(error) = sys_handle_close(self.0) {
+            println!("failed to close handle: {:?}", error);
+        }
+    }
+}
+
 impl fmt::Debug for OwnedHandle {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_tuple("OwnedHandle")
@@ -26,4 +39,9 @@ impl fmt::Debug for OwnedHandle {
 
 pub trait Handleable {
     fn handle(&self) -> &OwnedHandle;
+}
+
+pub fn sys_handle_close(id: HandleId) -> Result<(), ErrorCode> {
+    syscall1(SYS_HANDLE_CLOSE, id.as_usize())?;
+    Ok(())
 }
