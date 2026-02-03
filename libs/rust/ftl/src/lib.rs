@@ -9,7 +9,7 @@ pub mod print;
 
 pub mod allocator;
 
-mod arch;
+pub mod arch;
 mod panic;
 
 pub mod application;
