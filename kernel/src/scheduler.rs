@@ -28,4 +28,8 @@ impl Scheduler {
     pub fn push(&self, thread: SharedRef<Thread>) {
         self.runqueue.lock().push_back(thread);
     }
+
+    pub fn push_front(&self, thread: SharedRef<Thread>) {
+        self.runqueue.lock().push_front(thread);
+    }
 }

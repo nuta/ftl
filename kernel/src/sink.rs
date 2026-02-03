@@ -99,10 +99,8 @@ impl Sink {
         buf: &UserSlice,
     ) -> Result<bool, ErrorCode> {
         let mut mutable = self.mutable.lock();
-        while let Some(id) = mutable.ready_queue.pop_front() {
-            mutable.ready_set.remove(&id);
-
-            let handle_id = HandleId::from_raw(id);
+        while let Some(id) = mutable.ready_queue.front() {
+            let handle_id = HandleId::from_raw(*id);
             let Some(object) = handle_table.get_any(handle_id) else {
                 // The object has been removed from the handle table.
                 // TODO: What if the ID is reused?
@@ -113,7 +111,9 @@ impl Sink {
             //       when adding the object to the sink.
             let handle = object.authorize(HandleRight::READ)?;
             let Some((ty, event)) = handle.read_event(handle_table)? else {
-                // The object has no events to report.
+                // The object has no events to report. Remove it from the ready set.
+                mutable.ready_queue.pop_front();
+                mutable.ready_set.remove(&handle_id.as_usize());
                 continue;
             };
 

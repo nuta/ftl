@@ -9,6 +9,7 @@ use ftl::application::Application;
 use ftl::application::Context;
 use ftl::application::ReadCompleter;
 use ftl::application::WriteCompleter;
+use ftl::arch::min_page_size;
 use ftl::channel::Channel;
 use ftl::collections::VecDeque;
 use ftl::error::ErrorCode;
@@ -19,6 +20,7 @@ use ftl::pci::PciEntry;
 use ftl::prelude::*;
 use ftl::println;
 use ftl::rc::Rc;
+use ftl_utils::alignment::align_up;
 
 use crate::virtio::ChainEntry;
 use crate::virtio::Error as VirtioError;
@@ -365,7 +367,7 @@ impl Main {
             return Ok(self.free_txs.swap_remove(index));
         }
 
-        let size = TX_BUFFER_SIZE.max(min_size);
+        let size = align_up(TX_BUFFER_SIZE.max(min_size), min_page_size());
         let mut vaddr = 0usize;
         let mut paddr = 0usize;
         ftl::dmabuf::sys_dmabuf_alloc(size, &mut vaddr, &mut paddr)
