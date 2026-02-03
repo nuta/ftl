@@ -548,14 +548,17 @@ impl Application for Main {
             ip_addrs.push(our_ip).unwrap();
         });
 
-        Self {
+        let mut this = Self {
             smol_clock,
             sockets: SocketSet::new(Vec::new()),
             states_by_ch,
             states_by_handle: HashMap::new(),
             device,
             iface: iface,
-        }
+        };
+
+        this.poll(ctx);
+        this
     }
 
     fn open(&mut self, ctx: &mut Context, completer: OpenCompleter) {
