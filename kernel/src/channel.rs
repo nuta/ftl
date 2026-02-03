@@ -288,6 +288,23 @@ impl Handleable for Channel {
         Ok(())
     }
 
+    fn close(&self) {
+        let peer = {
+            let mut mutable = self.mutable.lock();
+            mutable.peer.take()
+        };
+
+        let Some(peer) = peer else {
+            return;
+        };
+
+        let mut peer_mutable = peer.mutable.lock();
+        peer_mutable.peer = None;
+        if let Some(ref emitter) = peer_mutable.emitter {
+            emitter.notify();
+        }
+    }
+
     fn read_event(
         &self,
         handle_table: &mut HandleTable,

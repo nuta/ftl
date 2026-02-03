@@ -5,6 +5,7 @@ use ftl_types::handle::HandleId;
 use ftl_types::sink::EventBody;
 use ftl_types::sink::EventType;
 
+use crate::channel::Channel;
 use crate::process::HandleTable;
 use crate::shared_ref::SharedRef;
 use crate::sink::EventEmitter;
@@ -84,6 +85,10 @@ pub trait Handleable: Any + Send + Sync {
         Err(ErrorCode::Unsupported)
     }
 
+    fn close(&self) {
+        // Do nothing by default.
+    }
+
     fn read_event(
         &self,
         _handle_table: &mut HandleTable,
@@ -100,7 +105,8 @@ pub fn sys_handle_close(
 
     let process = current.process();
     let mut handle_table = process.handle_table().lock();
-    handle_table.remove(handle_id)?;
+    let handle = handle_table.remove(handle_id)?;
+    handle.0.object.close();
 
     Ok(SyscallResult::Return(0))
 }
