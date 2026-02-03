@@ -34,11 +34,6 @@ const NOT_FOUND_RESPONSE: &[u8] = b"HTTP/1.1 404 Not Found\r\nContent-Length: 9\
 const BAD_REQUEST_RESPONSE: &[u8] =
     b"HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
 
-#[used]
-pub static SPEC: Spec = Spec {
-    name: "http_server",
-};
-
 struct ConnState {
     ch: Rc<Channel>,
     read_buf: Vec<u8>,
@@ -296,7 +291,7 @@ impl Application for Main {
                 conn.closing = true;
                 eof = true;
             } else {
-                let mut data = match buf {
+                let data = match buf {
                     BufferMut::Vec(mut data) => {
                         let len = len.min(data.len());
                         data.truncate(len);
