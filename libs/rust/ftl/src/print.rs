@@ -1,12 +1,22 @@
+use alloc::string::String;
+use alloc::string::ToString;
 use core::fmt;
 
 use crate::syscall::sys_console_write;
 
 pub struct Printer;
 
+static BUFFER: spin::Mutex<String> = spin::Mutex::new(String::new());
+
 impl fmt::Write for Printer {
     fn write_str(&mut self, s: &str) -> fmt::Result {
-        sys_console_write(s.as_bytes());
+        let mut buffer = BUFFER.lock();
+        buffer.push_str(s);
+        while let Some(index) = buffer.find('\n') {
+            sys_console_write(buffer[..(index + 1)].as_bytes());
+            *buffer = buffer[index + 1..].to_string();
+        }
+
         Ok(())
     }
 }
