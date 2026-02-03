@@ -217,6 +217,7 @@ impl Main {
 
 impl Application for Main {
     fn init(ctx: &mut Context) -> Self {
+        println!("[http] starting...");
         let ch_id = HandleId::from_raw(1);
         let ch = Rc::new(Channel::from_handle(OwnedHandle::from_raw(ch_id)));
         ctx.add_channel(ch.clone()).unwrap();

@@ -89,18 +89,12 @@ struct Device {
 }
 
 impl Device {
-    fn new() -> Self {
-        let ch_id = HandleId::from_raw(1);
-        let ch = Rc::new(Channel::from_handle(OwnedHandle::from_raw(ch_id)));
+    fn new(ch: Rc<Channel>) -> Self {
         Self {
             ch,
             rx_queue: VecDeque::new(),
             inflight_reads: 0,
         }
-    }
-
-    fn channel(&self) -> Rc<Channel> {
-        self.ch.clone()
     }
 
     fn handle_id(&self) -> HandleId {
@@ -518,6 +512,7 @@ fn parse_uri(completer: &OpenCompleter) -> Result<Uri, ErrorCode> {
 
 impl Application for Main {
     fn init(ctx: &mut Context) -> Self {
+        println!("[tcpip] starting...");
         let hwaddr = [0x52, 0x54, 0x00, 0x12, 0x34, 0x56];
         let gw_ip = Ipv4Address::new(10, 0, 2, 2);
         let our_ip = IpCidr::Ipv4(Ipv4Cidr::new(Ipv4Address::new(10, 0, 2, 15), 24));
@@ -526,8 +521,25 @@ impl Application for Main {
         let hwaddr = HardwareAddress::Ethernet(EthernetAddress::from_bytes(&hwaddr));
         let config = smoltcp::iface::Config::new(hwaddr);
 
-        let mut device = Device::new();
-        ctx.add_channel(device.channel()).unwrap();
+        let driver_ch = Rc::new(Channel::from_handle(OwnedHandle::from_raw(
+            HandleId::from_raw(1),
+        )));
+        let http_ch = Rc::new(Channel::from_handle(OwnedHandle::from_raw(
+            HandleId::from_raw(2),
+        )));
+
+        let mut states_by_ch = HashMap::new();
+
+        let driver_id = driver_ch.handle().id();
+        let http_id = http_ch.handle().id();
+        let driver_state = Rc::new(RefCell::new(State::Driver));
+        let http_state = Rc::new(RefCell::new(State::Control));
+        states_by_ch.insert(driver_id, driver_state.clone());
+        states_by_ch.insert(http_id, http_state.clone());
+
+        ctx.add_channel(driver_ch.clone()).unwrap();
+        ctx.add_channel(http_ch.clone()).unwrap();
+        let mut device = Device::new(driver_ch);
 
         let mut iface = Interface::new(config, &mut device, smol_clock.now());
 
@@ -539,7 +551,7 @@ impl Application for Main {
         Self {
             smol_clock,
             sockets: SocketSet::new(Vec::new()),
-            states_by_ch: HashMap::new(),
+            states_by_ch,
             states_by_handle: HashMap::new(),
             device,
             iface: iface,
@@ -582,7 +594,7 @@ impl Application for Main {
 
     fn read(&mut self, ctx: &mut Context, completer: ReadCompleter, offset: usize, len: usize) {
         let Some(state) = self.states_by_ch.get(&ctx.handle_id()) else {
-            println!("state not found for {:?}", ctx.handle_id());
+            println!("state not found for read on {:?}", ctx.handle_id());
             completer.error(ErrorCode::InvalidArgument);
             return;
         };
@@ -605,7 +617,7 @@ impl Application for Main {
 
     fn write(&mut self, ctx: &mut Context, completer: WriteCompleter, offset: usize, len: usize) {
         let Some(state) = self.states_by_ch.get(&ctx.handle_id()) else {
-            println!("state not found for {:?}", ctx.handle_id());
+            println!("state not found for write on {:?}", ctx.handle_id());
             completer.error(ErrorCode::InvalidArgument);
             return;
         };
@@ -646,16 +658,25 @@ impl Application for Main {
     }
 
     fn write_reply(&mut self, ctx: &mut Context, _ch: &Rc<Channel>, _buf: Buffer, _len: usize) {
-        if ctx.handle_id() == self.device.handle_id() {
+        let Some(state) = self.states_by_ch.get(&ctx.handle_id()) else {
+            println!("state not found for write reply on {:?}", ctx.handle_id());
             return;
-        }
+        };
 
-        println!("unexpected write reply on {:?}", ctx.handle_id());
+        let mut state_borrow = state.borrow_mut();
+        match &mut *state_borrow {
+            State::Driver => {
+                // Sent a packet.
+            }
+            _ => {
+                println!("unexpected write reply on {:?}", ctx.handle_id());
+            }
+        }
     }
 
     fn peer_closed(&mut self, ctx: &mut Context, _ch: &Rc<Channel>) {
         let Some(state) = self.states_by_ch.get(&ctx.handle_id()) else {
-            println!("state not found for {:?}", ctx.handle_id());
+            println!("state not found for peer closed on {:?}", ctx.handle_id());
             return;
         };
 
