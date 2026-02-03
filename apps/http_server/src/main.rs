@@ -65,6 +65,7 @@ impl ConnState {
             data: BufferMut::Vec(vec![0u8; READ_BUFFER_SIZE]),
         };
 
+        println!("[http] sending read");
         match self.ch.send(msg) {
             Ok(()) => {
                 self.read_in_flight = true;
@@ -264,6 +265,7 @@ impl Application for Main {
         }
 
         if is_listener {
+            println!("[http] accepted new connection: {:?}", new_id);
             self.channels
                 .insert(new_id, ChannelState::Conn(ConnState::new(new_ch.clone())));
             if let Some(ChannelState::Conn(conn)) = self.channels.get_mut(&new_id) {
