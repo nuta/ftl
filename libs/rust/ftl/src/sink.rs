@@ -13,6 +13,7 @@ use ftl_types::sink::EventType;
 use ftl_types::sink::RawEvent;
 use ftl_types::syscall::SYS_SINK_ADD;
 use ftl_types::syscall::SYS_SINK_CREATE;
+use ftl_types::syscall::SYS_SINK_REMOVE;
 use ftl_types::syscall::SYS_SINK_WAIT;
 
 use crate::channel::Cookie;
@@ -54,6 +55,11 @@ impl Sink {
 
     pub fn add<H: Handleable>(&self, handle: &H) -> Result<(), ErrorCode> {
         sys_sink_add(self.handle.id(), handle.handle().id())?;
+        Ok(())
+    }
+
+    pub fn remove(&self, id: HandleId) -> Result<(), ErrorCode> {
+        sys_sink_remove(self.handle.id(), id)?;
         Ok(())
     }
 
@@ -132,6 +138,11 @@ fn sys_sink_create() -> Result<OwnedHandle, ErrorCode> {
 
 fn sys_sink_add(sink: HandleId, handle: HandleId) -> Result<(), ErrorCode> {
     syscall2(SYS_SINK_ADD, sink.as_usize(), handle.as_usize())?;
+    Ok(())
+}
+
+fn sys_sink_remove(sink: HandleId, id: HandleId) -> Result<(), ErrorCode> {
+    syscall2(SYS_SINK_REMOVE, sink.as_usize(), id.as_usize())?;
     Ok(())
 }
 
