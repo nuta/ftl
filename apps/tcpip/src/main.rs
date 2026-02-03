@@ -154,6 +154,9 @@ impl smoltcp::phy::Device for Device {
         timestamp: smoltcp::time::Instant,
     ) -> Option<(Self::RxToken<'_>, Self::TxToken<'_>)> {
         if let Some(packet) = self.rx_queue.pop_front() {
+            // Keep one RX read in flight after consuming a packet so the next
+            // incoming frame can trigger a read reply immediately.
+            self.fill_rx();
             let rx = RxToken { buffer: packet };
             let tx = TxToken {
                 ch: self.ch.as_ref(),
