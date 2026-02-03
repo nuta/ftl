@@ -76,10 +76,12 @@ impl Application for Main {
 
         // Look up virtio-net PCI device
         let mut entries: MaybeUninit<[PciEntry; 10]> = MaybeUninit::uninit();
-        let n = ftl::pci::sys_pci_lookup(entries.as_mut_ptr() as *mut PciEntry, 10, 0x1af4, 0x1000)
-            .unwrap();
+        let n =
+            ftl::pci::sys_pci_lookup(entries.as_mut_ptr() as *mut PciEntry, 10, 0x1af4, 0x1000)
+                .unwrap();
 
-        let devices = unsafe { entries.assume_init() };
+        let devices =
+            unsafe { core::slice::from_raw_parts(entries.as_ptr() as *const PciEntry, n) };
         println!("[virtio_net] found {} virtio-net PCI devices", n);
 
         assert!(n > 0, "no virtio-net device found");
