@@ -1,4 +1,5 @@
 mod boot;
+mod bootinfo;
 mod console;
 mod cpuvar;
 mod idle;
@@ -7,6 +8,7 @@ mod io_apic;
 mod ioport;
 mod local_apic;
 mod mp_table;
+mod multiboot;
 mod pci;
 mod pic;
 mod pvh;

@@ -1,14 +1,11 @@
 //! PVH boot protocol.
 
-use core::cmp::max;
-use core::ops::Range;
-
 use ftl_arrayvec::ArrayVec;
 
 use crate::address::PAddr;
-use crate::address::VAddr;
 use crate::arch::paddr2vaddr;
-use crate::arch::x64::vmspace::vaddr2paddr;
+use crate::arch::x64::bootinfo::exclude_reserved_regions;
+use crate::arch::x64::bootinfo::reserved_regions_with_initfs;
 use crate::boot::BootInfo;
 use crate::boot::FreeRam;
 
@@ -45,45 +42,6 @@ struct HvmMemoryMapEntry {
     size: u64,
     type_: u32,
     reserved: u32,
-}
-
-fn exclude_reserved_regions(
-    free_start: u64,
-    free_end: u64,
-    reserved_regions: &[Range<u64>],
-    mut f: impl FnMut(u64, u64),
-) {
-    debug_assert!(reserved_regions.is_sorted_by_key(|r| r.start));
-
-    if reserved_regions.is_empty() {
-        f(free_start, free_end);
-        return;
-    }
-
-    let mut current = free_start;
-    for range in reserved_regions {
-        if range.start >= free_end {
-            // The reserved region is after the free region.
-            break;
-        }
-
-        if range.start > current {
-            // Found a gap.
-            f(current, range.start);
-        }
-
-        current = max(current, range.end);
-    }
-
-    if current < free_end {
-        // The remaining gap.
-        f(current, free_end);
-    }
-}
-
-unsafe extern "C" {
-    static __kernel_memory: u8;
-    static __kernel_memory_end: u8;
 }
 
 pub fn parse_start_info(start_info: PAddr) -> BootInfo {
@@ -128,13 +86,8 @@ pub fn parse_start_info(start_info: PAddr) -> BootInfo {
 
     // QEMU does not exclude module regions from the free RAM regions. Exclude
     // them manually so that the kernel won't try to allocate from them.
-    let kernel_memory_start = VAddr::new(&raw const __kernel_memory as usize);
-    let kernel_memory_end = VAddr::new(&raw const __kernel_memory_end as usize);
-    let mut reserved_regions = [
-        vaddr2paddr(kernel_memory_start).as_u64()..vaddr2paddr(kernel_memory_end).as_u64(),
-        initfs_module.paddr..initfs_module.paddr + initfs_module.size,
-    ];
-    reserved_regions.sort_unstable_by_key(|r| r.start);
+    let initfs_range = initfs_module.paddr..initfs_module.paddr + initfs_module.size;
+    let reserved_regions = reserved_regions_with_initfs(initfs_range);
 
     let mut free_rams = ArrayVec::new();
     for entry in memmap {

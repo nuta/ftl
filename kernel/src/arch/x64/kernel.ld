@@ -7,6 +7,14 @@ SECTIONS {
     __kernel_memory = .;
 
     . = ALIGN(16);
+    .multiboot2 : AT(ADDR(.multiboot2) - KERNEL_BASE) {
+        KEEP(*(.multiboot2));
+    }
+
+    .note.pvh : AT(ADDR(.note.pvh) - KERNEL_BASE) {
+        KEEP(*(.note.pvh));
+    }
+
     .text : AT(ADDR(.text) - KERNEL_BASE) {
         *(.text .text.*);
     }

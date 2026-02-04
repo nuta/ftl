@@ -12,6 +12,7 @@ use crate::address::VAddr;
 use crate::arch::NUM_CPUS_MAX;
 use crate::arch::x64::console::SERIAL_IRQ;
 use crate::arch::x64::io_apic::use_ioapic;
+use crate::arch::x64::multiboot;
 use crate::arch::x64::pvh;
 use crate::arch::x64::vmspace::vaddr2paddr;
 
@@ -49,7 +50,7 @@ static mut GDT_ENTRIES: [MaybeUninit<[u64; NUM_GDT_ENTRIES]>; NUM_CPUS_MAX] =
 static mut TSS_ENTRIES: [MaybeUninit<Tss>; NUM_CPUS_MAX] =
     [const { MaybeUninit::uninit() }; NUM_CPUS_MAX];
 
-extern "C" fn rust_boot(start_info: PAddr) -> ! {
+extern "C" fn rust_boot(multiboot_magic: u32, start_info: PAddr) -> ! {
     super::console::init();
 
     // SeaBIOS prints an escape sequence which disables line wrapping, and messes up
@@ -138,7 +139,13 @@ extern "C" fn rust_boot(start_info: PAddr) -> ! {
             .expect("failed to enable serial IRQ");
     });
 
-    let bootinfo = pvh::parse_start_info(start_info);
+    let bootinfo = if multiboot_magic == 0x36d76289 {
+        println!("multiboot2 magic detected");
+        multiboot::parse_multiboot2_info(start_info)
+    } else {
+        println!("parsing as PVH");
+        pvh::parse_start_info(start_info)
+    };
     crate::boot::boot(&bootinfo);
 }
 
@@ -184,7 +191,13 @@ unsafe extern "C" fn x64_boot() -> ! {
     naked_asm!(
         // The entry point. The kernel boots from this assembly code.
         //
+        // This boot code supports 2 boot protocols:
+        //
         // - PVH boot protocol: EBX = HvmStartInfo
+        // - Multiboot2 boot protocol: EBX = Multiboot2BootInfoHeader
+        //
+        // In both protocols, the CPU is in the following state:
+        //
         // - 32-bit protected mode
         // - paging disabled
         // - EIP is in physical address
@@ -195,8 +208,9 @@ unsafe extern "C" fn x64_boot() -> ! {
         "cli",
         "cld",
 
-        // Prepare arguments for rust_boot. Do not modify edi in this code!
-        "mov edi, ebx",
+        // Prepare the arguments for rust_boot. Do not touch EDI/ESI in this function!
+        "mov edi, eax", // multiboot2 magic
+        "mov esi, ebx", // Multiboot2BootInfoHeader or HvmStartInfo
 
         // Initialize the stack for this bootstrap processor (BSP).
         "lea esp, [{BSP_STACK_BOTTOM} + {KERNEL_STACK_SIZE} - {KERNEL_BASE}]",
