@@ -1,6 +1,7 @@
 use alloc::rc::Rc;
 
 use ftl_types::channel::CallId;
+use ftl_types::channel::ErrorReplyInline;
 use ftl_types::channel::MessageInfo;
 use ftl_types::channel::OpenInline;
 use ftl_types::channel::OpenReplyInline;
@@ -199,6 +200,11 @@ pub trait Application {
     }
 
     #[allow(unused)]
+    fn error_reply(&mut self, ctx: &mut Context, ch: &Rc<Channel>, error: ErrorCode) {
+        println!("received an unexpected message: error reply ({error:?})");
+    }
+
+    #[allow(unused)]
     fn irq(&mut self, ctx: &mut Context, interrupt: &Rc<Interrupt>, irq: u8) {
         println!("received an unexpected irq: {irq}");
     }
@@ -287,6 +293,10 @@ pub fn run<A: Application>() {
                             panic!("unexpected cookie type");
                         };
                         app.write_reply(&mut ctx, &ch, buf, inline.len);
+                    }
+                    MessageInfo::ERROR_REPLY => {
+                        let inline = unsafe { &*(inline.as_ptr() as *const ErrorReplyInline) };
+                        app.error_reply(&mut ctx, &ch, inline.error);
                     }
                     _ => panic!("unexpected message info: {:?}", info),
                 }
