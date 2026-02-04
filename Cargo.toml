@@ -11,6 +11,7 @@ members = [
     "apps/pong",
     "apps/tcpip",
     "apps/virtio_net",
+    "apps/http_server",
     "kernel",
     "libs/rust/*",
 ]
