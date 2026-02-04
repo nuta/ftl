@@ -73,6 +73,12 @@ impl Application for Main {
                 // Accepted a new connection.
                 let conn_ch_id = new_ch.handle().id();
 
+                // Request to accept the next connection.
+                ch.send(Message::Open {
+                    uri: Buffer::Static(b""),
+                })
+                .expect("failed to send accept message");
+
                 // Provide a read buffer to TCP/IP server.
                 new_ch
                     .send(Message::Read {
