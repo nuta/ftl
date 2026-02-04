@@ -4,6 +4,7 @@
 
 use core::cell::RefCell;
 use core::fmt;
+use core::net::Ipv4Addr;
 
 use ftl::application::Application;
 use ftl::application::Context;
@@ -28,13 +29,13 @@ use smoltcp::iface::PollResult;
 use smoltcp::iface::SocketHandle;
 use smoltcp::iface::SocketSet;
 use smoltcp::phy::DeviceCapabilities;
+use smoltcp::socket::dhcpv4;
 use smoltcp::socket::tcp;
 use smoltcp::socket::tcp::ListenError;
 use smoltcp::wire::EthernetAddress;
 use smoltcp::wire::HardwareAddress;
 use smoltcp::wire::IpCidr;
 use smoltcp::wire::IpListenEndpoint;
-use smoltcp::wire::Ipv4Address;
 use smoltcp::wire::Ipv4Cidr;
 
 enum Uri {
@@ -44,6 +45,7 @@ enum Uri {
 const TCP_BUFFER_SIZE: usize = 4096;
 const NET_RX_BUFFER_SIZE: usize = 1514;
 const RX_QUEUE_SIZE: usize = 1;
+const VIRTIO_NET_MAC_URI: &[u8] = b"ethernet:mac";
 
 struct RxToken {
     buffer: Vec<u8>,
@@ -186,6 +188,7 @@ impl smoltcp::phy::Device for Device {
 
 enum State {
     Driver,
+    DriverMac,
     Control,
     TcpConn {
         handle: SocketHandle,
@@ -204,6 +207,7 @@ impl fmt::Debug for State {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             State::Driver => write!(f, "Driver"),
+            State::DriverMac => write!(f, "DriverMac"),
             State::Control => write!(f, "Control"),
             State::TcpConn { .. } => write!(f, "TcpConn"),
             State::TcpListener { .. } => write!(f, "TcpListener"),
@@ -229,8 +233,10 @@ struct Main {
     sockets: SocketSet<'static>,
     states_by_ch: HashMap<HandleId, Rc<RefCell<State>>>,
     states_by_handle: HashMap<SocketHandle, Rc<RefCell<State>>>,
+    dhcp_handle: SocketHandle,
     device: Device,
     iface: Interface,
+    ready_to_serve: bool,
 }
 
 impl Main {
@@ -311,9 +317,14 @@ impl Main {
     }
 
     pub fn poll(&mut self, ctx: &mut Context) {
+        if !self.ready_to_serve {
+            return;
+        }
+
         loop {
             let now = self.smol_clock.now();
             let result = self.iface.poll(now, &mut self.device, &mut self.sockets);
+            self.poll_dhcp();
             self.do_poll(ctx);
             if matches!(result, PollResult::SocketStateChanged) {
                 continue;
@@ -329,15 +340,80 @@ impl Main {
         }
     }
 
+    fn poll_dhcp(&mut self) {
+        let event = self
+            .sockets
+            .get_mut::<dhcpv4::Socket>(self.dhcp_handle)
+            .poll();
+
+        match event {
+            None => {}
+            Some(dhcpv4::Event::Configured(config)) => {
+                let our_ip = config.address;
+                let gw_ip = config.router;
+                self.apply_dhcp_config(our_ip, gw_ip);
+            }
+            Some(dhcpv4::Event::Deconfigured) => {
+                println!("[tcpip] DHCP deconfigured");
+            }
+        }
+    }
+
+    fn apply_dhcp_config(&mut self, mut our_ip: Ipv4Cidr, gw_ip: Option<Ipv4Addr>) {
+        println!(
+            "[tcpip] DHCP configured: address={}, router={:?}",
+            our_ip, gw_ip
+        );
+
+        // Google Compute Engine assigns a /32 address, which confuses
+        // smoltcp since it's not in the same subnet as the router.
+        //
+        // Adjust the address to the common prefix with the router.
+        if let Some(gw_ip) = gw_ip {
+            if !our_ip.contains_addr(&gw_ip) {
+                // Compute the common prefix between the address and the router.
+                let a = u32::from_be_bytes(our_ip.address().octets());
+                let b = u32::from_be_bytes(gw_ip.octets());
+                let prefix = (a ^ b).leading_zeros() as u8;
+
+                let adjusted = Ipv4Cidr::new(our_ip.address(), prefix);
+                println!(
+                    "[tcpip] adjusting IPv4 prefix: {} -> {} (router {})",
+                    our_ip, adjusted, gw_ip
+                );
+                our_ip = adjusted;
+            }
+        }
+
+        // Set our IP address.
+        self.iface.update_ip_addrs(|addrs| {
+            addrs.clear();
+            addrs.push(IpCidr::Ipv4(our_ip)).unwrap();
+        });
+
+        // Set the default route.
+        if let Some(gw_ip) = gw_ip {
+            if let Err(error) = self.iface.routes_mut().add_default_ipv4_route(gw_ip) {
+                println!("[tcpip] failed to add default IPv4 route: {:?}", error);
+            }
+        } else {
+            println!("[tcpip] missing default IPv4 route");
+            self.iface.routes_mut().remove_default_ipv4_route();
+        }
+    }
+
     fn do_poll(&mut self, ctx: &mut Context) {
         use smoltcp::socket::Socket;
 
         let mut accepted_sockets = Vec::new();
         let mut destroyed_sockets = Vec::new();
         for (handle, socket) in self.sockets.iter_mut() {
-            let state = self.states_by_handle.get(&handle).unwrap();
             match socket {
+                Socket::Dhcpv4(socket) => {
+                    // DHCP socket is handled in poll_dhcp.
+                }
                 Socket::Tcp(socket) => {
+                    let state = self.states_by_handle.get(&handle).unwrap();
                     let mut state_borrow = state.borrow_mut();
                     match socket.state() {
                         tcp::State::Listen | tcp::State::SynSent => {
@@ -406,6 +482,30 @@ impl Main {
                 println!("failed to remove channel: {:?}", error);
             }
         }
+    }
+
+    fn on_mac_read_reply(&mut self, buf: BufferMut, len: usize) {
+        let data = match buf {
+            BufferMut::Vec(mut data) => {
+                data.truncate(len.min(data.len()));
+                data
+            }
+            _ => unreachable!(),
+        };
+
+        if data.len() < 6 {
+            println!("[tcpip] MAC reply too short: {} bytes", data.len());
+            return;
+        }
+
+        let mac = [data[0], data[1], data[2], data[3], data[4], data[5]];
+        let hwaddr = HardwareAddress::Ethernet(EthernetAddress::from_bytes(&mac));
+        self.iface.set_hardware_addr(hwaddr);
+        self.ready_to_serve = true;
+        println!(
+            "[tcpip] MAC configured: {:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
+            mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]
+        );
     }
 }
 
@@ -582,12 +682,8 @@ fn parse_uri(completer: &OpenCompleter) -> Result<Uri, ErrorCode> {
 impl Application for Main {
     fn init(ctx: &mut Context) -> Self {
         println!("[tcpip] starting...");
-        let hwaddr = [0x52, 0x54, 0x00, 0x12, 0x34, 0x56];
-        let gw_ip = Ipv4Address::new(10, 0, 2, 2);
-        let our_ip = IpCidr::Ipv4(Ipv4Cidr::new(Ipv4Address::new(10, 0, 2, 15), 24));
-
         let smol_clock = SmolClock::new();
-        let hwaddr = HardwareAddress::Ethernet(EthernetAddress::from_bytes(&hwaddr));
+        let hwaddr = HardwareAddress::Ethernet(EthernetAddress::from_bytes(&[0; 6]));
         let config = smoltcp::iface::Config::new(hwaddr);
 
         let driver_ch = Rc::new(Channel::from_handle(OwnedHandle::from_raw(
@@ -608,22 +704,28 @@ impl Application for Main {
 
         ctx.add_channel(driver_ch.clone()).unwrap();
         ctx.add_channel(http_ch.clone()).unwrap();
+
+        if let Err(error) = driver_ch.send(Message::Open {
+            uri: Buffer::Static(VIRTIO_NET_MAC_URI),
+        }) {
+            println!("[tcpip] failed to request MAC: {:?}", error);
+        }
         let mut device = Device::new(driver_ch);
 
         let mut iface = Interface::new(config, &mut device, smol_clock.now());
 
-        iface.routes_mut().add_default_ipv4_route(gw_ip).unwrap();
-        iface.update_ip_addrs(|ip_addrs| {
-            ip_addrs.push(our_ip).unwrap();
-        });
+        let mut sockets = SocketSet::new(Vec::new());
+        let dhcp_handle = sockets.add(dhcpv4::Socket::new());
 
         let mut this = Self {
             smol_clock,
-            sockets: SocketSet::new(Vec::new()),
+            sockets,
             states_by_ch,
             states_by_handle: HashMap::new(),
+            dhcp_handle,
             device,
             iface: iface,
+            ready_to_serve: false,
         };
 
         this.poll(ctx);
@@ -658,7 +760,7 @@ impl Application for Main {
                     }
                 }
             }
-            State::TcpConn { .. } | State::Driver => {
+            State::TcpConn { .. } | State::Driver | State::DriverMac => {
                 completer.error(ErrorCode::Unsupported);
             }
         }
@@ -681,7 +783,7 @@ impl Application for Main {
             State::TcpListener { .. } => {
                 completer.error(ErrorCode::Unsupported);
             }
-            State::Driver | State::Control => {
+            State::Driver | State::DriverMac | State::Control => {
                 completer.error(ErrorCode::Unsupported);
             }
         }
@@ -704,13 +806,42 @@ impl Application for Main {
             State::TcpListener { .. } => {
                 completer.error(ErrorCode::Unsupported);
             }
-            State::Driver | State::Control => {
+            State::Driver | State::DriverMac | State::Control => {
                 completer.error(ErrorCode::Unsupported);
             }
         }
     }
 
-    fn read_reply(&mut self, ctx: &mut Context, _ch: &Rc<Channel>, buf: BufferMut, len: usize) {
+    fn open_reply(&mut self, ctx: &mut Context, _ch: &Rc<Channel>, _uri: Buffer, new_ch: Channel) {
+        let ch_id = ctx.handle_id();
+        let state = self.states_by_ch.get(&ch_id).unwrap().borrow_mut();
+        match &*state {
+            State::Driver => {
+                let new_ch = Rc::new(new_ch);
+                if let Err(error) = ctx.add_channel(new_ch.clone()) {
+                    println!("[tcpip] failed to add MAC control channel: {:?}", error);
+                    return;
+                }
+
+                drop(state);
+                let new_id = new_ch.handle().id();
+                self.states_by_ch
+                    .insert(new_id, Rc::new(RefCell::new(State::DriverMac)));
+
+                if let Err(error) = new_ch.send(Message::Read {
+                    offset: 0,
+                    data: BufferMut::Vec(vec![0u8; 6]),
+                }) {
+                    println!("[tcpip] failed to read MAC: {:?}", error);
+                }
+            }
+            _ => {
+                println!("unexpected state for open reply: {state:?}");
+            }
+        }
+    }
+
+    fn read_reply(&mut self, ctx: &mut Context, ch: &Rc<Channel>, buf: BufferMut, len: usize) {
         let mut state = self
             .states_by_ch
             .get(&ctx.handle_id())
@@ -721,6 +852,11 @@ impl Application for Main {
             State::Driver => {
                 drop(state);
                 self.device.on_read_reply(buf, len);
+                self.poll(ctx);
+            }
+            State::DriverMac => {
+                drop(state);
+                self.on_mac_read_reply(buf, len);
                 self.poll(ctx);
             }
             _ => {
@@ -769,6 +905,9 @@ impl Application for Main {
             }
             State::Driver => {
                 todo!("handle driver peer closed");
+            }
+            State::DriverMac => {
+                println!("[tcpip] MAC control channel closed");
             }
             State::Control => {
                 // Nothing to do.

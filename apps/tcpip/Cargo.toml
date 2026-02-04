@@ -10,6 +10,7 @@ smoltcp = { workspace = true, default-features = false, features = [
     "log",
     "alloc",
     "medium-ethernet",
+    "socket-dhcpv4",
     "socket-tcp",
     "proto-ipv4",
 ] }

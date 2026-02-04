@@ -7,13 +7,16 @@ use core::mem::size_of;
 
 use ftl::application::Application;
 use ftl::application::Context;
+use ftl::application::OpenCompleter;
 use ftl::application::ReadCompleter;
 use ftl::application::WriteCompleter;
 use ftl::arch::min_page_size;
 use ftl::channel::Channel;
+use ftl::collections::HashMap;
 use ftl::collections::VecDeque;
 use ftl::error::ErrorCode;
 use ftl::handle::HandleId;
+use ftl::handle::Handleable;
 use ftl::handle::OwnedHandle;
 use ftl::interrupt::Interrupt;
 use ftl::pci::PciEntry;
@@ -59,6 +62,11 @@ struct PendingWrite {
     data: Vec<u8>,
 }
 
+enum State {
+    Packet,
+    Mac,
+}
+
 struct Main {
     virtio: VirtioPci,
     rxq: VirtQueue,
@@ -69,7 +77,8 @@ struct Main {
     pending_reads: VecDeque<ReadCompleter>,
     pending_writes: VecDeque<PendingWrite>,
     rx_queue: VecDeque<Vec<u8>>,
-    net_ch_id: HandleId,
+    mac: [u8; 6],
+    states: HashMap<HandleId, State>,
 }
 
 impl Application for Main {
@@ -143,6 +152,9 @@ impl Application for Main {
         let ch = Channel::from_handle(OwnedHandle::from_raw(ch_id));
         ctx.add_channel(ch).unwrap();
 
+        let mut states = HashMap::new();
+        states.insert(ch_id, State::Packet);
+
         // Initialize pending_rxs with None for each possible descriptor
         let mut pending_rxs: Vec<Option<OngoingRx>> = Vec::with_capacity(rxq.queue_size());
         for _ in 0..rxq.queue_size() {
@@ -188,7 +200,54 @@ impl Application for Main {
             pending_reads: VecDeque::new(),
             pending_writes: VecDeque::new(),
             rx_queue: VecDeque::new(),
-            net_ch_id: ch_id,
+            mac,
+            states,
+        }
+    }
+
+    fn open(&mut self, ctx: &mut Context, completer: OpenCompleter) {
+        let state = self.states.get(&ctx.handle_id()).unwrap();
+        match state {
+            State::Mac => {
+                completer.error(ErrorCode::InvalidArgument);
+            }
+            State::Packet => {
+                let mut buf = [0u8; 64];
+                let len = match completer.read_uri(0, &mut buf) {
+                    Ok(len) => len,
+                    Err(error) => {
+                        completer.error(error);
+                        return;
+                    }
+                };
+
+                let Ok(uri) = core::str::from_utf8(&buf[..len]) else {
+                    completer.error(ErrorCode::InvalidArgument);
+                    return;
+                };
+
+                if uri != "ethernet:mac" {
+                    completer.error(ErrorCode::InvalidArgument);
+                    return;
+                }
+
+                let (our_ch, their_ch) = match Channel::new() {
+                    Ok(pair) => pair,
+                    Err(error) => {
+                        completer.error(error);
+                        return;
+                    }
+                };
+
+                let our_ch = Rc::new(our_ch);
+                if let Err(error) = ctx.add_channel(our_ch.clone()) {
+                    completer.error(error);
+                    return;
+                }
+
+                self.states.insert(our_ch.handle().id(), State::Mac);
+                completer.complete(their_ch);
+            }
         }
     }
 
@@ -240,42 +299,57 @@ impl Application for Main {
         interrupt.acknowledge().unwrap();
     }
 
-    fn read(&mut self, ctx: &mut Context, completer: ReadCompleter, _offset: usize, _len: usize) {
-        if ctx.handle_id() != self.net_ch_id {
-            completer.error(ErrorCode::InvalidArgument);
-            return;
+    fn read(&mut self, ctx: &mut Context, completer: ReadCompleter, _offset: usize, len: usize) {
+        let state = self.states.get(&ctx.handle_id()).unwrap();
+        match state {
+            State::Packet => {
+                self.pending_reads.push_back(completer);
+                self.poll_reads();
+            }
+            State::Mac => {
+                let slice = &self.mac[..min(len, self.mac.len())];
+                match completer.write_data(0, slice) {
+                    Ok(len) => {
+                        completer.complete(len);
+                    }
+                    Err(error) => {
+                        println!("[virtio_net] failed to write MAC: {:?}", error);
+                        completer.error(error);
+                    }
+                };
+            }
         }
-
-        self.pending_reads.push_back(completer);
-        self.poll_reads();
     }
 
     fn write(&mut self, ctx: &mut Context, completer: WriteCompleter, _offset: usize, len: usize) {
-        if ctx.handle_id() != self.net_ch_id {
-            completer.error(ErrorCode::InvalidArgument);
-            return;
-        }
-
-        let mut data = vec![0u8; len];
-        let read_len = match completer.read_data(0, &mut data) {
-            Ok(len) => len,
-            Err(error) => {
-                println!("[virtio_net] failed to read tx data: {:?}", error);
-                completer.error(error);
-                return;
+        let state = self.states.get(&ctx.handle_id()).unwrap();
+        match state {
+            State::Mac => {
+                completer.error(ErrorCode::Unsupported);
             }
-        };
+            State::Packet => {
+                let mut data = vec![0u8; len];
+                let read_len = match completer.read_data(0, &mut data) {
+                    Ok(len) => len,
+                    Err(error) => {
+                        println!("[virtio_net] failed to read tx data: {:?}", error);
+                        completer.error(error);
+                        return;
+                    }
+                };
 
-        if read_len == 0 {
-            println!("[virtio_net] no data to write");
-            completer.complete(0);
-            return;
+                if read_len == 0 {
+                    println!("[virtio_net] no data to write");
+                    completer.complete(0);
+                    return;
+                }
+
+                data.truncate(read_len);
+                self.pending_writes
+                    .push_back(PendingWrite { completer, data });
+                self.poll_writes();
+            }
         }
-
-        data.truncate(read_len);
-        self.pending_writes
-            .push_back(PendingWrite { completer, data });
-        self.poll_writes();
     }
 }
 
