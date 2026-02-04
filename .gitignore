@@ -3,4 +3,6 @@
 *.elf
 *.log
 *.tar
+*.tar.*
 *.pcap
+*.iso
