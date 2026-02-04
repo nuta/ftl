@@ -122,6 +122,10 @@ impl Application for Main {
 
                 if let Some(message) = conn.poll_send() {
                     ch.send(message).expect("failed to send write message");
+                } else {
+                    println!("closing connection on {:?}", ch.handle().id());
+                    self.states.remove(&ch.handle().id());
+                    ctx.remove(ch.handle().id()).unwrap();
                 }
             }
             _ => {
@@ -135,6 +139,10 @@ impl Application for Main {
             Some(State::TcpConn(conn)) => {
                 if let Some(message) = conn.poll_send() {
                     ch.send(message).expect("failed to send write message");
+                } else {
+                    println!("closing connection on {:?}", ch.handle().id());
+                    self.states.remove(&ch.handle().id());
+                    ctx.remove(ch.handle().id()).unwrap();
                 }
             }
             _ => {
