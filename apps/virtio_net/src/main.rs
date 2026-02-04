@@ -116,11 +116,14 @@ impl Application for Main {
         // Initialize virtio device
         const VIRTIO_NET_F_MAC: u32 = 1 << 5;
         let virtio = VirtioPci::new(entry.bus, entry.slot, iobase);
-        let guest_features = virtio.initialize1();
+        let device_features = virtio.initialize1();
         assert!(
-            guest_features & VIRTIO_NET_F_MAC != 0,
+            device_features & VIRTIO_NET_F_MAC != 0,
             "MAC feature not supported"
         );
+
+        // Only advertise features we actually support.
+        let guest_features = device_features & VIRTIO_NET_F_MAC;
         virtio.write_guest_features(guest_features);
 
         // Read MAC address
