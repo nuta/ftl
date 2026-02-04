@@ -106,20 +106,17 @@ impl Application for Main {
                 };
 
                 buf.truncate(len);
-                match conn.handle_recv(buf) {
-                    ControlFlow::Continue(()) => {
-                        // Keep reading more data.
-                        ch.send(Message::Read {
-                            offset: 0,
-                            data: BufferMut::Vec(vec![0; RECV_BUFFER_SIZE]),
-                        })
-                        .expect("failed to send read message");
-                    }
-                    ControlFlow::Break(()) => {
-                        // No more data to read.
-                    }
+                if let ControlFlow::Continue(()) = conn.handle_recv(buf) {
+                    // Ask for more data.
+                    ch.send(Message::Read {
+                        offset: 0,
+                        data: BufferMut::Vec(vec![0; RECV_BUFFER_SIZE]),
+                    })
+                    .expect("failed to send read message");
+                    return;
                 }
 
+                // No more data to read; start sending the response.
                 if let Some(message) = conn.poll_send() {
                     ch.send(message).expect("failed to send write message");
                 } else {
