@@ -177,7 +177,7 @@ pub fn sys_sink_remove(
     let object_id = HandleId::from_raw(a1);
 
     let process = current.process();
-    let mut handle_table = process.handle_table().lock();
+    let handle_table = process.handle_table().lock();
     handle_table
         .get::<Sink>(sink_id)?
         .authorize(HandleRight::WRITE)?

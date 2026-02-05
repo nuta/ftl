@@ -55,7 +55,7 @@ impl Application for Main {
         Self { states }
     }
 
-    fn open_reply(&mut self, ctx: &mut Context, ch: &Rc<Channel>, uri: Buffer, new_ch: Channel) {
+    fn open_reply(&mut self, ctx: &mut Context, ch: &Rc<Channel>, _uri: Buffer, new_ch: Channel) {
         match self.states.get_mut(&ch.handle().id()) {
             Some(State::Tcpip) => {
                 // Request to accept a new connection.
@@ -131,7 +131,7 @@ impl Application for Main {
         }
     }
 
-    fn write_reply(&mut self, ctx: &mut Context, ch: &Rc<Channel>, buf: Buffer, len: usize) {
+    fn write_reply(&mut self, ctx: &mut Context, ch: &Rc<Channel>, _buf: Buffer, _len: usize) {
         match self.states.get_mut(&ch.handle().id()) {
             Some(State::TcpConn(conn)) => {
                 if let Some(message) = conn.poll_send() {

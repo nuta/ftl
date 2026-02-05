@@ -24,13 +24,10 @@ use ftl::prelude::*;
 use ftl::println;
 use ftl::rc::Rc;
 use ftl_utils::alignment::align_up;
-
-use crate::virtio::ChainEntry;
-use crate::virtio::Error as VirtioError;
-use crate::virtio::VirtQueue;
-use crate::virtio::VirtioPci;
-
-mod virtio;
+use ftl_virtio::ChainEntry;
+use ftl_virtio::Error as VirtioError;
+use ftl_virtio::VirtQueue;
+use ftl_virtio::VirtioPci;
 
 #[repr(C, packed)]
 struct VirtioNetHdr {
@@ -124,7 +121,7 @@ impl Application for Main {
 
         // Initialize virtio device
         const VIRTIO_NET_F_MAC: u32 = 1 << 5;
-        let virtio = VirtioPci::new(entry.bus, entry.slot, iobase);
+        let virtio = VirtioPci::new(iobase);
         let device_features = virtio.initialize1();
         assert!(
             device_features & VIRTIO_NET_F_MAC != 0,
@@ -146,7 +143,7 @@ impl Application for Main {
         );
 
         let mut rxq = virtio.setup_virtqueue(0).unwrap();
-        let mut txq = virtio.setup_virtqueue(1).unwrap();
+        let txq = virtio.setup_virtqueue(1).unwrap();
 
         let ch_id = HandleId::from_raw(1);
         let ch = Channel::from_handle(OwnedHandle::from_raw(ch_id));
@@ -399,7 +396,7 @@ impl Main {
         let header_len = size_of::<VirtioNetHdr>();
         let payload_len = data.len().max(MIN_ETH_FRAME);
         let total_len = header_len + payload_len;
-        let mut tx = self.allocate_tx_buffer(total_len)?;
+        let tx = self.allocate_tx_buffer(total_len)?;
 
         unsafe {
             let hdr_ptr = tx.vaddr as *mut VirtioNetHdr;

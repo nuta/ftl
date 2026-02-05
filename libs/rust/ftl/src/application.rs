@@ -230,7 +230,7 @@ pub fn run<A: Application>() {
                 ch_id,
                 info,
                 call_id,
-                handles,
+                handles: _,
                 inline,
             } => {
                 let ch = match objects.get(&ch_id) {
@@ -241,7 +241,7 @@ pub fn run<A: Application>() {
                 let mut ctx = Context::new(&sink, &mut objects, ch.handle().id());
                 match info {
                     MessageInfo::OPEN => {
-                        let inline = unsafe { &*(inline.as_ptr() as *const OpenInline) };
+                        let _inline = unsafe { &*(inline.as_ptr() as *const OpenInline) };
                         let completer = OpenCompleter::new(ch, call_id);
                         app.open(&mut ctx, completer);
                     }
@@ -270,10 +270,13 @@ pub fn run<A: Application>() {
                     _ => panic!("unknown handle id from sink: {:?}", ch_id),
                 };
 
+                // FIXME: Cookie is not guaranteed to be Box<Cookie>.
+                let cookie = unsafe { Cookie::from_raw(cookie) };
+
                 let mut ctx = Context::new(&sink, &mut objects, ch.handle().id());
                 match info {
                     MessageInfo::OPEN_REPLY => {
-                        let inline = unsafe { &*(inline.as_ptr() as *const OpenReplyInline) };
+                        let _inline = unsafe { &*(inline.as_ptr() as *const OpenReplyInline) };
                         let Cookie::Buffer(uri) = *cookie else {
                             panic!("unexpected cookie type");
                         };

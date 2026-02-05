@@ -1,5 +1,5 @@
 [package]
-name = "virtio_net"
+name = "ftl_virtio"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -7,4 +7,3 @@ edition.workspace = true
 [dependencies]
 ftl = { workspace = true }
 ftl_utils = { workspace = true }
-ftl_virtio = { workspace = true }

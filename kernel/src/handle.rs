@@ -5,7 +5,6 @@ use ftl_types::handle::HandleId;
 use ftl_types::sink::EventBody;
 use ftl_types::sink::EventType;
 
-use crate::channel::Channel;
 use crate::process::HandleTable;
 use crate::shared_ref::SharedRef;
 use crate::sink::EventEmitter;

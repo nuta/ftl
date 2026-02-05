@@ -1,4 +1,3 @@
-use alloc::boxed::Box;
 use core::fmt;
 use core::mem::MaybeUninit;
 
@@ -16,7 +15,6 @@ use ftl_types::syscall::SYS_SINK_CREATE;
 use ftl_types::syscall::SYS_SINK_REMOVE;
 use ftl_types::syscall::SYS_SINK_WAIT;
 
-use crate::channel::Cookie;
 use crate::handle::Handleable;
 use crate::handle::OwnedHandle;
 use crate::syscall::syscall0;
@@ -33,7 +31,7 @@ pub enum Event {
     ReplyMessage {
         ch_id: HandleId,
         info: MessageInfo,
-        cookie: Box<Cookie>,
+        cookie: usize,
         handles: ArrayVec<OwnedHandle, NUM_HANDLES_MAX>,
         inline: [u8; INLINE_LEN_MAX],
     },
@@ -93,12 +91,10 @@ impl Sink {
                         inline: message.body.inline,
                     }
                 } else {
-                    // FIXME: Cookie is not guaranteed to be Box<Cookie>.
-                    let cookie = unsafe { Cookie::from_raw(message.cookie) };
                     Event::ReplyMessage {
                         ch_id: raw.header.id,
                         info,
-                        cookie,
+                        cookie: message.cookie,
                         handles,
                         inline: message.body.inline,
                     }

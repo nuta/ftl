@@ -8,6 +8,8 @@
 //! Old but covers legacy + PCI concisely:
 //! <https://ozlabs.org/~rusty/virtio-spec/virtio-0.9.5.pdf>
 
+#![no_std]
+
 use core::arch::asm;
 use core::ptr::read_volatile;
 use core::ptr::write_volatile;
@@ -32,9 +34,6 @@ const PCI_IOPORT_CONFIG: u16 = 20;
 const STATUS_ACKNOWLEDGE: u8 = 1;
 const STATUS_DRIVER: u8 = 2;
 const STATUS_DRIVER_OK: u8 = 4;
-const STATUS_FEATURES_OK: u8 = 8;
-const STATUS_DRIVER_FAILED: u8 = 128;
-
 const DESC_F_NEXT: u16 = 1;
 const DESC_F_WRITE: u16 = 2;
 
@@ -224,6 +223,7 @@ impl VirtQueue {
 
             self.free_indicies.push(index);
             let desc = unsafe { read_volatile(self.descs.add(index as usize)) };
+            count += 1;
             if desc.flags & DESC_F_NEXT == 0 {
                 break;
             }
@@ -242,14 +242,12 @@ impl VirtQueue {
 }
 
 pub struct VirtioPci {
-    bus: u8,
-    slot: u8,
     iobase: u16,
 }
 
 impl VirtioPci {
-    pub fn new(bus: u8, slot: u8, iobase: u16) -> Self {
-        Self { bus, slot, iobase }
+    pub fn new(iobase: u16) -> Self {
+        Self { iobase }
     }
 
     pub fn initialize1(&self) -> u32 {

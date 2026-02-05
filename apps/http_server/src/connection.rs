@@ -10,7 +10,6 @@ use httparse::Request;
 use httparse::Status;
 
 const MAX_HEADERS: usize = 64;
-const RECV_BUFFER_SIZE: usize = 4096;
 
 pub enum Connection {
     ReadingHeaders { read_buf: Vec<u8> },

@@ -2,7 +2,6 @@ use core::hint::spin_loop;
 
 use super::ioport::in8;
 use super::ioport::out8;
-use crate::cpuvar::CpuVar;
 
 fn putchar(c: u8) {
     // Wait for the serial port to be ready to receive more data.
