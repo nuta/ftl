@@ -1,5 +1,3 @@
-use core::slice;
-
 use ftl_types::error::ErrorCode;
 use ftl_types::syscall::SYS_CHANNEL_CREATE;
 use ftl_types::syscall::SYS_CHANNEL_OOL_READ;
@@ -47,12 +45,7 @@ fn do_syscall(
     a4: usize,
 ) -> Result<SyscallResult, ErrorCode> {
     match n {
-        SYS_CONSOLE_WRITE => {
-            // FIXME: Use UserSlice.
-            let s = unsafe { slice::from_raw_parts(a0 as *const u8, a1) };
-            arch::console_write(s);
-            Ok(SyscallResult::Return(0))
-        }
+        SYS_CONSOLE_WRITE => crate::print::sys_console_write(thread, a0, a1),
         SYS_HANDLE_CLOSE => crate::handle::sys_handle_close(thread, a0),
         SYS_CHANNEL_CREATE => crate::channel::sys_channel_create(thread, a0),
         SYS_CHANNEL_SEND => crate::channel::sys_channel_send(thread, a0, a1, a2, a3, a4),
