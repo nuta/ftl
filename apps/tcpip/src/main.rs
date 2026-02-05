@@ -478,6 +478,7 @@ impl Main {
         for (handle, channel_id) in destroyed_sockets {
             self.sockets.remove(handle);
             self.states_by_handle.remove(&handle);
+            self.states_by_ch.remove(&channel_id);
             if let Err(error) = ctx.remove(channel_id) {
                 println!("failed to remove channel: {:?}", error);
             }
