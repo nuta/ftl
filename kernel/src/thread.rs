@@ -13,6 +13,7 @@ use crate::scheduler::SCHEDULER;
 use crate::shared_ref::SharedRef;
 use crate::sink::Sink;
 use crate::spinlock::SpinLock;
+use crate::syscall::SyscallResult;
 
 pub enum Promise {
     SinkWait {
@@ -44,6 +45,7 @@ enum State {
     Runnable,
     Blocked(Promise),
     Idle,
+    Exited,
 }
 
 struct Mutable {
@@ -95,6 +97,11 @@ impl Thread {
         SCHEDULER.push(self);
     }
 
+    pub fn exit(&self) {
+        let mut mutable = self.mutable.lock();
+        mutable.state = State::Exited;
+    }
+
     /// Attempts to resolve the blocked state, and returns `true` if the
     /// thread is now runnable.
     pub fn poll(self: &SharedRef<Self>) -> bool {
@@ -102,6 +109,7 @@ impl Thread {
         match &mutable.state {
             State::Runnable => true,
             State::Idle => false,
+            State::Exited => false,
             State::Blocked(promise) => {
                 if let Some(result) = promise.poll(self) {
                     mutable.state = State::Runnable;
@@ -139,6 +147,11 @@ impl Thread {
             (*arch_thread).set_syscall_result(raw);
         }
     }
+}
+
+pub fn sys_thread_exit(current: &SharedRef<Thread>) -> Result<SyscallResult, ErrorCode> {
+    current.exit();
+    Ok(SyscallResult::Exit)
 }
 
 /// The current thread.

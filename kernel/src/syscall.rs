@@ -17,6 +17,7 @@ use ftl_types::syscall::SYS_PCI_GET_INTERRUPT_LINE;
 use ftl_types::syscall::SYS_PCI_LOOKUP;
 #[cfg(target_arch = "x86_64")]
 use ftl_types::syscall::SYS_PCI_SET_BUSMASTER;
+use ftl_types::syscall::SYS_PROCESS_EXIT;
 use ftl_types::syscall::SYS_SINK_ADD;
 use ftl_types::syscall::SYS_SINK_CREATE;
 use ftl_types::syscall::SYS_SINK_REMOVE;
@@ -33,6 +34,7 @@ use crate::thread::return_to_user;
 pub enum SyscallResult {
     Return(usize),
     Blocked(Promise),
+    Exit,
 }
 
 fn do_syscall(
@@ -73,6 +75,7 @@ fn do_syscall(
         SYS_X64_IOPL => arch::sys_x64_iopl(thread, a0),
         SYS_INTERRUPT_ACQUIRE => crate::interrupt::sys_interrupt_acquire(thread, a0),
         SYS_INTERRUPT_ACKNOWLEDGE => crate::interrupt::sys_interrupt_acknowledge(thread, a0),
+        SYS_PROCESS_EXIT => crate::process::sys_process_exit(thread),
         _ => {
             println!("unknown syscall: {}", n);
             Err(ErrorCode::UnknownSyscall)
@@ -96,6 +99,9 @@ pub extern "C" fn syscall_handler(
         }
         Ok(SyscallResult::Blocked(promise)) => {
             thread.block_on(promise);
+        }
+        Ok(SyscallResult::Exit) => {
+            // Do nothing and switch to another thread.
         }
         Err(error) => {
             unsafe { thread.set_syscall_result(Err(error)) };

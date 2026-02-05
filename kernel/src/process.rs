@@ -11,6 +11,9 @@ use crate::isolation::Isolation;
 use crate::shared_ref::RefCounted;
 use crate::shared_ref::SharedRef;
 use crate::spinlock::SpinLock;
+use crate::syscall::SyscallResult;
+use crate::thread::Thread;
+use crate::thread::sys_thread_exit;
 
 pub struct Process {
     isolation: SharedRef<dyn Isolation>,
@@ -77,6 +80,18 @@ impl HandleTable {
             .remove(&id.as_usize())
             .ok_or(ErrorCode::HandleNotFound)
     }
+
+    pub fn clear(&mut self) {
+        for handle in self.handles.values() {
+            handle.bypass_check().close();
+        }
+        self.handles.clear();
+    }
+}
+
+pub fn sys_process_exit(current: &SharedRef<Thread>) -> Result<SyscallResult, ErrorCode> {
+    current.process().handle_table().lock().clear();
+    sys_thread_exit(current)
 }
 
 pub static IDLE_PROCESS: SharedRef<Process> = {

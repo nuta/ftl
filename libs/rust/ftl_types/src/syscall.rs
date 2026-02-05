@@ -27,3 +27,4 @@ pub const SYS_INTERRUPT_ACKNOWLEDGE: usize = 15;
 pub const SYS_PCI_GET_INTERRUPT_LINE: usize = 16;
 pub const SYS_SINK_REMOVE: usize = 17;
 pub const SYS_HANDLE_CLOSE: usize = 18;
+pub const SYS_PROCESS_EXIT: usize = 19;
