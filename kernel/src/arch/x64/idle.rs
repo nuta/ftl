@@ -8,3 +8,11 @@ pub fn idle() -> ! {
         }
     }
 }
+
+pub fn halt() -> ! {
+    loop {
+        unsafe {
+            asm!("cli; hlt");
+        }
+    }
+}

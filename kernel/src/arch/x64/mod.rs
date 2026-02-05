@@ -20,7 +20,10 @@ pub use console::console_write;
 pub use cpuvar::CpuVar;
 pub use cpuvar::get_cpuvar;
 pub use cpuvar::set_cpuvar;
+pub use idle::halt;
 pub use idle::idle;
+pub use io_apic::interrupt_acknowledge;
+pub use io_apic::interrupt_acquire;
 pub use ioport::sys_x64_iopl;
 pub use pci::sys_pci_get_bar;
 pub use pci::sys_pci_get_interrupt_line;
@@ -31,8 +34,5 @@ pub use thread::Thread;
 pub use thread::thread_switch;
 pub use vmspace::MIN_PAGE_SIZE;
 pub use vmspace::paddr2vaddr;
-
-pub use io_apic::interrupt_acquire;
-pub use io_apic::interrupt_acknowledge;
 
 pub(super) const NUM_CPUS_MAX: usize = 16;
