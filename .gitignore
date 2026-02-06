@@ -7,3 +7,4 @@
 *.tar.*
 *.pcap
 *.iso
+node_modules
