@@ -292,7 +292,7 @@ impl Main {
     ) -> Result<Channel, ErrorCode> {
         let (our_ch, their_ch) = Channel::new()?;
         let new_ch_id = our_ch.handle().id();
-        ctx.add_channel(our_ch)?;
+        ctx.add_channel(our_ch).unwrap();
 
         // Create a new listen socket.
         let new_listen_handle = self.do_tcp_listen(endpoint)?;
@@ -901,15 +901,18 @@ impl Application for Main {
                 pending_accepts, ..
             } => {
                 // Nothing t odo.
+                ctx.remove(ctx.handle_id()).unwrap();
             }
             State::Driver => {
                 todo!("handle driver peer closed");
             }
             State::DriverMac => {
-                println!("[tcpip] MAC control channel closed");
+                trace!("MAC control channel closed");
+                ctx.remove(ctx.handle_id()).unwrap();
             }
             State::Control => {
                 // Nothing to do.
+                ctx.remove(ctx.handle_id()).unwrap();
             }
         }
 
