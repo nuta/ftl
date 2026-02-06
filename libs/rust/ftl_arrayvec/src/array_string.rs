@@ -32,6 +32,12 @@ impl<const N: usize> ArrayString<N> {
         self.inner.len()
     }
 
+    pub const fn as_str(&self) -> &str {
+        // SAFETY: `from_static` ensures the entire &str, which is a valid UTF-8
+        // string.
+        unsafe { core::str::from_utf8_unchecked(self.inner.as_slice()) }
+    }
+
     pub const fn as_bytes(&self) -> &[u8] {
         self.inner.as_slice()
     }
@@ -53,9 +59,7 @@ impl<const N: usize> ArrayString<N> {
 
 impl<const N: usize> AsRef<str> for ArrayString<N> {
     fn as_ref(&self) -> &str {
-        // SAFETY: `push_str` ensures the entire &str, which is a valid UTF-8
-        // string.
-        unsafe { core::str::from_utf8_unchecked(self.inner.as_ref()) }
+        self.as_str()
     }
 }
 

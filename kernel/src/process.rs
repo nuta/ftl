@@ -35,6 +35,11 @@ impl Process {
         })
     }
 
+    #[allow(unused)] // For debugging
+    pub fn name(&self) -> &str {
+        self.name.as_str()
+    }
+
     pub fn isolation(&self) -> &SharedRef<dyn Isolation> {
         &self.isolation
     }
