@@ -8,6 +8,7 @@ use crate::address::VAddr;
 use crate::arch::Thread;
 use crate::arch::x64::console::SERIAL_IRQ;
 use crate::arch::x64::io_apic::IRQ_VECTOR_BASE;
+use crate::arch::x64::timer::TIMER_IRQ;
 use crate::arch::x64::vmspace::vaddr2paddr;
 use crate::cpuvar::CpuVar;
 use crate::spinlock::SpinLock;
@@ -199,7 +200,9 @@ extern "C" fn handle_interrupt(vector: u8, error_code: u64) -> ! {
 
     if vector >= IRQ_VECTOR_BASE {
         let irq = vector - IRQ_VECTOR_BASE;
-        if irq == SERIAL_IRQ {
+        if irq == TIMER_IRQ {
+            super::timer::handle_interrupt();
+        } else if irq == SERIAL_IRQ {
             super::console::handle_interrupt();
         } else {
             crate::interrupt::notify_irq(irq);

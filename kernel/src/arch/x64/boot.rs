@@ -132,6 +132,7 @@ extern "C" fn rust_boot(multiboot_magic: u32, start_info: PAddr) -> ! {
     super::idt::init();
     super::pic::init();
     super::mp_table::init();
+    super::timer::init();
 
     use_ioapic(|ioapic| {
         ioapic

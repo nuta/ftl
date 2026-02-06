@@ -14,6 +14,7 @@ mod pic;
 mod pvh;
 mod syscall;
 mod thread;
+mod timer;
 mod vmspace;
 
 pub use console::console_write;

@@ -51,16 +51,20 @@ impl IoApic {
     }
 
     pub fn enable_irq(&mut self, irq: u8) -> Result<(), ErrorCode> {
-        if irq >= self.num_entries {
+        self.enable_irq_at(irq, irq)
+    }
+
+    pub(super) fn enable_irq_at(&mut self, redir_index: u8, irq: u8) -> Result<(), ErrorCode> {
+        if redir_index >= self.num_entries {
             return Err(ErrorCode::OutOfBounds);
         }
 
         let vector = IRQ_VECTOR_BASE + irq;
 
         // Unkased, edge-triggered, active-high, "fixed" delivery.
-        write_ioapic(self.base, redir_reg_low(irq) as u32, vector as u32);
+        write_ioapic(self.base, redir_reg_low(redir_index), vector as u32);
         // Destination: BSP (APIC ID 0)
-        write_ioapic(self.base, redir_reg_high(irq), 0);
+        write_ioapic(self.base, redir_reg_high(redir_index), 0);
 
         Ok(())
     }
