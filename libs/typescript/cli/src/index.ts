@@ -23,5 +23,5 @@ export async function main(args: string[]) {
         process.exit(1);
     }
 
-    await command.run(commandArgs);
+    await command.main(commandArgs);
 }
