@@ -15,7 +15,6 @@ use ftl::handle::Handleable;
 use ftl::handle::OwnedHandle;
 use ftl::log::*;
 use ftl::prelude::vec;
-use ftl::println;
 use ftl::rc::Rc;
 
 use crate::connection::Connection;

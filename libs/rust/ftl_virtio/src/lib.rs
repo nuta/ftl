@@ -19,7 +19,6 @@ use core::sync::atomic::fence;
 use ftl::error::ErrorCode;
 use ftl::log::trace;
 use ftl::prelude::*;
-use ftl::println;
 use ftl_utils::alignment::align_up;
 
 const PCI_IOPORT_DEVICE_FEATURES: u16 = 0;
