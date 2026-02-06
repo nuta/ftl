@@ -113,6 +113,10 @@ impl Channel {
             return Err(ErrorCode::InvalidMessage);
         }
 
+        if info.inline_len() > INLINE_LEN_MAX {
+            return Err(ErrorCode::InvalidMessage);
+        }
+
         let mut mutable = self.mutable.lock();
         let peer = mutable.peer.as_ref().ok_or(ErrorCode::PeerClosed)?.clone();
 
