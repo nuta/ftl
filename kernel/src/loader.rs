@@ -6,6 +6,8 @@ use core::mem::MaybeUninit;
 use core::mem::size_of;
 use core::slice;
 
+use ftl_arrayvec::ArrayString;
+use ftl_types::environ::PROCESS_NAME_MAX_LEN;
 use ftl_types::environ::StartInfo;
 use ftl_utils::alignment::align_up;
 
@@ -161,14 +163,24 @@ pub fn load_app(file: &initfs::File, mut handles: Vec<SharedRef<Channel>>) {
 
     use alloc::boxed::Box;
 
+    let mut name_bytes = [0; PROCESS_NAME_MAX_LEN];
+    let mut name_len = 0;
+    while name_len < PROCESS_NAME_MAX_LEN && name_len < file.name.len() {
+        name_bytes[name_len] = file.name.as_bytes()[name_len];
+        name_len += 1;
+    }
+
     let info_uninit = Box::leak(Box::new(MaybeUninit::<StartInfo>::uninit()));
     info_uninit.write(StartInfo {
         syscall: arch::direct_syscall_handler,
         min_page_size: arch::MIN_PAGE_SIZE,
+        name: name_bytes,
+        name_len: name_len as u8,
     });
     let start_info = info_uninit.as_ptr() as usize;
 
-    let process = Process::new(INKERNEL_ISOLATION.clone()).expect("failed to create process");
+    let name = ArrayString::try_from(file.name).expect("failed to create process name");
+    let process = Process::new(name, INKERNEL_ISOLATION.clone()).expect("failed to create process");
 
     {
         let mut handle_table = process.handle_table().lock();

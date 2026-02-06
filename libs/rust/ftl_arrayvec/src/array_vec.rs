@@ -2,6 +2,8 @@ use core::mem::MaybeUninit;
 use core::ptr;
 use core::slice;
 
+use crate::CapacityError;
+
 /// A fixed-size vector.
 ///
 /// Similar to `Vec<T>`, but using a pre-allocated fixed-sized array instead
@@ -111,6 +113,28 @@ impl<T, const N: usize> ArrayVec<T, N> {
 
     pub fn iter_mut(&mut self) -> slice::IterMut<'_, T> {
         self.as_slice_mut().iter_mut()
+    }
+}
+
+impl<T: Copy, const N: usize> ArrayVec<T, N> {
+    pub const fn try_extend_from_slice(&mut self, values: &[T]) -> Result<(), CapacityError> {
+        if self.len + values.len() > N {
+            return Err(CapacityError);
+        }
+
+        self.extend_from_slice_unchecked(values);
+        Ok(())
+    }
+
+    // We need this version to avoid "Drop is not allowed in const fn" error.
+    pub(crate) const fn extend_from_slice_unchecked(&mut self, values: &[T]) {
+        let mut i = 0;
+        while i < values.len() {
+            self.elems[self.len + i].write(values[i]);
+            i += 1;
+        }
+
+        self.len += values.len();
     }
 }
 

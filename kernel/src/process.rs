@@ -1,5 +1,7 @@
 use alloc::collections::btree_map::BTreeMap;
 
+use ftl_arrayvec::ArrayString;
+use ftl_types::environ::PROCESS_NAME_MAX_LEN;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 
@@ -16,13 +18,18 @@ use crate::thread::Thread;
 use crate::thread::sys_thread_exit;
 
 pub struct Process {
+    name: ArrayString<PROCESS_NAME_MAX_LEN>,
     isolation: SharedRef<dyn Isolation>,
     handle_table: SpinLock<HandleTable>,
 }
 
 impl Process {
-    pub fn new(isolation: SharedRef<dyn Isolation>) -> Result<SharedRef<Self>, ErrorCode> {
+    pub fn new(
+        name: ArrayString<PROCESS_NAME_MAX_LEN>,
+        isolation: SharedRef<dyn Isolation>,
+    ) -> Result<SharedRef<Self>, ErrorCode> {
         SharedRef::new(Self {
+            name,
             isolation,
             handle_table: SpinLock::new(HandleTable::new()),
         })
@@ -96,6 +103,7 @@ pub fn sys_process_exit(current: &SharedRef<Thread>) -> Result<SyscallResult, Er
 
 pub static IDLE_PROCESS: SharedRef<Process> = {
     static INNER: RefCounted<Process> = RefCounted::new_static(Process {
+        name: ArrayString::from_static("[idle]"),
         isolation: SharedRef::clone_static(&INKERNEL_ISOLATION),
         handle_table: SpinLock::new(HandleTable::new()),
     });
