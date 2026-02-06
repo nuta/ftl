@@ -12,6 +12,7 @@ use ftl_types::channel::WriteReplyInline;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use hashbrown::HashMap;
+use log::trace;
 
 use crate::channel::Buffer;
 use crate::channel::BufferMut;
@@ -43,14 +44,14 @@ impl OpenCompleter {
     pub fn error(self, error: ErrorCode) {
         let reply = Reply::ErrorReply { error };
         if let Err(err) = self.ch.reply(self.call_id, reply) {
-            println!("failed to complete open: {err:?}");
+            trace!("failed to complete open: {err:?}");
         }
     }
 
     pub fn complete(self, ch: Channel) {
         let reply = Reply::OpenReply { ch };
         if let Err(err) = self.ch.reply(self.call_id, reply) {
-            println!("failed to complete open: {err:?}");
+            trace!("failed to complete open: {err:?}");
         }
     }
 }
@@ -75,14 +76,14 @@ impl ReadCompleter {
     pub fn error(self, error: ErrorCode) {
         let reply = Reply::ErrorReply { error };
         if let Err(err) = self.ch.reply(self.call_id, reply) {
-            println!("failed to complete read: {err:?}");
+            trace!("failed to complete read: {err:?}");
         }
     }
 
     pub fn complete(self, len: usize) {
         let reply = Reply::ReadReply { len };
         if let Err(err) = self.ch.reply(self.call_id, reply) {
-            println!("failed to complete read: {err:?}");
+            trace!("failed to complete read: {err:?}");
         }
     }
 }
@@ -109,14 +110,14 @@ impl WriteCompleter {
     pub fn error(self, error: ErrorCode) {
         let reply = Reply::ErrorReply { error };
         if let Err(err) = self.ch.reply(self.call_id, reply) {
-            println!("failed to complete write: {err:?}");
+            trace!("failed to complete write: {err:?}");
         }
     }
 
     pub fn complete(self, len: usize) {
         let reply = Reply::WriteReply { len };
         if let Err(err) = self.ch.reply(self.call_id, reply) {
-            println!("failed to complete write: {err:?}");
+            trace!("failed to complete write: {err:?}");
         }
     }
 }
@@ -168,50 +169,50 @@ pub trait Application {
 
     #[allow(unused)]
     fn open(&mut self, ctx: &mut Context, completer: OpenCompleter) {
-        println!("received an unexpected message: open");
+        trace!("received an unexpected message: open");
         completer.error(ErrorCode::Unsupported)
     }
 
     #[allow(unused)]
     fn read(&mut self, ctx: &mut Context, completer: ReadCompleter, offset: usize, len: usize) {
-        println!("received an unexpected message: read");
+        trace!("received an unexpected message: read");
         completer.error(ErrorCode::Unsupported)
     }
 
     #[allow(unused)]
     fn write(&mut self, ctx: &mut Context, completer: WriteCompleter, offset: usize, len: usize) {
-        println!("received an unexpected message: write");
+        trace!("received an unexpected message: write");
         completer.error(ErrorCode::Unsupported)
     }
 
     #[allow(unused)]
     fn open_reply(&mut self, ctx: &mut Context, ch: &Rc<Channel>, uri: Buffer, new_ch: Channel) {
-        println!("received an unexpected message: open reply");
+        trace!("received an unexpected message: open reply");
     }
 
     #[allow(unused)]
     fn read_reply(&mut self, ctx: &mut Context, ch: &Rc<Channel>, buf: BufferMut, len: usize) {
-        println!("received an unexpected message: read reply");
+        trace!("received an unexpected message: read reply");
     }
 
     #[allow(unused)]
     fn write_reply(&mut self, ctx: &mut Context, ch: &Rc<Channel>, buf: Buffer, len: usize) {
-        println!("received an unexpected message: write reply");
+        trace!("received an unexpected message: write reply");
     }
 
     #[allow(unused)]
     fn error_reply(&mut self, ctx: &mut Context, ch: &Rc<Channel>, error: ErrorCode) {
-        println!("received an unexpected message: error reply ({error:?})");
+        trace!("received an unexpected message: error reply ({error:?})");
     }
 
     #[allow(unused)]
     fn irq(&mut self, ctx: &mut Context, interrupt: &Rc<Interrupt>, irq: u8) {
-        println!("received an unexpected irq: {irq}");
+        trace!("received an unexpected irq: {irq}");
     }
 
     #[allow(unused)]
     fn peer_closed(&mut self, ctx: &mut Context, ch: &Rc<Channel>) {
-        println!("received an unexpected message: peer closed");
+        trace!("received an unexpected message: peer closed");
     }
 }
 

@@ -21,6 +21,7 @@ use ftl::error::ErrorCode;
 use ftl::handle::HandleId;
 use ftl::handle::Handleable;
 use ftl::handle::OwnedHandle;
+use ftl::log::*;
 use ftl::prelude::*;
 use ftl::println;
 use ftl::rc::Rc;
@@ -79,7 +80,7 @@ impl smoltcp::phy::TxToken for TxToken<'_> {
 
         if let Err(error) = self.ch.send(msg) {
             // TODO: Add a semaphore to limit the number of inflight writes.
-            println!("failed to send packet: {:?}", error);
+            trace!("failed to send packet: {:?}", error);
         }
 
         result
@@ -139,7 +140,7 @@ impl Device {
                     self.inflight_reads += 1;
                 }
                 Err(error) => {
-                    println!("failed to send a packet to drivers: {:?}", error);
+                    trace!("failed to send a packet to drivers: {:?}", error);
                     break;
                 }
             }
@@ -254,7 +255,7 @@ impl Main {
                 return Err(ErrorCode::InvalidArgument);
             }
             Err(e) => {
-                println!("unexpected listen error: {:?}", e);
+                trace!("unexpected listen error: {:?}", e);
                 return Err(ErrorCode::Unreachable);
             }
         }
@@ -354,16 +355,13 @@ impl Main {
                 self.apply_dhcp_config(our_ip, gw_ip);
             }
             Some(dhcpv4::Event::Deconfigured) => {
-                println!("[tcpip] DHCP deconfigured");
+                trace!("DHCP deconfigured");
             }
         }
     }
 
     fn apply_dhcp_config(&mut self, mut our_ip: Ipv4Cidr, gw_ip: Option<Ipv4Addr>) {
-        println!(
-            "[tcpip] DHCP configured: address={}, router={:?}",
-            our_ip, gw_ip
-        );
+        trace!("DHCP configured: address={}, router={:?}", our_ip, gw_ip);
 
         // Google Compute Engine assigns a /32 address, which confuses
         // smoltcp since it's not in the same subnet as the router.
@@ -377,8 +375,8 @@ impl Main {
                 let prefix = (a ^ b).leading_zeros() as u8;
 
                 let adjusted = Ipv4Cidr::new(our_ip.address(), prefix);
-                println!(
-                    "[tcpip] adjusting IPv4 prefix: {} -> {} (router {})",
+                trace!(
+                    "adjusting IPv4 prefix: {} -> {} (router {})",
                     our_ip, adjusted, gw_ip
                 );
                 our_ip = adjusted;
@@ -394,10 +392,10 @@ impl Main {
         // Set the default route.
         if let Some(gw_ip) = gw_ip {
             if let Err(error) = self.iface.routes_mut().add_default_ipv4_route(gw_ip) {
-                println!("[tcpip] failed to add default IPv4 route: {:?}", error);
+                trace!("failed to add default IPv4 route: {:?}", error);
             }
         } else {
-            println!("[tcpip] missing default IPv4 route");
+            trace!("missing default IPv4 route");
             self.iface.routes_mut().remove_default_ipv4_route();
         }
     }
@@ -437,7 +435,7 @@ impl Main {
                                     // Handshake in progress for an accepted socket.
                                 }
                                 _ => {
-                                    println!("[tcpip] unexpected state: {:?}", *state_borrow);
+                                    trace!("unexpected state: {:?}", *state_borrow);
                                     unreachable!();
                                 }
                             }
@@ -480,7 +478,7 @@ impl Main {
             self.states_by_handle.remove(&handle);
             self.states_by_ch.remove(&channel_id);
             if let Err(error) = ctx.remove(channel_id) {
-                println!("failed to remove channel: {:?}", error);
+                trace!("failed to remove channel: {:?}", error);
             }
         }
     }
@@ -495,7 +493,7 @@ impl Main {
         };
 
         if data.len() < 6 {
-            println!("[tcpip] MAC reply too short: {} bytes", data.len());
+            trace!("MAC reply too short: {} bytes", data.len());
             return;
         }
 
@@ -503,8 +501,8 @@ impl Main {
         let hwaddr = HardwareAddress::Ethernet(EthernetAddress::from_bytes(&mac));
         self.iface.set_hardware_addr(hwaddr);
         self.ready_to_serve = true;
-        println!(
-            "[tcpip] MAC configured: {:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
+        trace!(
+            "MAC configured: {:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]
         );
     }
@@ -536,7 +534,7 @@ fn tcp_read_write(socket: &mut tcp::Socket, state: &mut State) {
                     len
                 }
                 Err(error) => {
-                    println!("failed to write data to read completer: {:?}", error);
+                    trace!("failed to write data to read completer: {:?}", error);
                     completer.error(error);
                     0
                 }
@@ -563,7 +561,7 @@ fn tcp_read_write(socket: &mut tcp::Socket, state: &mut State) {
                     len
                 }
                 Err(error) => {
-                    println!("failed to read data from write completer: {:?}", error);
+                    trace!("failed to read data from write completer: {:?}", error);
                     completer.error(error);
                     0
                 }
@@ -595,7 +593,7 @@ fn tcp_channel_closed(socket: &mut tcp::Socket, state: &mut State) {
     }
 
     // Initiate a local close (FIN) when the channel is closed.
-    println!("[tcpip] initiating FIN (channel closed)");
+    trace!("initiating FIN (channel closed)");
     socket.close();
 }
 
@@ -633,7 +631,7 @@ fn tcp_peer_closed(socket: &mut tcp::Socket, state: &mut State) {
     debug_assert!(pending_writes.is_empty());
 
     // It's safe to close the socket now. Send a FIN packet to the peer.
-    println!("[tcpip] closing socket (peer closed)");
+    trace!("closing socket (peer closed)");
     socket.close();
 }
 
@@ -682,7 +680,7 @@ fn parse_uri(completer: &OpenCompleter) -> Result<Uri, ErrorCode> {
 
 impl Application for Main {
     fn init(ctx: &mut Context) -> Self {
-        println!("[tcpip] starting...");
+        trace!("starting...");
         let smol_clock = SmolClock::new();
         let hwaddr = HardwareAddress::Ethernet(EthernetAddress::from_bytes(&[0; 6]));
         let config = smoltcp::iface::Config::new(hwaddr);
@@ -709,7 +707,7 @@ impl Application for Main {
         if let Err(error) = driver_ch.send(Message::Open {
             uri: Buffer::Static(VIRTIO_NET_MAC_URI),
         }) {
-            println!("[tcpip] failed to request MAC: {:?}", error);
+            trace!("failed to request MAC: {:?}", error);
         }
         let mut device = Device::new(driver_ch);
 
@@ -756,7 +754,7 @@ impl Application for Main {
                         }
                     }
                     Err(error) => {
-                        println!("invalid URI: {:?}", error);
+                        trace!("invalid URI: {:?}", error);
                         completer.error(ErrorCode::InvalidArgument)
                     }
                 }
@@ -769,7 +767,7 @@ impl Application for Main {
 
     fn read(&mut self, ctx: &mut Context, completer: ReadCompleter, offset: usize, len: usize) {
         let Some(state) = self.states_by_ch.get(&ctx.handle_id()) else {
-            println!("state not found for read on {:?}", ctx.handle_id());
+            trace!("state not found for read on {:?}", ctx.handle_id());
             completer.error(ErrorCode::InvalidArgument);
             return;
         };
@@ -792,7 +790,7 @@ impl Application for Main {
 
     fn write(&mut self, ctx: &mut Context, completer: WriteCompleter, offset: usize, len: usize) {
         let Some(state) = self.states_by_ch.get(&ctx.handle_id()) else {
-            println!("state not found for write on {:?}", ctx.handle_id());
+            trace!("state not found for write on {:?}", ctx.handle_id());
             completer.error(ErrorCode::InvalidArgument);
             return;
         };
@@ -820,7 +818,7 @@ impl Application for Main {
             State::Driver => {
                 let new_ch = Rc::new(new_ch);
                 if let Err(error) = ctx.add_channel(new_ch.clone()) {
-                    println!("[tcpip] failed to add MAC control channel: {:?}", error);
+                    trace!("failed to add MAC control channel: {:?}", error);
                     return;
                 }
 
@@ -833,11 +831,11 @@ impl Application for Main {
                     offset: 0,
                     data: BufferMut::Vec(vec![0u8; 6]),
                 }) {
-                    println!("[tcpip] failed to read MAC: {:?}", error);
+                    trace!("failed to read MAC: {:?}", error);
                 }
             }
             _ => {
-                println!("unexpected state for open reply: {state:?}");
+                trace!("unexpected state for open reply: {state:?}");
             }
         }
     }
@@ -861,14 +859,14 @@ impl Application for Main {
                 self.poll(ctx);
             }
             _ => {
-                println!("unexpected read reply");
+                trace!("unexpected read reply");
             }
         }
     }
 
     fn write_reply(&mut self, ctx: &mut Context, _ch: &Rc<Channel>, _buf: Buffer, _len: usize) {
         let Some(state) = self.states_by_ch.get(&ctx.handle_id()) else {
-            println!("state not found for write reply on {:?}", ctx.handle_id());
+            trace!("state not found for write reply on {:?}", ctx.handle_id());
             return;
         };
 
@@ -878,14 +876,14 @@ impl Application for Main {
                 // Sent a packet.
             }
             _ => {
-                println!("unexpected write reply on {:?}", ctx.handle_id());
+                trace!("unexpected write reply on {:?}", ctx.handle_id());
             }
         }
     }
 
     fn peer_closed(&mut self, ctx: &mut Context, _ch: &Rc<Channel>) {
         let Some(state) = self.states_by_ch.get(&ctx.handle_id()) else {
-            println!("state not found for peer closed on {:?}", ctx.handle_id());
+            trace!("state not found for peer closed on {:?}", ctx.handle_id());
             return;
         };
 

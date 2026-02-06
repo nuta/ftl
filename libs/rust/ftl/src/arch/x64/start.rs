@@ -38,6 +38,7 @@ extern "C" fn start() -> ! {
 
     apply_relocations(image_base, relocs, relocs_end);
 
+    crate::log::init();
     crate::allocator::init();
 
     unsafe {

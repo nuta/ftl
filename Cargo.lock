@@ -86,6 +86,7 @@ dependencies = [
  "ftl_arrayvec",
  "ftl_types",
  "hashbrown",
+ "log",
  "spin",
  "talc",
 ]

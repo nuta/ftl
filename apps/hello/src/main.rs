@@ -3,5 +3,5 @@
 
 #[unsafe(no_mangle)]
 fn main() {
-    ftl::println!("Hello World!");
+    ftl::trace!("Hello World!");
 }

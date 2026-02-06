@@ -10,3 +10,4 @@ ftl_arrayvec = { workspace = true }
 talc = { workspace = true }
 spin = { workspace = true }
 hashbrown = { workspace = true }
+log = { workspace = true }

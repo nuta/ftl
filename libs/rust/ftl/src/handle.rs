@@ -4,6 +4,7 @@ use ftl_types::error::ErrorCode;
 // TODO: Make this private
 pub use ftl_types::handle::HandleId;
 use ftl_types::syscall::SYS_HANDLE_CLOSE;
+use log::trace;
 
 use crate::syscall::syscall1;
 
@@ -22,9 +23,9 @@ impl OwnedHandle {
 
 impl Drop for OwnedHandle {
     fn drop(&mut self) {
-        println!("dropping handle: {:?}", self);
+        trace!("dropping handle: {:?}", self);
         if let Err(error) = sys_handle_close(self.0) {
-            println!("failed to close handle: {:?}", error);
+            trace!("failed to close handle: {:?}", error);
         }
     }
 }

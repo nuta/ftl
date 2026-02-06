@@ -13,6 +13,7 @@ use ftl::collections::HashMap;
 use ftl::handle::HandleId;
 use ftl::handle::Handleable;
 use ftl::handle::OwnedHandle;
+use ftl::log::*;
 use ftl::prelude::vec;
 use ftl::println;
 use ftl::rc::Rc;
@@ -92,7 +93,7 @@ impl Application for Main {
                 self.states.insert(conn_ch_id, State::TcpConn(conn));
             }
             _ => {
-                println!("unexpected open reply on {:?}", ch.handle().id());
+                trace!("unexpected open reply on {:?}", ch.handle().id());
             }
         }
     }
@@ -100,7 +101,7 @@ impl Application for Main {
     fn read_reply(&mut self, ctx: &mut Context, ch: &Rc<Channel>, buf: BufferMut, len: usize) {
         match self.states.get_mut(&ch.handle().id()) {
             Some(State::TcpConn(conn)) => {
-                println!("received {} bytes from {:?}", len, ch.handle().id());
+                trace!("received {} bytes from {:?}", len, ch.handle().id());
                 let BufferMut::Vec(mut buf) = buf else {
                     unreachable!()
                 };
@@ -120,13 +121,13 @@ impl Application for Main {
                 if let Some(message) = conn.poll_send() {
                     ch.send(message).expect("failed to send write message");
                 } else {
-                    println!("closing connection on {:?}", ch.handle().id());
+                    trace!("closing connection on {:?}", ch.handle().id());
                     self.states.remove(&ch.handle().id());
                     ctx.remove(ch.handle().id()).unwrap();
                 }
             }
             _ => {
-                println!("unexpected read reply on {:?}", ch.handle().id());
+                trace!("unexpected read reply on {:?}", ch.handle().id());
             }
         }
     }
@@ -137,13 +138,13 @@ impl Application for Main {
                 if let Some(message) = conn.poll_send() {
                     ch.send(message).expect("failed to send write message");
                 } else {
-                    println!("closing connection on {:?}", ch.handle().id());
+                    trace!("closing connection on {:?}", ch.handle().id());
                     self.states.remove(&ch.handle().id());
                     ctx.remove(ch.handle().id()).unwrap();
                 }
             }
             _ => {
-                println!("unexpected write reply on {:?}", ch.handle().id());
+                trace!("unexpected write reply on {:?}", ch.handle().id());
             }
         }
     }

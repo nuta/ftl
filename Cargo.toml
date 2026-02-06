@@ -17,6 +17,7 @@ members = [
 ]
 
 [workspace.dependencies]
+log = "0"
 talc = "4.4.3"
 spin = "0.10.0"
 hashbrown = "0.16.1"

@@ -32,7 +32,7 @@ impl Application for Main {
     }
 
     fn write_reply(&mut self, _ctx: &mut Context, ch: &Rc<Channel>, _buf: Buffer, len: usize) {
-        println!("[ping] received write reply: {} bytes written", len);
+        trace!("[ping] received write reply: {} bytes written", len);
         ch.send(Message::Write {
             offset: 0,
             data: Buffer::String(format!("Ping({})", self.counter)),

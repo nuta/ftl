@@ -22,7 +22,7 @@ impl Application for Main {
     fn write(&mut self, _ctx: &mut Context, completer: WriteCompleter, offset: usize, _len: usize) {
         let mut buf = [0; 512];
         let len = completer.read_data(offset, &mut buf).unwrap();
-        println!(
+        trace!(
             "[pong] OOL read ({len} bytes): {:?}",
             core::str::from_utf8(&buf[..len])
         );

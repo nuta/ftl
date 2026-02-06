@@ -19,9 +19,9 @@ use ftl::handle::HandleId;
 use ftl::handle::Handleable;
 use ftl::handle::OwnedHandle;
 use ftl::interrupt::Interrupt;
+use ftl::log::*;
 use ftl::pci::PciEntry;
 use ftl::prelude::*;
-use ftl::println;
 use ftl::rc::Rc;
 use ftl_utils::alignment::align_up;
 use ftl_virtio::ChainEntry;
@@ -80,7 +80,7 @@ struct Main {
 
 impl Application for Main {
     fn init(ctx: &mut Context) -> Self {
-        println!("[virtio_net] starting...");
+        trace!("starting...");
 
         // Look up virtio-net PCI device
         let mut entries: MaybeUninit<[PciEntry; 10]> = MaybeUninit::uninit();
@@ -89,15 +89,12 @@ impl Application for Main {
 
         let devices =
             unsafe { core::slice::from_raw_parts(entries.as_ptr() as *const PciEntry, n) };
-        println!("[virtio_net] found {} virtio-net PCI devices", n);
+        trace!("found {} virtio-net PCI devices", n);
 
         assert!(n > 0, "no virtio-net device found");
 
         let entry = devices[0];
-        println!(
-            "[virtio_net] using PCI device at {:x}:{:x}",
-            entry.bus, entry.slot
-        );
+        trace!("using PCI device at {:x}:{:x}", entry.bus, entry.slot);
 
         // Enable bus mastering
         ftl::pci::sys_pci_set_busmaster(entry.bus, entry.slot, true).unwrap();
@@ -105,19 +102,19 @@ impl Application for Main {
         // Get BAR0 (I/O port base for legacy virtio)
         let bar0 = ftl::pci::sys_pci_get_bar(entry.bus, entry.slot, 0).unwrap();
         let iobase = (bar0 & 0xfffffffc) as u16;
-        println!("[virtio_net] I/O base: {:#x}", iobase);
+        trace!("I/O base: {:#x}", iobase);
 
         // Get interrupt line and acquire it
         let irq = ftl::pci::sys_pci_get_interrupt_line(entry.bus, entry.slot).unwrap();
-        println!("[virtio_net] IRQ: {}", irq);
+        trace!("IRQ: {}", irq);
 
         let interrupt = Interrupt::acquire(irq).unwrap();
         ctx.add_interrupt(Rc::new(interrupt)).unwrap();
-        println!("[virtio_net] interrupt acquired");
+        trace!("interrupt acquired");
 
         // Enable IOPL for direct I/O access
         ftl::syscall::sys_x64_iopl(true).unwrap();
-        println!("[virtio_net] I/O port access enabled");
+        trace!("I/O port access enabled");
 
         // Initialize virtio device
         const VIRTIO_NET_F_MAC: u32 = 1 << 5;
@@ -137,8 +134,8 @@ impl Application for Main {
         for i in 0..6 {
             mac[i] = virtio.read_device_config8(i as u16);
         }
-        println!(
-            "[virtio_net] MAC address: {:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
+        trace!(
+            " MAC address: {:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]
         );
 
@@ -181,11 +178,11 @@ impl Application for Main {
             pending_rxs[head.0 as usize] = Some(OngoingRx { vaddr, paddr });
         }
         rxq.notify(&virtio);
-        println!("[virtio_net] RX buffers prepared");
+        trace!("RX buffers prepared");
 
         // Complete virtio initialization.
         virtio.initialize2();
-        println!("[virtio_net] virtio device initialized");
+        trace!("virtio device initialized");
 
         Self {
             virtio,
@@ -255,11 +252,11 @@ impl Application for Main {
             let header_len = size_of::<VirtioNetHdr>();
             while let Some(used) = self.rxq.pop() {
                 let Some(rx) = self.ongoing_rxs[used.head.0 as usize].take() else {
-                    println!("missing a RX request for {:?}", used.head);
+                    trace!("missing a RX request for {:?}", used.head);
                     continue;
                 };
 
-                println!("[virtio_net] received packet: {} bytes", used.total_len);
+                trace!("received packet: {} bytes", used.total_len);
                 let total_len = used.total_len as usize;
                 if total_len > header_len {
                     let payload_len = min(
@@ -310,7 +307,7 @@ impl Application for Main {
                         completer.complete(len);
                     }
                     Err(error) => {
-                        println!("[virtio_net] failed to write MAC: {:?}", error);
+                        trace!("failed to write MAC: {:?}", error);
                         completer.error(error);
                     }
                 };
@@ -329,14 +326,14 @@ impl Application for Main {
                 let read_len = match completer.read_data(0, &mut data) {
                     Ok(len) => len,
                     Err(error) => {
-                        println!("[virtio_net] failed to read tx data: {:?}", error);
+                        trace!("failed to read tx data: {:?}", error);
                         completer.error(error);
                         return;
                     }
                 };
 
                 if read_len == 0 {
-                    println!("[virtio_net] no data to write");
+                    trace!("no data to write");
                     completer.complete(0);
                     return;
                 }
@@ -358,13 +355,13 @@ impl Main {
             let write_len = match completer.write_data(0, &packet) {
                 Ok(len) => len,
                 Err(error) => {
-                    println!("[virtio_net] failed to write rx data: {:?}", error);
+                    trace!("failed to write rx data: {:?}", error);
                     completer.error(error);
                     continue;
                 }
             };
 
-            println!("[virtio_net] wrote {} bytes to read completer", write_len);
+            trace!("wrote {} bytes to read completer", write_len);
             completer.complete(write_len);
         }
     }
@@ -378,7 +375,7 @@ impl Main {
                     break;
                 }
                 Err(error) => {
-                    println!("[virtio_net] failed to send tx: {:?}", error);
+                    trace!("failed to send tx: {:?}", error);
                     pending.completer.error(ErrorCode::Unreachable);
                 }
             }

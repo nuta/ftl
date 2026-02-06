@@ -17,6 +17,7 @@ use core::sync::atomic::Ordering;
 use core::sync::atomic::fence;
 
 use ftl::error::ErrorCode;
+use ftl::log::trace;
 use ftl::prelude::*;
 use ftl::println;
 use ftl_utils::alignment::align_up;
@@ -217,7 +218,7 @@ impl VirtQueue {
             if count >= self.queue_size {
                 // Too long chain. This should never happen, but it's not
                 // critical enough to panic. Just log it.
-                println!("virtio: too long chain detected");
+                trace!("virtio: too long chain detected");
                 break;
             }
 
