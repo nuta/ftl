@@ -104,7 +104,7 @@ fn load_elf(file: &initfs::File) -> Result<VAddr, ElfError> {
     }
 
     // Allocate memory for the image.
-    println!(
+    trace!(
         "{}: Loading an ELF file in initfs: entry={:x}, image_size={}",
         file.name, ehdr.entry, image_size
     );
@@ -129,7 +129,7 @@ fn load_elf(file: &initfs::File) -> Result<VAddr, ElfError> {
         let src_end = src_start + phdr.filesz as usize;
         let dst_end = dst_start + phdr.filesz as usize;
 
-        println!(
+        trace!(
             "{}: phdr: vaddr={:x}, filesz={:x}, memsz={:x}",
             file.name, phdr.vaddr, phdr.filesz, phdr.memsz
         );
@@ -210,7 +210,7 @@ pub fn load(initfs: &InitFs) {
     handles_map.insert("http_server", vec![tcpip_http_ch1]);
 
     for file in initfs.iter() {
-        println!("loading app: {}", file.name);
+        trace!("loading app: {}", file.name);
         let handles = handles_map
             .remove(file.name)
             .expect("app is not defined in the manifest");

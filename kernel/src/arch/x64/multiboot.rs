@@ -122,10 +122,10 @@ pub(super) fn parse_multiboot2_info(info_addr: PAddr) -> BootInfo {
                     let length = entry.length;
                     let type_ = entry.type_;
                     let Some(end) = addr.checked_add(length) else {
-                        println!("memory map entry overflows: {addr:x} + {length:x}");
+                        trace!("memory map entry overflows: {addr:x} + {length:x}");
                         continue;
                     };
-                    println!(
+                    trace!(
                         "memory map: {:08x} - {:08x} ({} MB - {})",
                         addr,
                         end,
@@ -140,7 +140,7 @@ pub(super) fn parse_multiboot2_info(info_addr: PAddr) -> BootInfo {
                         })
                         .is_err()
                     {
-                        println!("too many memory map entries, ignoring {:x}", addr);
+                        trace!("too many memory map entries, ignoring {:x}", addr);
                         break;
                     }
                 }
@@ -158,7 +158,7 @@ pub(super) fn parse_multiboot2_info(info_addr: PAddr) -> BootInfo {
             }
             _ => {
                 let type_ = tag_header.type_;
-                println!("unknown tag type: {:08x}", type_);
+                trace!("unknown tag type: {:08x}", type_);
             }
         }
 
@@ -185,9 +185,9 @@ pub(super) fn parse_multiboot2_info(info_addr: PAddr) -> BootInfo {
                 let start = PAddr::new(start as usize);
                 let end = PAddr::new(end as usize);
                 let size = end.as_usize() - start.as_usize();
-                println!("RAM: {start} - {end} ({} KiB)", size / 1024);
+                trace!("RAM: {start} - {end} ({} KiB)", size / 1024);
                 if free_rams.try_push(FreeRam { start, end }).is_err() {
-                    println!("too many free RAM regions: {start} - {end}");
+                    trace!("too many free RAM regions: {start} - {end}");
                 }
             },
         );

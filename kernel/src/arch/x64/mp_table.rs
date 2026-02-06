@@ -142,7 +142,7 @@ pub fn init() {
             ENTRY_TYPE_PROCESSOR => {
                 let entry = unsafe { paddr2ptr::<ProcessorEntry>(entry_addr) };
                 let id = entry.local_apic_id;
-                println!("Processor: id={}", id);
+                trace!("Processor: id={}", id);
                 20
             }
             ENTRY_TYPE_IO_APIC => {
@@ -151,7 +151,7 @@ pub fn init() {
                 8
             }
             _ => {
-                // println!("unknown entry type: {}", type_byte);
+                // trace!("unknown entry type: {}", type_byte);
                 8
             }
         };

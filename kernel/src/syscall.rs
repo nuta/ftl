@@ -70,7 +70,7 @@ fn do_syscall(
         SYS_INTERRUPT_ACKNOWLEDGE => crate::interrupt::sys_interrupt_acknowledge(thread, a0),
         SYS_PROCESS_EXIT => crate::process::sys_process_exit(thread),
         _ => {
-            println!("unknown syscall: {}", n);
+            trace!("unknown syscall: {}", n);
             Err(ErrorCode::UnknownSyscall)
         }
     }

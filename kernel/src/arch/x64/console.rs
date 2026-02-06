@@ -45,7 +45,7 @@ pub(super) fn handle_interrupt() {
             break;
         }
 
-        println!("serial interrupt: \x1b[1;91m{}\x1b[0m", ch as char);
+        trace!("serial interrupt: \x1b[1;91m{}\x1b[0m", ch as char);
     }
 
     let cpuvar = super::get_cpuvar();

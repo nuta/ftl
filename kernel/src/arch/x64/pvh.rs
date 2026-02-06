@@ -74,7 +74,7 @@ pub fn parse_start_info(start_info: PAddr) -> BootInfo {
     let initfs =
         unsafe { core::slice::from_raw_parts(paddr2vaddr(paddr).as_usize() as *const u8, size) };
 
-    println!("found a module (initfs): paddr={}, size={}", paddr, size);
+    trace!("found a module (initfs): paddr={}, size={}", paddr, size);
 
     let memmap_paddr = PAddr::new(start_info.memmap_paddr as usize);
     let memmap = unsafe {
@@ -96,7 +96,7 @@ pub fn parse_start_info(start_info: PAddr) -> BootInfo {
         let type_ = entry.type_;
         if type_ == HVM_MEMMAP_TYPE_RAM {
             let Some(end) = entry.addr.checked_add(size) else {
-                println!("the size of the memory region overflows: {start:x} + {size:x}");
+                trace!("the size of the memory region overflows: {start:x} + {size:x}");
                 continue;
             };
 
@@ -104,9 +104,9 @@ pub fn parse_start_info(start_info: PAddr) -> BootInfo {
                 let start = PAddr::new(start as usize);
                 let end = PAddr::new(end as usize);
                 let size = end.as_usize() - start.as_usize();
-                println!("RAM: {start} - {end} ({} KiB)", size / 1024);
+                trace!("RAM: {start} - {end} ({} KiB)", size / 1024);
                 if free_rams.try_push(FreeRam { start, end }).is_err() {
-                    println!("too many free RAM regions: {start} - {end}");
+                    trace!("too many free RAM regions: {start} - {end}");
                 }
             });
         }

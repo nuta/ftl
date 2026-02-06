@@ -75,11 +75,11 @@ pub(super) fn use_ioapic(f: impl FnOnce(&mut IoApic)) {
 pub fn init(base: PAddr) {
     let mut lock = IOAPIC.lock();
     if lock.is_some() {
-        println!("I/O APIC is already initialized");
+        trace!("I/O APIC is already initialized");
         return;
     }
 
-    println!("I/O APIC base: {}", base);
+    trace!("I/O APIC base: {}", base);
     let base = super::paddr2vaddr(base);
     let ioapic = IoApic::init(base);
     *lock = Some(ioapic);

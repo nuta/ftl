@@ -33,7 +33,7 @@ pub struct Thread {
 
 impl Thread {
     pub fn new(entry: usize, sp: usize, start_info: usize) -> Self {
-        println!(
+        trace!(
             "new thread: entry={:x}, sp={:x}, start_info={:x}",
             entry, sp, start_info
         );

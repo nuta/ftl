@@ -46,7 +46,7 @@ impl LocalApic {
     pub fn init() -> Self {
         let base_paddr = unsafe { rdmsr(MSR_IA32_APIC_BASE) & 0xfffff000 };
         let base = super::paddr2vaddr(PAddr::new(base_paddr as usize));
-        println!("Local APIC base: {:x}", base_paddr);
+        trace!("Local APIC base: {:x}", base_paddr);
 
         // Accept all interrupts.
         write(base, Reg::TaskPriority, 0);

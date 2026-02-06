@@ -55,9 +55,9 @@ extern "C" fn rust_boot(multiboot_magic: u32, start_info: PAddr) -> ! {
 
     // SeaBIOS prints an escape sequence which disables line wrapping, and messes up
     // your terminal. Revert it.
-    println!("\x1b[?7h\n");
+    trace!("\x1b[?7h\n");
 
-    println!("Booting FTL...");
+    trace!("Booting FTL...");
 
     // Enable FS/GS base.
     unsafe {
@@ -140,10 +140,10 @@ extern "C" fn rust_boot(multiboot_magic: u32, start_info: PAddr) -> ! {
     });
 
     let bootinfo = if multiboot_magic == 0x36d76289 {
-        println!("multiboot2 magic detected");
+        trace!("multiboot2 magic detected");
         multiboot::parse_multiboot2_info(start_info)
     } else {
-        println!("parsing as PVH");
+        trace!("parsing as PVH");
         pvh::parse_start_info(start_info)
     };
     crate::boot::boot(&bootinfo);

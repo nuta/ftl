@@ -45,7 +45,7 @@ impl PageAllocator {
         for free_ram in free_rams {
             let allocator = BumpAllocator::new(free_ram.start.as_usize(), free_ram.end.as_usize());
             if regions.try_push(allocator).is_err() {
-                println!("too many free RAM regions");
+                trace!("too many free RAM regions");
                 return;
             }
         }
@@ -90,7 +90,7 @@ impl GlobalAllocator {
 
     pub unsafe fn add_region(&self, vaddr: VAddr, size: usize) {
         if vaddr.as_usize().checked_add(size).is_none() {
-            println!("too large kernel memory region: base={vaddr}, size={size}");
+            trace!("too large kernel memory region: base={vaddr}, size={size}");
             return;
         }
 
@@ -98,7 +98,7 @@ impl GlobalAllocator {
         unsafe {
             let span = talc::Span::new(ptr, ptr.add(size));
             if self.inner.lock().claim(span).is_err() {
-                println!("failed to claim kernel memory region: base={vaddr}, size={size}");
+                trace!("failed to claim kernel memory region: base={vaddr}, size={size}");
             }
         }
     }

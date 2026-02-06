@@ -193,7 +193,7 @@ impl Channel {
         if let Some(ref emitter) = peer_mutable.emitter {
             emitter.notify();
         }
-        println!(
+        trace!(
             "enqueued a message: kind={}, {} OOLs, {} handles, {} bytes",
             info.kind(),
             info.num_ools(),

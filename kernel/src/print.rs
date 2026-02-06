@@ -44,20 +44,39 @@ pub fn sys_console_write(
 }
 
 #[macro_export]
+macro_rules! info {
+    ($($arg:tt)+) => {{
+        $crate::println!("[kernel] INFO  {}", format_args!($($arg)+));
+    }};
+}
+
+#[macro_export]
+macro_rules! warn {
+    ($($arg:tt)+) => {{
+        $crate::println!(
+            "[kernel] \x1b[33mWARN\x1b[0m  {}",
+            format_args!($($arg)+)
+        );
+    }};
+}
+
+#[macro_export]
+macro_rules! trace {
+    ($($arg:tt)+) => {{
+        $crate::println!("[kernel    ] {}", format_args!($($arg)+));
+    }};
+}
+
+#[macro_export]
 macro_rules! println {
     () => {{
         #[allow(unused_imports)]
         use core::fmt::Write;
         writeln!($crate::print::Printer).ok();
     }};
-    ($fmt:expr) => {{
+    ($($arg:tt)*) => {{
         #[allow(unused_imports)]
         use core::fmt::Write;
-        writeln!($crate::print::Printer, $fmt).ok();
-    }};
-    ($fmt:expr, $($arg:tt)*) => {{
-        #[allow(unused_imports)]
-        use core::fmt::Write;
-        writeln!($crate::print::Printer, $fmt, $($arg)*).ok();
+        writeln!($crate::print::Printer, $($arg)*).ok();
     }};
 }

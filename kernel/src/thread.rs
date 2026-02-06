@@ -134,7 +134,7 @@ impl Thread {
         // Encode the return value.
         let raw = match retval {
             Ok(retval) if retval >= ERROR_RETVAL_BASE => {
-                println!("invalid syscall return value: {:x}", retval);
+                trace!("invalid syscall return value: {:x}", retval);
                 ERROR_RETVAL_BASE + ErrorCode::Unreachable as usize
             }
             Ok(retval) => retval,
