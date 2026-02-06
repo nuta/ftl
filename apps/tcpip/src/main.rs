@@ -1,6 +1,5 @@
 #![no_std]
 #![no_main]
-#![allow(unused)]
 
 use core::cell::RefCell;
 use core::fmt;
@@ -23,7 +22,6 @@ use ftl::handle::Handleable;
 use ftl::handle::OwnedHandle;
 use ftl::log::*;
 use ftl::prelude::*;
-use ftl::println;
 use ftl::rc::Rc;
 use smoltcp::iface::Interface;
 use smoltcp::iface::PollResult;
@@ -102,10 +100,6 @@ impl Device {
         }
     }
 
-    fn handle_id(&self) -> HandleId {
-        self.ch.handle().id()
-    }
-
     fn on_read_reply(&mut self, buf: BufferMut, len: usize) {
         debug_assert!(self.inflight_reads > 0);
         self.inflight_reads -= 1;
@@ -154,7 +148,7 @@ impl smoltcp::phy::Device for Device {
 
     fn receive(
         &mut self,
-        timestamp: smoltcp::time::Instant,
+        _timestamp: smoltcp::time::Instant,
     ) -> Option<(Self::RxToken<'_>, Self::TxToken<'_>)> {
         if let Some(packet) = self.rx_queue.pop_front() {
             // Keep one RX read in flight after consuming a packet so the next
@@ -173,7 +167,7 @@ impl smoltcp::phy::Device for Device {
         }
     }
 
-    fn transmit(&mut self, timestamp: smoltcp::time::Instant) -> Option<Self::TxToken<'_>> {
+    fn transmit(&mut self, _timestamp: smoltcp::time::Instant) -> Option<Self::TxToken<'_>> {
         Some(TxToken {
             ch: self.ch.as_ref(),
         })
@@ -192,14 +186,12 @@ enum State {
     DriverMac,
     Control,
     TcpConn {
-        handle: SocketHandle,
         pending_reads: VecDeque<ReadCompleter>,
         pending_writes: VecDeque<WriteCompleter>,
         channel_id: HandleId,
         channel_closed: bool,
     },
     TcpListener {
-        handle: SocketHandle,
         pending_accepts: VecDeque<OpenCompleter>,
     },
 }
@@ -275,7 +267,6 @@ impl Main {
         ctx.add_channel(our_ch)?;
 
         let state = Rc::new(RefCell::new(State::TcpListener {
-            handle,
             pending_accepts: VecDeque::new(),
         }));
 
@@ -298,7 +289,6 @@ impl Main {
         let new_listen_handle = self.do_tcp_listen(endpoint)?;
 
         let conn_state = Rc::new(RefCell::new(State::TcpConn {
-            handle: accepted_handle,
             pending_reads: VecDeque::new(),
             pending_writes: VecDeque::new(),
             channel_id: new_ch_id,
@@ -407,7 +397,7 @@ impl Main {
         let mut destroyed_sockets = Vec::new();
         for (handle, socket) in self.sockets.iter_mut() {
             match socket {
-                Socket::Dhcpv4(socket) => {
+                Socket::Dhcpv4(_socket) => {
                     // DHCP socket is handled in poll_dhcp.
                 }
                 Socket::Tcp(socket) => {
@@ -522,7 +512,7 @@ fn tcp_read_write(socket: &mut tcp::Socket, state: &mut State) {
         let Some(completer) = pending_reads.pop_front() else {
             break;
         };
-        socket.recv(|buf| {
+        let result = socket.recv(|buf| {
             // Documentation:
             //
             // > Call f with the largest contiguous slice of octets in the receive
@@ -542,13 +532,19 @@ fn tcp_read_write(socket: &mut tcp::Socket, state: &mut State) {
 
             (read_len, () /* retrun value of recv */)
         });
+
+        if let Err(error) = result {
+            warn!("failed to recv from socket: {:?}", error);
+            break;
+        }
     }
 
     while socket.can_send() {
         let Some(completer) = pending_writes.pop_front() else {
             break;
         };
-        socket.send(|buf| {
+
+        let result = socket.send(|buf| {
             // Documentation:
             //
             // > Call f with the largest contiguous slice of octets in the
@@ -569,6 +565,11 @@ fn tcp_read_write(socket: &mut tcp::Socket, state: &mut State) {
 
             (write_len, () /* return value of send */)
         });
+
+        if let Err(error) = result {
+            warn!("failed to write to socket: {:?}", error);
+            break;
+        }
     }
 }
 
@@ -711,7 +712,7 @@ impl Application for Main {
         }
         let mut device = Device::new(driver_ch);
 
-        let mut iface = Interface::new(config, &mut device, smol_clock.now());
+        let iface = Interface::new(config, &mut device, smol_clock.now());
 
         let mut sockets = SocketSet::new(Vec::new());
         let dhcp_handle = sockets.add(dhcpv4::Socket::new());
@@ -765,7 +766,7 @@ impl Application for Main {
         }
     }
 
-    fn read(&mut self, ctx: &mut Context, completer: ReadCompleter, offset: usize, len: usize) {
+    fn read(&mut self, ctx: &mut Context, completer: ReadCompleter, _offset: usize, _len: usize) {
         let Some(state) = self.states_by_ch.get(&ctx.handle_id()) else {
             trace!("state not found for read on {:?}", ctx.handle_id());
             completer.error(ErrorCode::InvalidArgument);
@@ -788,7 +789,7 @@ impl Application for Main {
         }
     }
 
-    fn write(&mut self, ctx: &mut Context, completer: WriteCompleter, offset: usize, len: usize) {
+    fn write(&mut self, ctx: &mut Context, completer: WriteCompleter, _offset: usize, _len: usize) {
         let Some(state) = self.states_by_ch.get(&ctx.handle_id()) else {
             trace!("state not found for write on {:?}", ctx.handle_id());
             completer.error(ErrorCode::InvalidArgument);
@@ -840,7 +841,7 @@ impl Application for Main {
         }
     }
 
-    fn read_reply(&mut self, ctx: &mut Context, ch: &Rc<Channel>, buf: BufferMut, len: usize) {
+    fn read_reply(&mut self, ctx: &mut Context, _ch: &Rc<Channel>, buf: BufferMut, len: usize) {
         let mut state = self
             .states_by_ch
             .get(&ctx.handle_id())
@@ -889,17 +890,10 @@ impl Application for Main {
 
         let mut state_borrow = state.borrow_mut();
         match &mut *state_borrow {
-            State::TcpConn {
-                pending_reads,
-                pending_writes,
-                channel_closed,
-                ..
-            } => {
+            State::TcpConn { channel_closed, .. } => {
                 *channel_closed = true;
             }
-            State::TcpListener {
-                pending_accepts, ..
-            } => {
+            State::TcpListener { .. } => {
                 // Nothing t odo.
                 ctx.remove(ctx.handle_id()).unwrap();
             }
