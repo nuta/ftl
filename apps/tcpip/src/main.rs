@@ -4,7 +4,6 @@
 use core::cell::RefCell;
 use core::fmt;
 use core::net::Ipv4Addr;
-use core::time::Duration;
 
 use ftl::application::Application;
 use ftl::application::Context;
@@ -938,7 +937,7 @@ impl Application for Main {
         self.poll(ctx);
     }
 
-    fn timer_expired(&mut self, ctx: &mut Context, timer: &Rc<Timer>) {
+    fn timer_expired(&mut self, ctx: &mut Context, _timer: &Rc<Timer>) {
         info!("timer expired");
         self.poll(ctx);
     }

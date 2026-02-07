@@ -11,7 +11,6 @@ use ftl_types::channel::WriteInline;
 use ftl_types::channel::WriteReplyInline;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
-use ftl_types::time::Monotonic;
 use hashbrown::HashMap;
 use log::trace;
 

@@ -37,7 +37,7 @@ impl Monotonic {
 
     pub fn checked_add(&self, duration: Duration) -> Option<Self> {
         let delta_nanos: u64 = duration.as_nanos().try_into().ok()?;
-        if delta_nanos >= SAFE_DELTA {
+        if delta_nanos > SAFE_DELTA {
             return None;
         }
 
@@ -55,11 +55,6 @@ impl Monotonic {
     /// deltas stay within half the ring.
     pub fn is_before(&self, other: &Self) -> bool {
         let diff = other.0.wrapping_sub(self.0);
-        diff != 0 && diff < SAFE_DELTA
-    }
-
-    /// Returns true if `self` is after `other` in circular time.
-    pub fn is_after(&self, other: &Self) -> bool {
-        !self.is_before(other)
+        diff != 0 && diff <= SAFE_DELTA
     }
 }

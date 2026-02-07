@@ -2,7 +2,6 @@ use crate::channel::CallId;
 use crate::channel::MessageBody;
 use crate::channel::MessageInfo;
 use crate::handle::HandleId;
-use crate::time::Monotonic;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct EventType(u32);

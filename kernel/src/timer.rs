@@ -141,7 +141,7 @@ pub fn handle_interrupt() {
     for timer in &global_timer.actives {
         let mut mutable = timer.mutable.lock();
         match mutable.state {
-            State::Pending(expires_at) if now.is_after(&expires_at) => {
+            State::Pending(expires_at) if expires_at.is_before(&now) => {
                 // The timer has expired, notify the listeners.
                 mutable.state = State::Expired;
                 if let Some(emitter) = mutable.emitter.as_mut() {
