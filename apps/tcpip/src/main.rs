@@ -23,6 +23,7 @@ use ftl::handle::OwnedHandle;
 use ftl::log::*;
 use ftl::prelude::*;
 use ftl::rc::Rc;
+use ftl::time::Timer;
 use smoltcp::iface::Interface;
 use smoltcp::iface::PollResult;
 use smoltcp::iface::SocketHandle;
@@ -208,21 +209,27 @@ impl fmt::Debug for State {
     }
 }
 
-struct SmolClock {}
+struct SmolClock {
+    started_at: ftl::time::Instant,
+}
 
 impl SmolClock {
     fn new() -> Self {
-        Self {}
+        Self {
+            started_at: ftl::time::Instant::now(),
+        }
     }
 
     fn now(&self) -> smoltcp::time::Instant {
-        // TODO:
-        smoltcp::time::Instant::from_secs(0)
+        let elapsed = ftl::time::Instant::now().elapsed_since(&self.started_at);
+        let elapsed_micros = elapsed.as_micros().min(i64::MAX as u128) as i64;
+        smoltcp::time::Instant::from_micros(elapsed_micros)
     }
 }
 
 struct Main {
     smol_clock: SmolClock,
+    timer: Rc<Timer>,
     sockets: SocketSet<'static>,
     states_by_ch: HashMap<HandleId, Rc<RefCell<State>>>,
     states_by_handle: HashMap<SocketHandle, Rc<RefCell<State>>>,
@@ -233,6 +240,17 @@ struct Main {
 }
 
 impl Main {
+    fn update_timer(&mut self) {
+        let now = self.smol_clock.now();
+        let Some(delay) = self.iface.poll_delay(now, &self.sockets) else {
+            return;
+        };
+
+        if let Err(error) = self.timer.set_timeout(delay.into()) {
+            trace!("failed to set poll timer: {:?}", error);
+        }
+    }
+
     fn do_tcp_listen(&mut self, endpoint: IpListenEndpoint) -> Result<SocketHandle, ErrorCode> {
         let rx_buf = tcp::SocketBuffer::new(vec![0; TCP_BUFFER_SIZE]);
         let tx_buf = tcp::SocketBuffer::new(vec![0; TCP_BUFFER_SIZE]);
@@ -329,6 +347,8 @@ impl Main {
             }
             break;
         }
+
+        self.update_timer();
     }
 
     fn poll_dhcp(&mut self) {
@@ -711,6 +731,8 @@ impl Application for Main {
             trace!("failed to request MAC: {:?}", error);
         }
         let mut device = Device::new(driver_ch);
+        let timer = Rc::new(Timer::new().expect("failed to create poll timer"));
+        ctx.add_timer(timer.clone()).unwrap();
 
         let iface = Interface::new(config, &mut device, smol_clock.now());
 
@@ -719,6 +741,7 @@ impl Application for Main {
 
         let mut this = Self {
             smol_clock,
+            timer,
             sockets,
             states_by_ch,
             states_by_handle: HashMap::new(),
@@ -911,6 +934,11 @@ impl Application for Main {
         }
 
         drop(state_borrow);
+        self.poll(ctx);
+    }
+
+    fn timer_expired(&mut self, ctx: &mut Context, _timer: &Rc<Timer>) {
+        trace!("timer expired");
         self.poll(ctx);
     }
 }
