@@ -349,6 +349,12 @@ impl Main {
         }
 
         self.update_timer();
+        trace!(
+            "poll completed: sockets={}, states_by_ch={}, states_by_handle={}",
+            self.sockets.iter().count(),
+            self.states_by_ch.len(),
+            self.states_by_handle.len()
+        );
     }
 
     fn poll_dhcp(&mut self) {
