@@ -33,6 +33,8 @@ pub use pci::sys_pci_set_busmaster;
 pub use syscall::direct_syscall_handler;
 pub use thread::Thread;
 pub use thread::thread_switch;
+pub use timer::read_timer;
+pub use timer::set_timer;
 pub use vmspace::MIN_PAGE_SIZE;
 pub use vmspace::paddr2vaddr;
 

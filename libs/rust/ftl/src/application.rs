@@ -23,6 +23,7 @@ use crate::handle::Handleable;
 use crate::interrupt::Interrupt;
 use crate::sink::Event;
 use crate::sink::Sink;
+use crate::time::Timer;
 
 pub struct OpenCompleter {
     ch: Rc<Channel>,
@@ -125,6 +126,7 @@ impl WriteCompleter {
 enum Object {
     Channel(Rc<Channel>),
     Interrupt(Rc<Interrupt>),
+    Timer(Rc<Timer>),
 }
 
 pub struct Context<'a> {
@@ -154,6 +156,14 @@ impl<'a> Context<'a> {
         self.sink.add(interrupt.as_ref())?;
         self.objects
             .insert(interrupt.handle().id(), Object::Interrupt(interrupt));
+        Ok(())
+    }
+
+    pub fn add_timer<T: Into<Rc<Timer>>>(&mut self, timer: T) -> Result<(), ErrorCode> {
+        let timer = timer.into();
+        self.sink.add(timer.as_ref())?;
+        self.objects
+            .insert(timer.handle().id(), Object::Timer(timer));
         Ok(())
     }
 
@@ -213,6 +223,11 @@ pub trait Application {
     #[allow(unused)]
     fn peer_closed(&mut self, ctx: &mut Context, ch: &Rc<Channel>) {
         trace!("received an unexpected message: peer closed");
+    }
+
+    #[allow(unused)]
+    fn timer_expired(&mut self, ctx: &mut Context, timer: &Rc<Timer>) {
+        trace!("received an unexpected message: time expired");
     }
 }
 
@@ -322,6 +337,15 @@ pub fn run<A: Application>() {
 
                 let mut ctx = Context::new(&sink, &mut objects, ch.handle().id());
                 app.peer_closed(&mut ctx, &ch);
+            }
+            Event::Timer { handle_id } => {
+                let timer = match objects.get(&handle_id) {
+                    Some(Object::Timer(timer)) => timer.clone(),
+                    _ => panic!("unknown handle id from sink: {:?}", handle_id),
+                };
+
+                let mut ctx = Context::new(&sink, &mut objects, timer.handle().id());
+                app.timer_expired(&mut ctx, &timer);
             }
         }
     }

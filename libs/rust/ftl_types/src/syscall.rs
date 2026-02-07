@@ -28,3 +28,6 @@ pub const SYS_PCI_GET_INTERRUPT_LINE: usize = 16;
 pub const SYS_SINK_REMOVE: usize = 17;
 pub const SYS_HANDLE_CLOSE: usize = 18;
 pub const SYS_PROCESS_EXIT: usize = 19;
+pub const SYS_TIME_NOW: usize = 20;
+pub const SYS_TIMER_CREATE: usize = 21;
+pub const SYS_TIMER_SET: usize = 22;

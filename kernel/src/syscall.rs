@@ -20,6 +20,9 @@ use ftl_types::syscall::SYS_SINK_ADD;
 use ftl_types::syscall::SYS_SINK_CREATE;
 use ftl_types::syscall::SYS_SINK_REMOVE;
 use ftl_types::syscall::SYS_SINK_WAIT;
+use ftl_types::syscall::SYS_TIME_NOW;
+use ftl_types::syscall::SYS_TIMER_CREATE;
+use ftl_types::syscall::SYS_TIMER_SET;
 #[cfg(target_arch = "x86_64")]
 use ftl_types::syscall::SYS_X64_IOPL;
 
@@ -69,6 +72,9 @@ fn do_syscall(
         SYS_INTERRUPT_ACQUIRE => crate::interrupt::sys_interrupt_acquire(thread, a0),
         SYS_INTERRUPT_ACKNOWLEDGE => crate::interrupt::sys_interrupt_acknowledge(thread, a0),
         SYS_PROCESS_EXIT => crate::process::sys_process_exit(thread),
+        SYS_TIME_NOW => crate::timer::sys_time_now(),
+        SYS_TIMER_CREATE => crate::timer::sys_timer_create(thread),
+        SYS_TIMER_SET => crate::timer::sys_timer_set(thread, a0, a1),
         _ => {
             trace!("unknown syscall: {}", n);
             Err(ErrorCode::UnknownSyscall)
