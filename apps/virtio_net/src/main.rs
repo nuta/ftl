@@ -361,7 +361,6 @@ impl Main {
                 }
             };
 
-            trace!("wrote {} bytes to read completer", write_len);
             completer.complete(write_len);
         }
     }
