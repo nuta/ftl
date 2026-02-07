@@ -37,7 +37,7 @@ impl Monotonic {
 
     pub fn checked_add(&self, duration: Duration) -> Option<Self> {
         let delta_nanos: u64 = duration.as_nanos().try_into().ok()?;
-        if delta_nanos > SAFE_DELTA {
+        if delta_nanos >= SAFE_DELTA {
             return None;
         }
 
