@@ -247,7 +247,6 @@ impl Main {
             return;
         };
 
-        trace!("setting poll timer to {:?}", delay.millis());
         if let Err(error) = self.timer.set_timeout(delay.into()) {
             trace!("failed to set poll timer: {:?}", error);
         }

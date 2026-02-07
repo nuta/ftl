@@ -51,7 +51,6 @@ impl Timer {
         let mut global_timer = GLOBAL_TIMER.lock();
         let now = arch::read_timer();
         let expires_at = now + duration;
-        info!("setting timer to {:?}", expires_at.as_millis());
 
         let mut mutable = self.mutable.lock();
         let old_state = mem::replace(&mut mutable.state, State::Pending(expires_at));
