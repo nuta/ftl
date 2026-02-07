@@ -1,4 +1,5 @@
 use alloc::vec::Vec;
+use core::mem;
 use core::time::Duration;
 
 use ftl_types::error::ErrorCode;
@@ -50,12 +51,16 @@ impl Timer {
         let mut global_timer = GLOBAL_TIMER.lock();
         let now = arch::read_timer();
         let expires_at = now + duration;
+        info!("setting timer to {:?}", expires_at.as_millis());
 
         let mut mutable = self.mutable.lock();
-        mutable.state = State::Pending(expires_at);
+        let old_state = mem::replace(&mut mutable.state, State::Pending(expires_at));
         drop(mutable);
 
-        global_timer.actives.push(self.clone());
+        if matches!(old_state, State::NotSet) {
+            global_timer.actives.push(self.clone());
+        }
+
         reschedule_timer(&global_timer);
         Ok(())
     }

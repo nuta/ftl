@@ -33,6 +33,10 @@ impl Timer {
         let handle = sys_timer_create()?;
         Ok(Timer { handle })
     }
+
+    pub fn set_timeout(&self, duration: Duration) -> Result<(), ErrorCode> {
+        sys_timer_set(self.handle.id(), duration)
+    }
 }
 
 impl Handleable for Timer {
