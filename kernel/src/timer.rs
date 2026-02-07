@@ -50,7 +50,9 @@ impl Timer {
     pub fn set_timeout(self: &SharedRef<Self>, duration: Duration) -> Result<(), ErrorCode> {
         let mut global_timer = GLOBAL_TIMER.lock();
         let now = arch::read_timer();
-        let expires_at = now + duration;
+        let expires_at = now
+            .checked_add(duration)
+            .ok_or(ErrorCode::InvalidArgument)?;
 
         let mut mutable = self.mutable.lock();
         let old_state = mem::replace(&mut mutable.state, State::Pending(expires_at));
@@ -93,17 +95,6 @@ impl Handleable for Timer {
     }
 }
 
-/// Returns true if the timer has expired (now >= expires_at) considering wrapping.
-fn is_timer_expired(now: Monotonic, expires_at: Monotonic) -> bool {
-    let now = now.as_nanos();
-    let expires_at = expires_at.as_nanos();
-
-    // Timer is expired if now is at or after expires_at
-    // This means expires_at is before or equal to now
-    let diff = now.wrapping_sub(expires_at);
-    diff < (u64::MAX / 2)
-}
-
 struct GlobalTimer {
     actives: Vec<SharedRef<Timer>>,
 }
@@ -136,8 +127,8 @@ fn reschedule_timer(global_timer: &GlobalTimer) {
         }
     }
 
-    if let Some(timeout) = earliest {
-        arch::set_timer(timeout);
+    if let Some(deadline) = earliest {
+        arch::set_timer(deadline);
     }
 }
 
@@ -150,7 +141,7 @@ pub fn handle_interrupt() {
     for timer in &global_timer.actives {
         let mut mutable = timer.mutable.lock();
         match mutable.state {
-            State::Pending(expires_at) if is_timer_expired(now, expires_at) => {
+            State::Pending(expires_at) if now.is_after(&expires_at) => {
                 // The timer has expired, notify the listeners.
                 mutable.state = State::Expired;
                 if let Some(emitter) = mutable.emitter.as_mut() {
@@ -191,13 +182,8 @@ pub fn sys_timer_set(
     a1: usize,
 ) -> Result<SyscallResult, ErrorCode> {
     let timer_id = HandleId::from_raw(a0);
-    let duration_ms = a1 as u64;
+    let timeout_nanos = a1 as u64;
     static_assert!(size_of::<u64>() == size_of::<usize>());
-
-    // is_before and is_timer_expired depend on this invariant.
-    if duration_ms > u64::MAX / 2 {
-        return Err(ErrorCode::InvalidArgument);
-    }
 
     thread
         .process()
@@ -205,7 +191,7 @@ pub fn sys_timer_set(
         .lock()
         .get::<Timer>(timer_id)?
         .authorize(HandleRight::WRITE)?
-        .set_timeout(Duration::from_millis(duration_ms))?;
+        .set_timeout(Duration::from_nanos(timeout_nanos))?;
 
     Ok(SyscallResult::Return(0))
 }

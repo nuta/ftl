@@ -59,7 +59,7 @@ pub fn sys_timer_set(handle: HandleId, duration: Duration) -> Result<(), ErrorCo
     syscall2(
         SYS_TIMER_SET,
         handle.as_usize(),
-        duration.as_millis() as usize,
+        duration.as_nanos() as usize,
     )?;
     Ok(())
 }

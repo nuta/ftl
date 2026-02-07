@@ -1,5 +1,6 @@
-use core::ops::Add;
 use core::time::Duration;
+
+const SAFE_DELTA: u64 = (1u64 << 63) - 1;
 
 /// The [`std::time::Instant`] for FTL.
 ///
@@ -34,27 +35,31 @@ impl Monotonic {
         self.0 / 1_000_000
     }
 
+    pub fn checked_add(&self, duration: Duration) -> Option<Self> {
+        let delta_nanos: u64 = duration.as_nanos().try_into().ok()?;
+        if delta_nanos > SAFE_DELTA {
+            return None;
+        }
+
+        Some(Self(self.0.wrapping_add(delta_nanos)))
+    }
+
     pub fn elapsed_since(&self, other: &Self) -> Duration {
-        //
         Duration::from_nanos(self.0.wrapping_sub(other.0))
     }
 
     /// Compare two tick values considering potential wrapping.
     ///
-    /// Returns true if `a` is before `b` in circular time. This works correctly
-    /// even when the tick counter wraps around.
+    /// Returns true if `self` is before `other` in circular time. This works
+    /// correctly even when the tick counter wraps around, as long as compared
+    /// deltas stay within half the ring.
     pub fn is_before(&self, other: &Self) -> bool {
-        // If the difference is less than the maximum timer duration, self is before
-        // other.
-        self.0.wrapping_sub(other.0) < (u64::MAX / 2)
+        let diff = other.0.wrapping_sub(self.0);
+        diff != 0 && diff < SAFE_DELTA
     }
-}
 
-impl Add<Duration> for Monotonic {
-    type Output = Self;
-
-    fn add(self, rhs: Duration) -> Self::Output {
-        // FIXME: u64
-        Self(self.0 + rhs.as_nanos() as u64)
+    /// Returns true if `self` is after `other` in circular time.
+    pub fn is_after(&self, other: &Self) -> bool {
+        !self.is_before(other)
     }
 }
