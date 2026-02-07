@@ -6,6 +6,7 @@ use ftl_arrayvec::ArrayVec;
 use ftl_bump_allocator::BumpAllocator;
 use ftl_types::error::ErrorCode;
 use ftl_utils::alignment::is_aligned;
+use ftl_utils::formatter::ByteSize;
 
 use crate::address::PAddr;
 use crate::address::VAddr;
@@ -20,6 +21,8 @@ use crate::shared_ref::SharedRef;
 use crate::spinlock::SpinLock;
 use crate::syscall::SyscallResult;
 use crate::thread::Thread;
+
+const KERNEL_HEAP_CHUNK_SIZE: usize = 512 * 1024;
 
 /// The physical memory allocator.
 pub static PAGE_ALLOCATOR: PageAllocator = PageAllocator::new();
@@ -72,8 +75,32 @@ impl PageAllocator {
 struct OomHandler;
 
 impl talc::OomHandler for OomHandler {
-    fn handle_oom(_talc: &mut talc::Talc<Self>, layout: Layout) -> Result<(), ()> {
-        panic!("out of memory: {:?}", layout);
+    fn handle_oom(talc: &mut talc::Talc<Self>, layout: Layout) -> Result<(), ()> {
+        assert!(
+            // Divided by 2 to leave some space for Talc's metadata.
+            layout.size() <= KERNEL_HEAP_CHUNK_SIZE / 2,
+            "too large memory allocation: {}",
+            ByteSize(layout.size())
+        );
+
+        info!(
+            "extending kernel heap: requested {}, supplying {}",
+            ByteSize(layout.size()),
+            ByteSize(KERNEL_HEAP_CHUNK_SIZE)
+        );
+
+        let paddr = PAGE_ALLOCATOR
+            .alloc(KERNEL_HEAP_CHUNK_SIZE)
+            .expect("out of memory");
+        let ptr: *mut u8 = arch::paddr2vaddr(paddr).as_usize() as *mut u8;
+        let end = unsafe { ptr.add(KERNEL_HEAP_CHUNK_SIZE) };
+
+        unsafe {
+            talc.claim(talc::Span::new(ptr, end))
+                .expect("failed to extend the kernel heap");
+        }
+
+        Ok(())
     }
 }
 
