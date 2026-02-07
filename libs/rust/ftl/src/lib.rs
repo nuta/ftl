@@ -21,6 +21,7 @@ pub mod log;
 pub mod prelude;
 pub mod sink;
 pub mod syscall;
+pub mod time;
 
 pub mod channel;
 pub mod interrupt;

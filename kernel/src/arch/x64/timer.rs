@@ -4,6 +4,8 @@
 use core::sync::atomic::AtomicU32;
 use core::sync::atomic::Ordering;
 
+use ftl_types::time::Monotonic;
+
 use super::ioport::out8;
 
 pub(super) const TIMER_IRQ: u8 = 0;
@@ -24,12 +26,18 @@ const DIVISOR: u16 = (PIT_HZ / TIMER_HZ) as u16;
 static TICKS: AtomicU32 = AtomicU32::new(0xffff_0000);
 
 pub(super) fn handle_interrupt() {
-    let ticks = TICKS.fetch_add(1, Ordering::Relaxed);
-    if ticks % 1000 == 0 {
-        info!("timer tick: {}", ticks);
-    }
-
+    TICKS.fetch_add(1, Ordering::Relaxed);
+    crate::timer::handle_interrupt();
     super::get_cpuvar().arch.local_apic.acknowledge_irq();
+}
+
+pub fn read_timer() -> Monotonic {
+    let ticks = TICKS.load(Ordering::Relaxed);
+    Monotonic::from_millis(ticks as u64)
+}
+
+pub fn set_timer(_duration: Monotonic) {
+    // Do nothing. PIT is not an one-shot timer.
 }
 
 pub(super) fn init() {

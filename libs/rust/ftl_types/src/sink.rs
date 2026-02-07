@@ -2,6 +2,7 @@ use crate::channel::CallId;
 use crate::channel::MessageBody;
 use crate::channel::MessageInfo;
 use crate::handle::HandleId;
+use crate::time::Monotonic;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct EventType(u32);
@@ -10,6 +11,7 @@ impl EventType {
     pub const MESSAGE: Self = Self(1);
     pub const IRQ: Self = Self(2);
     pub const PEER_CLOSED: Self = Self(3);
+    pub const TIMER: Self = Self(4);
 }
 
 #[derive(Clone, Copy)]
@@ -35,6 +37,7 @@ pub union EventBody {
     pub message: MessageEvent,
     pub irq: IrqEvent,
     pub peer_closed: PeerClosedEvent,
+    pub timer: TimerEvent,
 }
 
 #[derive(Clone, Copy)]
@@ -52,3 +55,7 @@ pub struct MessageEvent {
     pub call_id: CallId,
     pub body: MessageBody,
 }
+
+#[derive(Clone, Copy)]
+#[repr(C)]
+pub struct TimerEvent {}

@@ -208,16 +208,21 @@ impl fmt::Debug for State {
     }
 }
 
-struct SmolClock {}
+struct SmolClock {
+    started_at: ftl::time::Instant,
+}
 
 impl SmolClock {
     fn new() -> Self {
-        Self {}
+        Self {
+            started_at: ftl::time::Instant::now(),
+        }
     }
 
     fn now(&self) -> smoltcp::time::Instant {
-        // TODO:
-        smoltcp::time::Instant::from_secs(0)
+        let elapsed = ftl::time::Instant::now().elapsed_since(&self.started_at);
+        let elapsed_micros = elapsed.as_micros().min(i64::MAX as u128) as i64;
+        smoltcp::time::Instant::from_micros(elapsed_micros)
     }
 }
 

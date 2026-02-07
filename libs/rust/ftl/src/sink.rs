@@ -42,6 +42,9 @@ pub enum Event {
         handle_id: HandleId,
         irq: u8,
     },
+    Timer {
+        handle_id: HandleId,
+    },
 }
 
 pub struct Sink {
@@ -110,6 +113,11 @@ impl Sink {
             EventType::PEER_CLOSED => {
                 Event::PeerClosed {
                     ch_id: raw.header.id,
+                }
+            }
+            EventType::TIMER => {
+                Event::Timer {
+                    handle_id: raw.header.id,
                 }
             }
             _ => {
