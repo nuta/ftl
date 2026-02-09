@@ -1,0 +1,58 @@
+# Generate docs and deploy to Vercel.
+name: Docs
+
+on:
+  push:
+  pull_request:
+    branches:
+      - main
+
+# No permissions allowed by default. Specify explicitly in each job.
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - uses: oven-sh/setup-bun@v2
+
+    - name: Install VitePress
+      run: bun install vitepress
+
+    - name: Build docs
+      run: bunx vitepress build
+      working-directory: docs
+
+    - uses: actions/upload-artifact@v4
+      with:
+        name: docs
+        path: docs/.vitepress/dist
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+    - uses: actions/download-artifact@v4
+      with:
+        name: docs
+        path: dist
+
+    - name: Install Vercel CLI
+      run: npm install -g vercel
+
+    - name: Deploy to Vercel
+      run: |
+        cp docs/vercel.json dist/vercel.json
+        vercel --prod dist -t "$VERCEL_TOKEN"
+      env:
+        VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+        VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
