@@ -34,6 +34,15 @@ export async function main(args: string[]) {
         }
     });
 
+    process.on('SIGINT', () => {
+        console.log('exiting...');
+        if (qemu) {
+            qemu.kill('SIGTERM');
+        }
+
+        process.exit(0);
+    });
+
     const rebuild = async (filename?: string) => {
         if (qemu) {
             qemu.kill('SIGTERM');
@@ -53,7 +62,9 @@ export async function main(args: string[]) {
             if (qemu) {
                 await qemu.exited;
             }
-            qemu = await startQemu();
+            qemu = await startQemu({
+                inheritStdin: false // Enable Ctrl-C to exit QEMU
+            });
         } catch (error) {
             console.error(`failed to run: ${error}`);
         }

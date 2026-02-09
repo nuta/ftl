@@ -1,4 +1,8 @@
-export async function startQemu() {
+export interface QemuParams {
+    inheritStdin?: boolean;
+}
+
+export async function startQemu(params: QemuParams) {
     const args = [
         "-m", "128",
         "-cpu", "qemu64,+fsgsbase",
@@ -15,5 +19,6 @@ export async function startQemu() {
         "-object", "filter-dump,id=filter0,netdev=net0,file=network.pcap"
     ];
 
-    return Bun.spawn(["qemu-system-x86_64", ...args], { stdio: ["inherit", "inherit", "inherit"] });
+    const stdin = params.inheritStdin ? "inherit" : null;
+    return Bun.spawn(["qemu-system-x86_64", ...args], { stdio: [stdin, "inherit", "inherit"] });
 }
