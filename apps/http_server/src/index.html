@@ -1,20 +1,86 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>FTL</title>
+    <meta charset="UTF-8">
+    <title>FTL operating system</title>
+    <style>
+      main {
+        font-family: sans-serif;
+        margin-left: 1.5rem;
+        font-size: 1.1rem;
+        line-height: 1.7;
+      }
+
+      h2 {
+        font-size: 1.3rem;
+        margin-top: 2rem;
+        font-weight: bold;
+      }
+
+      .ascii-art {
+        font-family: 'Menlo', monospace;
+        font-size: 0.8rem;
+        line-height: 1;
+        width: fit-content;
+      }
+
+      ul {
+        padding-inline-start: 1.5rem;
+      }
+
+      footer {
+        font-size: 0.95rem;
+        margin-top: 2rem;
+      }
+    </style>
   </head>
   <body>
-    <h1>It works!</h1>
-    <hr>
-    <center>
-      <figure>
-        <img src="https://imgs.xkcd.com/comics/operating_systems.png"
-             alt="xkcd - Operating Systems"
-             style="max-width: 100%; height: auto;">
-        <figcaption><a href="https://xkcd.com/1508/">xkcd</a></figcaption>
-      </figure>
-    </center>
-    <hr>
-    <address>Powered by FTL</address>
+    <main>
+      <h1>FTL operating system</h1>
+      <nav>
+        <a href="https://ftl-docs.seiya.me">Documentation</a>
+        &nbsp;|&nbsp;
+        <a href="https://github.com/nuta/ftl">GitHub</a>
+        &nbsp;|&nbsp;
+        <a href="https://seiya.me/blog">Devlog</a>
+      </nav>
+      <section>
+        <h2>Architecture</h2>
+<pre class="ascii-art">
+                     Message Passing
+  Isolation #1  ┌ ─ ─ ─ ┐        ┌ ─ ─ ┐  Isolation #2
+  (user mode)   │       │        │     │  (kernel mode)
+  ┌─────────────│──┐┌───│────────│─────│─────────────┐
+  │ Process     ▼  ││   ▼        ▼     ▼             │
+  │ ┏━━━━━━━━━━━━▄ ││ ┏━━━━━━━━━━━━▄  ┏━━━━━━━━━━━━▄ │
+  │ ┃            █ ││ ┃            █  ┃            █ │
+  │ ┃  API       █ ││ ┃  TCP/IP    █  ┃  Ethernet  █ │
+  │ ┃  Server    █ ││ ┃  Stack     █  ┃  Driver    █ │
+  │ ┃            █ ││ ┃            █  ┃            █ │
+  │ ▝▀▀▀▀▀▀▀▀▀▀▀▀▀ ││ ▝▀▀▀▀▀▀▀▀▀▀▀▀▀  ▝▀▀▀▀▀▀▀▀▀▀▀▀▀ │
+  └───│────────────┘└────────────────────────────────┘
+      │                                   Applications
+  ╶╶╶╶│╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶
+      ▼ System Calls                            Kernel
+  ╔══════════════════════════════════════════════════╗
+  ║       Microkernel (memory, threads, IPC, ...)    ║
+  ╚══════════════════════════════════════════════════╝
+</pre>
+      <figcaption></figcaption>
+      </section>
+      <section>
+        <h2>Features & Goals</h2>
+        <ul>
+          <li>Microkernel architecture (OS services are isolated processes)</li>
+          <li>Userspace-first design: make OS development approachable for everyone</li>
+          <li>Run performance-critical services in kernel (safely)</li>
+          <li>Schema-less and async message passing IPC</li>
+          <li>Fast edit-and-run cycle for hassle-free developer experience</li>
+        </ul>
+      </section>
+      <footer>
+        Powered by <a href="https://github.com/nuta/ftl">FTL</a> (yes, you're talking to this OS)
+      </footer>
+    </main>
   </body>
 </html>
