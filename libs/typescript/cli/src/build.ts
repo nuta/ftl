@@ -3,11 +3,12 @@ import { Arch } from "./types";
 import fs from 'fs/promises';
 
 export interface BuildParams {
+    mode: 'debug' | 'release';
     arch: Arch;
     apps: string[];
 }
 
-async function cargoBuild(manifestPath: string, targetJSON: string, args: string[] = []): Promise<void> {
+async function cargoBuild(manifestPath: string, targetJSON: string, mode: 'debug' | 'release', args: string[] = []): Promise<void> {
     let argv = [
         'cargo',
         'build',
@@ -17,6 +18,11 @@ async function cargoBuild(manifestPath: string, targetJSON: string, args: string
         '--target', targetJSON,
         ...args,
     ]
+
+    if (mode === 'release') {
+        argv.push('--release');
+    }
+
     const proc = Bun.spawn(argv, {
         env: {
             ...process.env,
@@ -46,16 +52,16 @@ export async function build(params: BuildParams) {
     for (const app of params.apps) {
         const manifestPath = `apps/${app}/Cargo.toml`;
         const targetJSON = `libs/rust/ftl/src/arch/${params.arch}/user.json`;
-        await cargoBuild(manifestPath, targetJSON, cargoArgs);
+        await cargoBuild(manifestPath, targetJSON, params.mode, cargoArgs);
         initfsFiles[app] = `target/user/debug/${app}`;
     }
 
     const kernelManifestPath = 'kernel/Cargo.toml';
     const kernelTargetJSON = `kernel/src/arch/${params.arch}/kernel.json`;
-    await cargoBuild(kernelManifestPath, kernelTargetJSON, cargoArgs);
+    await cargoBuild(kernelManifestPath, kernelTargetJSON, params.mode, cargoArgs);
 
     const initfs = await createInitfs(initfsFiles);
     await Bun.write('initfs.tar', initfs);
 
-    await fs.copyFile('target/kernel/debug/kernel', 'ftl.elf');
+    await fs.copyFile(`target/kernel/${params.mode}/kernel`, 'ftl.elf');
 }
