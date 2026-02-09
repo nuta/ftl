@@ -47,6 +47,9 @@ const NET_RX_BUFFER_SIZE: usize = 1514;
 const RX_QUEUE_SIZE: usize = 1;
 const VIRTIO_NET_MAC_URI: &[u8] = b"ethernet:mac";
 
+// TODO: Remove this default timeout once we solve leaks.
+const TCP_SOCKET_TIMEOUT: smoltcp::time::Duration = smoltcp::time::Duration::from_secs(30);
+
 struct RxToken {
     buffer: Vec<u8>,
 }
@@ -258,6 +261,7 @@ impl Main {
 
         socket.set_nagle_enabled(false);
         socket.set_ack_delay(None);
+        socket.set_timeout(Some(TCP_SOCKET_TIMEOUT));
 
         match socket.listen(endpoint) {
             Ok(_) => {}
