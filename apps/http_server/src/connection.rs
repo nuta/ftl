@@ -76,7 +76,7 @@ fn process_request(req: Request) -> VecDeque<Buffer> {
     };
 
     let headers = format!(
-        "HTTP/1.1 {status} OK\r\nContent-Length: {}\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n",
+        "HTTP/1.1 {status} OK\r\nServer: FTL\r\nContent-Length: {}\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n",
         body.len()
     );
 
