@@ -50,8 +50,9 @@ jobs:
 
     - name: Deploy to Vercel
       run: |
-        cp docs/vercel.json dist/vercel.json
-        vercel --prod dist -t "$VERCEL_TOKEN"
+        echo '{"cleanUrls": true,"trailingSlash": false}' > vercel.json
+        vercel --prod . -t "$VERCEL_TOKEN"
+      working-directory: dist
       env:
         VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
