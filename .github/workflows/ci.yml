@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ubuntu_build:
+    name: "Build (Ubuntu)"
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v5
+    - uses: oven-sh/setup-bun@v2
+    - uses: actions/cache@v4
+      with:
+        path: |
+          ~/.rustup/
+          ~/.cargo/registry/
+          target
+        key: build-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: build-${{ runner.os }}-
+    - name: Build World
+      run: bin/ftl build
+
+  macos_build:
+    name: "Build (macOS)"
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v5
+    - uses: oven-sh/setup-bun@v2
+    - uses: actions/cache@v4
+      with:
+        path: |
+          ~/.rustup/
+          ~/.cargo/registry/
+          target
+        key: build-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: build-${{ runner.os }}-
+    - name: Build World
+      run: bin/ftl build
