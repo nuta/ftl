@@ -102,9 +102,6 @@ idt_handlers:
 #[unsafe(no_mangle)]
 extern "C" fn interrupt_entry() -> ! {
     naked_asm!(
-        "cli",
-        "cld",
-
         // TODO: SWAPGS is tricky and error-prone. If a double exception
         //       occurs, SWAPGS will switch to the user's one. Typically,
         //       a interrupt handler checks RFLAGS.CPL or CS, but in FTL
@@ -112,7 +109,9 @@ extern "C" fn interrupt_entry() -> ! {
         //
         //       We could use RFLAGS.IF to determine if we are in the
         //       kernel context (assuming interrupts are disabled).
+        "cli",
         "swapgs",
+        "cld",
         "push rax",
 
         // thread = CpuVar.current_thread

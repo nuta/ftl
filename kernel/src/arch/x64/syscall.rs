@@ -14,6 +14,7 @@ pub extern "C" fn direct_syscall_handler(
     n: usize,
 ) -> usize {
     naked_asm!(
+        "cli",
         "swapgs",
 
         // thread = CpuVar.current_thread
