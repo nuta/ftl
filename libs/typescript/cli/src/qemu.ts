@@ -14,9 +14,12 @@ export async function startQemu(params: QemuParams) {
         "-gdb", "tcp::7778",
         "-d", "cpu_reset,unimp,guest_errors,int",
         "-D", "qemu.log",
-        "-netdev", "user,id=net0,hostfwd=tcp:127.0.0.1:30080-:80",
-        "-device", "virtio-net-pci,netdev=net0",
-        "-object", "filter-dump,id=filter0,netdev=net0,file=network.pcap"
+        // "-netdev", "user,id=net0,hostfwd=tcp:127.0.0.1:30080-:80",
+        // "-device", "virtio-net-pci,netdev=net0",
+        // "-object", "filter-dump,id=filter0,netdev=net0,file=network.pcap"
+        "-device", "virtio-scsi-pci,id=scsi0",
+        "-drive", `if=none,id=scsidisk0,file=disk.img,format=raw`,
+        "-device", "scsi-hd,drive=scsidisk0,bus=scsi0.0"
     ];
 
     const stdin = params.inheritStdin ? "inherit" : null;
