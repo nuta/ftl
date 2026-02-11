@@ -31,6 +31,7 @@ const STATUS_DRIVER_OK: u8 = 4;
 #[repr(u16)]
 pub enum DeviceType {
     Network = 1,
+    Scsi = 8,
 }
 
 #[derive(Debug)]
