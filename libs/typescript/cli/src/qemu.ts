@@ -1,17 +1,8 @@
-import fs from "fs/promises";
-
 export interface QemuParams {
     inheritStdin?: boolean;
 }
 
 export async function startQemu(params: QemuParams) {
-    const scsiDiskPath = "/tmp/ftl-virtio-scsi-disk.img";
-    const scsiDiskSize = 64 * 1024 * 1024;
-
-    const scsiDisk = await fs.open(scsiDiskPath, "a");
-    await scsiDisk.truncate(scsiDiskSize);
-    await scsiDisk.close();
-
     const args = [
         "-m", "128",
         "-cpu", "qemu64,+fsgsbase",
@@ -23,9 +14,9 @@ export async function startQemu(params: QemuParams) {
         "-gdb", "tcp::7778",
         "-d", "cpu_reset,unimp,guest_errors,int",
         "-D", "qemu.log",
-        "-device", "virtio-scsi-pci,id=scsi0",
-        "-drive", `if=none,id=scsidisk0,file=${scsiDiskPath},format=raw`,
-        "-device", "scsi-hd,drive=scsidisk0,bus=scsi0.0"
+        "-netdev", "user,id=net0,hostfwd=tcp:127.0.0.1:30080-:80",
+        "-device", "virtio-net-pci,netdev=net0",
+        "-object", "filter-dump,id=filter0,netdev=net0,file=network.pcap"
     ];
 
     const stdin = params.inheritStdin ? "inherit" : null;
