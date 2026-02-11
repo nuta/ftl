@@ -15,8 +15,10 @@ FTL follows three key design philosophies:
 Install [Rust toolchain](https://rustup.rs/), [Bun](https://bun.com/docs/installation), [QEMU](https://www.qemu.org/download/#macos), and run:
 
 ```
-./run.sh
+bin/ftl run
 ```
+
+See [Getting Started](docs/getting-started.md) for more details.
 
 ## License
 
