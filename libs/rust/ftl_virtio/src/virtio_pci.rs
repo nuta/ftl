@@ -158,6 +158,8 @@ impl VirtioPci {
 
     fn acknowledge(&self) {
         // 1. Reset the device. This is not required on initial start up.
+        self.out8(PCI_IOPORT_STATUS, 0);
+
         // 2. The ACKNOWLEDGE status bit is set: we have noticed the device.
         self.out8(PCI_IOPORT_STATUS, STATUS_ACKNOWLEDGE);
 
