@@ -138,6 +138,15 @@ impl<T: Copy, const N: usize> ArrayVec<T, N> {
     }
 }
 
+impl<T: Copy, const N: usize> Clone for ArrayVec<T, N> {
+    fn clone(&self) -> Self {
+        Self {
+            elems: self.elems,
+            len: self.len,
+        }
+    }
+}
+
 impl<T, const N: usize> Drop for ArrayVec<T, N> {
     fn drop(&mut self) {
         self.clear();
