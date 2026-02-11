@@ -20,10 +20,10 @@ use ftl::collections::VecDeque;
 use ftl::error::ErrorCode;
 use ftl::handle::HandleId;
 use ftl::handle::Handleable;
-use ftl::handle::OwnedHandle;
 use ftl::log::*;
 use ftl::prelude::*;
 use ftl::rc::Rc;
+use ftl::service::Service;
 use ftl::time::Timer;
 use smoltcp::iface::Interface;
 use smoltcp::iface::PollResult;
@@ -189,7 +189,7 @@ impl smoltcp::phy::Device for Device {
 enum State {
     Driver,
     DriverMac,
-    Control,
+    Client,
     TcpConn {
         pending_reads: VecDeque<ReadCompleter>,
         pending_writes: VecDeque<WriteCompleter>,
@@ -206,7 +206,7 @@ impl fmt::Debug for State {
         match self {
             State::Driver => write!(f, "Driver"),
             State::DriverMac => write!(f, "DriverMac"),
-            State::Control => write!(f, "Control"),
+            State::Client => write!(f, "Client"),
             State::TcpConn { .. } => write!(f, "TcpConn"),
             State::TcpListener { .. } => write!(f, "TcpListener"),
         }
@@ -717,24 +717,14 @@ impl Application for Main {
         let hwaddr = HardwareAddress::Ethernet(EthernetAddress::from_bytes(&[0; 6]));
         let config = smoltcp::iface::Config::new(hwaddr);
 
-        let driver_ch = Rc::new(Channel::from_handle(OwnedHandle::from_raw(
-            HandleId::from_raw(1),
-        )));
-        let http_ch = Rc::new(Channel::from_handle(OwnedHandle::from_raw(
-            HandleId::from_raw(2),
-        )));
-
+        let driver_ch = Rc::new(Channel::connect("ethernet").unwrap());
         let mut states_by_ch = HashMap::new();
 
         let driver_id = driver_ch.handle().id();
-        let http_id = http_ch.handle().id();
         let driver_state = Rc::new(RefCell::new(State::Driver));
-        let http_state = Rc::new(RefCell::new(State::Control));
         states_by_ch.insert(driver_id, driver_state.clone());
-        states_by_ch.insert(http_id, http_state.clone());
 
         ctx.add_channel(driver_ch.clone()).unwrap();
-        ctx.add_channel(http_ch.clone()).unwrap();
 
         if let Err(error) = driver_ch.send(Message::Open {
             uri: Buffer::Static(VIRTIO_NET_MAC_URI),
@@ -750,6 +740,10 @@ impl Application for Main {
         let mut sockets = SocketSet::new(Vec::new());
         let dhcp_handle = sockets.add(dhcpv4::Socket::new());
 
+        let service = Service::register("tcpip").unwrap();
+        ctx.add_service(service).unwrap();
+
+        trace!("ready");
         let mut this = Self {
             smol_clock,
             timer,
@@ -778,7 +772,7 @@ impl Application for Main {
             } => {
                 pending_accepts.push_back(completer);
             }
-            State::Control => {
+            State::Client => {
                 drop(state_borrow);
                 match parse_uri(&completer) {
                     Ok(Uri::TcpListen(endpoint)) => {
@@ -816,7 +810,7 @@ impl Application for Main {
             State::TcpListener { .. } => {
                 completer.error(ErrorCode::Unsupported);
             }
-            State::Driver | State::DriverMac | State::Control => {
+            State::Driver | State::DriverMac | State::Client => {
                 completer.error(ErrorCode::Unsupported);
             }
         }
@@ -839,7 +833,7 @@ impl Application for Main {
             State::TcpListener { .. } => {
                 completer.error(ErrorCode::Unsupported);
             }
-            State::Driver | State::DriverMac | State::Control => {
+            State::Driver | State::DriverMac | State::Client => {
                 completer.error(ErrorCode::Unsupported);
             }
         }
@@ -937,7 +931,7 @@ impl Application for Main {
                 trace!("MAC control channel closed");
                 ctx.remove(ctx.handle_id()).unwrap();
             }
-            State::Control => {
+            State::Client => {
                 // Nothing to do.
                 ctx.remove(ctx.handle_id()).unwrap();
             }
@@ -950,6 +944,13 @@ impl Application for Main {
     fn timer_expired(&mut self, ctx: &mut Context, _timer: &Rc<Timer>) {
         trace!("timer expired");
         self.poll(ctx);
+    }
+
+    fn connected(&mut self, ctx: &mut Context, ch: Channel) {
+        trace!("client connected");
+        self.states_by_ch
+            .insert(ch.handle().id(), Rc::new(RefCell::new(State::Client)));
+        ctx.add_channel(ch).unwrap();
     }
 }
 

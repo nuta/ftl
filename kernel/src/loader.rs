@@ -151,7 +151,7 @@ fn load_elf(file: &initfs::File) -> Result<VAddr, ElfError> {
     Ok(entry)
 }
 
-pub fn load_app(file: &initfs::File, mut handles: Vec<SharedRef<Channel>>) {
+pub fn load_app(file: &initfs::File) {
     let entry = load_elf(&file).expect("failed to load ELF file");
 
     let stack_size = 1024 * 1024;
@@ -181,17 +181,6 @@ pub fn load_app(file: &initfs::File, mut handles: Vec<SharedRef<Channel>>) {
 
     let name = ArrayString::try_from(file.name).expect("failed to create process name");
     let process = Process::new(name, INKERNEL_ISOLATION.clone()).expect("failed to create process");
-
-    {
-        let mut handle_table = process.handle_table().lock();
-        for (i, handle) in handles.drain(..).enumerate() {
-            let id = handle_table
-                .insert(Handle::new(handle, HandleRight::ALL))
-                .expect("failed to insert channel handle");
-            assert_eq!(id.as_usize(), i + 1);
-        }
-    }
-
     let thread =
         Thread::new(process, entry.as_usize(), sp, start_info).expect("failed to create thread");
 
@@ -199,21 +188,8 @@ pub fn load_app(file: &initfs::File, mut handles: Vec<SharedRef<Channel>>) {
 }
 
 pub fn load(initfs: &InitFs) {
-    // FIXME: Implement dynamic handle allocation & service discovery.
-    let (tcpip_driver_ch0, tcpip_driver_ch1) =
-        Channel::new().expect("failed to create ping-pong channel");
-    let (tcpip_http_ch0, tcpip_http_ch1) =
-        Channel::new().expect("failed to create ping-pong channel");
-    let mut handles_map = BTreeMap::new();
-    handles_map.insert("virtio_net", vec![tcpip_driver_ch0]);
-    handles_map.insert("tcpip", vec![tcpip_driver_ch1, tcpip_http_ch0]);
-    handles_map.insert("http_server", vec![tcpip_http_ch1]);
-
     for file in initfs.iter() {
         trace!("loading app: {}", file.name);
-        let handles = handles_map
-            .remove(file.name)
-            .expect("app is not defined in the manifest");
-        load_app(&file, handles);
+        load_app(&file);
     }
 }

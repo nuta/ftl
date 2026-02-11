@@ -24,6 +24,7 @@ use ftl::log::*;
 use ftl::pci::PciEntry;
 use ftl::prelude::*;
 use ftl::rc::Rc;
+use ftl::service::Service;
 use ftl_utils::alignment::align_up;
 use ftl_virtio::ChainEntry;
 use ftl_virtio::Error as VirtioError;
@@ -143,13 +144,6 @@ impl Application for Main {
         let mut rxq = virtio.setup_virtqueue(0).unwrap();
         let txq = virtio.setup_virtqueue(1).unwrap();
 
-        let ch_id = HandleId::from_raw(1);
-        let ch = Channel::from_handle(OwnedHandle::from_raw(ch_id));
-        ctx.add_channel(ch).unwrap();
-
-        let mut states = HashMap::new();
-        states.insert(ch_id, State::Packet);
-
         // Initialize pending_rxs with None for each possible descriptor
         let mut pending_rxs: Vec<Option<OngoingRx>> = Vec::with_capacity(rxq.queue_size());
         for _ in 0..rxq.queue_size() {
@@ -185,6 +179,9 @@ impl Application for Main {
         virtio.initialize2();
         trace!("virtio device initialized");
 
+        let service = Service::register("ethernet").unwrap();
+        ctx.add_service(service).unwrap();
+
         Self {
             virtio,
             rxq,
@@ -196,7 +193,7 @@ impl Application for Main {
             pending_writes: VecDeque::new(),
             rx_queue: VecDeque::new(),
             mac,
-            states,
+            states: HashMap::new(),
         }
     }
 
@@ -345,6 +342,11 @@ impl Application for Main {
                 self.poll_writes();
             }
         }
+    }
+
+    fn connected(&mut self, ctx: &mut Context, ch: Channel) {
+        self.states.insert(ch.handle().id(), State::Packet);
+        ctx.add_channel(ch).unwrap();
     }
 }
 

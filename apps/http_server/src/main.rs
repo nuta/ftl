@@ -34,18 +34,13 @@ struct Main {
     states: HashMap<HandleId, State>,
 }
 
-fn open_tcpip_ch() -> Rc<Channel> {
-    let control_id = HandleId::from_raw(1);
-    Rc::new(Channel::from_handle(OwnedHandle::from_raw(control_id)))
-}
-
 impl Application for Main {
     fn init(ctx: &mut InitContext) -> Self {
         let mut states = HashMap::new();
 
-        let tcpip = open_tcpip_ch();
-        ctx.add_channel(tcpip.clone()).unwrap();
+        let tcpip = Rc::new(Channel::connect("tcpip").unwrap());
         states.insert(tcpip.handle().id(), State::Tcpip);
+        ctx.add_channel(tcpip.clone()).unwrap();
 
         tcpip
             .send(Message::Open {
