@@ -35,9 +35,17 @@ const MAX_SCAN_TARGET: u16 = 15;
 const OPCODE_INQUIRY: u8 = 0x12;
 const OPCODE_TEST_UNIT_READY: u8 = 0x00;
 const OPCODE_READ_CAPACITY10: u8 = 0x25;
+const OPCODE_READ10: u8 = 0x28;
+const OPCODE_WRITE10: u8 = 0x2a;
+const OPCODE_SYNCHRONIZE_CACHE10: u8 = 0x35;
 
 const VIRTIO_SCSI_S_OK: u8 = 0;
 const SCSI_STATUS_GOOD: u8 = 0;
+
+const JOKE_PAYLOAD: &[u8] =
+    b"Joke 1: Why did the kernel panic? It could not handle the pressure.\n\
+Joke 2: There are 10 kinds of people: those who understand binary and those who do not.\n\
+Joke 3: I would tell you a UDP joke, but you might not get it.\n";
 
 #[derive(Debug)]
 enum DriverError {
@@ -45,15 +53,52 @@ enum DriverError {
     VirtQueueFull,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum DataDirection {
+    None,
+    DeviceToDriver,
+    DriverToDevice,
+}
+
 #[derive(Clone, Copy, Debug)]
 enum RequestKind {
-    Inquiry { target: u16, lun: u16 },
-    TestUnitReady { target: u16, lun: u16, retries: u8 },
-    ReadCapacity10 { target: u16, lun: u16, retries: u8 },
+    Inquiry {
+        target: u16,
+        lun: u16,
+    },
+    TestUnitReady {
+        target: u16,
+        lun: u16,
+        retries: u8,
+    },
+    ReadCapacity10 {
+        target: u16,
+        lun: u16,
+        retries: u8,
+    },
+    Write10 {
+        target: u16,
+        lun: u16,
+        lba: u32,
+        transfer_blocks: u16,
+    },
+    SynchronizeCache10 {
+        target: u16,
+        lun: u16,
+        lba: u32,
+        transfer_blocks: u16,
+    },
+    Read10 {
+        target: u16,
+        lun: u16,
+        lba: u32,
+        transfer_blocks: u16,
+    },
 }
 
 struct OngoingRequest {
     kind: RequestKind,
+    data_direction: DataDirection,
     data_vaddr: usize,
     data_len: usize,
     resp_vaddr: usize,
@@ -62,6 +107,15 @@ struct OngoingRequest {
 struct OngoingEvent {
     vaddr: usize,
     paddr: usize,
+}
+
+struct DiskRoundtripTest {
+    target: u16,
+    lun: u16,
+    lba: u32,
+    transfer_blocks: u16,
+    payload_len: usize,
+    expected: Vec<u8>,
 }
 
 struct Main {
@@ -74,6 +128,8 @@ struct Main {
     scan_next_target: u16,
     max_scan_target: u16,
     found_disks: usize,
+    disk_test: Option<DiskRoundtripTest>,
+    disk_test_done: bool,
 }
 
 impl Application for Main {
@@ -120,9 +176,7 @@ impl Application for Main {
 
         trace!(
             "virtio-scsi config: features=0x{:08x}, max_target={} (scanning target IDs 0..={})",
-            device_features,
-            config_max_target,
-            max_scan_target
+            device_features, config_max_target, max_scan_target
         );
 
         let mut app = Self {
@@ -135,6 +189,8 @@ impl Application for Main {
             scan_next_target: 0,
             max_scan_target,
             found_disks: 0,
+            disk_test: None,
+            disk_test_done: false,
         };
 
         app.queue_next_inquiry();
@@ -168,7 +224,10 @@ impl Main {
 
     fn queue_next_inquiry(&mut self) {
         if self.scan_next_target > self.max_scan_target {
-            trace!("virtio-scsi scan complete: found {} disk(s)", self.found_disks);
+            trace!(
+                "virtio-scsi scan complete: found {} disk(s)",
+                self.found_disks
+            );
             return;
         }
 
@@ -176,7 +235,10 @@ impl Main {
         self.scan_next_target = self.scan_next_target.saturating_add(1);
 
         if let Err(error) = self.submit_inquiry(target, 0) {
-            trace!("failed to submit INQUIRY for target {}: {:?}", target, error);
+            trace!(
+                "failed to submit INQUIRY for target {}: {:?}",
+                target, error
+            );
             self.queue_next_inquiry();
         }
     }
@@ -190,7 +252,9 @@ impl Main {
             RequestKind::Inquiry { target, lun },
             encode_lun(target, lun),
             cdb,
+            DataDirection::DeviceToDriver,
             INQUIRY_ALLOC_LEN,
+            None,
         )
     }
 
@@ -215,7 +279,9 @@ impl Main {
             },
             encode_lun(target, lun),
             cdb,
+            DataDirection::DeviceToDriver,
             READ_CAPACITY10_ALLOC_LEN,
+            None,
         )
     }
 
@@ -240,7 +306,92 @@ impl Main {
             },
             encode_lun(target, lun),
             cdb,
+            DataDirection::None,
             0,
+            None,
+        )
+    }
+
+    fn submit_write10(
+        &mut self,
+        target: u16,
+        lun: u16,
+        lba: u32,
+        transfer_blocks: u16,
+        payload: &[u8],
+    ) -> Result<(), DriverError> {
+        let mut cdb = [0u8; 32];
+        cdb[0] = OPCODE_WRITE10;
+        cdb[2..6].copy_from_slice(&lba.to_be_bytes());
+        cdb[7..9].copy_from_slice(&transfer_blocks.to_be_bytes());
+
+        self.submit_scsi_command(
+            RequestKind::Write10 {
+                target,
+                lun,
+                lba,
+                transfer_blocks,
+            },
+            encode_lun(target, lun),
+            cdb,
+            DataDirection::DriverToDevice,
+            payload.len(),
+            Some(payload),
+        )
+    }
+
+    fn submit_synchronize_cache10(
+        &mut self,
+        target: u16,
+        lun: u16,
+        lba: u32,
+        transfer_blocks: u16,
+    ) -> Result<(), DriverError> {
+        let mut cdb = [0u8; 32];
+        cdb[0] = OPCODE_SYNCHRONIZE_CACHE10;
+        cdb[2..6].copy_from_slice(&lba.to_be_bytes());
+        cdb[7..9].copy_from_slice(&transfer_blocks.to_be_bytes());
+
+        self.submit_scsi_command(
+            RequestKind::SynchronizeCache10 {
+                target,
+                lun,
+                lba,
+                transfer_blocks,
+            },
+            encode_lun(target, lun),
+            cdb,
+            DataDirection::None,
+            0,
+            None,
+        )
+    }
+
+    fn submit_read10(
+        &mut self,
+        target: u16,
+        lun: u16,
+        lba: u32,
+        transfer_blocks: u16,
+        data_len: usize,
+    ) -> Result<(), DriverError> {
+        let mut cdb = [0u8; 32];
+        cdb[0] = OPCODE_READ10;
+        cdb[2..6].copy_from_slice(&lba.to_be_bytes());
+        cdb[7..9].copy_from_slice(&transfer_blocks.to_be_bytes());
+
+        self.submit_scsi_command(
+            RequestKind::Read10 {
+                target,
+                lun,
+                lba,
+                transfer_blocks,
+            },
+            encode_lun(target, lun),
+            cdb,
+            DataDirection::DeviceToDriver,
+            data_len,
+            None,
         )
     }
 
@@ -249,7 +400,9 @@ impl Main {
         kind: RequestKind,
         lun: [u8; 8],
         cdb: [u8; 32],
+        data_direction: DataDirection,
         data_len: usize,
+        data_out: Option<&[u8]>,
     ) -> Result<(), DriverError> {
         let (req_vaddr, req_paddr) = Self::alloc_dma(SCSI_REQ_LEN)?;
         let (resp_vaddr, resp_paddr) = Self::alloc_dma(SCSI_RESP_LEN)?;
@@ -269,46 +422,74 @@ impl Main {
         unsafe {
             copy_nonoverlapping(req.as_ptr(), req_vaddr as *mut u8, req.len());
             write_bytes(resp_vaddr as *mut u8, 0, SCSI_RESP_LEN);
-            if data_len > 0 {
-                write_bytes(data_vaddr as *mut u8, 0, data_len);
+            match data_direction {
+                DataDirection::None => {}
+                DataDirection::DeviceToDriver => {
+                    assert!(data_len > 0);
+                    write_bytes(data_vaddr as *mut u8, 0, data_len);
+                }
+                DataDirection::DriverToDevice => {
+                    let payload = data_out.expect("missing SCSI data-out payload");
+                    assert_eq!(payload.len(), data_len);
+                    copy_nonoverlapping(payload.as_ptr(), data_vaddr as *mut u8, payload.len());
+                }
             }
         }
 
-        let head = if data_len > 0 {
-            let chain = [
-                ChainEntry::Read {
-                    paddr: req_paddr as u64,
-                    len: SCSI_REQ_LEN as u32,
-                },
-                ChainEntry::Write {
-                    paddr: resp_paddr as u64,
-                    len: SCSI_RESP_LEN as u32,
-                },
-                ChainEntry::Write {
-                    paddr: data_paddr as u64,
-                    len: data_len as u32,
-                },
-            ];
-
-            self.requestq.push(&chain)
-        } else {
-            let chain = [
-                ChainEntry::Read {
-                    paddr: req_paddr as u64,
-                    len: SCSI_REQ_LEN as u32,
-                },
-                ChainEntry::Write {
-                    paddr: resp_paddr as u64,
-                    len: SCSI_RESP_LEN as u32,
-                },
-            ];
-
-            self.requestq.push(&chain)
+        let head = match data_direction {
+            DataDirection::None => {
+                let chain = [
+                    ChainEntry::Read {
+                        paddr: req_paddr as u64,
+                        len: SCSI_REQ_LEN as u32,
+                    },
+                    ChainEntry::Write {
+                        paddr: resp_paddr as u64,
+                        len: SCSI_RESP_LEN as u32,
+                    },
+                ];
+                self.requestq.push(&chain)
+            }
+            DataDirection::DeviceToDriver => {
+                let chain = [
+                    ChainEntry::Read {
+                        paddr: req_paddr as u64,
+                        len: SCSI_REQ_LEN as u32,
+                    },
+                    ChainEntry::Write {
+                        paddr: resp_paddr as u64,
+                        len: SCSI_RESP_LEN as u32,
+                    },
+                    ChainEntry::Write {
+                        paddr: data_paddr as u64,
+                        len: data_len as u32,
+                    },
+                ];
+                self.requestq.push(&chain)
+            }
+            DataDirection::DriverToDevice => {
+                let chain = [
+                    ChainEntry::Read {
+                        paddr: req_paddr as u64,
+                        len: SCSI_REQ_LEN as u32,
+                    },
+                    ChainEntry::Read {
+                        paddr: data_paddr as u64,
+                        len: data_len as u32,
+                    },
+                    ChainEntry::Write {
+                        paddr: resp_paddr as u64,
+                        len: SCSI_RESP_LEN as u32,
+                    },
+                ];
+                self.requestq.push(&chain)
+            }
         }
         .map_err(|virtqueue::FullError| DriverError::VirtQueueFull)?;
 
         self.ongoing[head.0 as usize] = Some(OngoingRequest {
             kind,
+            data_direction,
             data_vaddr,
             data_len,
             resp_vaddr,
@@ -351,9 +532,7 @@ impl Main {
                         {
                             trace!(
                                 "failed to resubmit TEST UNIT READY for target {} lun {}: {:?}",
-                                target,
-                                lun,
-                                error
+                                target, lun, error
                             );
                             self.queue_next_inquiry();
                         }
@@ -377,9 +556,7 @@ impl Main {
                         {
                             trace!(
                                 "failed to resubmit READ CAPACITY(10) for target {} lun {}: {:?}",
-                                target,
-                                lun,
-                                error
+                                target, lun, error
                             );
                             self.queue_next_inquiry();
                         }
@@ -387,25 +564,34 @@ impl Main {
                     }
                 }
                 RequestKind::Inquiry { .. } => {}
+                RequestKind::Write10 { .. } => {
+                    self.disk_test = None;
+                    self.disk_test_done = true;
+                }
+                RequestKind::SynchronizeCache10 { .. } => {
+                    self.disk_test = None;
+                    self.disk_test_done = true;
+                }
+                RequestKind::Read10 { .. } => {
+                    self.disk_test = None;
+                    self.disk_test_done = true;
+                }
             }
 
             trace!(
                 "SCSI {:?} failed: response={}, status=0x{:02x}, resid={}, sense_len={}",
-                request.kind,
-                response,
-                status,
-                resid,
-                sense_len
+                request.kind, response, status, resid, sense_len
             );
             self.queue_next_inquiry();
             return;
         }
 
-        let data = if request.data_len > 0 {
-            unsafe { slice::from_raw_parts(request.data_vaddr as *const u8, request.data_len) }
-        } else {
-            &[]
-        };
+        let data =
+            if request.data_direction == DataDirection::DeviceToDriver && request.data_len > 0 {
+                unsafe { slice::from_raw_parts(request.data_vaddr as *const u8, request.data_len) }
+            } else {
+                &[]
+            };
 
         match request.kind {
             RequestKind::Inquiry { target, lun } => {
@@ -425,6 +611,30 @@ impl Main {
             } => {
                 self.handle_read_capacity_success(target, lun, data);
             }
+            RequestKind::Write10 {
+                target,
+                lun,
+                lba,
+                transfer_blocks,
+            } => {
+                self.handle_write10_success(target, lun, lba, transfer_blocks);
+            }
+            RequestKind::SynchronizeCache10 {
+                target,
+                lun,
+                lba,
+                transfer_blocks,
+            } => {
+                self.handle_synchronize_cache10_success(target, lun, lba, transfer_blocks);
+            }
+            RequestKind::Read10 {
+                target,
+                lun,
+                lba,
+                transfer_blocks,
+            } => {
+                self.handle_read10_success(target, lun, lba, transfer_blocks, data);
+            }
         }
     }
 
@@ -439,8 +649,7 @@ impl Main {
         let reason = read_le_u32(&raw[12..16]);
         trace!(
             "virtio-scsi event: code=0x{:08x}, reason=0x{:08x}",
-            event_code,
-            reason
+            event_code, reason
         );
 
         unsafe {
@@ -487,11 +696,7 @@ impl Main {
         let product = ascii_field(&data[16..32]);
         trace!(
             "target {} lun {}: peripheral=0x{:02x}, vendor='{}', product='{}'",
-            target,
-            lun,
-            peripheral,
-            vendor,
-            product
+            target, lun, peripheral, vendor, product
         );
 
         self.found_disks += 1;
@@ -499,9 +704,7 @@ impl Main {
         if let Err(error) = self.submit_test_unit_ready(target, lun) {
             trace!(
                 "failed to submit TEST UNIT READY for target {} lun {}: {:?}",
-                target,
-                lun,
-                error
+                target, lun, error
             );
             self.queue_next_inquiry();
         }
@@ -511,9 +714,7 @@ impl Main {
         if let Err(error) = self.submit_read_capacity10(target, lun) {
             trace!(
                 "failed to submit READ CAPACITY(10) for target {} lun {}: {:?}",
-                target,
-                lun,
-                error
+                target, lun, error
             );
             self.queue_next_inquiry();
         }
@@ -537,8 +738,7 @@ impl Main {
         if block_len == 0 {
             trace!(
                 "target {} lun {}: invalid block size reported (0 bytes)",
-                target,
-                lun
+                target, lun
             );
             self.queue_next_inquiry();
             return;
@@ -547,8 +747,7 @@ impl Main {
         if last_lba == u32::MAX {
             trace!(
                 "target {} lun {}: READ CAPACITY(10) overflow, disk requires READ CAPACITY(16)",
-                target,
-                lun
+                target, lun
             );
             self.queue_next_inquiry();
             return;
@@ -559,13 +758,207 @@ impl Main {
 
         trace!(
             "target {} lun {} capacity: {} bytes ({} MiB, block={} bytes)",
-            target,
-            lun,
-            capacity_bytes,
-            capacity_mib,
-            block_len
+            target, lun, capacity_bytes, capacity_mib, block_len
         );
 
+        if !self.disk_test_done && self.disk_test.is_none() {
+            self.start_disk_roundtrip_test(target, lun, last_lba, block_len);
+            return;
+        }
+
+        self.queue_next_inquiry();
+    }
+
+    fn start_disk_roundtrip_test(&mut self, target: u16, lun: u16, last_lba: u32, block_len: u32) {
+        let block_len = block_len as usize;
+        if block_len == 0 {
+            trace!("skip disk roundtrip test: block size is zero");
+            self.disk_test_done = true;
+            self.queue_next_inquiry();
+            return;
+        }
+
+        let required_blocks = JOKE_PAYLOAD.len().div_ceil(block_len);
+        if required_blocks == 0 || required_blocks > usize::from(u16::MAX) {
+            trace!(
+                "skip disk roundtrip test: payload requires invalid block count ({})",
+                required_blocks
+            );
+            self.disk_test_done = true;
+            self.queue_next_inquiry();
+            return;
+        }
+
+        let total_blocks = last_lba as usize + 1;
+        if required_blocks > total_blocks {
+            trace!(
+                "skip disk roundtrip test: disk too small (need {} blocks, have {})",
+                required_blocks, total_blocks
+            );
+            self.disk_test_done = true;
+            self.queue_next_inquiry();
+            return;
+        }
+
+        let transfer_blocks = required_blocks as u16;
+        let lba: u32 = if total_blocks > required_blocks { 1 } else { 0 };
+        let total_data_len = required_blocks * block_len;
+
+        let mut expected = Vec::with_capacity(total_data_len);
+        expected.resize(total_data_len, 0);
+        expected[..JOKE_PAYLOAD.len()].copy_from_slice(JOKE_PAYLOAD);
+
+        trace!(
+            "disk roundtrip test: writing {} bytes ({} blocks) at target {} lun {} lba {}",
+            JOKE_PAYLOAD.len(),
+            transfer_blocks,
+            target,
+            lun,
+            lba
+        );
+
+        if let Err(error) = self.submit_write10(target, lun, lba, transfer_blocks, &expected) {
+            trace!(
+                "failed to submit WRITE(10) for target {} lun {}: {:?}",
+                target, lun, error
+            );
+            self.disk_test_done = true;
+            self.queue_next_inquiry();
+            return;
+        }
+
+        self.disk_test = Some(DiskRoundtripTest {
+            target,
+            lun,
+            lba,
+            transfer_blocks,
+            payload_len: JOKE_PAYLOAD.len(),
+            expected,
+        });
+    }
+
+    fn handle_write10_success(&mut self, target: u16, lun: u16, lba: u32, transfer_blocks: u16) {
+        trace!(
+            "WRITE(10) succeeded for target {} lun {} at lba {} ({} blocks), flushing cache",
+            target, lun, lba, transfer_blocks
+        );
+
+        if let Err(error) = self.submit_synchronize_cache10(target, lun, lba, transfer_blocks) {
+            trace!(
+                "failed to submit SYNCHRONIZE CACHE(10) for target {} lun {}: {:?}",
+                target, lun, error
+            );
+            self.disk_test = None;
+            self.disk_test_done = true;
+            self.queue_next_inquiry();
+        }
+    }
+
+    fn handle_synchronize_cache10_success(
+        &mut self,
+        target: u16,
+        lun: u16,
+        lba: u32,
+        transfer_blocks: u16,
+    ) {
+        trace!(
+            "SYNCHRONIZE CACHE(10) succeeded for target {} lun {}, reading data back",
+            target, lun
+        );
+
+        let Some(test) = self.disk_test.as_ref() else {
+            trace!("missing disk roundtrip state before READ(10)");
+            self.disk_test_done = true;
+            self.queue_next_inquiry();
+            return;
+        };
+
+        if test.target != target
+            || test.lun != lun
+            || test.lba != lba
+            || test.transfer_blocks != transfer_blocks
+        {
+            trace!("disk roundtrip state mismatch before READ(10)");
+            self.disk_test = None;
+            self.disk_test_done = true;
+            self.queue_next_inquiry();
+            return;
+        }
+
+        if let Err(error) =
+            self.submit_read10(target, lun, lba, transfer_blocks, test.expected.len())
+        {
+            trace!(
+                "failed to submit READ(10) for target {} lun {}: {:?}",
+                target, lun, error
+            );
+            self.disk_test = None;
+            self.disk_test_done = true;
+            self.queue_next_inquiry();
+        }
+    }
+
+    fn handle_read10_success(
+        &mut self,
+        target: u16,
+        lun: u16,
+        lba: u32,
+        transfer_blocks: u16,
+        data: &[u8],
+    ) {
+        let Some(test) = self.disk_test.take() else {
+            trace!("READ(10) completed without an active disk roundtrip test");
+            self.disk_test_done = true;
+            self.queue_next_inquiry();
+            return;
+        };
+
+        if test.target != target
+            || test.lun != lun
+            || test.lba != lba
+            || test.transfer_blocks != transfer_blocks
+        {
+            trace!("READ(10) completed for unexpected target/lun/lba");
+            self.disk_test_done = true;
+            self.queue_next_inquiry();
+            return;
+        }
+
+        if data.len() < test.expected.len() {
+            trace!(
+                "READ(10) data too short: expected {} bytes, got {} bytes",
+                test.expected.len(),
+                data.len()
+            );
+            self.disk_test_done = true;
+            self.queue_next_inquiry();
+            return;
+        }
+
+        let read_back = &data[..test.expected.len()];
+        if read_back != test.expected.as_slice() {
+            let mismatch = first_mismatch_offset(read_back, test.expected.as_slice()).unwrap_or(0);
+            trace!(
+                "disk roundtrip mismatch at byte {}: wrote=0x{:02x}, read=0x{:02x}",
+                mismatch, test.expected[mismatch], read_back[mismatch]
+            );
+            self.disk_test_done = true;
+            self.queue_next_inquiry();
+            return;
+        }
+
+        let message = match core::str::from_utf8(&read_back[..test.payload_len]) {
+            Ok(text) => text,
+            Err(_) => "<invalid utf-8>",
+        };
+
+        trace!(
+            "disk roundtrip verified at target {} lun {} lba {} ({} blocks)",
+            target, lun, lba, transfer_blocks
+        );
+        trace!("disk payload:\n{}", message);
+
+        self.disk_test_done = true;
         self.queue_next_inquiry();
     }
 }
@@ -601,6 +994,20 @@ fn read_be_u32(bytes: &[u8]) -> u32 {
         | (u32::from(bytes[1]) << 16)
         | (u32::from(bytes[2]) << 8)
         | (u32::from(bytes[3]))
+}
+
+fn first_mismatch_offset(lhs: &[u8], rhs: &[u8]) -> Option<usize> {
+    let len = min(lhs.len(), rhs.len());
+    for i in 0..len {
+        if lhs[i] != rhs[i] {
+            return Some(i);
+        }
+    }
+    if lhs.len() == rhs.len() {
+        None
+    } else {
+        Some(len)
+    }
 }
 
 fn ascii_field(bytes: &[u8]) -> &str {
