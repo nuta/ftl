@@ -21,6 +21,7 @@ use crate::channel::Cookie;
 use crate::channel::Reply;
 use crate::handle::Handleable;
 use crate::interrupt::Interrupt;
+use crate::service::Service;
 use crate::sink::Event;
 use crate::sink::Sink;
 use crate::time::Timer;
@@ -127,6 +128,7 @@ enum Object {
     Channel(Rc<Channel>),
     Interrupt(Rc<Interrupt>),
     Timer(Rc<Timer>),
+    Service(Rc<Service>),
 }
 
 pub struct InitContext<'a> {
@@ -159,6 +161,20 @@ impl<'a> InitContext<'a> {
         self.sink.add(timer.as_ref())?;
         self.objects
             .insert(timer.handle().id(), Object::Timer(timer));
+        Ok(())
+    }
+
+    pub fn add_service<T: Into<Rc<Service>>>(&mut self, service: T) -> Result<(), ErrorCode> {
+        let service = service.into();
+        self.sink.add(service.as_ref())?;
+        self.objects
+            .insert(service.handle().id(), Object::Service(service));
+        Ok(())
+    }
+
+    pub fn remove(&mut self, id: HandleId) -> Result<(), ErrorCode> {
+        self.sink.remove(id)?;
+        self.objects.remove(&id);
         Ok(())
     }
 }
@@ -198,6 +214,14 @@ impl<'a> Context<'a> {
         self.sink.add(timer.as_ref())?;
         self.objects
             .insert(timer.handle().id(), Object::Timer(timer));
+        Ok(())
+    }
+
+    pub fn add_service<T: Into<Rc<Service>>>(&mut self, service: T) -> Result<(), ErrorCode> {
+        let service = service.into();
+        self.sink.add(service.as_ref())?;
+        self.objects
+            .insert(service.handle().id(), Object::Service(service));
         Ok(())
     }
 
@@ -262,6 +286,11 @@ pub trait Application {
     #[allow(unused)]
     fn timer_expired(&mut self, ctx: &mut Context, timer: &Rc<Timer>) {
         trace!("received an unexpected message: time expired");
+    }
+
+    #[allow(unused)]
+    fn connected(&mut self, ctx: &mut Context, ch: Channel) {
+        trace!("received an unexpected message: client connected");
     }
 }
 
@@ -376,6 +405,10 @@ pub fn run<A: Application>() {
 
                 let mut ctx = Context::new(&sink, &mut objects, timer.handle().id());
                 app.timer_expired(&mut ctx, &timer);
+            }
+            Event::Client { ch } => {
+                let mut ctx = Context::new(&sink, &mut objects, ch.handle().id());
+                app.connected(&mut ctx, ch);
             }
         }
     }

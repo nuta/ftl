@@ -11,6 +11,7 @@ impl EventType {
     pub const IRQ: Self = Self(2);
     pub const PEER_CLOSED: Self = Self(3);
     pub const TIMER: Self = Self(4);
+    pub const CLIENT: Self = Self(5);
 }
 
 #[derive(Clone, Copy)]
@@ -37,6 +38,7 @@ pub union EventBody {
     pub irq: IrqEvent,
     pub peer_closed: PeerClosedEvent,
     pub timer: TimerEvent,
+    pub client: ClientEvent,
 }
 
 #[derive(Clone, Copy)]
@@ -58,3 +60,10 @@ pub struct MessageEvent {
 #[derive(Clone, Copy)]
 #[repr(C)]
 pub struct TimerEvent {}
+
+#[derive(Clone, Copy)]
+#[repr(C)]
+pub struct ClientEvent {
+    /// The channel ID connected to the client.
+    pub id: HandleId,
+}

@@ -20,10 +20,12 @@ use ftl_types::syscall::SYS_CHANNEL_CREATE;
 use ftl_types::syscall::SYS_CHANNEL_OOL_READ;
 use ftl_types::syscall::SYS_CHANNEL_OOL_WRITE;
 use ftl_types::syscall::SYS_CHANNEL_SEND;
+use ftl_types::syscall::SYS_SERVICE_LOOKUP;
 
 use crate::handle::Handleable;
 use crate::handle::OwnedHandle;
 use crate::syscall::syscall1;
+use crate::syscall::syscall2;
 use crate::syscall::syscall5;
 
 pub enum Buffer {
@@ -153,6 +155,13 @@ impl Channel {
     // TODO: Make this private
     pub fn from_handle(handle: OwnedHandle) -> Self {
         Self { handle }
+    }
+
+    pub fn connect(name: &str) -> Result<Self, ErrorCode> {
+        let id = sys_service_lookup(name)?;
+        let handle = OwnedHandle::from_raw(id);
+        let ch = Channel::from_handle(handle);
+        Ok(ch)
     }
 
     pub fn send(&self, message: Message) -> Result<(), ErrorCode> {
@@ -329,4 +338,9 @@ pub fn sys_channel_ool_write(
         buf.as_ptr() as usize,
         buf.len(),
     )
+}
+
+pub fn sys_service_lookup(name: &str) -> Result<HandleId, ErrorCode> {
+    let id = syscall2(SYS_SERVICE_LOOKUP, name.as_ptr() as usize, name.len())?;
+    Ok(HandleId::from_raw(id))
 }

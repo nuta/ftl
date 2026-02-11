@@ -31,3 +31,5 @@ pub const SYS_PROCESS_EXIT: usize = 19;
 pub const SYS_TIME_NOW: usize = 20;
 pub const SYS_TIMER_CREATE: usize = 21;
 pub const SYS_TIMER_SET: usize = 22;
+pub const SYS_SERVICE_REGISTER: usize = 23;
+pub const SYS_SERVICE_LOOKUP: usize = 24;

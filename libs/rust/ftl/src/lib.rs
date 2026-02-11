@@ -19,6 +19,7 @@ pub mod error;
 pub mod handle;
 pub mod log;
 pub mod prelude;
+pub mod service;
 pub mod sink;
 pub mod syscall;
 pub mod time;

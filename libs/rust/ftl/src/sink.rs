@@ -15,6 +15,7 @@ use ftl_types::syscall::SYS_SINK_CREATE;
 use ftl_types::syscall::SYS_SINK_REMOVE;
 use ftl_types::syscall::SYS_SINK_WAIT;
 
+use crate::channel::Channel;
 use crate::handle::Handleable;
 use crate::handle::OwnedHandle;
 use crate::syscall::syscall0;
@@ -44,6 +45,9 @@ pub enum Event {
     },
     Timer {
         handle_id: HandleId,
+    },
+    Client {
+        ch: Channel,
     },
 }
 
@@ -119,6 +123,11 @@ impl Sink {
                 Event::Timer {
                     handle_id: raw.header.id,
                 }
+            }
+            EventType::CLIENT => {
+                let id = unsafe { raw.body.client.id };
+                let ch = Channel::from_handle(OwnedHandle::from_raw(id));
+                Event::Client { ch }
             }
             _ => {
                 return Err(ErrorCode::Unsupported);

@@ -16,6 +16,8 @@ use ftl_types::syscall::SYS_PCI_LOOKUP;
 #[cfg(target_arch = "x86_64")]
 use ftl_types::syscall::SYS_PCI_SET_BUSMASTER;
 use ftl_types::syscall::SYS_PROCESS_EXIT;
+use ftl_types::syscall::SYS_SERVICE_LOOKUP;
+use ftl_types::syscall::SYS_SERVICE_REGISTER;
 use ftl_types::syscall::SYS_SINK_ADD;
 use ftl_types::syscall::SYS_SINK_CREATE;
 use ftl_types::syscall::SYS_SINK_REMOVE;
@@ -75,6 +77,8 @@ fn do_syscall(
         SYS_TIME_NOW => crate::timer::sys_time_now(),
         SYS_TIMER_CREATE => crate::timer::sys_timer_create(thread),
         SYS_TIMER_SET => crate::timer::sys_timer_set(thread, a0, a1),
+        SYS_SERVICE_REGISTER => crate::service::sys_service_register(thread, a0, a1),
+        SYS_SERVICE_LOOKUP => crate::service::sys_service_lookup(thread, a0, a1),
         _ => {
             trace!("unknown syscall: {}", n);
             Err(ErrorCode::UnknownSyscall)
