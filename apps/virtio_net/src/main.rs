@@ -2,7 +2,6 @@
 #![no_main]
 
 use core::cmp::min;
-use core::mem::MaybeUninit;
 use core::mem::size_of;
 
 use ftl::application::Application;
@@ -18,18 +17,17 @@ use ftl::collections::VecDeque;
 use ftl::error::ErrorCode;
 use ftl::handle::HandleId;
 use ftl::handle::Handleable;
-use ftl::handle::OwnedHandle;
 use ftl::interrupt::Interrupt;
 use ftl::log::*;
-use ftl::pci::PciEntry;
 use ftl::prelude::*;
 use ftl::rc::Rc;
 use ftl::service::Service;
 use ftl_utils::alignment::align_up;
 use ftl_virtio::ChainEntry;
-use ftl_virtio::Error as VirtioError;
 use ftl_virtio::VirtQueue;
 use ftl_virtio::VirtioPci;
+use ftl_virtio::virtio_pci::DeviceType;
+use ftl_virtio::virtqueue;
 
 #[repr(C, packed)]
 struct VirtioNetHdr {
@@ -44,6 +42,12 @@ struct VirtioNetHdr {
 const MIN_ETH_FRAME: usize = 60;
 const RX_BUFFER_SIZE: usize = 1514 + size_of::<VirtioNetHdr>();
 const TX_BUFFER_SIZE: usize = RX_BUFFER_SIZE;
+
+#[derive(Debug)]
+enum Error {
+    DmaBufAlloc(ErrorCode),
+    VirtQueueFull,
+}
 
 struct OngoingRx {
     vaddr: usize,
@@ -84,44 +88,11 @@ impl Application for Main {
     fn init(ctx: &mut InitContext) -> Self {
         trace!("starting...");
 
-        // Look up virtio-net PCI device
-        let mut entries: MaybeUninit<[PciEntry; 10]> = MaybeUninit::uninit();
-        let n = ftl::pci::sys_pci_lookup(entries.as_mut_ptr() as *mut PciEntry, 10, 0x1af4, 0x1000)
-            .unwrap();
-
-        let devices =
-            unsafe { core::slice::from_raw_parts(entries.as_ptr() as *const PciEntry, n) };
-        trace!("found {} virtio-net PCI devices", n);
-
-        assert!(n > 0, "no virtio-net device found");
-
-        let entry = devices[0];
-        trace!("using PCI device at {:x}:{:x}", entry.bus, entry.slot);
-
-        // Enable bus mastering
-        ftl::pci::sys_pci_set_busmaster(entry.bus, entry.slot, true).unwrap();
-
-        // Get BAR0 (I/O port base for legacy virtio)
-        let bar0 = ftl::pci::sys_pci_get_bar(entry.bus, entry.slot, 0).unwrap();
-        let iobase = (bar0 & 0xfffffffc) as u16;
-        trace!("I/O base: {:#x}", iobase);
-
-        // Get interrupt line and acquire it
-        let irq = ftl::pci::sys_pci_get_interrupt_line(entry.bus, entry.slot).unwrap();
-        trace!("IRQ: {}", irq);
-
-        let interrupt = Interrupt::acquire(irq).unwrap();
-        ctx.add_interrupt(Rc::new(interrupt)).unwrap();
-        trace!("interrupt acquired");
-
-        // Enable IOPL for direct I/O access
-        ftl::syscall::sys_x64_iopl(true).unwrap();
-        trace!("I/O port access enabled");
+        let prober = VirtioPci::probe(DeviceType::Network).unwrap();
 
         // Initialize virtio device
         const VIRTIO_NET_F_MAC: u32 = 1 << 5;
-        let virtio = VirtioPci::new(iobase);
-        let device_features = virtio.initialize1();
+        let device_features = prober.read_guest_features();
         assert!(
             device_features & VIRTIO_NET_F_MAC != 0,
             "MAC feature not supported"
@@ -129,7 +100,9 @@ impl Application for Main {
 
         // Only advertise features we actually support.
         let guest_features = device_features & VIRTIO_NET_F_MAC;
-        virtio.write_guest_features(guest_features);
+        let (virtio, interrupt) = prober.finish(guest_features);
+
+        ctx.add_interrupt(Rc::new(interrupt)).unwrap();
 
         // Read MAC address
         let mut mac = [0u8; 6];
@@ -172,11 +145,11 @@ impl Application for Main {
             // Track which buffer is associated with this descriptor
             pending_rxs[head.0 as usize] = Some(OngoingRx { vaddr, paddr });
         }
-        rxq.notify(&virtio);
+
+        virtio.notify(&rxq);
         trace!("RX buffers prepared");
 
         // Complete virtio initialization.
-        virtio.initialize2();
         trace!("virtio device initialized");
 
         let service = Service::register("ethernet").unwrap();
@@ -282,7 +255,7 @@ impl Application for Main {
                 self.ongoing_rxs[head.0 as usize] = Some(rx);
             }
 
-            self.rxq.notify(&self.virtio);
+            self.virtio.notify(&self.rxq);
 
             self.poll_reads();
             self.poll_writes();
@@ -372,7 +345,7 @@ impl Main {
         while let Some(pending) = self.pending_writes.pop_front() {
             match self.send_packet(&pending.data) {
                 Ok(()) => pending.completer.complete(pending.data.len()),
-                Err(VirtioError::VirtQueueFull) => {
+                Err(Error::VirtQueueFull) => {
                     self.pending_writes.push_front(pending);
                     break;
                 }
@@ -384,7 +357,7 @@ impl Main {
         }
     }
 
-    fn send_packet(&mut self, data: &[u8]) -> Result<(), VirtioError> {
+    fn send_packet(&mut self, data: &[u8]) -> Result<(), Error> {
         while let Some(used) = self.txq.pop() {
             // TODO: Merge into allocate_tx_buffer
             if let Some(buf) = self.ongoing_txs[used.head.0 as usize].take() {
@@ -424,17 +397,17 @@ impl Main {
             },
         ]) {
             Ok(head) => head,
-            Err(error) => {
+            Err(virtqueue::FullError) => {
                 self.free_txs.push(tx);
-                return Err(error);
+                return Err(Error::VirtQueueFull);
             }
         };
         self.ongoing_txs[head.0 as usize] = Some(tx);
-        self.txq.notify(&self.virtio);
+        self.virtio.notify(&self.txq);
         Ok(())
     }
 
-    fn allocate_tx_buffer(&mut self, min_size: usize) -> Result<OngoingTx, VirtioError> {
+    fn allocate_tx_buffer(&mut self, min_size: usize) -> Result<OngoingTx, Error> {
         if let Some(index) = self.free_txs.iter().position(|buf| buf.size >= min_size) {
             return Ok(self.free_txs.swap_remove(index));
         }
@@ -442,8 +415,7 @@ impl Main {
         let size = align_up(TX_BUFFER_SIZE.max(min_size), min_page_size());
         let mut vaddr = 0usize;
         let mut paddr = 0usize;
-        ftl::dmabuf::sys_dmabuf_alloc(size, &mut vaddr, &mut paddr)
-            .map_err(VirtioError::DmaBufAlloc)?;
+        ftl::dmabuf::sys_dmabuf_alloc(size, &mut vaddr, &mut paddr).map_err(Error::DmaBufAlloc)?;
         Ok(OngoingTx { vaddr, paddr, size })
     }
 }
