@@ -7,6 +7,7 @@ use core::net::Ipv4Addr;
 
 use ftl::application::Application;
 use ftl::application::Context;
+use ftl::application::InitContext;
 use ftl::application::OpenCompleter;
 use ftl::application::ReadCompleter;
 use ftl::application::WriteCompleter;
@@ -710,7 +711,7 @@ fn parse_uri(completer: &OpenCompleter) -> Result<Uri, ErrorCode> {
 }
 
 impl Application for Main {
-    fn init(ctx: &mut Context) -> Self {
+    fn init(ctx: &mut InitContext) -> Self {
         trace!("starting...");
         let smol_clock = SmolClock::new();
         let hwaddr = HardwareAddress::Ethernet(EthernetAddress::from_bytes(&[0; 6]));
@@ -761,7 +762,6 @@ impl Application for Main {
             ready_to_serve: false,
         };
 
-        this.poll(ctx);
         this
     }
 

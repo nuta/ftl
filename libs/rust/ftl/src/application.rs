@@ -129,6 +129,40 @@ enum Object {
     Timer(Rc<Timer>),
 }
 
+pub struct InitContext<'a> {
+    sink: &'a Sink,
+    objects: &'a mut HashMap<HandleId, Object>,
+}
+
+impl<'a> InitContext<'a> {
+    fn new(sink: &'a Sink, objects: &'a mut HashMap<HandleId, Object>) -> Self {
+        Self { sink, objects }
+    }
+
+    pub fn add_channel<T: Into<Rc<Channel>>>(&mut self, ch: T) -> Result<(), ErrorCode> {
+        let ch = ch.into();
+        self.sink.add(ch.as_ref())?;
+        self.objects.insert(ch.handle().id(), Object::Channel(ch));
+        Ok(())
+    }
+
+    pub fn add_interrupt<T: Into<Rc<Interrupt>>>(&mut self, interrupt: T) -> Result<(), ErrorCode> {
+        let interrupt = interrupt.into();
+        self.sink.add(interrupt.as_ref())?;
+        self.objects
+            .insert(interrupt.handle().id(), Object::Interrupt(interrupt));
+        Ok(())
+    }
+
+    pub fn add_timer<T: Into<Rc<Timer>>>(&mut self, timer: T) -> Result<(), ErrorCode> {
+        let timer = timer.into();
+        self.sink.add(timer.as_ref())?;
+        self.objects
+            .insert(timer.handle().id(), Object::Timer(timer));
+        Ok(())
+    }
+}
+
 pub struct Context<'a> {
     sink: &'a Sink,
     objects: &'a mut HashMap<HandleId, Object>,
@@ -175,7 +209,7 @@ impl<'a> Context<'a> {
 }
 
 pub trait Application {
-    fn init(ctx: &mut Context) -> Self;
+    fn init(ctx: &mut InitContext) -> Self;
 
     #[allow(unused)]
     fn open(&mut self, ctx: &mut Context, completer: OpenCompleter) {
@@ -234,11 +268,7 @@ pub trait Application {
 pub fn run<A: Application>() {
     let sink = Sink::new().unwrap();
     let mut objects = HashMap::new();
-    let mut app = A::init(&mut Context::new(
-        &sink,
-        &mut objects,
-        HandleId::from_raw(0),
-    ) /* FIXME: */);
+    let mut app = A::init(&mut InitContext::new(&sink, &mut objects));
     loop {
         let event = sink.wait().unwrap();
         match event {

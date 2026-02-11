@@ -7,6 +7,7 @@ use core::mem::size_of;
 
 use ftl::application::Application;
 use ftl::application::Context;
+use ftl::application::InitContext;
 use ftl::application::OpenCompleter;
 use ftl::application::ReadCompleter;
 use ftl::application::WriteCompleter;
@@ -79,7 +80,7 @@ struct Main {
 }
 
 impl Application for Main {
-    fn init(ctx: &mut Context) -> Self {
+    fn init(ctx: &mut InitContext) -> Self {
         trace!("starting...");
 
         // Look up virtio-net PCI device

@@ -5,6 +5,7 @@ use core::ops::ControlFlow;
 
 use ftl::application::Application;
 use ftl::application::Context;
+use ftl::application::InitContext;
 use ftl::channel::Buffer;
 use ftl::channel::BufferMut;
 use ftl::channel::Channel;
@@ -39,7 +40,7 @@ fn open_tcpip_ch() -> Rc<Channel> {
 }
 
 impl Application for Main {
-    fn init(ctx: &mut Context) -> Self {
+    fn init(ctx: &mut InitContext) -> Self {
         let mut states = HashMap::new();
 
         let tcpip = open_tcpip_ch();
