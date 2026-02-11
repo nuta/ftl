@@ -353,3 +353,12 @@ dependencies = [
  "ftl_utils",
  "ftl_virtio",
 ]
+
+[[package]]
+name = "virtio_scsi"
+version = "0.0.0"
+dependencies = [
+ "ftl",
+ "ftl_utils",
+ "ftl_virtio",
+]

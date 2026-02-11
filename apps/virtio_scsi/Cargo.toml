@@ -1,0 +1,10 @@
+[package]
+name = "virtio_scsi"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+
+[dependencies]
+ftl = { workspace = true }
+ftl_utils = { workspace = true }
+ftl_virtio = { workspace = true }
