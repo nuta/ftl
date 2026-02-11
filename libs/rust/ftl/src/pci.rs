@@ -2,6 +2,7 @@ use ftl_types::error::ErrorCode;
 pub use ftl_types::pci::PciEntry;
 use ftl_types::syscall::SYS_PCI_GET_BAR;
 use ftl_types::syscall::SYS_PCI_GET_INTERRUPT_LINE;
+use ftl_types::syscall::SYS_PCI_GET_SUBSYSTEM_ID;
 use ftl_types::syscall::SYS_PCI_LOOKUP;
 use ftl_types::syscall::SYS_PCI_SET_BUSMASTER;
 
@@ -38,6 +39,11 @@ pub fn sys_pci_set_busmaster(bus: u8, slot: u8, enable: bool) -> Result<(), Erro
 pub fn sys_pci_get_bar(bus: u8, slot: u8, bar: u8) -> Result<u32, ErrorCode> {
     let bar = syscall3(SYS_PCI_GET_BAR, bus as usize, slot as usize, bar as usize)?;
     Ok(bar as u32)
+}
+
+pub fn sys_pci_get_subsystem_id(bus: u8, slot: u8) -> Result<u16, ErrorCode> {
+    let id = syscall2(SYS_PCI_GET_SUBSYSTEM_ID, bus as usize, slot as usize)?;
+    Ok(id as u16)
 }
 
 pub fn sys_pci_get_interrupt_line(bus: u8, slot: u8) -> Result<u8, ErrorCode> {

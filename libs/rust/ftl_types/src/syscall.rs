@@ -33,3 +33,4 @@ pub const SYS_TIMER_CREATE: usize = 21;
 pub const SYS_TIMER_SET: usize = 22;
 pub const SYS_SERVICE_REGISTER: usize = 23;
 pub const SYS_SERVICE_LOOKUP: usize = 24;
+pub const SYS_PCI_GET_SUBSYSTEM_ID: usize = 25;

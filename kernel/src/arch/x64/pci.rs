@@ -186,3 +186,11 @@ pub fn sys_pci_get_interrupt_line(a0: usize, a1: usize) -> Result<SyscallResult,
     let value = read_config8(bus, slot, offset_of!(PciConfig, interrupt_line));
     Ok(SyscallResult::Return(value as usize))
 }
+
+pub fn sys_pci_get_subsystem_id(a0: usize, a1: usize) -> Result<SyscallResult, ErrorCode> {
+    let bus = a0 as u8;
+    let slot = a1 as u8;
+
+    let value = read_config16(bus, slot, offset_of!(PciConfig, subsystem_id));
+    Ok(SyscallResult::Return(value as usize))
+}
