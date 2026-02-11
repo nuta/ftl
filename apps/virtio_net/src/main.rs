@@ -218,7 +218,7 @@ impl Application for Main {
 
     fn irq(&mut self, _ctx: &mut Context, interrupt: &Rc<Interrupt>, _irq: u8) {
         let isr = self.virtio.read_isr();
-        if isr & 1 != 0 {
+        if isr.virtqueue_updated() {
             // Process received packets.
             let header_len = size_of::<VirtioNetHdr>();
             while let Some(used) = self.rxq.pop() {

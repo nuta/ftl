@@ -134,6 +134,14 @@ impl Prober {
     }
 }
 
+pub struct IsrStatus(u8);
+
+impl IsrStatus {
+    pub fn virtqueue_updated(&self) -> bool {
+        self.0 & 1 != 0
+    }
+}
+
 pub struct VirtioPci {
     iobase: u16,
 }
@@ -209,8 +217,9 @@ impl VirtioPci {
     }
 
     /// Reads and clears the ISR status register.
-    pub fn read_isr(&self) -> u8 {
-        self.in8(PCI_IOPORT_ISR)
+    pub fn read_isr(&self) -> IsrStatus {
+        let raw = self.in8(PCI_IOPORT_ISR);
+        IsrStatus(raw)
     }
 
     pub fn notify(&self, virtqueue: &VirtQueue) {
