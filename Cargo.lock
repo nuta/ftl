@@ -84,6 +84,7 @@ name = "ftl"
 version = "0.0.0"
 dependencies = [
  "ftl_arrayvec",
+ "ftl_macros",
  "ftl_types",
  "hashbrown",
  "log",
@@ -101,6 +102,10 @@ version = "0.0.0"
 dependencies = [
  "ftl_utils",
 ]
+
+[[package]]
+name = "ftl_macros"
+version = "0.0.0"
 
 [[package]]
 name = "ftl_types"

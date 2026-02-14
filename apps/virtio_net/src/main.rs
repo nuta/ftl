@@ -1,5 +1,6 @@
 #![no_std]
 #![no_main]
+#![allow(unused)]
 
 use core::cmp::min;
 
@@ -8,7 +9,7 @@ use ftl::error::ErrorCode;
 use ftl::eventloop::EventLoop;
 use ftl::prelude::*;
 use ftl::service::Service;
-use ftl_virtio::dma_buf::DmaBufPool;
+// use ftl_virtio::dma_buf::DmaBufPool;
 use ftl_virtio::virtio_pci::DeviceType;
 use ftl_virtio::virtio_pci::VirtioPci;
 use ftl_virtio::virtqueue::ChainEntry;
@@ -19,7 +20,7 @@ const PACKET_BUFFER_SIZE: usize = 1514;
 
 #[ftl::main]
 fn main() {
-    let mut eventloop = EventLoop::new();
+    let mut eventloop = EventLoop::new().unwrap();
 
     // Initialize virtio device.
     let prober = VirtioPci::probe(DeviceType::Network).unwrap();

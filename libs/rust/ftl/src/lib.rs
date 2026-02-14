@@ -3,6 +3,7 @@
 extern crate alloc;
 
 pub use alloc::rc;
+pub use ftl_macros::main;
 
 #[macro_use]
 pub mod print;
