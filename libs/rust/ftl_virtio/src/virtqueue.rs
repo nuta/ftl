@@ -103,6 +103,17 @@ impl VirtQueue {
         self.queue_index
     }
 
+    pub fn can_push(&self) -> bool {
+        !self.free_indicies.is_empty()
+    }
+
+    pub fn can_pop(&self) -> bool {
+        fence(Ordering::Acquire);
+
+        let used_idx = unsafe { read_volatile(&(*self.used).idx) };
+        self.last_used_idx != used_idx
+    }
+
     /// Push a descriptor chain to the available ring.
     pub fn push(&mut self, chain: &[ChainEntry]) -> Result<HeadId, FullError> {
         assert!(chain.len() > 0);
@@ -166,10 +177,7 @@ impl VirtQueue {
 
     /// Pops a used descriptor chain (i.e. a complete request).
     pub fn pop(&mut self) -> Option<UsedChain> {
-        fence(Ordering::Acquire);
-
-        let used_idx = unsafe { read_volatile(&(*self.used).idx) };
-        if self.last_used_idx == used_idx {
+        if !self.can_pop() {
             return None;
         }
 
