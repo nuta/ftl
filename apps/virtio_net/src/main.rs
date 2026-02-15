@@ -3,25 +3,70 @@
 #![allow(unused)]
 
 use core::cmp::min;
+use core::mem::size_of;
 
 use ftl::arch::min_page_size;
 use ftl::collections::vec_deque::VecDeque;
+use ftl::driver::DmaBuf;
 use ftl::driver::DmaBufPool;
 use ftl::error::ErrorCode;
 use ftl::eventloop::Event;
 use ftl::eventloop::EventLoop;
+use ftl::eventloop::ReadCompleter;
 use ftl::eventloop::Request;
 use ftl::prelude::*;
 use ftl::service::Service;
 use ftl_utils::alignment::align_up;
+use ftl_virtio::VirtQueue;
 use ftl_virtio::virtio_pci::DeviceType;
 use ftl_virtio::virtio_pci::VirtioPci;
 use ftl_virtio::virtqueue::ChainEntry;
 
 const VIRTIO_NET_F_MAC: u32 = 1 << 5;
 const CONCURRENT_READS_LIMIT: usize = 16;
-const PACKET_BUFFER_SIZE: usize = 1514;
+const PAYLOAD_SIZE_MAX: usize = 1514;
+const BUFFER_SIZE: usize = 1514 + size_of::<VirtioNetHdr>();
 const RX_QUEUE_MAX: usize = 16;
+
+#[repr(C, packed)]
+struct VirtioNetHdr {
+    flags: u8,
+    gso_type: u8,
+    hdr_len: u16,
+    gso_size: u16,
+    csum_start: u16,
+    csum_offset: u16,
+}
+
+fn payload_slice(dmabuf: &DmaBuf, payload_len: usize) -> &[u8] {
+    let header_len = size_of::<VirtioNetHdr>();
+    &dmabuf.as_slice()[header_len..header_len + payload_len]
+}
+
+fn payload_slice_mut(dmabuf: &mut DmaBuf, payload_len: usize) -> &mut [u8] {
+    let header_len = size_of::<VirtioNetHdr>();
+    &mut dmabuf.as_mut_slice()[header_len..header_len + payload_len]
+}
+
+fn handle_rx(
+    rxq: &mut VirtQueue<DmaBuf>,
+    dmabuf: DmaBuf,
+    total_len: usize,
+    completer: ReadCompleter,
+) {
+    // Reply to the request.
+    let header_len = size_of::<VirtioNetHdr>();
+    let payload = &dmabuf.as_slice()[header_len..header_len + total_len];
+    completer.complete_with(payload);
+
+    // Re-push the buffer to the RX queue.
+    let token = rxq.reserve().unwrap();
+    let chain = &[ChainEntry::Write {
+        paddr: dmabuf.paddr() as u64,
+        len: BUFFER_SIZE as u32,
+    }];
+    rxq.push(token, chain, dmabuf);
+}
 
 #[ftl::main]
 fn main() {
@@ -42,12 +87,12 @@ fn main() {
     let mut txq = virtio.setup_virtqueue(1).unwrap();
 
     // // Allocate RX buffers.
-    let mut dmabuf_pool = DmaBufPool::new(align_up(PACKET_BUFFER_SIZE, min_page_size()));
+    let mut dmabuf_pool = DmaBufPool::new(align_up(BUFFER_SIZE, min_page_size()));
     for _ in 0..min(rxq.queue_size(), RX_QUEUE_MAX) {
         let dmabuf = dmabuf_pool.alloc().unwrap();
         let chain = &[ChainEntry::Write {
             paddr: dmabuf.paddr() as u64,
-            len: dmabuf.len() as u32,
+            len: BUFFER_SIZE as u32,
         }];
 
         let token = rxq.reserve().unwrap();
@@ -74,18 +119,9 @@ fn main() {
     let mut pending_reads = VecDeque::new();
     loop {
         match eventloop.wait() {
-            Event::Request(Request::Read { len, completer }) => {
-                if let Some((dmabuf, _total_len)) = rxq.pop() {
-                    // Reply to the request.
-                    completer.complete_with(dmabuf.as_slice());
-
-                    // Re-push the buffer to the RX queue.
-                    let token = rxq.reserve().unwrap();
-                    let chain = &[ChainEntry::Write {
-                        paddr: dmabuf.paddr() as u64,
-                        len: dmabuf.len() as u32,
-                    }];
-                    rxq.push(token, chain, dmabuf);
+            Event::Request(Request::Read { len: _, completer }) => {
+                if let Some((dmabuf, total_len)) = rxq.pop() {
+                    handle_rx(&mut rxq, dmabuf, total_len, completer);
                 } else if pending_reads.len() > CONCURRENT_READS_LIMIT {
                     completer.error(ErrorCode::TryLater);
                 } else {
@@ -99,9 +135,13 @@ fn main() {
                     continue;
                 };
 
-                // TODO: header
+                let header_len = size_of::<VirtioNetHdr>();
+                let header_slice = &mut dmabuf.as_mut_slice()[..header_len];
+                header_slice.fill(0);
 
-                if let Err(err) = completer.read_data(0, &mut dmabuf.as_mut_slice()[..len]) {
+                let payload_len = min(len, PAYLOAD_SIZE_MAX);
+                let payload_slice = payload_slice_mut(&mut dmabuf, payload_len);
+                if let Err(err) = completer.read_data(0, payload_slice) {
                     completer.error(err);
                     dmabuf_pool.free(dmabuf);
                     continue;
@@ -109,7 +149,7 @@ fn main() {
 
                 let chain = &[ChainEntry::Read {
                     paddr: dmabuf.paddr() as u64,
-                    len: dmabuf.len() as u32,
+                    len: (header_len + payload_len) as u32,
                 }];
 
                 let Some(token) = txq.reserve() else {
@@ -120,7 +160,7 @@ fn main() {
 
                 txq.push(token, chain, dmabuf);
                 virtio.notify(&txq);
-                completer.complete(len);
+                completer.complete(payload_len);
             }
             Event::Request(Request::Invoke { completer }) => {
                 match completer.kind() {
@@ -136,16 +176,9 @@ fn main() {
                     virtio.notify(&txq);
 
                     while rxq.can_pop() && !pending_reads.is_empty() {
-                        let (dmabuf, _total_len) = rxq.pop().unwrap();
+                        let (dmabuf, total_len) = rxq.pop().unwrap();
                         let completer = pending_reads.pop_front().unwrap();
-
-                        completer.complete_with(dmabuf.as_slice());
-                        let chain = &[ChainEntry::Write {
-                            paddr: dmabuf.paddr() as u64,
-                            len: dmabuf.len() as u32,
-                        }];
-                        let token = rxq.reserve().unwrap();
-                        rxq.push(token, chain, dmabuf);
+                        handle_rx(&mut rxq, dmabuf, total_len, completer);
                     }
                 }
             }

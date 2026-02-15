@@ -36,15 +36,22 @@ pub struct ReadCompleter {
 
 impl ReadCompleter {
     pub fn complete(&self, len: usize) {
-        todo!();
+        if let Err(error) = self.ch.reply(self.call_id, Reply::ReadReply { len }) {
+            warn!("failed to complete read: {:?}", error);
+        }
     }
 
     pub fn error(&self, error: ErrorCode) {
-        todo!();
+        if let Err(send_error) = self.ch.reply(self.call_id, Reply::ErrorReply { error }) {
+            warn!("failed to error read: {:?}", send_error);
+        }
     }
 
     pub fn complete_with(&self, data: &[u8]) {
-        todo!();
+        match self.ch.ool_write(self.call_id, 0, 0, data) {
+            Ok(len) => self.complete(len),
+            Err(error) => self.error(error),
+        }
     }
 }
 
@@ -61,8 +68,8 @@ impl WriteCompleter {
     }
 
     pub fn error(&self, error: ErrorCode) {
-        if let Err(error) = self.ch.reply(self.call_id, Reply::WriteReply { len: 0 }) {
-            warn!("failed to error write: {:?}", error);
+        if let Err(send_error) = self.ch.reply(self.call_id, Reply::ErrorReply { error }) {
+            warn!("failed to error write: {:?}", send_error);
         }
     }
 
@@ -97,7 +104,9 @@ impl InvokeCompleter {
     }
 
     pub fn error(&self, error: ErrorCode) {
-        todo!();
+        if let Err(send_error) = self.ch.reply(self.call_id, Reply::ErrorReply { error }) {
+            warn!("failed to error invoke: {:?}", send_error);
+        }
     }
 
     pub fn complete_with(self, data: &[u8]) {
