@@ -67,18 +67,7 @@ impl WriteCompleter {
         }
     }
 
-    #[track_caller]
     pub fn error(&self, error: ErrorCode) {
-        if cfg!(debug_assertions) {
-            let caller = core::panic::Location::caller();
-            log::warn!(
-                "completing with error: {:?} at {}:{}",
-                error,
-                caller.file(),
-                caller.line()
-            );
-        }
-
         if let Err(send_error) = self.ch.reply(self.call_id, Reply::ErrorReply { error }) {
             warn!("failed to error write: {:?}", send_error);
         }
