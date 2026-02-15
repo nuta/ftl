@@ -188,7 +188,6 @@ impl smoltcp::phy::Device for Device {
 
 enum State {
     Driver,
-    DriverMac,
     Client,
     TcpConn {
         pending_reads: VecDeque<ReadCompleter>,
@@ -205,7 +204,6 @@ impl fmt::Debug for State {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             State::Driver => write!(f, "Driver"),
-            State::DriverMac => write!(f, "DriverMac"),
             State::Client => write!(f, "Client"),
             State::TcpConn { .. } => write!(f, "TcpConn"),
             State::TcpListener { .. } => write!(f, "TcpListener"),
@@ -781,7 +779,7 @@ impl Application for Main {
                     }
                 }
             }
-            State::TcpConn { .. } | State::Driver | State::DriverMac => {
+            State::TcpConn { .. } | State::Driver => {
                 completer.error(ErrorCode::Unsupported);
             }
         }
@@ -804,7 +802,7 @@ impl Application for Main {
             State::TcpListener { .. } => {
                 completer.error(ErrorCode::Unsupported);
             }
-            State::Driver | State::DriverMac | State::Client => {
+            State::Driver | State::Client => {
                 completer.error(ErrorCode::Unsupported);
             }
         }
@@ -827,37 +825,8 @@ impl Application for Main {
             State::TcpListener { .. } => {
                 completer.error(ErrorCode::Unsupported);
             }
-            State::Driver | State::DriverMac | State::Client => {
+            State::Driver | State::Client => {
                 completer.error(ErrorCode::Unsupported);
-            }
-        }
-    }
-
-    fn open_reply(&mut self, ctx: &mut Context, _ch: &Rc<Channel>, _uri: Buffer, new_ch: Channel) {
-        let ch_id = ctx.handle_id();
-        let state = self.states_by_ch.get(&ch_id).unwrap().borrow_mut();
-        match &*state {
-            State::Driver => {
-                let new_ch = Rc::new(new_ch);
-                if let Err(error) = ctx.add_channel(new_ch.clone()) {
-                    trace!("failed to add MAC control channel: {:?}", error);
-                    return;
-                }
-
-                drop(state);
-                let new_id = new_ch.handle().id();
-                self.states_by_ch
-                    .insert(new_id, Rc::new(RefCell::new(State::DriverMac)));
-
-                if let Err(error) = new_ch.send(Message::Read {
-                    offset: 0,
-                    data: BufferMut::Vec(vec![0u8; 6]),
-                }) {
-                    trace!("failed to read MAC: {:?}", error);
-                }
-            }
-            _ => {
-                trace!("unexpected state for open reply: {state:?}");
             }
         }
     }
@@ -875,11 +844,6 @@ impl Application for Main {
                 self.device.on_read_reply(buf, len);
                 self.poll(ctx);
             }
-            State::DriverMac => {
-                drop(state);
-                self.on_mac_read_reply(buf);
-                self.poll(ctx);
-            }
             _ => {
                 trace!("unexpected read reply");
             }
@@ -894,13 +858,13 @@ impl Application for Main {
             .borrow_mut();
 
         match &mut *state {
-            State::DriverMac => {
+            State::Driver => {
                 drop(state);
                 self.on_mac_read_reply(output);
                 self.poll(ctx);
             }
             _ => {
-                trace!("unexpected read reply");
+                trace!("unexpected invoke reply");
             }
         }
     }
@@ -939,10 +903,6 @@ impl Application for Main {
             }
             State::Driver => {
                 todo!("handle driver peer closed");
-            }
-            State::DriverMac => {
-                trace!("MAC control channel closed");
-                ctx.remove(ctx.handle_id()).unwrap();
             }
             State::Client => {
                 // Nothing to do.

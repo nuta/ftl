@@ -2,11 +2,17 @@ use alloc::rc::Rc;
 use core::fmt;
 
 use ftl_types::channel::CallId;
+use ftl_types::channel::InvokeInline;
+use ftl_types::channel::MessageInfo;
+use ftl_types::channel::ReadInline;
+use ftl_types::channel::WriteInline;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use hashbrown::HashMap;
+use log::warn;
 
 use crate::channel::Channel;
+use crate::channel::Reply;
 use crate::handle::Handleable;
 use crate::interrupt::Interrupt;
 use crate::service::Service;
@@ -14,6 +20,7 @@ use crate::sink;
 use crate::sink::Sink;
 
 enum Object {
+    Channel(#[allow(unused)] Rc<Channel>),
     Interrupt(#[allow(unused)] Rc<Interrupt>),
     Service(#[allow(unused)] Rc<Service>),
 }
@@ -48,19 +55,19 @@ pub struct WriteCompleter {
 
 impl WriteCompleter {
     pub fn complete(&self, len: usize) {
-        todo!();
+        if let Err(error) = self.ch.reply(self.call_id, Reply::WriteReply { len }) {
+            warn!("failed to complete write: {:?}", error);
+        }
     }
 
     pub fn error(&self, error: ErrorCode) {
-        todo!();
+        if let Err(error) = self.ch.reply(self.call_id, Reply::WriteReply { len: 0 }) {
+            warn!("failed to error write: {:?}", error);
+        }
     }
 
     pub fn read_data(&self, offset: usize, data: &mut [u8]) -> Result<usize, ErrorCode> {
         self.ch.ool_read(self.call_id, 0, offset, data)
-    }
-
-    pub fn complete_with(&self, data: &[u8]) {
-        todo!();
     }
 }
 
@@ -71,8 +78,10 @@ pub struct InvokeCompleter {
 }
 
 impl InvokeCompleter {
-    pub fn complete(&self, len: usize) {
-        todo!();
+    pub fn complete(self) {
+        if let Err(error) = self.ch.reply(self.call_id, Reply::InvokeReply {}) {
+            warn!("failed to complete invoke: {:?}", error);
+        }
     }
 
     pub fn kind(&self) -> u32 {
@@ -91,8 +100,13 @@ impl InvokeCompleter {
         todo!();
     }
 
-    pub fn complete_with(&self, data: &[u8]) {
-        todo!();
+    pub fn complete_with(self, data: &[u8]) {
+        if let Err(error) = self.write_bytes(0, data) {
+            self.error(error);
+            return;
+        }
+
+        self.complete();
     }
 }
 
@@ -166,24 +180,86 @@ impl EventLoop {
     }
 
     pub fn wait(&mut self) -> Event<'_> {
-        let event = self.sink.wait();
-        match event {
-            Ok(sink::Event::CallMessage {
-                ch_id,
-                info,
-                call_id,
-                handles,
-                inline,
-                //
-            }) => {
-                todo!();
-            }
-            Ok(sink::Event::Irq { handle_id, irq }) => {
-                todo!();
-            }
-            Ok((sink::Event::Client { ch })) => Event::Connect(ch),
-            _ => {
-                todo!();
+        loop {
+            let event = self.sink.wait().unwrap();
+            match event {
+                sink::Event::CallMessage {
+                    ch_id,
+                    info,
+                    call_id,
+                    handles,
+                    inline,
+                } => {
+                    // TODO: Support passing handles through eventloop API.
+                    drop(handles);
+
+                    let ch = match self.states.get(&ch_id) {
+                        Some(State {
+                            object: Object::Channel(ch),
+                        }) => ch.clone(),
+                        _ => panic!("unknown handle id from sink: {:?}", ch_id),
+                    };
+
+                    let request = match info {
+                        MessageInfo::READ => {
+                            // FIXME: Alignment is not guaranteed.
+                            let inline = unsafe { &*(inline.as_ptr() as *const ReadInline) };
+                            Request::Read {
+                                len: inline.len,
+                                completer: ReadCompleter { ch, call_id },
+                            }
+                        }
+                        MessageInfo::WRITE => {
+                            // FIXME: Alignment is not guaranteed.
+                            let inline = unsafe { &*(inline.as_ptr() as *const WriteInline) };
+                            Request::Write {
+                                len: inline.len,
+                                completer: WriteCompleter { ch, call_id },
+                            }
+                        }
+                        MessageInfo::INVOKE => {
+                            // FIXME: Alignment is not guaranteed.
+                            let inline = unsafe { &*(inline.as_ptr() as *const InvokeInline) };
+                            Request::Invoke {
+                                completer: InvokeCompleter {
+                                    ch,
+                                    kind: inline.kind,
+                                    call_id,
+                                },
+                            }
+                        }
+                        _ => panic!("unexpected message info: {:?}", info),
+                    };
+
+                    return Event::Request(request);
+                }
+                sink::Event::Irq { handle_id, irq: _ } => {
+                    match self.states.get(&handle_id) {
+                        Some(State {
+                            object: Object::Interrupt(interrupt),
+                        }) => return Event::Interrupt { interrupt },
+                        _ => panic!("unknown handle id from sink: {:?}", handle_id),
+                    }
+                }
+                sink::Event::Client { ch } => {
+                    let ch = Rc::new(ch);
+                    self.sink.add(ch.as_ref()).unwrap();
+                    self.states.insert(
+                        ch.handle().id(),
+                        State {
+                            object: Object::Channel(ch),
+                        },
+                    );
+                }
+                sink::Event::PeerClosed { ch_id } => {
+                    todo!("peer closed");
+                }
+                sink::Event::ReplyMessage { .. } => {
+                    panic!("reply messages are not supported in EventLoop")
+                }
+                sink::Event::Timer { handle_id } => {
+                    panic!("unexpected timer event: {:?}", handle_id)
+                }
             }
         }
     }

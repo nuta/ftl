@@ -8,6 +8,7 @@ use core::mem::MaybeUninit;
 use ftl_types::channel::CallId;
 use ftl_types::channel::ErrorReplyInline;
 use ftl_types::channel::InvokeInline;
+use ftl_types::channel::InvokeReplyInline;
 use ftl_types::channel::MessageBody;
 use ftl_types::channel::MessageInfo;
 use ftl_types::channel::OutOfLine;
@@ -129,6 +130,7 @@ pub enum Reply {
         /// The length of the data actually written.
         len: usize,
     },
+    InvokeReply {},
 }
 
 pub(crate) enum Cookie {
@@ -247,6 +249,11 @@ impl Channel {
                 let inline = unsafe { &mut *(body.inline.as_mut_ptr() as *mut WriteReplyInline) };
                 *inline = WriteReplyInline { len };
                 MessageInfo::WRITE_REPLY
+            }
+            Reply::InvokeReply {} => {
+                let inline = unsafe { &mut *(body.inline.as_mut_ptr() as *mut InvokeReplyInline) };
+                *inline = InvokeReplyInline {};
+                MessageInfo::INVOKE_REPLY
             }
         };
 
