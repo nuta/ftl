@@ -119,8 +119,7 @@ fn main() {
             }
             Event::Request(Request::Write { len, completer }) => {
                 let Ok(mut dmabuf) = dmabuf_pool.alloc() else {
-                    warn!("failed to allocate a DMA buffer");
-                    completer.error(ErrorCode::TryLater);
+                    completer.error(ErrorCode::OutOfMemory);
                     continue;
                 };
 
