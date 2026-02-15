@@ -4,6 +4,7 @@ use core::ptr::write_volatile;
 use core::sync::atomic::Ordering;
 use core::sync::atomic::fence;
 
+use ftl::driver::DmaBuf;
 use ftl::log::trace;
 use ftl::prelude::*;
 use ftl_utils::alignment::align_up;
@@ -56,18 +57,25 @@ pub struct UsedChain {
     pub total_len: u32,
 }
 
-pub struct VirtQueue {
+pub struct PushToken {
+    head_index: u16,
+}
+
+pub struct VirtQueue<C> {
     queue_size: u16,
     queue_index: u16,
+    _dmabuf: DmaBuf,
     descs: *mut Desc,
     avail: *mut Avail,
     used: *mut Used,
     free_indicies: Vec<u16>,
     last_used_idx: u16,
+    contexts: Vec<Option<C>>,
 }
 
-impl VirtQueue {
-    pub fn new(queue_index: u16, queue_size: u16, vaddr: usize) -> Self {
+impl<C> VirtQueue<C> {
+    pub fn new(queue_index: u16, queue_size: u16, dmabuf: DmaBuf) -> Self {
+        let vaddr = dmabuf.vaddr();
         let descs = vaddr as *mut Desc;
         let avail_offset = size_of::<Desc>() * queue_size as usize;
         let avail = (vaddr + avail_offset) as *mut Avail;
@@ -84,14 +92,22 @@ impl VirtQueue {
             (*avail).flags = 0;
             (*avail).idx = 0;
         }
+
+        let mut contexts = Vec::with_capacity(queue_size as usize);
+        for _ in 0..queue_size {
+            contexts.push(None);
+        }
+
         Self {
             queue_index,
             queue_size,
+            _dmabuf: dmabuf,
             descs,
             avail,
             used,
             free_indicies,
             last_used_idx: 0,
+            contexts,
         }
     }
 
@@ -114,23 +130,23 @@ impl VirtQueue {
         self.last_used_idx != used_idx
     }
 
-    /// Push a descriptor chain to the available ring.
-    pub fn push(&mut self, chain: &[ChainEntry]) -> Result<HeadId, FullError> {
-        assert!(chain.len() > 0);
+    pub fn reserve(&mut self) -> Option<PushToken> {
+        let head_index = self.free_indicies.pop()?;
+        Some(PushToken { head_index })
+    }
 
-        if chain.len() > self.free_indicies.len() {
-            return Err(FullError);
-        }
+    /// Push a descriptor chain to the available ring.
+    pub fn push(&mut self, ticket: PushToken, chain: &[ChainEntry], ctx: C) {
+        assert!(chain.len() > 0);
 
         // Add descriptors to the chain.
         let mut next_index = None;
-        let head_index = self.free_indicies.pop().unwrap();
         for (i, entry) in chain.iter().enumerate() {
             let desc_index = if let Some(index) = next_index {
                 index
             } else {
                 // The first descriptor in the chain.
-                head_index
+                ticket.head_index
             };
 
             let (mut flags, paddr, len) = match entry {
@@ -165,18 +181,25 @@ impl VirtQueue {
         let avail_index = unsafe { read_volatile(&(*self.avail).idx) };
         let ring_index = (avail_index % self.queue_size) as usize;
         unsafe {
-            write_volatile((*self.avail).ring.as_mut_ptr().add(ring_index), head_index);
+            write_volatile(
+                (*self.avail).ring.as_mut_ptr().add(ring_index),
+                ticket.head_index,
+            );
         }
         fence(Ordering::Release);
         unsafe {
             write_volatile(&mut (*self.avail).idx, avail_index.wrapping_add(1));
         }
 
-        Ok(HeadId(head_index))
+        debug_assert!(self.contexts[ticket.head_index as usize].is_none());
+        self.contexts[ticket.head_index as usize] = Some(ctx);
     }
 
     /// Pops a used descriptor chain (i.e. a complete request).
-    pub fn pop(&mut self) -> Option<UsedChain> {
+    ///
+    /// Returns `(ctx, total_len)`, where `total_len` is the total length
+    /// written by the device.
+    pub fn pop(&mut self) -> Option<(C, usize)> {
         if !self.can_pop() {
             return None;
         }
@@ -205,9 +228,11 @@ impl VirtQueue {
             index = desc.next;
         }
 
-        Some(UsedChain {
-            head: HeadId(elem.id as u16),
-            total_len: elem.len,
-        })
+        let Some(ctx) = self.contexts[index as usize].take() else {
+            warn!("context not found for index {index}");
+            return None;
+        };
+
+        Some((ctx, elem.len as usize))
     }
 }

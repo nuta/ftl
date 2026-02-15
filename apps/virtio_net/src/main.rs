@@ -4,12 +4,16 @@
 
 use core::cmp::min;
 
+use ftl::arch::min_page_size;
 use ftl::collections::vec_deque::VecDeque;
+use ftl::driver::DmaBufPool;
 use ftl::error::ErrorCode;
+use ftl::eventloop::Event;
 use ftl::eventloop::EventLoop;
+use ftl::eventloop::Request;
 use ftl::prelude::*;
 use ftl::service::Service;
-// use ftl_virtio::dma_buf::DmaBufPool;
+use ftl_utils::alignment::align_up;
 use ftl_virtio::virtio_pci::DeviceType;
 use ftl_virtio::virtio_pci::VirtioPci;
 use ftl_virtio::virtqueue::ChainEntry;
@@ -17,6 +21,7 @@ use ftl_virtio::virtqueue::ChainEntry;
 const VIRTIO_NET_F_MAC: u32 = 1 << 5;
 const CONCURRENT_READS_LIMIT: usize = 16;
 const PACKET_BUFFER_SIZE: usize = 1514;
+const RX_QUEUE_MAX: usize = 16;
 
 #[ftl::main]
 fn main() {
@@ -33,96 +38,120 @@ fn main() {
     eventloop.add_interrupt(interrupt).unwrap();
 
     // Prepare virtqueues.
-    let txq = virtio.setup_virtqueue(1).unwrap();
     let mut rxq = virtio.setup_virtqueue(0).unwrap();
+    let mut txq = virtio.setup_virtqueue(1).unwrap();
 
     // // Allocate RX buffers.
-    // let dmabuf_pool = DmaBufPool::new(PACKET_BUFFER_SIZE);
-    // for _ in 0..min(rxq.queue_size(), 16) {
-    //     let dmabuf = dmabuf_pool.alloc().unwrap();
-    //     let chain = &[ChainEntry::Write {
-    //         paddr: dmabuf.paddr() as u64,
-    //         len: PACKET_BUFFER_SIZE as u32,
-    //     }];
-    //     rxq.push(chain).unwrap();
-    // }
+    let mut dmabuf_pool = DmaBufPool::new(align_up(PACKET_BUFFER_SIZE, min_page_size()));
+    for _ in 0..min(rxq.queue_size(), RX_QUEUE_MAX) {
+        let dmabuf = dmabuf_pool.alloc().unwrap();
+        let chain = &[ChainEntry::Write {
+            paddr: dmabuf.paddr() as u64,
+            len: dmabuf.len() as u32,
+        }];
 
-    // virtio.notify(&rxq);
+        let token = rxq.reserve().unwrap();
+        rxq.push(token, chain, dmabuf);
+    }
 
-    // // Read MAC address
-    // let mut mac = [0u8; 6];
-    // for i in 0..6 {
-    //     mac[i] = virtio.read_device_config8(i as u16);
-    // }
+    virtio.notify(&rxq);
 
-    // // Register the service.
-    // let service = Service::register("ethernet").unwrap();
-    // ctx.add_service(service).unwrap();
+    // Read MAC address
+    let mut mac = [
+        virtio.read_device_config8(0),
+        virtio.read_device_config8(1),
+        virtio.read_device_config8(2),
+        virtio.read_device_config8(3),
+        virtio.read_device_config8(4),
+        virtio.read_device_config8(5),
+    ];
 
-    // trace!("ready: mac={mac:02x?}");
-    // let mut pending_reads = VecDeque::new();
-    // loop {
-    //     match eventloop.next() {
-    //         Event::Request(Request::Read { completer }) => {
-    //             match rxq.pop() {
-    //                 Some(dmabuf) => {
-    //                     completer.complete_with(dmabuf.as_slice());
-    //                 }
-    //                 None if pending_reads.len() > CONCURRENT_READS_LIMIT => {
-    //                     completer.error(ErrorCode::TryLater);
-    //                 }
-    //                 None => {
-    //                     pending_reads.push_back(completer);
-    //                 }
-    //             }
-    //         }
-    //         Event::Request(Request::Write { len, completer }) => {
-    //             if !txq.can_push() {
-    //                 completer.error(ErrorCode::TryLater);
-    //                 continue;
-    //             }
+    // Register the service.
+    let service = Service::register("ethernet").unwrap();
+    eventloop.add_service(service).unwrap();
 
-    //             let Some(dmabuf) = dmabuf_pool.alloc() else {
-    //                 completer.error(ErrorCode::TryLater);
-    //                 continue;
-    //             };
+    trace!("ready: mac={mac:02x?}");
+    let mut pending_reads = VecDeque::new();
+    loop {
+        match eventloop.wait() {
+            Event::Request(Request::Read { len, completer }) => {
+                if let Some((dmabuf, _total_len)) = rxq.pop() {
+                    // Reply to the request.
+                    completer.complete_with(dmabuf.as_slice());
 
-    //             let dst = dmabuf.as_mut_slice(size_of::<VirtioNetHdr>()..len);
-    //             if let Err(err) = completer.read_data(0, dst) {
-    //                 completer.error(err);
-    //                 dmabuf_pool.free(dmabuf);
-    //                 continue;
-    //             }
+                    // Re-push the buffer to the RX queue.
+                    let token = rxq.reserve().unwrap();
+                    let chain = &[ChainEntry::Write {
+                        paddr: dmabuf.paddr() as u64,
+                        len: dmabuf.len() as u32,
+                    }];
+                    rxq.push(token, chain, dmabuf);
+                } else if pending_reads.len() > CONCURRENT_READS_LIMIT {
+                    completer.error(ErrorCode::TryLater);
+                } else {
+                    pending_reads.push_back(completer);
+                }
+            }
+            Event::Request(Request::Write { len, completer }) => {
+                let Ok(mut dmabuf) = dmabuf_pool.alloc() else {
+                    warn!("failed to allocate a DMA buffer");
+                    completer.error(ErrorCode::TryLater);
+                    continue;
+                };
 
-    //             let chain = &[ChainEntry::Read {
-    //                 paddr: dmabuf.paddr() as u64,
-    //                 len: PACKET_BUFFER_SIZE as u32,
-    //             }];
+                // TODO: header
 
-    //             txq.push(chain).unwrap();
-    //             completer.complete();
-    //         }
-    //         Event::Connect { ch } => {
-    //             eventloop.add_channel(ch).unwrap();
-    //         }
-    //         Event::Interrupt { interrupt } => {
-    //             if virtio.read_isr().virtqueue_updated() {
-    //                 while rxq.can_pop() && !pending_reads.is_empty() {
-    //                     let chain = rxq.pop().unwrap();
-    //                     let completer = pending_reads.pop_front().unwrap();
+                if let Err(err) = completer.read_data(0, &mut dmabuf.as_mut_slice()[..len]) {
+                    completer.error(err);
+                    dmabuf_pool.free(dmabuf);
+                    continue;
+                }
 
-    //                     // completer.complete_with(dmabuf.as_slice());
-    //                     dmabuf_pool.free(dmabuf);
-    //                 }
+                let chain = &[ChainEntry::Read {
+                    paddr: dmabuf.paddr() as u64,
+                    len: dmabuf.len() as u32,
+                }];
 
-    //                 while let Some(dmabuf) = txq.pop() {
-    //                     dmabuf_pool.free(dmabuf);
-    //                 }
-    //             }
-    //         }
-    //         ev => {
-    //             warn!("unhandled event: {:?}", ev);
-    //         }
-    //     }
-    // }
+                let Some(token) = txq.reserve() else {
+                    completer.error(ErrorCode::TryLater);
+                    dmabuf_pool.free(dmabuf);
+                    continue;
+                };
+
+                txq.push(token, chain, dmabuf);
+                virtio.notify(&txq);
+                completer.complete(len);
+            }
+            Event::Request(Request::Invoke { completer }) => {
+                match completer.kind() {
+                    1 => completer.complete_with(&mac),
+                    _ => completer.error(ErrorCode::Unsupported),
+                }
+            }
+            Event::Interrupt { interrupt } => {
+                if virtio.read_isr().virtqueue_updated() {
+                    while let Some((dmabuf, _total_len)) = txq.pop() {
+                        dmabuf_pool.free(dmabuf);
+                    }
+                    virtio.notify(&txq);
+
+                    while rxq.can_pop() && !pending_reads.is_empty() {
+                        let (dmabuf, _total_len) = rxq.pop().unwrap();
+                        let completer = pending_reads.pop_front().unwrap();
+
+                        completer.complete_with(dmabuf.as_slice());
+                        let chain = &[ChainEntry::Write {
+                            paddr: dmabuf.paddr() as u64,
+                            len: dmabuf.len() as u32,
+                        }];
+                        let token = rxq.reserve().unwrap();
+                        rxq.push(token, chain, dmabuf);
+                    }
+                }
+            }
+            ev => {
+                warn!("unhandled event: {:?}", ev);
+            }
+        }
+    }
 }
