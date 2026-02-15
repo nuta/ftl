@@ -105,16 +105,16 @@ fn main() {
     eventloop.add_service(service).unwrap();
 
     trace!("ready: mac={mac:02x?}");
-    let mut pending_reads = VecDeque::new();
+    let mut read_waiters = VecDeque::new();
     loop {
         match eventloop.wait() {
             Event::Request(Request::Read { len: _, completer }) => {
                 if let Some((dmabuf, total_len)) = rxq.pop() {
                     handle_rx(&mut rxq, dmabuf, total_len, completer);
-                } else if pending_reads.len() > READ_WAITERS_MAX {
+                } else if read_waiters.len() > READ_WAITERS_MAX {
                     completer.error(ErrorCode::TryLater);
                 } else {
-                    pending_reads.push_back(completer);
+                    read_waiters.push_back(completer);
                 }
             }
             Event::Request(Request::Write { len, completer }) => {
@@ -164,9 +164,9 @@ fn main() {
                     }
                     virtio.notify(&txq);
 
-                    while rxq.can_pop() && !pending_reads.is_empty() {
+                    while rxq.can_pop() && !read_waiters.is_empty() {
                         let (dmabuf, total_len) = rxq.pop().unwrap();
-                        let completer = pending_reads.pop_front().unwrap();
+                        let completer = read_waiters.pop_front().unwrap();
                         handle_rx(&mut rxq, dmabuf, total_len, completer);
                     }
                 }
