@@ -20,7 +20,7 @@ use ftl_virtio::virtio_pci::DeviceType;
 use ftl_virtio::virtio_pci::VirtioPci;
 use ftl_virtio::virtqueue::ChainEntry;
 
-const CONCURRENT_READS_LIMIT: usize = 16;
+const READ_WAITERS_MAX: usize = 16;
 const PAYLOAD_SIZE_MAX: usize = 1514;
 const BUFFER_SIZE: usize = 1514 + size_of::<VirtioNetHdr>();
 const HEADER_LEN: usize = size_of::<VirtioNetHdr>();
@@ -111,7 +111,7 @@ fn main() {
             Event::Request(Request::Read { len: _, completer }) => {
                 if let Some((dmabuf, total_len)) = rxq.pop() {
                     handle_rx(&mut rxq, dmabuf, total_len, completer);
-                } else if pending_reads.len() > CONCURRENT_READS_LIMIT {
+                } else if pending_reads.len() > READ_WAITERS_MAX {
                     completer.error(ErrorCode::TryLater);
                 } else {
                     pending_reads.push_back(completer);
