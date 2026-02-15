@@ -108,7 +108,11 @@ fn main() {
     let mut read_waiters = VecDeque::new();
     loop {
         match eventloop.wait() {
-            Event::Request(Request::Read { len: _, completer }) => {
+            Event::Request(Request::Read {
+                offset: _,
+                len: _,
+                completer,
+            }) => {
                 if let Some((dmabuf, total_len)) = rxq.pop() {
                     handle_rx(&mut rxq, dmabuf, total_len, completer);
                 } else if read_waiters.len() > READ_WAITERS_MAX {
@@ -117,7 +121,11 @@ fn main() {
                     read_waiters.push_back(completer);
                 }
             }
-            Event::Request(Request::Write { len, completer }) => {
+            Event::Request(Request::Write {
+                offset: _,
+                len,
+                completer,
+            }) => {
                 let Ok(mut dmabuf) = dmabuf_pool.alloc() else {
                     completer.error(ErrorCode::OutOfMemory);
                     continue;
@@ -157,6 +165,10 @@ fn main() {
                 }
             }
             Event::Interrupt { interrupt } => {
+                if let Err(error) = interrupt.acknowledge() {
+                    warn!("failed to acknowledge interrupt: {:?}", error);
+                }
+
                 if virtio.read_isr().virtqueue_updated() {
                     while let Some((dmabuf, _total_len)) = txq.pop() {
                         dmabuf_pool.free(dmabuf);
@@ -168,6 +180,11 @@ fn main() {
                         let completer = read_waiters.pop_front().unwrap();
                         handle_rx(&mut rxq, dmabuf, total_len, completer);
                     }
+                }
+            }
+            Event::Connect(ch) => {
+                if let Err(error) = eventloop.add_channel(ch) {
+                    warn!("failed to register client channel: {:?}", error);
                 }
             }
             ev => {

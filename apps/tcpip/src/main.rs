@@ -5,12 +5,6 @@ use core::cell::RefCell;
 use core::fmt;
 use core::net::Ipv4Addr;
 
-use ftl::application::Application;
-use ftl::application::Context;
-use ftl::application::InitContext;
-use ftl::application::OpenCompleter;
-use ftl::application::ReadCompleter;
-use ftl::application::WriteCompleter;
 use ftl::channel::Buffer;
 use ftl::channel::BufferMut;
 use ftl::channel::Channel;
@@ -18,6 +12,13 @@ use ftl::channel::Message;
 use ftl::collections::HashMap;
 use ftl::collections::VecDeque;
 use ftl::error::ErrorCode;
+use ftl::eventloop::Event;
+use ftl::eventloop::EventLoop;
+use ftl::eventloop::OpenCompleter;
+use ftl::eventloop::ReadCompleter;
+use ftl::eventloop::ReplyEvent;
+use ftl::eventloop::Request;
+use ftl::eventloop::WriteCompleter;
 use ftl::handle::HandleId;
 use ftl::handle::Handleable;
 use ftl::log::*;
@@ -242,6 +243,30 @@ struct Main {
 }
 
 impl Main {
+    fn connect_driver(&mut self, eventloop: &mut EventLoop) -> Result<(), ErrorCode> {
+        let driver_ch = Rc::new(Channel::connect("ethernet")?);
+        eventloop.add_channel(driver_ch.clone())?;
+
+        let driver_id = driver_ch.handle().id();
+        self.states_by_ch
+            .insert(driver_id, Rc::new(RefCell::new(State::Driver)));
+
+        self.device.ch = driver_ch.clone();
+        self.device.rx_queue.clear();
+        self.device.inflight_reads = 0;
+        self.ready_to_serve = false;
+
+        if let Err(error) = driver_ch.send(Message::Invoke {
+            kind: 1,
+            input: Buffer::Static(VIRTIO_NET_MAC_URI),
+            output: BufferMut::Vec(vec![0; 6]),
+        }) {
+            trace!("failed to request MAC: {:?}", error);
+        }
+
+        Ok(())
+    }
+
     fn update_timer(&mut self) {
         let now = self.smol_clock.now();
         let Some(delay) = self.iface.poll_delay(now, &self.sockets) else {
@@ -279,13 +304,13 @@ impl Main {
 
     pub fn tcp_listen(
         &mut self,
-        ctx: &mut Context,
+        eventloop: &mut EventLoop,
         endpoint: IpListenEndpoint,
     ) -> Result<Channel, ErrorCode> {
         let (our_ch, their_ch) = Channel::new()?;
         let handle = self.do_tcp_listen(endpoint)?;
         let ch_id = our_ch.handle().id();
-        ctx.add_channel(our_ch)?;
+        eventloop.add_channel(our_ch)?;
 
         let state = Rc::new(RefCell::new(State::TcpListener {
             pending_accepts: VecDeque::new(),
@@ -298,13 +323,13 @@ impl Main {
 
     pub fn tcp_accept(
         &mut self,
-        ctx: &mut Context,
+        eventloop: &mut EventLoop,
         accepted_handle: SocketHandle,
         endpoint: IpListenEndpoint,
     ) -> Result<Channel, ErrorCode> {
         let (our_ch, their_ch) = Channel::new()?;
         let new_ch_id = our_ch.handle().id();
-        ctx.add_channel(our_ch).unwrap();
+        eventloop.add_channel(our_ch)?;
 
         // Create a new listen socket.
         let new_listen_handle = self.do_tcp_listen(endpoint)?;
@@ -328,7 +353,7 @@ impl Main {
         Ok(their_ch)
     }
 
-    pub fn poll(&mut self, ctx: &mut Context) {
+    pub fn poll(&mut self, eventloop: &mut EventLoop) {
         if !self.ready_to_serve {
             return;
         }
@@ -337,7 +362,7 @@ impl Main {
             let now = self.smol_clock.now();
             let result = self.iface.poll(now, &mut self.device, &mut self.sockets);
             self.poll_dhcp();
-            self.do_poll(ctx);
+            self.do_poll(eventloop);
             if matches!(result, PollResult::SocketStateChanged) {
                 continue;
             }
@@ -419,7 +444,7 @@ impl Main {
         }
     }
 
-    fn do_poll(&mut self, ctx: &mut Context) {
+    fn do_poll(&mut self, eventloop: &mut EventLoop) {
         use smoltcp::socket::Socket;
 
         let mut accepted_sockets = Vec::new();
@@ -486,7 +511,7 @@ impl Main {
         }
 
         for (handle, endpoint, completer) in accepted_sockets {
-            match self.tcp_accept(ctx, handle, endpoint) {
+            match self.tcp_accept(eventloop, handle, endpoint) {
                 Ok(new_ch) => completer.complete(new_ch),
                 Err(error) => completer.error(error),
             }
@@ -496,7 +521,7 @@ impl Main {
             self.sockets.remove(handle);
             self.states_by_handle.remove(&handle);
             self.states_by_ch.remove(&channel_id);
-            if let Err(error) = ctx.remove(channel_id) {
+            if let Err(error) = eventloop.remove(channel_id) {
                 trace!("failed to remove channel: {:?}", error);
             }
         }
@@ -504,7 +529,7 @@ impl Main {
 
     fn on_mac_read_reply(&mut self, buf: BufferMut) {
         let data = match buf {
-            BufferMut::Vec(mut data) => data,
+            BufferMut::Vec(data) => data,
             _ => unreachable!(),
         };
 
@@ -700,8 +725,8 @@ fn parse_uri(completer: &OpenCompleter) -> Result<Uri, ErrorCode> {
     }
 }
 
-impl Application for Main {
-    fn init(ctx: &mut InitContext) -> Self {
+impl Main {
+    fn new(eventloop: &mut EventLoop) -> Self {
         trace!("starting...");
         let smol_clock = SmolClock::new();
         let hwaddr = HardwareAddress::Ethernet(EthernetAddress::from_bytes(&[0; 6]));
@@ -714,18 +739,19 @@ impl Application for Main {
         let driver_state = Rc::new(RefCell::new(State::Driver));
         states_by_ch.insert(driver_id, driver_state.clone());
 
-        ctx.add_channel(driver_ch.clone()).unwrap();
+        eventloop.add_channel(driver_ch.clone()).unwrap();
 
         if let Err(error) = driver_ch.send(Message::Invoke {
             kind: 1,
-            input: Buffer::Static(b""),
+            input: Buffer::Static(VIRTIO_NET_MAC_URI),
             output: BufferMut::Vec(vec![0; 6]),
         }) {
             trace!("failed to request MAC: {:?}", error);
         }
+
         let mut device = Device::new(driver_ch);
         let timer = Rc::new(Timer::new().expect("failed to create poll timer"));
-        ctx.add_timer(timer.clone()).unwrap();
+        eventloop.add_timer(timer.clone()).unwrap();
 
         let iface = Interface::new(config, &mut device, smol_clock.now());
 
@@ -733,10 +759,10 @@ impl Application for Main {
         let dhcp_handle = sockets.add(dhcpv4::Socket::new());
 
         let service = Service::register("tcpip").unwrap();
-        ctx.add_service(service).unwrap();
+        eventloop.add_service(service).unwrap();
 
         trace!("ready");
-        let mut this = Self {
+        Self {
             smol_clock,
             timer,
             sockets,
@@ -746,13 +772,11 @@ impl Application for Main {
             device,
             iface: iface,
             ready_to_serve: false,
-        };
-
-        this
+        }
     }
 
-    fn open(&mut self, ctx: &mut Context, completer: OpenCompleter) {
-        let Some(state) = self.states_by_ch.get(&ctx.handle_id()) else {
+    fn on_open_request(&mut self, eventloop: &mut EventLoop, completer: OpenCompleter) {
+        let Some(state) = self.states_by_ch.get(&completer.handle_id()) else {
             completer.error(ErrorCode::InvalidArgument);
             return;
         };
@@ -768,7 +792,7 @@ impl Application for Main {
                 drop(state_borrow);
                 match parse_uri(&completer) {
                     Ok(Uri::TcpListen(endpoint)) => {
-                        match self.tcp_listen(ctx, endpoint) {
+                        match self.tcp_listen(eventloop, endpoint) {
                             Ok(new_ch) => completer.complete(new_ch),
                             Err(error) => completer.error(error),
                         }
@@ -785,9 +809,16 @@ impl Application for Main {
         }
     }
 
-    fn read(&mut self, ctx: &mut Context, completer: ReadCompleter, _offset: usize, _len: usize) {
-        let Some(state) = self.states_by_ch.get(&ctx.handle_id()) else {
-            trace!("state not found for read on {:?}", ctx.handle_id());
+    fn on_read_request(
+        &mut self,
+        eventloop: &mut EventLoop,
+        completer: ReadCompleter,
+        _offset: usize,
+        _len: usize,
+    ) {
+        let handle_id = completer.handle_id();
+        let Some(state) = self.states_by_ch.get(&handle_id) else {
+            trace!("state not found for read on {:?}", handle_id);
             completer.error(ErrorCode::InvalidArgument);
             return;
         };
@@ -797,7 +828,7 @@ impl Application for Main {
             State::TcpConn { pending_reads, .. } => {
                 pending_reads.push_back(completer);
                 drop(state_borrow);
-                self.poll(ctx);
+                self.poll(eventloop);
             }
             State::TcpListener { .. } => {
                 completer.error(ErrorCode::Unsupported);
@@ -808,9 +839,16 @@ impl Application for Main {
         }
     }
 
-    fn write(&mut self, ctx: &mut Context, completer: WriteCompleter, _offset: usize, _len: usize) {
-        let Some(state) = self.states_by_ch.get(&ctx.handle_id()) else {
-            trace!("state not found for write on {:?}", ctx.handle_id());
+    fn on_write_request(
+        &mut self,
+        eventloop: &mut EventLoop,
+        completer: WriteCompleter,
+        _offset: usize,
+        _len: usize,
+    ) {
+        let handle_id = completer.handle_id();
+        let Some(state) = self.states_by_ch.get(&handle_id) else {
+            trace!("state not found for write on {:?}", handle_id);
             completer.error(ErrorCode::InvalidArgument);
             return;
         };
@@ -820,7 +858,7 @@ impl Application for Main {
             State::TcpConn { pending_writes, .. } => {
                 pending_writes.push_back(completer);
                 drop(state_borrow);
-                self.poll(ctx);
+                self.poll(eventloop);
             }
             State::TcpListener { .. } => {
                 completer.error(ErrorCode::Unsupported);
@@ -831,18 +869,25 @@ impl Application for Main {
         }
     }
 
-    fn read_reply(&mut self, ctx: &mut Context, _ch: &Rc<Channel>, buf: BufferMut, len: usize) {
-        let mut state = self
-            .states_by_ch
-            .get(&ctx.handle_id())
-            .unwrap()
-            .borrow_mut();
+    fn on_read_reply(
+        &mut self,
+        eventloop: &mut EventLoop,
+        ch: &Rc<Channel>,
+        buf: BufferMut,
+        len: usize,
+    ) {
+        let handle_id = ch.handle().id();
+        let Some(state) = self.states_by_ch.get(&handle_id) else {
+            trace!("state not found for read reply on {:?}", handle_id);
+            return;
+        };
+        let mut state = state.borrow_mut();
 
         match &mut *state {
             State::Driver => {
                 drop(state);
                 self.device.on_read_reply(buf, len);
-                self.poll(ctx);
+                self.poll(eventloop);
             }
             _ => {
                 trace!("unexpected read reply");
@@ -850,18 +895,25 @@ impl Application for Main {
         }
     }
 
-    fn invoke_reply(&mut self, ctx: &mut Context, input: Buffer, output: BufferMut) {
-        let mut state = self
-            .states_by_ch
-            .get(&ctx.handle_id())
-            .unwrap()
-            .borrow_mut();
+    fn on_invoke_reply(
+        &mut self,
+        eventloop: &mut EventLoop,
+        ch: &Rc<Channel>,
+        _input: Buffer,
+        output: BufferMut,
+    ) {
+        let handle_id = ch.handle().id();
+        let Some(state) = self.states_by_ch.get(&handle_id) else {
+            trace!("state not found for invoke reply on {:?}", handle_id);
+            return;
+        };
+        let mut state = state.borrow_mut();
 
         match &mut *state {
             State::Driver => {
                 drop(state);
                 self.on_mac_read_reply(output);
-                self.poll(ctx);
+                self.poll(eventloop);
             }
             _ => {
                 trace!("unexpected invoke reply");
@@ -869,9 +921,10 @@ impl Application for Main {
         }
     }
 
-    fn write_reply(&mut self, ctx: &mut Context, _ch: &Rc<Channel>, _buf: Buffer, _len: usize) {
-        let Some(state) = self.states_by_ch.get(&ctx.handle_id()) else {
-            trace!("state not found for write reply on {:?}", ctx.handle_id());
+    fn on_write_reply(&mut self, ch: &Rc<Channel>, _buf: Buffer, _len: usize) {
+        let handle_id = ch.handle().id();
+        let Some(state) = self.states_by_ch.get(&handle_id) else {
+            trace!("state not found for write reply on {:?}", handle_id);
             return;
         };
 
@@ -881,53 +934,129 @@ impl Application for Main {
                 // Sent a packet.
             }
             _ => {
-                trace!("unexpected write reply on {:?}", ctx.handle_id());
+                trace!("unexpected write reply on {:?}", handle_id);
             }
         }
     }
 
-    fn peer_closed(&mut self, ctx: &mut Context, _ch: &Rc<Channel>) {
-        let Some(state) = self.states_by_ch.get(&ctx.handle_id()) else {
-            trace!("state not found for peer closed on {:?}", ctx.handle_id());
+    fn on_peer_closed(&mut self, eventloop: &mut EventLoop, ch: &Rc<Channel>) {
+        let handle_id = ch.handle().id();
+        let Some(state) = self.states_by_ch.get(&handle_id) else {
+            trace!("state not found for peer closed on {:?}", handle_id);
             return;
         };
 
         let mut state_borrow = state.borrow_mut();
+        let mut should_remove_channel = false;
+        let mut should_reconnect_driver = false;
         match &mut *state_borrow {
             State::TcpConn { channel_closed, .. } => {
                 *channel_closed = true;
             }
             State::TcpListener { .. } => {
-                // Nothing t odo.
-                ctx.remove(ctx.handle_id()).unwrap();
+                // Nothing to do.
+                should_remove_channel = true;
             }
             State::Driver => {
-                todo!("handle driver peer closed");
+                should_remove_channel = true;
+                should_reconnect_driver = true;
             }
             State::Client => {
                 // Nothing to do.
-                ctx.remove(ctx.handle_id()).unwrap();
+                should_remove_channel = true;
             }
         }
 
         drop(state_borrow);
-        self.poll(ctx);
+        if should_remove_channel {
+            self.states_by_ch.remove(&handle_id);
+            eventloop.remove(handle_id).unwrap();
+        }
+        if should_reconnect_driver {
+            if let Err(error) = self.connect_driver(eventloop) {
+                warn!("failed to reconnect ethernet driver: {:?}", error);
+            } else {
+                trace!("reconnected ethernet driver");
+            }
+        }
+        self.poll(eventloop);
     }
 
-    fn timer_expired(&mut self, ctx: &mut Context, _timer: &Rc<Timer>) {
+    fn on_timer_expired(&mut self, eventloop: &mut EventLoop) {
         trace!("timer expired");
-        self.poll(ctx);
+        self.poll(eventloop);
     }
 
-    fn connected(&mut self, ctx: &mut Context, ch: Channel) {
+    fn on_connected(&mut self, eventloop: &mut EventLoop, ch: Channel) {
         trace!("client connected");
         self.states_by_ch
             .insert(ch.handle().id(), Rc::new(RefCell::new(State::Client)));
-        ctx.add_channel(ch).unwrap();
+        eventloop.add_channel(ch).unwrap();
     }
 }
 
-#[unsafe(no_mangle)]
+#[ftl::main]
 fn main() {
-    ftl::application::run::<Main>();
+    let mut eventloop = EventLoop::new().unwrap();
+    let mut app = Main::new(&mut eventloop);
+
+    loop {
+        match eventloop.wait() {
+            Event::Request(request) => {
+                match request {
+                    Request::Open { completer } => {
+                        app.on_open_request(&mut eventloop, completer);
+                    }
+                    Request::Read {
+                        offset,
+                        len,
+                        completer,
+                    } => {
+                        app.on_read_request(&mut eventloop, completer, offset, len);
+                    }
+                    Request::Write {
+                        offset,
+                        len,
+                        completer,
+                    } => {
+                        app.on_write_request(&mut eventloop, completer, offset, len);
+                    }
+                    Request::Invoke { completer } => {
+                        completer.error(ErrorCode::Unsupported);
+                    }
+                }
+            }
+            Event::Reply(reply) => {
+                match reply {
+                    ReplyEvent::Open { .. } => {
+                        warn!("unexpected open reply");
+                    }
+                    ReplyEvent::Read { ch, buf, len } => {
+                        app.on_read_reply(&mut eventloop, &ch, buf, len);
+                    }
+                    ReplyEvent::Write { ch, buf, len } => {
+                        app.on_write_reply(&ch, buf, len);
+                    }
+                    ReplyEvent::Invoke { ch, input, output } => {
+                        app.on_invoke_reply(&mut eventloop, &ch, input, output);
+                    }
+                    ReplyEvent::Error { ch, error } => {
+                        warn!("error reply from {:?}: {:?}", ch, error);
+                    }
+                }
+            }
+            Event::PeerClosed { ch } => {
+                app.on_peer_closed(&mut eventloop, &ch);
+            }
+            Event::Timer { timer: _ } => {
+                app.on_timer_expired(&mut eventloop);
+            }
+            Event::Connect(ch) => {
+                app.on_connected(&mut eventloop, ch);
+            }
+            Event::Interrupt { interrupt } => {
+                warn!("unexpected interrupt: {:?}", interrupt);
+            }
+        }
+    }
 }
