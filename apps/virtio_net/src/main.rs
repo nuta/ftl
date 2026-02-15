@@ -5,7 +5,6 @@
 use core::cmp::min;
 use core::mem::size_of;
 
-use ftl::arch::min_page_size;
 use ftl::collections::vec_deque::VecDeque;
 use ftl::driver::DmaBuf;
 use ftl::driver::DmaBufPool;
@@ -16,7 +15,6 @@ use ftl::eventloop::ReadCompleter;
 use ftl::eventloop::Request;
 use ftl::prelude::*;
 use ftl::service::Service;
-use ftl_utils::alignment::align_up;
 use ftl_virtio::VirtQueue;
 use ftl_virtio::virtio_pci::DeviceType;
 use ftl_virtio::virtio_pci::VirtioPci;
@@ -78,7 +76,7 @@ fn main() {
     let mut txq = virtio.setup_virtqueue(1).unwrap();
 
     // // Allocate RX buffers.
-    let mut dmabuf_pool = DmaBufPool::new(align_up(BUFFER_SIZE, min_page_size()));
+    let mut dmabuf_pool = DmaBufPool::new(BUFFER_SIZE);
     for _ in 0..min(rxq.queue_size(), RX_QUEUE_MAX) {
         let dmabuf = dmabuf_pool.alloc().unwrap();
         let chain = &[ChainEntry::Write {

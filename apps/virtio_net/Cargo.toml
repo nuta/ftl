@@ -6,5 +6,4 @@ edition.workspace = true
 
 [dependencies]
 ftl = { workspace = true }
-ftl_utils = { workspace = true }
 ftl_virtio = { workspace = true }

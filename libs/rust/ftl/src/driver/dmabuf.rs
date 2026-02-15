@@ -3,7 +3,7 @@ use core::slice;
 
 use ftl_types::error::ErrorCode;
 use ftl_types::syscall::SYS_DMABUF_ALLOC;
-use ftl_utils::alignment::is_aligned;
+use ftl_utils::alignment::align_up;
 
 use crate::arch::min_page_size;
 use crate::syscall::syscall3;
@@ -60,11 +60,7 @@ pub struct DmaBufPool {
 
 impl DmaBufPool {
     pub fn new(size: usize) -> Self {
-        debug_assert!(
-            is_aligned(size, min_page_size()),
-            "{size} is not aligned to the minimum page size"
-        );
-
+        let size = align_up(size, min_page_size());
         Self {
             size,
             pool: Vec::new(),
