@@ -22,14 +22,16 @@ use ftl_virtio::virtio_pci::DeviceType;
 use ftl_virtio::virtio_pci::VirtioPci;
 use ftl_virtio::virtqueue::ChainEntry;
 
-const VIRTIO_NET_F_MAC: u32 = 1 << 5;
 const CONCURRENT_READS_LIMIT: usize = 16;
 const PAYLOAD_SIZE_MAX: usize = 1514;
 const BUFFER_SIZE: usize = 1514 + size_of::<VirtioNetHdr>();
+const HEADER_LEN: usize = size_of::<VirtioNetHdr>();
 const RX_QUEUE_MAX: usize = 16;
 
+pub const VIRTIO_NET_F_MAC: u32 = 1 << 5;
+
 #[repr(C, packed)]
-struct VirtioNetHdr {
+pub struct VirtioNetHdr {
     flags: u8,
     gso_type: u8,
     hdr_len: u16,
@@ -45,8 +47,7 @@ fn handle_rx(
     completer: ReadCompleter,
 ) {
     // Reply to the request.
-    let header_len = size_of::<VirtioNetHdr>();
-    let payload = &dmabuf.as_slice()[header_len..header_len + total_len];
+    let payload = &dmabuf.as_slice()[HEADER_LEN..HEADER_LEN + total_len];
     completer.complete_with(payload);
 
     // Re-push the buffer to the RX queue.
@@ -125,13 +126,12 @@ fn main() {
                     continue;
                 };
 
-                let header_len = size_of::<VirtioNetHdr>();
-                let header_slice = &mut dmabuf.as_mut_slice()[..header_len];
+                let header_slice = &mut dmabuf.as_mut_slice()[..HEADER_LEN];
                 header_slice.fill(0);
 
                 let payload_len = min(len, PAYLOAD_SIZE_MAX);
                 let payload_slice =
-                    &mut dmabuf.as_mut_slice()[header_len..header_len + payload_len];
+                    &mut dmabuf.as_mut_slice()[HEADER_LEN..HEADER_LEN + payload_len];
                 if let Err(err) = completer.read_data(0, payload_slice) {
                     completer.error(err);
                     dmabuf_pool.free(dmabuf);
@@ -140,7 +140,7 @@ fn main() {
 
                 let chain = &[ChainEntry::Read {
                     paddr: dmabuf.paddr() as u64,
-                    len: (header_len + payload_len) as u32,
+                    len: (HEADER_LEN + payload_len) as u32,
                 }];
 
                 let Some(token) = txq.reserve() else {
