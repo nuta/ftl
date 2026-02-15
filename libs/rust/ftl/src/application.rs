@@ -2,6 +2,7 @@ use alloc::rc::Rc;
 
 use ftl_types::channel::CallId;
 use ftl_types::channel::ErrorReplyInline;
+use ftl_types::channel::InvokeReplyInline;
 use ftl_types::channel::MessageInfo;
 use ftl_types::channel::OpenInline;
 use ftl_types::channel::OpenReplyInline;
@@ -120,6 +121,27 @@ impl WriteCompleter {
         let reply = Reply::WriteReply { len };
         if let Err(err) = self.ch.reply(self.call_id, reply) {
             trace!("failed to complete write: {err:?}");
+        }
+    }
+}
+
+pub struct InvokeCompleter {
+    ch: Rc<Channel>,
+    call_id: CallId,
+}
+
+impl InvokeCompleter {
+    fn new(channel: Rc<Channel>, call_id: CallId) -> Self {
+        Self {
+            ch: channel,
+            call_id,
+        }
+    }
+
+    pub fn error(self, error: ErrorCode) {
+        let reply = Reply::ErrorReply { error };
+        if let Err(err) = self.ch.reply(self.call_id, reply) {
+            trace!("failed to complete invoke: {err:?}");
         }
     }
 }
@@ -254,6 +276,12 @@ pub trait Application {
     }
 
     #[allow(unused)]
+    fn invoke(&mut self, ctx: &mut Context, completer: InvokeCompleter, kind: u32) {
+        trace!("received an unexpected message: invoke");
+        completer.error(ErrorCode::Unsupported)
+    }
+
+    #[allow(unused)]
     fn open_reply(&mut self, ctx: &mut Context, ch: &Rc<Channel>, uri: Buffer, new_ch: Channel) {
         trace!("received an unexpected message: open reply");
     }
@@ -266,6 +294,11 @@ pub trait Application {
     #[allow(unused)]
     fn write_reply(&mut self, ctx: &mut Context, ch: &Rc<Channel>, buf: Buffer, len: usize) {
         trace!("received an unexpected message: write reply");
+    }
+
+    #[allow(unused)]
+    fn invoke_reply(&mut self, ctx: &mut Context, input: Buffer, output: BufferMut) {
+        trace!("received an unexpected message: invoke reply");
     }
 
     #[allow(unused)]
@@ -371,6 +404,13 @@ pub fn run<A: Application>() {
                             panic!("unexpected cookie type");
                         };
                         app.write_reply(&mut ctx, &ch, buf, inline.len);
+                    }
+                    MessageInfo::INVOKE_REPLY => {
+                        let _inline = unsafe { &*(inline.as_ptr() as *const InvokeReplyInline) };
+                        let Cookie::Invoke(input, output) = *cookie else {
+                            panic!("unexpected cookie type");
+                        };
+                        app.invoke_reply(&mut ctx, input, output);
                     }
                     MessageInfo::ERROR_REPLY => {
                         let inline = unsafe { &*(inline.as_ptr() as *const ErrorReplyInline) };

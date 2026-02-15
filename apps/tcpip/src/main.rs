@@ -504,19 +504,11 @@ impl Main {
         }
     }
 
-    fn on_mac_read_reply(&mut self, buf: BufferMut, len: usize) {
+    fn on_mac_read_reply(&mut self, buf: BufferMut) {
         let data = match buf {
-            BufferMut::Vec(mut data) => {
-                data.truncate(len.min(data.len()));
-                data
-            }
+            BufferMut::Vec(mut data) => data,
             _ => unreachable!(),
         };
-
-        if data.len() < 6 {
-            trace!("MAC reply too short: {} bytes", data.len());
-            return;
-        }
 
         let mac = [data[0], data[1], data[2], data[3], data[4], data[5]];
         let hwaddr = HardwareAddress::Ethernet(EthernetAddress::from_bytes(&mac));
@@ -726,8 +718,10 @@ impl Application for Main {
 
         ctx.add_channel(driver_ch.clone()).unwrap();
 
-        if let Err(error) = driver_ch.send(Message::Open {
-            uri: Buffer::Static(VIRTIO_NET_MAC_URI),
+        if let Err(error) = driver_ch.send(Message::Invoke {
+            kind: 1,
+            input: Buffer::Static(b""),
+            output: BufferMut::Vec(vec![0; 6]),
         }) {
             trace!("failed to request MAC: {:?}", error);
         }
@@ -883,7 +877,26 @@ impl Application for Main {
             }
             State::DriverMac => {
                 drop(state);
-                self.on_mac_read_reply(buf, len);
+                self.on_mac_read_reply(buf);
+                self.poll(ctx);
+            }
+            _ => {
+                trace!("unexpected read reply");
+            }
+        }
+    }
+
+    fn invoke_reply(&mut self, ctx: &mut Context, input: Buffer, output: BufferMut) {
+        let mut state = self
+            .states_by_ch
+            .get(&ctx.handle_id())
+            .unwrap()
+            .borrow_mut();
+
+        match &mut *state {
+            State::DriverMac => {
+                drop(state);
+                self.on_mac_read_reply(output);
                 self.poll(ctx);
             }
             _ => {

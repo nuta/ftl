@@ -124,6 +124,7 @@ impl fmt::Debug for Request {
 pub enum Event<'a> {
     Request(Request),
     Interrupt { interrupt: &'a Rc<Interrupt> },
+    Connect(Channel),
 }
 
 pub struct EventLoop {
@@ -180,6 +181,7 @@ impl EventLoop {
             Ok(sink::Event::Irq { handle_id, irq }) => {
                 todo!();
             }
+            Ok((sink::Event::Client { ch })) => Event::Connect(ch),
             _ => {
                 todo!();
             }
