@@ -38,16 +38,6 @@ struct VirtioNetHdr {
     csum_offset: u16,
 }
 
-fn payload_slice(dmabuf: &DmaBuf, payload_len: usize) -> &[u8] {
-    let header_len = size_of::<VirtioNetHdr>();
-    &dmabuf.as_slice()[header_len..header_len + payload_len]
-}
-
-fn payload_slice_mut(dmabuf: &mut DmaBuf, payload_len: usize) -> &mut [u8] {
-    let header_len = size_of::<VirtioNetHdr>();
-    &mut dmabuf.as_mut_slice()[header_len..header_len + payload_len]
-}
-
 fn handle_rx(
     rxq: &mut VirtQueue<DmaBuf>,
     dmabuf: DmaBuf,
@@ -140,7 +130,8 @@ fn main() {
                 header_slice.fill(0);
 
                 let payload_len = min(len, PAYLOAD_SIZE_MAX);
-                let payload_slice = payload_slice_mut(&mut dmabuf, payload_len);
+                let payload_slice =
+                    &mut dmabuf.as_mut_slice()[header_len..header_len + payload_len];
                 if let Err(err) = completer.read_data(0, payload_slice) {
                     completer.error(err);
                     dmabuf_pool.free(dmabuf);
