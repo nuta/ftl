@@ -1,26 +1,26 @@
 #![no_std]
 #![no_main]
 
-use ftl::application::Application;
-use ftl::application::Context;
-use ftl::application::InitContext;
 use ftl::channel::Buffer;
 use ftl::channel::Channel;
 use ftl::channel::Message;
+use ftl::eventloop::Event;
+use ftl::eventloop::EventLoop;
+use ftl::eventloop::ReplyEvent;
 use ftl::handle::HandleId;
 use ftl::handle::OwnedHandle;
-use ftl::prelude::*;
-use ftl::println;
+use ftl::log::*;
+use ftl::prelude::format;
 use ftl::rc::Rc;
 
 struct Main {
     counter: usize,
 }
 
-impl Application for Main {
-    fn init(ctx: &mut InitContext) -> Self {
+impl Main {
+    fn new(eventloop: &mut EventLoop) -> Self {
         let ch_id = HandleId::from_raw(1);
-        let ch = Channel::from_handle(OwnedHandle::from_raw(ch_id));
+        let ch = Rc::new(Channel::from_handle(OwnedHandle::from_raw(ch_id)));
 
         ch.send(Message::Write {
             offset: 0,
@@ -28,11 +28,11 @@ impl Application for Main {
         })
         .unwrap();
 
-        ctx.add_channel(ch).unwrap();
+        eventloop.add_channel(ch).unwrap();
         Self { counter: 0 }
     }
 
-    fn write_reply(&mut self, _ctx: &mut Context, ch: &Rc<Channel>, _buf: Buffer, len: usize) {
+    fn on_write_reply(&mut self, ch: &Rc<Channel>, len: usize) {
         trace!("[ping] received write reply: {} bytes written", len);
         ch.send(Message::Write {
             offset: 0,
@@ -43,7 +43,19 @@ impl Application for Main {
     }
 }
 
-#[unsafe(no_mangle)]
+#[ftl::main]
 fn main() {
-    ftl::application::run::<Main>();
+    let mut eventloop = EventLoop::new().unwrap();
+    let mut app = Main::new(&mut eventloop);
+
+    loop {
+        match eventloop.wait() {
+            Event::Reply(ReplyEvent::Write { ch, buf: _, len }) => {
+                app.on_write_reply(&ch, len);
+            }
+            ev => {
+                warn!("[ping] unhandled event: {:?}", ev);
+            }
+        }
+    }
 }
