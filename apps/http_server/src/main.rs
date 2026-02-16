@@ -12,7 +12,6 @@ use ftl::error::ErrorCode;
 use ftl::eventloop::Event;
 use ftl::eventloop::EventLoop;
 use ftl::eventloop::ReplyEvent;
-use ftl::eventloop::Request;
 use ftl::handle::HandleId;
 use ftl::handle::Handleable;
 use ftl::log::*;
@@ -101,11 +100,12 @@ impl Main {
                 })
                 .expect("failed to send accept message");
 
-                ch.send(Message::Read {
-                    offset: 0,
-                    data: BufferMut::Vec(vec![0; RECV_BUFFER_SIZE]),
-                })
-                .expect("failed to send read message");
+                new_ch
+                    .send(Message::Read {
+                        offset: 0,
+                        data: BufferMut::Vec(vec![0; RECV_BUFFER_SIZE]),
+                    })
+                    .expect("failed to send read message");
 
                 let conn = Connection::new();
                 eventloop.add_channel(Rc::new(new_ch)).unwrap();
