@@ -1,7 +1,6 @@
 #![no_std]
 #![no_main]
 
-use core::cell::RefCell;
 use core::fmt;
 use core::net::Ipv4Addr;
 
@@ -187,13 +186,12 @@ impl smoltcp::phy::Device for Device {
     }
 }
 
-enum State {
+enum Context {
     Driver,
     Client,
     TcpConn {
         pending_reads: VecDeque<ReadCompleter>,
         pending_writes: VecDeque<WriteCompleter>,
-        channel_id: HandleId,
         channel_closed: bool,
     },
     TcpListener {
@@ -201,13 +199,13 @@ enum State {
     },
 }
 
-impl fmt::Debug for State {
+impl fmt::Debug for Context {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            State::Driver => write!(f, "Driver"),
-            State::Client => write!(f, "Client"),
-            State::TcpConn { .. } => write!(f, "TcpConn"),
-            State::TcpListener { .. } => write!(f, "TcpListener"),
+            Context::Driver => write!(f, "Driver"),
+            Context::Client => write!(f, "Client"),
+            Context::TcpConn { .. } => write!(f, "TcpConn"),
+            Context::TcpListener { .. } => write!(f, "TcpListener"),
         }
     }
 }
@@ -234,8 +232,8 @@ struct Main {
     smol_clock: SmolClock,
     timer: Rc<Timer>,
     sockets: SocketSet<'static>,
-    states_by_ch: HashMap<HandleId, Rc<RefCell<State>>>,
-    states_by_handle: HashMap<SocketHandle, Rc<RefCell<State>>>,
+    contexts: HashMap<HandleId, Context>,
+    sock2id: HashMap<SocketHandle, HandleId>,
     dhcp_handle: SocketHandle,
     device: Device,
     iface: Interface,
@@ -248,8 +246,7 @@ impl Main {
         eventloop.add_channel(driver_ch.clone())?;
 
         let driver_id = driver_ch.handle().id();
-        self.states_by_ch
-            .insert(driver_id, Rc::new(RefCell::new(State::Driver)));
+        self.contexts.insert(driver_id, Context::Driver);
 
         self.device.ch = driver_ch.clone();
         self.device.rx_queue.clear();
@@ -312,12 +309,13 @@ impl Main {
         let ch_id = our_ch.handle().id();
         eventloop.add_channel(our_ch)?;
 
-        let state = Rc::new(RefCell::new(State::TcpListener {
-            pending_accepts: VecDeque::new(),
-        }));
-
-        self.states_by_ch.insert(ch_id, state.clone());
-        self.states_by_handle.insert(handle, state);
+        self.contexts.insert(
+            ch_id,
+            Context::TcpListener {
+                pending_accepts: VecDeque::new(),
+            },
+        );
+        self.sock2id.insert(handle, ch_id);
         Ok(their_ch)
     }
 
@@ -334,21 +332,18 @@ impl Main {
         // Create a new listen socket.
         let new_listen_handle = self.do_tcp_listen(endpoint)?;
 
-        let conn_state = Rc::new(RefCell::new(State::TcpConn {
-            pending_reads: VecDeque::new(),
-            pending_writes: VecDeque::new(),
-            channel_id: new_ch_id,
-            channel_closed: false,
-        }));
+        self.contexts.insert(
+            new_ch_id,
+            Context::TcpConn {
+                pending_reads: VecDeque::new(),
+                pending_writes: VecDeque::new(),
+                channel_closed: false,
+            },
+        );
 
-        // Replace the accepted socket's state.
-        self.states_by_ch.insert(new_ch_id, conn_state.clone());
-        let listen_state = self
-            .states_by_handle
-            .insert(accepted_handle, conn_state)
-            .unwrap();
-        self.states_by_handle
-            .insert(new_listen_handle, listen_state);
+        // Replace the accepted socket's state mapping.
+        let listen_ch_id = self.sock2id.insert(accepted_handle, new_ch_id).unwrap();
+        self.sock2id.insert(new_listen_handle, listen_ch_id);
 
         Ok(their_ch)
     }
@@ -380,8 +375,8 @@ impl Main {
         trace!(
             "poll completed: sockets={}, states_by_ch={}, states_by_handle={}",
             self.sockets.iter().count(),
-            self.states_by_ch.len(),
-            self.states_by_handle.len()
+            self.contexts.len(),
+            self.sock2id.len()
         );
     }
 
@@ -455,15 +450,25 @@ impl Main {
                     // DHCP socket is handled in poll_dhcp.
                 }
                 Socket::Tcp(socket) => {
-                    let state = self.states_by_handle.get(&handle).unwrap();
-                    let mut state_borrow = state.borrow_mut();
+                    let Some(ch_id) = self.sock2id.get(&handle).copied() else {
+                        trace!("state mapping not found for socket {:?}", handle);
+                        continue;
+                    };
+                    let Some(state) = self.contexts.get_mut(&ch_id) else {
+                        trace!(
+                            "state not found for socket {:?} (channel {:?})",
+                            handle, ch_id
+                        );
+                        destroyed_sockets.push((handle, ch_id));
+                        continue;
+                    };
                     match socket.state() {
                         tcp::State::Listen | tcp::State::SynSent => {
                             // No state changes.
                         }
                         tcp::State::SynReceived => {
-                            match &mut *state_borrow {
-                                State::TcpListener {
+                            match state {
+                                Context::TcpListener {
                                     pending_accepts, ..
                                 } => {
                                     // Check if we can accept a new connection.
@@ -475,35 +480,35 @@ impl Main {
                                         ));
                                     }
                                 }
-                                State::TcpConn { .. } => {
+                                Context::TcpConn { .. } => {
                                     // Handshake in progress for an accepted socket.
                                 }
                                 _ => {
-                                    trace!("unexpected state: {:?}", *state_borrow);
+                                    trace!("unexpected state: {:?}", state);
                                     unreachable!();
                                 }
                             }
                         }
                         tcp::State::Established => {
-                            tcp_read_write(socket, &mut state_borrow);
-                            tcp_channel_closed(socket, &mut state_borrow);
+                            tcp_read_write(socket, state);
+                            tcp_channel_closed(socket, state);
                         }
                         tcp::State::FinWait1 | tcp::State::FinWait2 => {
-                            tcp_read_write(socket, &mut state_borrow);
+                            tcp_read_write(socket, state);
                         }
                         tcp::State::CloseWait => {
-                            tcp_read_write(socket, &mut state_borrow);
-                            tcp_peer_closed(socket, &mut state_borrow);
+                            tcp_read_write(socket, state);
+                            tcp_peer_closed(socket, state);
                         }
                         tcp::State::Closing | tcp::State::LastAck => {
                             // Waiting for the peer to acknowledge the close.
                         }
                         tcp::State::TimeWait | tcp::State::Closed => {
                             // The socket has been closed by both sides.
-                            let State::TcpConn { channel_id, .. } = &mut *state_borrow else {
+                            let Context::TcpConn { .. } = state else {
                                 unreachable!();
                             };
-                            destroyed_sockets.push((handle, *channel_id));
+                            destroyed_sockets.push((handle, ch_id));
                         }
                     }
                 }
@@ -519,8 +524,8 @@ impl Main {
 
         for (handle, channel_id) in destroyed_sockets {
             self.sockets.remove(handle);
-            self.states_by_handle.remove(&handle);
-            self.states_by_ch.remove(&channel_id);
+            self.sock2id.remove(&handle);
+            self.contexts.remove(&channel_id);
             if let Err(error) = eventloop.remove(channel_id) {
                 trace!("failed to remove channel: {:?}", error);
             }
@@ -544,8 +549,8 @@ impl Main {
     }
 }
 
-fn tcp_read_write(socket: &mut tcp::Socket, state: &mut State) {
-    let State::TcpConn {
+fn tcp_read_write(socket: &mut tcp::Socket, state: &mut Context) {
+    let Context::TcpConn {
         pending_reads,
         pending_writes,
         ..
@@ -620,8 +625,8 @@ fn tcp_read_write(socket: &mut tcp::Socket, state: &mut State) {
 }
 
 // TODO: Merge this into tcp_read_write?
-fn tcp_channel_closed(socket: &mut tcp::Socket, state: &mut State) {
-    let State::TcpConn {
+fn tcp_channel_closed(socket: &mut tcp::Socket, state: &mut Context) {
+    let Context::TcpConn {
         pending_writes,
         channel_closed,
         ..
@@ -644,8 +649,8 @@ fn tcp_channel_closed(socket: &mut tcp::Socket, state: &mut State) {
     socket.close();
 }
 
-fn tcp_peer_closed(socket: &mut tcp::Socket, state: &mut State) {
-    let State::TcpConn {
+fn tcp_peer_closed(socket: &mut tcp::Socket, state: &mut Context) {
+    let Context::TcpConn {
         pending_reads,
         pending_writes,
         channel_closed,
@@ -736,8 +741,7 @@ impl Main {
         let mut states_by_ch = HashMap::new();
 
         let driver_id = driver_ch.handle().id();
-        let driver_state = Rc::new(RefCell::new(State::Driver));
-        states_by_ch.insert(driver_id, driver_state.clone());
+        states_by_ch.insert(driver_id, Context::Driver);
 
         eventloop.add_channel(driver_ch.clone()).unwrap();
 
@@ -766,8 +770,8 @@ impl Main {
             smol_clock,
             timer,
             sockets,
-            states_by_ch,
-            states_by_handle: HashMap::new(),
+            contexts: states_by_ch,
+            sock2id: HashMap::new(),
             dhcp_handle,
             device,
             iface: iface,
@@ -776,35 +780,35 @@ impl Main {
     }
 
     fn on_open_request(&mut self, eventloop: &mut EventLoop, completer: OpenCompleter) {
-        let Some(state) = self.states_by_ch.get(&completer.handle_id()) else {
-            completer.error(ErrorCode::InvalidArgument);
-            return;
-        };
-
-        let mut state_borrow = state.borrow_mut();
-        match &mut *state_borrow {
-            State::TcpListener {
+        let handle_id = completer.handle_id();
+        match self.contexts.get_mut(&handle_id) {
+            Some(Context::TcpListener {
                 pending_accepts, ..
-            } => {
+            }) => {
                 pending_accepts.push_back(completer);
+                return;
             }
-            State::Client => {
-                drop(state_borrow);
-                match parse_uri(&completer) {
-                    Ok(Uri::TcpListen(endpoint)) => {
-                        match self.tcp_listen(eventloop, endpoint) {
-                            Ok(new_ch) => completer.complete(new_ch),
-                            Err(error) => completer.error(error),
-                        }
-                    }
-                    Err(error) => {
-                        trace!("invalid URI: {:?}", error);
-                        completer.error(ErrorCode::InvalidArgument)
-                    }
+            Some(Context::Client) => {}
+            Some(Context::TcpConn { .. }) | Some(Context::Driver) => {
+                completer.error(ErrorCode::Unsupported);
+                return;
+            }
+            None => {
+                completer.error(ErrorCode::InvalidArgument);
+                return;
+            }
+        }
+
+        match parse_uri(&completer) {
+            Ok(Uri::TcpListen(endpoint)) => {
+                match self.tcp_listen(eventloop, endpoint) {
+                    Ok(new_ch) => completer.complete(new_ch),
+                    Err(error) => completer.error(error),
                 }
             }
-            State::TcpConn { .. } | State::Driver => {
-                completer.error(ErrorCode::Unsupported);
+            Err(error) => {
+                trace!("invalid URI: {:?}", error);
+                completer.error(ErrorCode::InvalidArgument)
             }
         }
     }
@@ -817,25 +821,26 @@ impl Main {
         _len: usize,
     ) {
         let handle_id = completer.handle_id();
-        let Some(state) = self.states_by_ch.get(&handle_id) else {
-            trace!("state not found for read on {:?}", handle_id);
-            completer.error(ErrorCode::InvalidArgument);
-            return;
-        };
-
-        let mut state_borrow = state.borrow_mut();
-        match &mut *state_borrow {
-            State::TcpConn { pending_reads, .. } => {
+        let mut should_poll = false;
+        match self.contexts.get_mut(&handle_id) {
+            Some(Context::TcpConn { pending_reads, .. }) => {
                 pending_reads.push_back(completer);
-                drop(state_borrow);
-                self.poll(eventloop);
+                should_poll = true;
             }
-            State::TcpListener { .. } => {
+            Some(Context::TcpListener { .. }) => {
                 completer.error(ErrorCode::Unsupported);
             }
-            State::Driver | State::Client => {
+            Some(Context::Driver) | Some(Context::Client) => {
                 completer.error(ErrorCode::Unsupported);
             }
+            None => {
+                trace!("state not found for read on {:?}", handle_id);
+                completer.error(ErrorCode::InvalidArgument);
+            }
+        }
+
+        if should_poll {
+            self.poll(eventloop);
         }
     }
 
@@ -847,25 +852,26 @@ impl Main {
         _len: usize,
     ) {
         let handle_id = completer.handle_id();
-        let Some(state) = self.states_by_ch.get(&handle_id) else {
-            trace!("state not found for write on {:?}", handle_id);
-            completer.error(ErrorCode::InvalidArgument);
-            return;
-        };
-
-        let mut state_borrow = state.borrow_mut();
-        match &mut *state_borrow {
-            State::TcpConn { pending_writes, .. } => {
+        let mut should_poll = false;
+        match self.contexts.get_mut(&handle_id) {
+            Some(Context::TcpConn { pending_writes, .. }) => {
                 pending_writes.push_back(completer);
-                drop(state_borrow);
-                self.poll(eventloop);
+                should_poll = true;
             }
-            State::TcpListener { .. } => {
+            Some(Context::TcpListener { .. }) => {
                 completer.error(ErrorCode::Unsupported);
             }
-            State::Driver | State::Client => {
+            Some(Context::Driver) | Some(Context::Client) => {
                 completer.error(ErrorCode::Unsupported);
             }
+            None => {
+                trace!("state not found for write on {:?}", handle_id);
+                completer.error(ErrorCode::InvalidArgument);
+            }
+        }
+
+        if should_poll {
+            self.poll(eventloop);
         }
     }
 
@@ -877,20 +883,16 @@ impl Main {
         len: usize,
     ) {
         let handle_id = ch.handle().id();
-        let Some(state) = self.states_by_ch.get(&handle_id) else {
-            trace!("state not found for read reply on {:?}", handle_id);
-            return;
-        };
-        let mut state = state.borrow_mut();
-
-        match &mut *state {
-            State::Driver => {
-                drop(state);
+        match self.contexts.get(&handle_id) {
+            Some(Context::Driver) => {
                 self.device.on_read_reply(buf, len);
                 self.poll(eventloop);
             }
-            _ => {
+            Some(_) => {
                 trace!("unexpected read reply");
+            }
+            None => {
+                trace!("state not found for read reply on {:?}", handle_id);
             }
         }
     }
@@ -903,73 +905,63 @@ impl Main {
         output: BufferMut,
     ) {
         let handle_id = ch.handle().id();
-        let Some(state) = self.states_by_ch.get(&handle_id) else {
-            trace!("state not found for invoke reply on {:?}", handle_id);
-            return;
-        };
-        let mut state = state.borrow_mut();
-
-        match &mut *state {
-            State::Driver => {
-                drop(state);
+        match self.contexts.get(&handle_id) {
+            Some(Context::Driver) => {
                 self.on_mac_read_reply(output);
                 self.poll(eventloop);
             }
-            _ => {
+            Some(_) => {
                 trace!("unexpected invoke reply");
+            }
+            None => {
+                trace!("state not found for invoke reply on {:?}", handle_id);
             }
         }
     }
 
     fn on_write_reply(&mut self, ch: &Rc<Channel>, _buf: Buffer, _len: usize) {
         let handle_id = ch.handle().id();
-        let Some(state) = self.states_by_ch.get(&handle_id) else {
-            trace!("state not found for write reply on {:?}", handle_id);
-            return;
-        };
-
-        let mut state_borrow = state.borrow_mut();
-        match &mut *state_borrow {
-            State::Driver => {
+        match self.contexts.get(&handle_id) {
+            Some(Context::Driver) => {
                 // Sent a packet.
             }
-            _ => {
+            Some(_) => {
                 trace!("unexpected write reply on {:?}", handle_id);
+            }
+            None => {
+                trace!("state not found for write reply on {:?}", handle_id);
             }
         }
     }
 
     fn on_peer_closed(&mut self, eventloop: &mut EventLoop, ch: &Rc<Channel>) {
         let handle_id = ch.handle().id();
-        let Some(state) = self.states_by_ch.get(&handle_id) else {
-            trace!("state not found for peer closed on {:?}", handle_id);
-            return;
-        };
-
-        let mut state_borrow = state.borrow_mut();
         let mut should_remove_channel = false;
         let mut should_reconnect_driver = false;
-        match &mut *state_borrow {
-            State::TcpConn { channel_closed, .. } => {
+        match self.contexts.get_mut(&handle_id) {
+            Some(Context::TcpConn { channel_closed, .. }) => {
                 *channel_closed = true;
             }
-            State::TcpListener { .. } => {
+            Some(Context::TcpListener { .. }) => {
                 // Nothing to do.
                 should_remove_channel = true;
             }
-            State::Driver => {
+            Some(Context::Driver) => {
                 should_remove_channel = true;
                 should_reconnect_driver = true;
             }
-            State::Client => {
+            Some(Context::Client) => {
                 // Nothing to do.
                 should_remove_channel = true;
             }
+            None => {
+                trace!("state not found for peer closed on {:?}", handle_id);
+                return;
+            }
         }
 
-        drop(state_borrow);
         if should_remove_channel {
-            self.states_by_ch.remove(&handle_id);
+            self.contexts.remove(&handle_id);
             eventloop.remove(handle_id).unwrap();
         }
         if should_reconnect_driver {
@@ -989,8 +981,7 @@ impl Main {
 
     fn on_connected(&mut self, eventloop: &mut EventLoop, ch: Channel) {
         trace!("client connected");
-        self.states_by_ch
-            .insert(ch.handle().id(), Rc::new(RefCell::new(State::Client)));
+        self.contexts.insert(ch.handle().id(), Context::Client);
         eventloop.add_channel(ch).unwrap();
     }
 }
