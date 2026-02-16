@@ -233,7 +233,7 @@ struct Main {
     timer: Rc<Timer>,
     sockets: SocketSet<'static>,
     contexts: HashMap<HandleId, Context>,
-    sock2id: HashMap<SocketHandle, HandleId>,
+    socket2id: HashMap<SocketHandle, HandleId>,
     dhcp_handle: SocketHandle,
     device: Device,
     iface: Interface,
@@ -315,7 +315,7 @@ impl Main {
                 pending_accepts: VecDeque::new(),
             },
         );
-        self.sock2id.insert(handle, ch_id);
+        self.socket2id.insert(handle, ch_id);
         Ok(their_ch)
     }
 
@@ -342,8 +342,8 @@ impl Main {
         );
 
         // Replace the accepted socket's state mapping.
-        let listen_ch_id = self.sock2id.insert(accepted_handle, new_ch_id).unwrap();
-        self.sock2id.insert(new_listen_handle, listen_ch_id);
+        let listen_ch_id = self.socket2id.insert(accepted_handle, new_ch_id).unwrap();
+        self.socket2id.insert(new_listen_handle, listen_ch_id);
 
         Ok(their_ch)
     }
@@ -373,10 +373,9 @@ impl Main {
 
         self.update_timer();
         trace!(
-            "poll completed: sockets={}, states_by_ch={}, states_by_handle={}",
+            "poll completed: sockets={}, states={}",
             self.sockets.iter().count(),
-            self.contexts.len(),
-            self.sock2id.len()
+            self.contexts.len()
         );
     }
 
@@ -450,16 +449,16 @@ impl Main {
                     // DHCP socket is handled in poll_dhcp.
                 }
                 Socket::Tcp(socket) => {
-                    let Some(ch_id) = self.sock2id.get(&handle).copied() else {
+                    let Some(id) = self.socket2id.get(&handle).copied() else {
                         trace!("state mapping not found for socket {:?}", handle);
                         continue;
                     };
-                    let Some(state) = self.contexts.get_mut(&ch_id) else {
+                    let Some(state) = self.contexts.get_mut(&id) else {
                         trace!(
-                            "state not found for socket {:?} (channel {:?})",
-                            handle, ch_id
+                            "context not found for socket {:?} (channel {:?})",
+                            handle, id
                         );
-                        destroyed_sockets.push((handle, ch_id));
+                        destroyed_sockets.push((handle, id));
                         continue;
                     };
                     match socket.state() {
@@ -508,7 +507,7 @@ impl Main {
                             let Context::TcpConn { .. } = state else {
                                 unreachable!();
                             };
-                            destroyed_sockets.push((handle, ch_id));
+                            destroyed_sockets.push((handle, id));
                         }
                     }
                 }
@@ -524,7 +523,7 @@ impl Main {
 
         for (handle, channel_id) in destroyed_sockets {
             self.sockets.remove(handle);
-            self.sock2id.remove(&handle);
+            self.socket2id.remove(&handle);
             self.contexts.remove(&channel_id);
             if let Err(error) = eventloop.remove(channel_id) {
                 trace!("failed to remove channel: {:?}", error);
@@ -738,10 +737,10 @@ impl Main {
         let config = smoltcp::iface::Config::new(hwaddr);
 
         let driver_ch = Rc::new(Channel::connect("ethernet").unwrap());
-        let mut states_by_ch = HashMap::new();
+        let mut states = HashMap::new();
 
         let driver_id = driver_ch.handle().id();
-        states_by_ch.insert(driver_id, Context::Driver);
+        states.insert(driver_id, Context::Driver);
 
         eventloop.add_channel(driver_ch.clone()).unwrap();
 
@@ -770,8 +769,8 @@ impl Main {
             smol_clock,
             timer,
             sockets,
-            contexts: states_by_ch,
-            sock2id: HashMap::new(),
+            contexts: states,
+            socket2id: HashMap::new(),
             dhcp_handle,
             device,
             iface: iface,
