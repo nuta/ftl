@@ -4,7 +4,7 @@ use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use ftl_types::syscall::SYS_VMSPACE_CREATE;
 use ftl_types::syscall::SYS_VMSPACE_MAP;
-use ftl_types::vmspace::PageAttrs;
+pub use ftl_types::vmspace::PageAttrs;
 
 use crate::handle::Handleable;
 use crate::handle::OwnedHandle;
