@@ -13,7 +13,7 @@ members = [
     "apps/virtio_net",
     "apps/http_server",
     "kernel",
-    "libs/rust/*",
+    "libs/rust/*", "apps/hello_linux",
 ]
 
 [workspace.dependencies]

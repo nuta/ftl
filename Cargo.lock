@@ -162,6 +162,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "hello_linux"
+version = "0.0.0"
+dependencies = [
+ "ftl",
+]
+
+[[package]]
 name = "http_server"
 version = "0.0.0"
 dependencies = [
