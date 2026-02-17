@@ -84,7 +84,7 @@ pub struct VmArea {
 
 impl VmArea {
     pub fn create_any(len: usize) -> Result<SharedRef<Self>, ErrorCode> {
-        if !is_aligned(len, MIN_PAGE_SIZE) {
+        if len == 0 || !is_aligned(len, MIN_PAGE_SIZE) {
             return Err(ErrorCode::InvalidArgument);
         }
 
