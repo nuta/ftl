@@ -1,7 +1,4 @@
 //! Application loader.
-use alloc::collections::btree_map::BTreeMap;
-use alloc::vec;
-use alloc::vec::Vec;
 use core::mem::MaybeUninit;
 use core::mem::size_of;
 use core::slice;
@@ -14,16 +11,12 @@ use ftl_utils::alignment::align_up;
 use crate::address::VAddr;
 use crate::arch;
 use crate::arch::MIN_PAGE_SIZE;
-use crate::channel::Channel;
-use crate::handle::Handle;
-use crate::handle::HandleRight;
 use crate::initfs;
 use crate::initfs::InitFs;
 use crate::isolation::INKERNEL_ISOLATION;
 use crate::memory::PAGE_ALLOCATOR;
 use crate::process::Process;
 use crate::scheduler::SCHEDULER;
-use crate::shared_ref::SharedRef;
 use crate::thread::Thread;
 
 #[repr(C)]

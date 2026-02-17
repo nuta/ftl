@@ -171,7 +171,7 @@ enum MpTableEntry<'a> {
     Bus(&'a BusEntry),
     IoApic(&'a IoApicEntry),
     IoInterruptAssignment(&'a IoInterruptAssignmentEntry),
-    Unknown(u8 /* type */),
+    Unknown,
 }
 
 #[derive(Clone)]
@@ -222,7 +222,7 @@ impl<'a> Iterator for MpTableIter<'a> {
             }
             _ => {
                 // trace!("unknown entry type: {}", type_byte);
-                (MpTableEntry::Unknown(*type_byte), 8)
+                (MpTableEntry::Unknown, 8)
             }
         };
 
@@ -236,6 +236,12 @@ impl<'a> Iterator for MpTableIter<'a> {
 pub fn init() {
     let mp_table = find_mpfp_table().expect("failed to locate MP floating pointer table");
     let iter = MpTableIter::new(mp_table);
+
+    for entry in iter.clone() {
+        if let MpTableEntry::Processor(entry) = entry {
+            trace!("processor: {:x}", entry.local_apic_id);
+        }
+    }
 
     // Find the ISA bus and I/O APIC.
     let mut isa_bus = None;
