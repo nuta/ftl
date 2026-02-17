@@ -9,7 +9,6 @@ use crate::arch::Thread;
 use crate::arch::x64::console::SERIAL_IRQ;
 use crate::arch::x64::io_apic::IRQ_VECTOR_BASE;
 use crate::arch::x64::timer::TIMER_IRQ;
-use crate::arch::x64::vmspace::vaddr2paddr;
 use crate::cpuvar::CpuVar;
 use crate::spinlock::SpinLock;
 use crate::thread::return_to_user;
@@ -215,7 +214,7 @@ extern "C" fn handle_interrupt(vector: u8, error_code: u64) -> ! {
 
 pub(super) fn init() {
     let handlers_vaddr = VAddr::new(unsafe { &idt_handlers as *const u8 as usize });
-    let handler_base = vaddr2paddr(handlers_vaddr).as_u64();
+    let handler_base = handlers_vaddr.as_usize() as u64;
 
     let mut idt = IDT.lock();
     for i in 0..NUM_IDT_ENTRIES {
@@ -227,10 +226,9 @@ pub(super) fn init() {
 
     // Build an IDTR.
     let idt_vaddr = VAddr::new(idt.as_ptr() as usize);
-    let idt_paddr = vaddr2paddr(idt_vaddr).as_u64();
     let idtr = Idtr {
         limit: (NUM_IDT_ENTRIES * size_of::<IdtEntry>() - 1) as u16,
-        base: idt_paddr,
+        base: idt_vaddr.as_usize() as u64,
     };
 
     unsafe {

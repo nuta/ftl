@@ -14,7 +14,6 @@ use crate::arch::x64::console::SERIAL_IRQ;
 use crate::arch::x64::io_apic::use_ioapic;
 use crate::arch::x64::multiboot;
 use crate::arch::x64::pvh;
-use crate::arch::x64::vmspace::vaddr2paddr;
 
 pub(super) const NUM_GDT_ENTRIES: usize = 8;
 pub(super) const GDT_KERNEL_CS: u16 = 8;
@@ -94,12 +93,12 @@ extern "C" fn rust_boot(multiboot_magic: u32, start_info: PAddr) -> ! {
     };
 
     // Build a 64-bit TSS descriptor.
-    let tss_paddr = vaddr2paddr(tss_vaddr).as_u64();
+    let tss_base = tss_vaddr.as_usize() as u64;
     let mut tss_low = 0x0000890000000000;
     tss_low |= (size_of::<Tss>() - 1) as u64; // limit (size - 1)
-    tss_low |= (tss_paddr & 0x00ff_ffff) << 16; // base[0:23]
-    tss_low |= (tss_paddr & 0xff00_0000) << 32; // base[24:31]
-    let tss_high = tss_paddr >> 32; // base[32:63]
+    tss_low |= (tss_base & 0x00ff_ffff) << 16; // base[0:23]
+    tss_low |= (tss_base & 0xff00_0000) << 32; // base[24:31]
+    let tss_high = tss_base >> 32; // base[32:63]
 
     // Build a GDT.
     let gdt_vaddr = unsafe {
@@ -118,10 +117,10 @@ extern "C" fn rust_boot(multiboot_magic: u32, start_info: PAddr) -> ! {
     };
 
     // Build a GDTR.
-    let gdt_paddr = vaddr2paddr(gdt_vaddr).as_u64();
+    let gdt_base = gdt_vaddr.as_usize() as u64;
     let gdtr = Gdtr {
         limit: (NUM_GDT_ENTRIES * size_of::<u64>() - 1) as u16,
-        base: gdt_paddr,
+        base: gdt_base,
     };
 
     unsafe {
