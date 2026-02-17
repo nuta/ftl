@@ -1,8 +1,6 @@
 #![no_std]
 #![no_main]
 
-use core::hint::spin_loop;
-
 use ftl::prelude::*;
 use ftl::process::Process;
 use ftl::thread::Thread;
@@ -35,7 +33,4 @@ fn main() {
     thread.start().unwrap();
 
     info!("thread started");
-
-    let sink = ftl::sink::Sink::new().unwrap();
-    sink.wait().unwrap();
 }
