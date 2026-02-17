@@ -136,8 +136,7 @@ pub struct InKernelIsolation {
 }
 
 impl InKernelIsolation {
-    pub fn new() -> Result<SharedRef<Self>, ErrorCode> {
-        let vmspace = VmSpace::new()?;
+    pub fn new(vmspace: SharedRef<VmSpace>) -> Result<SharedRef<Self>, ErrorCode> {
         SharedRef::new(Self { vmspace })
     }
 }

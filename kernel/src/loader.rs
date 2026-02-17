@@ -20,6 +20,7 @@ use crate::process::Process;
 use crate::scheduler::SCHEDULER;
 use crate::shared_ref::SharedRef;
 use crate::thread::Thread;
+use crate::vmspace::VmSpace;
 
 #[repr(C)]
 struct Ehdr64 {
@@ -183,7 +184,8 @@ pub fn load_app(file: &initfs::File, isolation: SharedRef<dyn Isolation>) {
 }
 
 pub fn load(initfs: &InitFs) {
-    let isolation = InKernelIsolation::new().unwrap();
+    let vmspace = VmSpace::new().unwrap();
+    let isolation = InKernelIsolation::new(vmspace).unwrap();
     for file in initfs.iter() {
         trace!("loading app: {}", file.name);
         load_app(&file, isolation.clone());

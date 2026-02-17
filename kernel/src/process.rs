@@ -20,6 +20,7 @@ use crate::spinlock::SpinLock;
 use crate::syscall::SyscallResult;
 use crate::thread::Thread;
 use crate::thread::sys_thread_exit;
+use crate::vmspace::VmSpace;
 
 pub struct Process {
     name: ArrayString<PROCESS_NAME_MAX_LEN>,
@@ -40,9 +41,10 @@ impl Process {
     }
 
     pub fn new_inkernel(
+        vmspace: SharedRef<VmSpace>,
         name: ArrayString<PROCESS_NAME_MAX_LEN>,
     ) -> Result<SharedRef<Self>, ErrorCode> {
-        let isolation = InKernelIsolation::new()?;
+        let isolation = InKernelIsolation::new(vmspace)?;
         Self::new(name, isolation)
     }
 
@@ -118,20 +120,22 @@ pub fn sys_process_create_inkernel(
     current: &SharedRef<Thread>,
     a0: usize,
     a1: usize,
+    a2: usize,
 ) -> Result<SyscallResult, ErrorCode> {
-    let name_slice = UserSlice::new(UserPtr::new(a0), a1)?;
+    let vmspace_id = HandleId::from_raw(a0);
+    let name_slice = UserSlice::new(UserPtr::new(a1), a2)?;
 
     let process = current.process();
-
     let mut name_buf = [0; PROCESS_NAME_MAX_LEN];
     process.isolation().read_bytes(&name_slice, &mut name_buf)?;
     let name = ArrayString::from_ascii_str(&name_buf).map_err(|_| ErrorCode::InvalidArgument)?;
 
-    let new_process = Process::new_inkernel(name)?;
-    let id = process
-        .handle_table()
-        .lock()
-        .insert(Handle::new(new_process, HandleRight::ALL))?;
+    let mut handle_table = process.handle_table().lock();
+    let vmspace = handle_table
+        .get::<VmSpace>(vmspace_id)?
+        .authorize(HandleRight::WRITE)?;
+    let new_process = Process::new_inkernel(vmspace, name)?;
+    let id = handle_table.insert(Handle::new(new_process, HandleRight::ALL))?;
 
     Ok(SyscallResult::Return(id.as_usize()))
 }

@@ -94,7 +94,9 @@ fn do_syscall(
         SYS_VMAREA_CREATE => crate::vmarea::sys_vmarea_create(thread, a0),
         SYS_VMAREA_READ => crate::vmarea::sys_vmarea_read(thread, a0, a1, a2, a3),
         SYS_VMAREA_WRITE => crate::vmarea::sys_vmarea_write(thread, a0, a1, a2, a3),
-        SYS_PROCESS_CREATE_INKERNEL => crate::process::sys_process_create_inkernel(thread, a0, a1),
+        SYS_PROCESS_CREATE_INKERNEL => {
+            crate::process::sys_process_create_inkernel(thread, a0, a1, a2)
+        }
         _ => {
             trace!("unknown syscall: {}", n);
             Err(ErrorCode::UnknownSyscall)

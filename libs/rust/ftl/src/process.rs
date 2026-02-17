@@ -6,15 +6,16 @@ use ftl_types::syscall::SYS_PROCESS_CREATE_INKERNEL;
 
 use crate::handle::Handleable;
 use crate::handle::OwnedHandle;
-use crate::syscall::syscall2;
+use crate::syscall::syscall3;
+use crate::vmspace::VmSpace;
 
 pub struct Process {
     handle: OwnedHandle,
 }
 
 impl Process {
-    pub fn create_inkernel(name: &str) -> Result<Self, ErrorCode> {
-        let handle = sys_process_create_inkernel(name)?;
+    pub fn create_inkernel(vmspace: &VmSpace, name: &str) -> Result<Self, ErrorCode> {
+        let handle = sys_process_create_inkernel(vmspace.handle().id(), name)?;
         Ok(Self { handle })
     }
 }
@@ -33,9 +34,13 @@ impl fmt::Debug for Process {
     }
 }
 
-pub fn sys_process_create_inkernel(name: &str) -> Result<OwnedHandle, ErrorCode> {
-    let raw = syscall2(
+pub fn sys_process_create_inkernel(
+    vmspace: HandleId,
+    name: &str,
+) -> Result<OwnedHandle, ErrorCode> {
+    let raw = syscall3(
         SYS_PROCESS_CREATE_INKERNEL,
+        vmspace.as_usize(),
         name.as_ptr() as usize,
         name.len(),
     )?;
