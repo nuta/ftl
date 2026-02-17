@@ -37,6 +37,7 @@ pub use thread::thread_switch;
 pub use timer::read_timer;
 pub use timer::set_timer;
 pub use vmspace::MIN_PAGE_SIZE;
+pub use vmspace::VmSpace;
 pub use vmspace::paddr2vaddr;
 
 pub(super) const NUM_CPUS_MAX: usize = 16;

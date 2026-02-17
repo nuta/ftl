@@ -3,6 +3,8 @@ use core::arch::global_asm;
 use core::arch::naked_asm;
 use core::mem::offset_of;
 
+use ftl_types::vmspace::PageAttrs;
+
 use super::boot::GDT_KERNEL_CS;
 use crate::address::VAddr;
 use crate::arch::Thread;
@@ -174,6 +176,18 @@ extern "C" fn interrupt_entry() -> ! {
     )
 }
 
+struct PageFaultError(u32);
+
+impl PageFaultError {
+    pub const fn new(error_code: u32) -> Self {
+        Self(error_code)
+    }
+
+    pub const fn caused_by_write(self) -> bool {
+        self.0 & 1 << 1 != 0
+    }
+}
+
 extern "C" fn handle_interrupt(vector: u8, error_code: u64) -> ! {
     let vector_str = match vector {
         0 => "Divide Error",
@@ -204,6 +218,25 @@ extern "C" fn handle_interrupt(vector: u8, error_code: u64) -> ! {
             super::console::handle_interrupt();
         } else {
             crate::interrupt::notify_irq(irq);
+        }
+    } else if vector == 14 {
+        let uaddr: usize;
+        unsafe {
+            asm!("mov {cr2}, cr2", cr2 = out(reg) uaddr);
+        }
+
+        let error = PageFaultError::new(error_code as u32);
+        let current = super::get_cpuvar().current_thread.thread();
+        let vmspace = current.process().isolation().vmspace();
+
+        let mut required = PageAttrs::NONE;
+        if error.caused_by_write() {
+            required |= PageAttrs::WRITABLE;
+        }
+
+        if let Err(err) = vmspace.handle_page_fault(uaddr, required) {
+            warn!("page fault at {uaddr:#x}: {:?}", err);
+            current.exit();
         }
     } else {
         panic!("unhandled interrupt ({vector}): {vector_str}, error_code={error_code:#x}");

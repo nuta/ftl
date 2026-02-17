@@ -27,6 +27,11 @@ use ftl_types::syscall::SYS_SINK_WAIT;
 use ftl_types::syscall::SYS_TIME_NOW;
 use ftl_types::syscall::SYS_TIMER_CREATE;
 use ftl_types::syscall::SYS_TIMER_SET;
+use ftl_types::syscall::SYS_VMAREA_CREATE;
+use ftl_types::syscall::SYS_VMAREA_READ;
+use ftl_types::syscall::SYS_VMAREA_WRITE;
+use ftl_types::syscall::SYS_VMSPACE_CREATE;
+use ftl_types::syscall::SYS_VMSPACE_MAP;
 #[cfg(target_arch = "x86_64")]
 use ftl_types::syscall::SYS_X64_IOPL;
 
@@ -83,6 +88,11 @@ fn do_syscall(
         SYS_TIMER_SET => crate::timer::sys_timer_set(thread, a0, a1),
         SYS_SERVICE_REGISTER => crate::service::sys_service_register(thread, a0, a1),
         SYS_SERVICE_LOOKUP => crate::service::sys_service_lookup(thread, a0, a1),
+        SYS_VMSPACE_CREATE => crate::vmspace::sys_vmspace_create(thread),
+        SYS_VMSPACE_MAP => crate::vmspace::sys_vmspace_map(thread, a0, a1, a2, a3),
+        SYS_VMAREA_CREATE => crate::vmarea::sys_vmarea_create(thread, a0),
+        SYS_VMAREA_READ => crate::vmarea::sys_vmarea_read(thread, a0, a1, a2, a3),
+        SYS_VMAREA_WRITE => crate::vmarea::sys_vmarea_write(thread, a0, a1, a2, a3),
         _ => {
             trace!("unknown syscall: {}", n);
             Err(ErrorCode::UnknownSyscall)

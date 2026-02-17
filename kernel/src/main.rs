@@ -31,3 +31,5 @@ mod spinlock;
 mod syscall;
 mod thread;
 mod timer;
+mod vmarea;
+mod vmspace;

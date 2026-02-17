@@ -26,6 +26,8 @@ pub mod service;
 pub mod sink;
 pub mod syscall;
 pub mod time;
+pub mod vmarea;
+pub mod vmspace;
 
 pub mod channel;
 pub mod interrupt;

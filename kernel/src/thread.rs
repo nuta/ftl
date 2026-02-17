@@ -273,5 +273,9 @@ pub fn return_to_user() -> ! {
         arch::idle();
     };
 
+    // Switch the address space.
+    // TODO: Should we cache the CR3 in the thread?
+    current.thread().process().isolation().vmspace().switch();
+
     arch::thread_switch(thread);
 }
