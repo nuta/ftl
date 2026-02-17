@@ -17,7 +17,6 @@ use crate::isolation::InKernelIsolation;
 use crate::isolation::Isolation;
 use crate::memory::PAGE_ALLOCATOR;
 use crate::process::Process;
-use crate::scheduler::SCHEDULER;
 use crate::shared_ref::SharedRef;
 use crate::thread::Thread;
 use crate::vmspace::VmSpace;
@@ -179,8 +178,7 @@ pub fn load_app(file: &initfs::File, isolation: SharedRef<dyn Isolation>) {
     let process = Process::new(name, isolation.clone()).expect("failed to create process");
     let thread =
         Thread::new(process, entry.as_usize(), sp, start_info).expect("failed to create thread");
-
-    SCHEDULER.push(thread);
+    thread.start();
 }
 
 pub fn load(initfs: &InitFs) {

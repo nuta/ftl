@@ -25,6 +25,7 @@ use ftl_types::syscall::SYS_SINK_ADD;
 use ftl_types::syscall::SYS_SINK_CREATE;
 use ftl_types::syscall::SYS_SINK_REMOVE;
 use ftl_types::syscall::SYS_SINK_WAIT;
+use ftl_types::syscall::SYS_THREAD_CREATE;
 use ftl_types::syscall::SYS_TIME_NOW;
 use ftl_types::syscall::SYS_TIMER_CREATE;
 use ftl_types::syscall::SYS_TIMER_SET;
@@ -97,6 +98,7 @@ fn do_syscall(
         SYS_PROCESS_CREATE_INKERNEL => {
             crate::process::sys_process_create_inkernel(thread, a0, a1, a2)
         }
+        SYS_THREAD_CREATE => crate::thread::sys_thread_create(thread, a0, a1, a2, a3),
         _ => {
             trace!("unknown syscall: {}", n);
             Err(ErrorCode::UnknownSyscall)

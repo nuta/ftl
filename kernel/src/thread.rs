@@ -3,12 +3,14 @@ use core::mem::offset_of;
 
 use ftl_arrayvec::ArrayString;
 use ftl_types::error::ErrorCode;
+use ftl_types::handle::HandleId;
 use ftl_types::syscall::ERROR_RETVAL_BASE;
 use ftl_utils::static_assert;
 
 use crate::arch;
 use crate::handle::Handle;
 use crate::handle::HandleRight;
+use crate::handle::Handleable;
 use crate::isolation::UserSlice;
 use crate::process::IDLE_PROCESS;
 use crate::process::Process;
@@ -64,6 +66,7 @@ impl Promise {
 }
 
 enum State {
+    Created,
     Runnable,
     Blocked(Promise),
     Idle,
@@ -92,7 +95,7 @@ impl Thread {
             arch: arch::Thread::new(entry, sp, start_info),
             process,
             mutable: SpinLock::new(Mutable {
-                state: State::Runnable,
+                state: State::Created,
             }),
         })
     }
@@ -119,6 +122,13 @@ impl Thread {
         SCHEDULER.push(self);
     }
 
+    pub fn start(self: &SharedRef<Self>) {
+        let mut mutable = self.mutable.lock();
+        debug_assert!(matches!(mutable.state, State::Created));
+        mutable.state = State::Runnable;
+        SCHEDULER.push(self.clone());
+    }
+
     pub fn exit(&self) {
         let mut mutable = self.mutable.lock();
         mutable.state = State::Exited;
@@ -130,8 +140,7 @@ impl Thread {
         let mut mutable = self.mutable.lock();
         match &mutable.state {
             State::Runnable => true,
-            State::Idle => false,
-            State::Exited => false,
+            State::Idle | State::Exited | State::Created => false,
             State::Blocked(promise) => {
                 if let Some(result) = promise.poll(self) {
                     mutable.state = State::Runnable;
@@ -171,9 +180,34 @@ impl Thread {
     }
 }
 
+impl Handleable for Thread {}
+
 pub fn sys_thread_exit(current: &SharedRef<Thread>) -> Result<SyscallResult, ErrorCode> {
     current.exit();
     Ok(SyscallResult::Exit)
+}
+
+pub fn sys_thread_create(
+    current: &SharedRef<Thread>,
+    a0: usize,
+    a1: usize,
+    a2: usize,
+    a3: usize,
+) -> Result<SyscallResult, ErrorCode> {
+    let process_id = HandleId::from_raw(a0);
+    let entry = a1;
+    let sp = a2;
+    let start_info = a3;
+
+    let mut handle_table = current.process().handle_table().lock();
+    let process = handle_table
+        .get::<Process>(process_id)?
+        .authorize(HandleRight::WRITE)?;
+
+    let thread = Thread::new(process, entry, sp, start_info)?;
+    let handle = Handle::new(thread, HandleRight::ALL);
+    let id = handle_table.insert(handle)?;
+    Ok(SyscallResult::Return(id.as_usize()))
 }
 
 /// The current thread.
