@@ -3,10 +3,12 @@ use core::fmt;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use ftl_types::syscall::SYS_THREAD_CREATE;
+use ftl_types::syscall::SYS_THREAD_START;
 
 use crate::handle::Handleable;
 use crate::handle::OwnedHandle;
 use crate::process::Process;
+use crate::syscall::syscall1;
 use crate::syscall::syscall4;
 
 pub struct Thread {
@@ -22,6 +24,10 @@ impl Thread {
     ) -> Result<Self, ErrorCode> {
         let handle = sys_thread_create(process.handle().id(), entry, sp, start_info)?;
         Ok(Self { handle })
+    }
+
+    pub fn start(&self) -> Result<(), ErrorCode> {
+        sys_thread_start(self.handle.id())
     }
 }
 
@@ -54,4 +60,9 @@ pub fn sys_thread_create(
     )?;
     let handle = OwnedHandle::from_raw(HandleId::from_raw(id));
     Ok(handle)
+}
+
+pub fn sys_thread_start(thread: HandleId) -> Result<(), ErrorCode> {
+    syscall1(SYS_THREAD_START, thread.as_usize())?;
+    Ok(())
 }
