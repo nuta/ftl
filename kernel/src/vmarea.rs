@@ -7,6 +7,7 @@ use ftl_types::handle::HandleId;
 use ftl_utils::alignment::is_aligned;
 
 use crate::address::PAddr;
+use crate::arch;
 use crate::arch::MIN_PAGE_SIZE;
 use crate::handle::Handle;
 use crate::handle::HandleRight;
@@ -30,11 +31,13 @@ impl Page {
     }
 
     pub fn as_slice(&self) -> &[u8] {
-        unsafe { slice::from_raw_parts(self.paddr.as_usize() as *const u8, MIN_PAGE_SIZE) }
+        let vaddr = arch::paddr2vaddr(self.paddr);
+        unsafe { slice::from_raw_parts(vaddr.as_usize() as *const u8, MIN_PAGE_SIZE) }
     }
 
     pub fn as_mut_slice(&mut self) -> &mut [u8] {
-        unsafe { slice::from_raw_parts_mut(self.paddr.as_usize() as *mut u8, MIN_PAGE_SIZE) }
+        let vaddr = arch::paddr2vaddr(self.paddr);
+        unsafe { slice::from_raw_parts_mut(vaddr.as_usize() as *mut u8, MIN_PAGE_SIZE) }
     }
 }
 
