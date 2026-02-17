@@ -22,6 +22,7 @@ pub mod handle;
 pub mod log;
 pub mod message;
 pub mod prelude;
+pub mod process;
 pub mod service;
 pub mod sink;
 pub mod syscall;

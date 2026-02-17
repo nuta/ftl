@@ -7,9 +7,13 @@ use ftl_types::handle::HandleId;
 
 use crate::handle::AnyHandle;
 use crate::handle::Handle;
+use crate::handle::HandleRight;
 use crate::handle::Handleable;
 use crate::isolation::IdleIsolation;
+use crate::isolation::InKernelIsolation;
 use crate::isolation::Isolation;
+use crate::isolation::UserPtr;
+use crate::isolation::UserSlice;
 use crate::shared_ref::RefCounted;
 use crate::shared_ref::SharedRef;
 use crate::spinlock::SpinLock;
@@ -33,6 +37,13 @@ impl Process {
             isolation,
             handle_table: SpinLock::new(HandleTable::new()),
         })
+    }
+
+    pub fn new_inkernel(
+        name: ArrayString<PROCESS_NAME_MAX_LEN>,
+    ) -> Result<SharedRef<Self>, ErrorCode> {
+        let isolation = InKernelIsolation::new()?;
+        Self::new(name, isolation)
     }
 
     #[allow(unused)] // For debugging
@@ -99,6 +110,30 @@ impl HandleTable {
         }
         self.handles.clear();
     }
+}
+
+impl Handleable for Process {}
+
+pub fn sys_process_create_inkernel(
+    current: &SharedRef<Thread>,
+    a0: usize,
+    a1: usize,
+) -> Result<SyscallResult, ErrorCode> {
+    let name_slice = UserSlice::new(UserPtr::new(a0), a1)?;
+
+    let process = current.process();
+
+    let mut name_buf = [0; PROCESS_NAME_MAX_LEN];
+    process.isolation().read_bytes(&name_slice, &mut name_buf)?;
+    let name = ArrayString::from_ascii_str(&name_buf).map_err(|_| ErrorCode::InvalidArgument)?;
+
+    let new_process = Process::new_inkernel(name)?;
+    let id = process
+        .handle_table()
+        .lock()
+        .insert(Handle::new(new_process, HandleRight::ALL))?;
+
+    Ok(SyscallResult::Return(id.as_usize()))
 }
 
 pub fn sys_process_exit(current: &SharedRef<Thread>) -> Result<SyscallResult, ErrorCode> {

@@ -17,6 +17,7 @@ use ftl_types::syscall::SYS_PCI_GET_SUBSYSTEM_ID;
 use ftl_types::syscall::SYS_PCI_LOOKUP;
 #[cfg(target_arch = "x86_64")]
 use ftl_types::syscall::SYS_PCI_SET_BUSMASTER;
+use ftl_types::syscall::SYS_PROCESS_CREATE_INKERNEL;
 use ftl_types::syscall::SYS_PROCESS_EXIT;
 use ftl_types::syscall::SYS_SERVICE_LOOKUP;
 use ftl_types::syscall::SYS_SERVICE_REGISTER;
@@ -93,6 +94,7 @@ fn do_syscall(
         SYS_VMAREA_CREATE => crate::vmarea::sys_vmarea_create(thread, a0),
         SYS_VMAREA_READ => crate::vmarea::sys_vmarea_read(thread, a0, a1, a2, a3),
         SYS_VMAREA_WRITE => crate::vmarea::sys_vmarea_write(thread, a0, a1, a2, a3),
+        SYS_PROCESS_CREATE_INKERNEL => crate::process::sys_process_create_inkernel(thread, a0, a1),
         _ => {
             trace!("unknown syscall: {}", n);
             Err(ErrorCode::UnknownSyscall)

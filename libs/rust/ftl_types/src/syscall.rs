@@ -39,3 +39,4 @@ pub const SYS_VMSPACE_MAP: usize = 27;
 pub const SYS_VMAREA_CREATE: usize = 28;
 pub const SYS_VMAREA_READ: usize = 29;
 pub const SYS_VMAREA_WRITE: usize = 30;
+pub const SYS_PROCESS_CREATE_INKERNEL: usize = 31;
