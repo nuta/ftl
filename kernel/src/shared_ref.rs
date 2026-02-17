@@ -132,19 +132,6 @@ impl<T> SharedRef<T> {
 }
 
 impl<T: ?Sized> SharedRef<T> {
-    /// Creates a new reference-counted object from a static reference.
-    pub const fn clone_static(this: &'static SharedRef<T>) -> Self {
-        // Static references are guaranteed to be alive for the lifetime of the
-        // program. Create the new SharedRef without incrementing the reference
-        // count.
-        Self { ptr: this.ptr }
-    }
-
-    /// Returns true if the two pointers point to the same object.
-    pub fn ptr_eq(a: &Self, b: &Self) -> bool {
-        core::ptr::addr_eq(a.ptr.as_ptr(), b.ptr.as_ptr())
-    }
-
     /// Returns a reference to the inner object.
     fn inner(&self) -> &RefCounted<T> {
         // SAFETY: The object will be kept alive as long as `self` is alive.

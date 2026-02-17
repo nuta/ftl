@@ -2,7 +2,6 @@ use core::arch::asm;
 
 use ftl_types::error::ErrorCode;
 
-use crate::isolation::INKERNEL_ISOLATION;
 use crate::shared_ref::SharedRef;
 use crate::syscall::SyscallResult;
 use crate::thread::Thread;
@@ -59,7 +58,7 @@ pub fn sys_x64_iopl(thread: &SharedRef<Thread>, a0: usize) -> Result<SyscallResu
     let _enable = a0 != 0;
 
     let isolation = thread.process().isolation();
-    if SharedRef::ptr_eq(isolation, &INKERNEL_ISOLATION) {
+    if isolation.is_inkernel() {
         // The thread is running in kernel mode. No need to change the IOPL.
         Ok(SyscallResult::Return(0))
     } else {

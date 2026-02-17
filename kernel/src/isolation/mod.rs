@@ -2,8 +2,8 @@ use core::mem::MaybeUninit;
 
 use ftl_types::error::ErrorCode;
 
-use crate::shared_ref::RefCounted;
 use crate::shared_ref::SharedRef;
+use crate::vmspace::VmSpace;
 
 /// A pointer in an isolation space.
 ///
@@ -97,27 +97,60 @@ pub fn write<T: Copy>(
 }
 
 pub trait Isolation: Send + Sync {
+    fn vmspace(&self) -> &SharedRef<VmSpace>;
+    fn is_inkernel(&self) -> bool;
     fn read_bytes(&self, slice: &UserSlice, buf: &mut [u8]) -> Result<(), ErrorCode>;
     fn write_bytes(&self, slice: &UserSlice, buf: &[u8]) -> Result<(), ErrorCode>;
 }
 
-pub static INKERNEL_ISOLATION: SharedRef<dyn Isolation> = {
-    static INNER: RefCounted<InKernelIsolation> = RefCounted::new_static(InKernelIsolation::new());
-    let isolation = SharedRef::new_static(&INNER);
-    isolation as SharedRef<dyn Isolation>
-};
-
-struct InKernelIsolation {
+pub struct IdleIsolation {
     _private: (),
 }
 
-impl InKernelIsolation {
+impl IdleIsolation {
     pub const fn new() -> Self {
         Self { _private: () }
     }
 }
 
+impl Isolation for IdleIsolation {
+    fn vmspace(&self) -> &SharedRef<VmSpace> {
+        unreachable!()
+    }
+
+    fn is_inkernel(&self) -> bool {
+        true
+    }
+
+    fn read_bytes(&self, _slice: &UserSlice, _buf: &mut [u8]) -> Result<(), ErrorCode> {
+        unreachable!()
+    }
+
+    fn write_bytes(&self, _slice: &UserSlice, _buf: &[u8]) -> Result<(), ErrorCode> {
+        unreachable!()
+    }
+}
+
+pub struct InKernelIsolation {
+    vmspace: SharedRef<VmSpace>,
+}
+
+impl InKernelIsolation {
+    pub fn new() -> Result<SharedRef<Self>, ErrorCode> {
+        let vmspace = VmSpace::new()?;
+        SharedRef::new(Self { vmspace })
+    }
+}
+
 impl Isolation for InKernelIsolation {
+    fn vmspace(&self) -> &SharedRef<VmSpace> {
+        &self.vmspace
+    }
+
+    fn is_inkernel(&self) -> bool {
+        true
+    }
+
     fn read_bytes(&self, slice: &UserSlice, buf: &mut [u8]) -> Result<(), ErrorCode> {
         let src = slice.start.0 as *const u8;
         unsafe {

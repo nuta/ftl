@@ -13,10 +13,12 @@ use crate::arch;
 use crate::arch::MIN_PAGE_SIZE;
 use crate::initfs;
 use crate::initfs::InitFs;
-use crate::isolation::INKERNEL_ISOLATION;
+use crate::isolation::InKernelIsolation;
+use crate::isolation::Isolation;
 use crate::memory::PAGE_ALLOCATOR;
 use crate::process::Process;
 use crate::scheduler::SCHEDULER;
+use crate::shared_ref::SharedRef;
 use crate::thread::Thread;
 
 #[repr(C)]
@@ -144,7 +146,7 @@ fn load_elf(file: &initfs::File) -> Result<VAddr, ElfError> {
     Ok(entry)
 }
 
-pub fn load_app(file: &initfs::File) {
+pub fn load_app(file: &initfs::File, isolation: SharedRef<dyn Isolation>) {
     let entry = load_elf(&file).expect("failed to load ELF file");
 
     let stack_size = 1024 * 1024;
@@ -173,7 +175,7 @@ pub fn load_app(file: &initfs::File) {
     let start_info = info_uninit.as_ptr() as usize;
 
     let name = ArrayString::try_from(file.name).expect("failed to create process name");
-    let process = Process::new(name, INKERNEL_ISOLATION.clone()).expect("failed to create process");
+    let process = Process::new(name, isolation.clone()).expect("failed to create process");
     let thread =
         Thread::new(process, entry.as_usize(), sp, start_info).expect("failed to create thread");
 
@@ -181,8 +183,9 @@ pub fn load_app(file: &initfs::File) {
 }
 
 pub fn load(initfs: &InitFs) {
+    let isolation = InKernelIsolation::new().unwrap();
     for file in initfs.iter() {
         trace!("loading app: {}", file.name);
-        load_app(&file);
+        load_app(&file, isolation.clone());
     }
 }

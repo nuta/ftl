@@ -14,7 +14,6 @@ use crate::arch;
 use crate::arch::MIN_PAGE_SIZE;
 use crate::boot::BootInfo;
 use crate::boot::FreeRam;
-use crate::isolation::INKERNEL_ISOLATION;
 use crate::isolation::UserPtr;
 use crate::isolation::UserSlice;
 use crate::shared_ref::SharedRef;
@@ -183,7 +182,7 @@ pub fn sys_dmabuf_alloc(
 
     // Map the allocated physical memory to the process's address space.
     let isolation = current.process().isolation();
-    let vaddr = if SharedRef::ptr_eq(isolation, &INKERNEL_ISOLATION) {
+    let vaddr = if isolation.is_inkernel() {
         arch::paddr2vaddr(paddr)
     } else {
         return Err(ErrorCode::Unsupported);

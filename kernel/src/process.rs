@@ -8,7 +8,7 @@ use ftl_types::handle::HandleId;
 use crate::handle::AnyHandle;
 use crate::handle::Handle;
 use crate::handle::Handleable;
-use crate::isolation::INKERNEL_ISOLATION;
+use crate::isolation::IdleIsolation;
 use crate::isolation::Isolation;
 use crate::shared_ref::RefCounted;
 use crate::shared_ref::SharedRef;
@@ -107,9 +107,12 @@ pub fn sys_process_exit(current: &SharedRef<Thread>) -> Result<SyscallResult, Er
 }
 
 pub static IDLE_PROCESS: SharedRef<Process> = {
+    static ISOLATION_INNER: RefCounted<IdleIsolation> =
+        RefCounted::new_static(IdleIsolation::new());
+
     static INNER: RefCounted<Process> = RefCounted::new_static(Process {
         name: ArrayString::from_static("[idle]"),
-        isolation: SharedRef::clone_static(&INKERNEL_ISOLATION),
+        isolation: SharedRef::new_static(&ISOLATION_INNER) as SharedRef<dyn Isolation>,
         handle_table: SpinLock::new(HandleTable::new()),
     });
     let process = SharedRef::new_static(&INNER);
