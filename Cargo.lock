@@ -84,7 +84,9 @@ name = "ftl"
 version = "0.0.0"
 dependencies = [
  "ftl_arrayvec",
+ "ftl_macros",
  "ftl_types",
+ "ftl_utils",
  "hashbrown",
  "log",
  "spin",
@@ -101,6 +103,10 @@ version = "0.0.0"
 dependencies = [
  "ftl_utils",
 ]
+
+[[package]]
+name = "ftl_macros"
+version = "0.0.0"
 
 [[package]]
 name = "ftl_types"
@@ -350,6 +356,5 @@ name = "virtio_net"
 version = "0.0.0"
 dependencies = [
  "ftl",
- "ftl_utils",
  "ftl_virtio",
 ]

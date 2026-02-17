@@ -1,6 +1,7 @@
 use core::arch::asm;
 use core::mem::MaybeUninit;
 
+use ftl::driver::DmaBuf;
 use ftl::error::ErrorCode;
 use ftl::interrupt::Interrupt;
 use ftl::pci::PciEntry;
@@ -94,7 +95,6 @@ fn find_pci_device(device_type: DeviceType) -> Result<PciEntry, ProbeError> {
 impl Prober {
     pub fn probe(device_type: DeviceType) -> Result<Self, ProbeError> {
         // Look up virtio-net PCI device
-        let mut entries: MaybeUninit<[PciEntry; 10]> = MaybeUninit::uninit();
         let entry = find_pci_device(device_type)?;
 
         // Enable bus mastering
@@ -182,7 +182,7 @@ impl VirtioPci {
         );
     }
 
-    pub fn setup_virtqueue(&self, queue_index: u16) -> Result<VirtQueue, Error> {
+    pub fn setup_virtqueue<C>(&self, queue_index: u16) -> Result<VirtQueue<C>, Error> {
         // 1. Write the virtqueue index (first queue is 0) to the Queue Select
         //    field.
         self.out16(PCI_IOPORT_QUEUE_SEL, queue_index);
@@ -199,17 +199,16 @@ impl VirtioPci {
 
         // 3. Allocate and zero virtqueue in contiguous physical memory, on a
         //    4096 byte alignment.
-        let mut paddr = 0;
-        let mut vaddr = 0;
-        ftl::dmabuf::sys_dmabuf_alloc(vring_size, &mut vaddr, &mut paddr)
-            .map_err(Error::DmaBufAlloc)?;
+        let dmabuf = DmaBuf::alloc(vring_size).map_err(Error::DmaBufAlloc)?;
 
         // Write the physical address, divided by 4096 to the Queue Address
         //    field.
-        let pfn: u32 = (paddr / 4096).try_into().map_err(|_| Error::TooHighPAddr)?;
+        let pfn: u32 = (dmabuf.paddr() / 4096)
+            .try_into()
+            .map_err(|_| Error::TooHighPAddr)?;
         self.out32(PCI_IOPORT_QUEUE_PFN, pfn);
 
-        Ok(VirtQueue::new(queue_index, queue_size, vaddr))
+        Ok(VirtQueue::new(queue_index, queue_size, dmabuf))
     }
 
     pub fn read_device_config8(&self, offset: u16) -> u8 {
@@ -222,7 +221,7 @@ impl VirtioPci {
         IsrStatus(raw)
     }
 
-    pub fn notify(&self, virtqueue: &VirtQueue) {
+    pub fn notify<C>(&self, virtqueue: &VirtQueue<C>) {
         self.out16(PCI_IOPORT_QUEUE_NOTIFY, virtqueue.queue_index());
     }
 

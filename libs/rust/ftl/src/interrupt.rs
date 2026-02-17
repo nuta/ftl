@@ -1,3 +1,5 @@
+use core::fmt;
+
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use ftl_types::syscall::SYS_INTERRUPT_ACKNOWLEDGE;
@@ -34,5 +36,11 @@ impl Interrupt {
 impl Handleable for Interrupt {
     fn handle(&self) -> &OwnedHandle {
         &self.handle
+    }
+}
+
+impl fmt::Debug for Interrupt {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Interrupt").field("irq", &self.irq).finish()
     }
 }

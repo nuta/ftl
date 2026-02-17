@@ -23,15 +23,13 @@ fn apply_relocations(image_base: u64, relocs: *const Elf64Rela, relocs_end: *con
 #[unsafe(no_mangle)]
 #[unsafe(naked)]
 extern "C" fn start() -> ! {
-    unsafe {
-        naked_asm!(
-            // Do not jump into rust_start directly. Rust (x86-64 ABI) expects
-            // the stack to be 16-byte aligned "just before" calling a function,
-            // before CALL pushes 8 bytes to the stack.
-            "call {rust_start}",
-            rust_start = sym rust_start,
-        );
-    }
+    naked_asm!(
+        // Do not jump into rust_start directly. Rust (x86-64 ABI) expects
+        // the stack to be 16-byte aligned "just before" calling a function,
+        // before CALL pushes 8 bytes to the stack.
+        "call {rust_start}",
+        rust_start = sym rust_start,
+    );
 }
 
 extern "C" fn rust_start() -> ! {

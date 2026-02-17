@@ -7,6 +7,8 @@ use core::mem::MaybeUninit;
 
 use ftl_types::channel::CallId;
 use ftl_types::channel::ErrorReplyInline;
+use ftl_types::channel::InvokeInline;
+use ftl_types::channel::InvokeReplyInline;
 use ftl_types::channel::MessageBody;
 use ftl_types::channel::MessageInfo;
 use ftl_types::channel::OutOfLine;
@@ -103,6 +105,11 @@ pub enum Message {
         /// the length of this buffer.
         data: Buffer,
     },
+    Invoke {
+        kind: u32,
+        input: Buffer,
+        output: BufferMut,
+    },
 }
 
 /// A reply message constructor.
@@ -123,11 +130,13 @@ pub enum Reply {
         /// The length of the data actually written.
         len: usize,
     },
+    InvokeReply {},
 }
 
 pub(crate) enum Cookie {
     Buffer(Buffer),
     BufferMut(BufferMut),
+    Invoke(Buffer, BufferMut),
 }
 
 impl Cookie {
@@ -192,6 +201,17 @@ impl Channel {
                 };
                 (MessageInfo::WRITE, Cookie::Buffer(data))
             }
+            Message::Invoke {
+                kind,
+                input,
+                output,
+            } => {
+                body.ools[0] = input.to_ool();
+                body.ools[1] = output.to_ool();
+                let inline = unsafe { &mut *(body.inline.as_mut_ptr() as *mut InvokeInline) };
+                *inline = InvokeInline { kind };
+                (MessageInfo::INVOKE, Cookie::Invoke(input, output))
+            }
         };
 
         sys_channel_send(
@@ -229,6 +249,11 @@ impl Channel {
                 let inline = unsafe { &mut *(body.inline.as_mut_ptr() as *mut WriteReplyInline) };
                 *inline = WriteReplyInline { len };
                 MessageInfo::WRITE_REPLY
+            }
+            Reply::InvokeReply {} => {
+                let inline = unsafe { &mut *(body.inline.as_mut_ptr() as *mut InvokeReplyInline) };
+                *inline = InvokeReplyInline {};
+                MessageInfo::INVOKE_REPLY
             }
         };
 

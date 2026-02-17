@@ -13,6 +13,8 @@ impl MessageInfo {
     pub const READ_REPLY: Self = Self::new(5, false, 0, 0, size_of::<ReadReplyInline>());
     pub const WRITE: Self = Self::new(6, true, 0, 1, size_of::<WriteInline>());
     pub const WRITE_REPLY: Self = Self::new(7, false, 0, 0, size_of::<WriteReplyInline>());
+    pub const INVOKE: Self = Self::new(8, true, 0, 2, size_of::<InvokeInline>());
+    pub const INVOKE_REPLY: Self = Self::new(9, false, 0, 0, size_of::<InvokeReplyInline>());
 
     const fn new(
         kind: u32,
@@ -21,7 +23,7 @@ impl MessageInfo {
         num_ools: u32,
         inline_len: usize,
     ) -> Self {
-        debug_assert!(kind <= 0b111);
+        debug_assert!(kind <= 0b11111);
         debug_assert!(num_handles <= NUM_HANDLES_MAX as u32);
         debug_assert!(num_ools <= NUM_OOLS_MAX as u32);
         debug_assert!(inline_len <= INLINE_LEN_MAX);
@@ -126,3 +128,11 @@ pub struct WriteInline {
 pub struct WriteReplyInline {
     pub len: usize,
 }
+
+#[repr(C)]
+pub struct InvokeInline {
+    pub kind: u32,
+}
+
+#[repr(C)]
+pub struct InvokeReplyInline {}

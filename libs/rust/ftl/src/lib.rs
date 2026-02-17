@@ -4,6 +4,8 @@ extern crate alloc;
 
 pub use alloc::rc;
 
+pub use ftl_macros::main;
+
 #[macro_use]
 pub mod print;
 
@@ -14,10 +16,11 @@ mod panic;
 
 pub mod application;
 pub mod collections;
-pub mod dmabuf;
+pub mod driver;
 pub mod error;
 pub mod handle;
 pub mod log;
+pub mod message;
 pub mod prelude;
 pub mod service;
 pub mod sink;
