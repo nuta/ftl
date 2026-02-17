@@ -8,7 +8,7 @@ use ftl_types::syscall::SYS_VMAREA_WRITE;
 
 use crate::handle::Handleable;
 use crate::handle::OwnedHandle;
-use crate::syscall::syscall0;
+use crate::syscall::syscall1;
 use crate::syscall::syscall4;
 
 pub struct VmArea {
@@ -16,8 +16,8 @@ pub struct VmArea {
 }
 
 impl VmArea {
-    pub fn new() -> Result<Self, ErrorCode> {
-        let handle = sys_vmarea_create()?;
+    pub fn new(len: usize) -> Result<Self, ErrorCode> {
+        let handle = sys_vmarea_create(len)?;
         Ok(Self { handle })
     }
 
@@ -44,8 +44,8 @@ impl fmt::Debug for VmArea {
     }
 }
 
-fn sys_vmarea_create() -> Result<OwnedHandle, ErrorCode> {
-    let raw = syscall0(SYS_VMAREA_CREATE)?;
+fn sys_vmarea_create(len: usize) -> Result<OwnedHandle, ErrorCode> {
+    let raw = syscall1(SYS_VMAREA_CREATE, len)?;
     let handle = OwnedHandle::from_raw(HandleId::from_raw(raw));
     Ok(handle)
 }
