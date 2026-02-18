@@ -4,9 +4,13 @@
 use ftl::application::Event;
 use ftl::application::EventLoop;
 use ftl::error::ErrorCode;
+use ftl::handle::HandleId;
+use ftl::handle::Handleable;
 use ftl::prelude::*;
 use ftl::rc::Rc;
+use ftl::syscall::sys_console_write;
 use ftl::thread::Thread;
+use ftl::thread::thread_resume_with;
 use ftl::vmarea::VmArea;
 use ftl::vmspace::PageAttrs;
 use ftl::vmspace::VmSpace;
@@ -80,19 +84,26 @@ impl LxProcess {
     }
 
     pub fn read_from_user(&self, addr: usize, buf: &mut [u8]) -> Result<(), Error> {
-        let vma = self
-            .vmas
-            .iter()
-            .find(|vma| vma.base <= addr && addr < vma.end)
-            .ok_or(Error::NotMappedAddr)?;
+        let mut pos = 0;
+        while pos < buf.len() {
+            let cur = addr + pos;
+            let vma = self
+                .vmas
+                .iter()
+                .find(|vma| vma.base <= cur && cur < vma.end)
+                .ok_or(Error::NotMappedAddr)?;
+            let span = core::cmp::min(buf.len() - pos, vma.end - cur);
+            vma.vmarea
+                .read(cur - vma.base, &mut buf[pos..pos + span])
+                .map_err(Error::ReadVmArea)?;
+            pos += span;
+        }
 
-        vma.vmarea
-            .read(addr - vma.base, buf)
-            .map_err(Error::ReadVmArea)
+        Ok(())
     }
 
-    pub fn return_from_syscall(&self, retval: usize) {
-        todo!()
+    pub fn return_from_syscall(&self, thread_id: HandleId, retval: usize) {
+        thread_resume_with(thread_id, retval).unwrap();
     }
 }
 
@@ -101,25 +112,51 @@ fn main() {
     info!("starting hello_linux");
 
     let mut eventloop = EventLoop::new().unwrap();
-    let _proc = LxProcess::create(&mut eventloop).unwrap();
-    // eventloop.add_thread(&proc.threads[0]).unwrap();
+    let proc = LxProcess::create(&mut eventloop).unwrap();
     info!("thread started");
+
+    const SYS_WRITE: u64 = 1;
+    const SYS_EXIT: u64 = 60;
 
     loop {
         match eventloop.wait() {
             Event::Syscall { thread, regs } => {
-                info!(
-                    "syscall event: rax={:x}, rdi={:x}, rsi={:x}, rdx={:x}, r10={:x}, r8={:x}, r9={:x}",
-                    regs.rax, regs.rdi, regs.rsi, regs.rdx, regs.r10, regs.r8, regs.r9
-                );
+                let retval = match regs.rax {
+                    SYS_WRITE => {
+                        let fd = regs.rdi as usize;
+                        let addr = regs.rsi as usize;
+                        let len = regs.rdx as usize;
+                        let mut buf = vec![0; 4096];
+                        let addr_aligned = (addr & !0xfff);
+                        trace!(
+                            "reading from user: addr={:x}, addr_aligned={:x}",
+                            addr, addr_aligned
+                        );
+                        proc.read_from_user(addr_aligned, &mut buf).unwrap();
 
-                if regs.rax == 1 {
-                    info!("SYS_WRITE");
-                } else if regs.rax == 60 {
-                    panic!("SYS_EXIT");
-                }
+                        let offset = addr - addr_aligned;
+                        let buf = &buf[offset..offset + len];
 
-                thread.resume_with(regs.rdx as usize).unwrap();
+                        if fd == 1 || fd == 2 {
+                            info!(
+                                "[{}] {}",
+                                if fd == 1 { "stdout" } else { "stderr" },
+                                core::str::from_utf8(buf).unwrap()
+                            );
+                        }
+                        len
+                    }
+                    SYS_EXIT => {
+                        info!("linux process exited");
+                        0
+                    }
+                    _ => {
+                        warn!("unsupported linux syscall: {}", regs.rax);
+                        0
+                    }
+                };
+
+                proc.return_from_syscall(thread.handle().id(), retval);
             }
             _ => {}
         }
