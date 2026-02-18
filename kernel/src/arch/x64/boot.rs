@@ -51,6 +51,38 @@ static mut GDT_ENTRIES: [MaybeUninit<[u64; NUM_GDT_ENTRIES]>; NUM_CPUS_MAX] =
 static mut TSS_ENTRIES: [MaybeUninit<Tss>; NUM_CPUS_MAX] =
     [const { MaybeUninit::uninit() }; NUM_CPUS_MAX];
 
+const MSR_IA32_STAR: u32 = 0xc000_0081;
+const MSR_IA32_LSTAR: u32 = 0xc000_0082;
+const MSR_IA32_FMASK: u32 = 0xc000_0084;
+const MSR_IA32_EFER: u32 = 0xc000_0080;
+const EFER_SCE: u64 = 1 << 0;
+const SYSCALL_FMASK: u64 = 1 << 9; // Clear IF on SYSCALL entry.
+
+unsafe fn rdmsr(msr: u32) -> u64 {
+    let low: u32;
+    let high: u32;
+    unsafe {
+        asm!(
+            "rdmsr",
+            in("ecx") msr,
+            out("eax") low,
+            out("edx") high,
+        );
+    }
+    ((high as u64) << 32) | (low as u64)
+}
+
+unsafe fn wrmsr(msr: u32, value: u64) {
+    unsafe {
+        asm!(
+            "wrmsr",
+            in("ecx") msr,
+            in("eax") value as u32,
+            in("edx") (value >> 32) as u32,
+        );
+    }
+}
+
 extern "C" fn rust_boot(multiboot_magic: u32, start_info: PAddr) -> ! {
     super::console::init();
 
@@ -128,6 +160,24 @@ extern "C" fn rust_boot(multiboot_magic: u32, start_info: PAddr) -> ! {
     unsafe {
         asm!("lgdt [{}]", in(reg) &gdtr);
         asm!("ltr ax", in("ax") GDT_TSS);
+    }
+
+    // Configure x64 SYSCALL/SYSRET MSRs for sandboxed threads.
+    unsafe {
+        let efer = rdmsr(MSR_IA32_EFER);
+        wrmsr(MSR_IA32_EFER, efer | EFER_SCE);
+
+        // On SYSCALL, CPU loads CS from STAR[47:32].
+        // On SYSRET, CPU uses STAR[63:48] + {8,16} for SS/CS.
+        let syscall_cs = GDT_KERNEL_CS as u64;
+        let sysret_base = (GDT_USER_DS as u64 | 3) - 8;
+        let star = (sysret_base << 48) | (syscall_cs << 32);
+        wrmsr(MSR_IA32_STAR, star);
+        wrmsr(
+            MSR_IA32_LSTAR,
+            super::syscall::user_syscall_handler as usize as u64,
+        );
+        wrmsr(MSR_IA32_FMASK, SYSCALL_FMASK);
     }
 
     super::idt::init();

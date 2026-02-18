@@ -60,17 +60,17 @@ pub extern "C" fn direct_syscall_handler(
     )
 }
 
-/// The handler for SYSCALL instruction in sandboxed threads.
+/// The handler for SYSCALL instruction.
 ///
 /// - RCX: The return address
 /// - R11: RFLAGS
 #[unsafe(naked)]
-pub extern "C" fn sandboxed_syscall_handler() -> ! {
+pub extern "C" fn user_syscall_handler() -> ! {
     naked_asm!(
         "cli",
         "swapgs",
         // Save syscall number.
-        "mov [gs:{scratch_offset}], rax",
+        "mov gs:[{scratch_offset}], rax",
 
         // thread = CpuVar.current_thread
         "mov rax, gs:[{current_thread_offset}]",
@@ -95,13 +95,13 @@ pub extern "C" fn sandboxed_syscall_handler() -> ! {
         "mov [rax + {r15_offset}], r15",
 
         // Restore the user RAX.
-        "mov rdi, [gs:{scratch_offset}]",
+        "mov rdi, gs:[{scratch_offset}]",
         "mov [rax + {rax_offset}], rdi",
 
         // Switch to the kernel stack.
         "mov rsp, gs:[{kernel_rsp_offset}]",
 
-        "call {handle_sandboxed_syscall}",
+        "call {handle_user_syscall}",
         current_thread_offset = const offset_of!(CpuVar, current_thread),
         scratch_offset = const offset_of!(CpuVar, arch.scratch),
         kernel_rsp_offset = const offset_of!(CpuVar, arch.kernel_rsp),
@@ -123,11 +123,11 @@ pub extern "C" fn sandboxed_syscall_handler() -> ! {
         r13_offset = const offset_of!(Thread, r13),
         r14_offset = const offset_of!(Thread, r14),
         r15_offset = const offset_of!(Thread, r15),
-        handle_sandboxed_syscall = sym handle_sandboxed_syscall,
+        handle_user_syscall = sym handle_user_syscall,
     )
 }
 
-extern "C" fn handle_sandboxed_syscall() -> ! {
+extern "C" fn handle_user_syscall() -> ! {
     let cpuvar = super::get_cpuvar();
     let arch_thread = cpuvar.current_thread.arch_thread();
     let thread = cpuvar.current_thread.thread();
@@ -144,6 +144,7 @@ extern "C" fn handle_sandboxed_syscall() -> ! {
         }
     };
 
+    trace!("syscall handler: {:x?}", regs);
     thread.block_on_sandboxed_syscall(regs);
     return_to_user();
 }
