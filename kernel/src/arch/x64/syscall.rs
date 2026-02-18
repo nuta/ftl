@@ -98,9 +98,13 @@ pub extern "C" fn sandboxed_syscall_handler() -> ! {
         "mov rdi, [gs:{scratch_offset}]",
         "mov [rax + {rax_offset}], rdi",
 
+        // Switch to the kernel stack.
+        "mov rsp, gs:[{kernel_rsp_offset}]",
+
         "call {handle_sandboxed_syscall}",
         current_thread_offset = const offset_of!(CpuVar, current_thread),
         scratch_offset = const offset_of!(CpuVar, arch.scratch),
+        kernel_rsp_offset = const offset_of!(CpuVar, arch.kernel_rsp),
         rip_offset = const offset_of!(Thread, rip),
         rflags_offset = const offset_of!(Thread, rflags),
         rax_offset = const offset_of!(Thread, rax),

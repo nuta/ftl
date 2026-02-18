@@ -73,7 +73,7 @@ extern "C" fn rust_boot(multiboot_magic: u32, start_info: PAddr) -> ! {
     let cpu_id = 0; // FIXME:
 
     // The interrupt stack.
-    let ist1 = BSP_STACK.as_ptr() as u64 + KERNEL_STACK_SIZE as u64;
+    let ist1 = kernel_stack_top(cpu_id);
 
     // Build a TSS.
     let tss_vaddr = unsafe {
@@ -186,6 +186,11 @@ struct Stack(#[allow(unused)] [u8; KERNEL_STACK_SIZE]);
 
 #[unsafe(link_section = ".data")]
 static BSP_STACK: MaybeUninit<Stack> = MaybeUninit::uninit();
+
+pub(super) fn kernel_stack_top(cpu_id: usize) -> u64 {
+    assert_eq!(cpu_id, 0); // TODO: SMP support
+    BSP_STACK.as_ptr() as u64 + KERNEL_STACK_SIZE as u64
+}
 
 #[unsafe(no_mangle)]
 #[unsafe(naked)]

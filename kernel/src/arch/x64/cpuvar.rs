@@ -1,6 +1,7 @@
 use core::arch::asm;
 use core::mem::MaybeUninit;
 
+use super::boot::kernel_stack_top;
 use super::NUM_CPUS_MAX;
 use super::local_apic::LocalApic;
 
@@ -14,15 +15,17 @@ static mut CPU_VARS: [MaybeUninit<crate::cpuvar::CpuVar>; NUM_CPUS_MAX] =
 pub struct CpuVar {
     magic: u64,
     pub scratch: u64,
+    pub kernel_rsp: u64,
     pub(super) local_apic: LocalApic,
 }
 
 impl CpuVar {
-    pub fn new() -> Self {
+    pub fn new(cpu_id: usize) -> Self {
         let local_apic = LocalApic::init();
         Self {
             magic: MAGIC,
             scratch: 0,
+            kernel_rsp: kernel_stack_top(cpu_id),
             local_apic,
         }
     }

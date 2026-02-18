@@ -12,11 +12,12 @@ pub struct CpuVar {
 }
 
 pub fn init() {
+    let cpu_id = 0; // FIXME:
     let idle_thread = Thread::new_idle().unwrap();
     arch::set_cpuvar(
-        0, // FIXME:
+        cpu_id,
         CpuVar {
-            arch: arch::CpuVar::new(),
+            arch: arch::CpuVar::new(cpu_id),
             current_thread: CurrentThread::new(idle_thread.clone()),
             idle_thread,
         },
