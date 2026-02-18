@@ -73,13 +73,6 @@ pub struct ClientEvent {
 #[derive(Clone, Copy, Debug)]
 #[repr(C)]
 pub struct SyscallEvent {
-    pub thread_id: HandleId,
-    pub regs: SyscallRegs,
-}
-
-#[derive(Clone, Copy, Debug)]
-#[repr(C)]
-pub struct SyscallRegs {
     pub rax: u64,
     pub rdi: u64,
     pub rsi: u64,

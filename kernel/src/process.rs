@@ -27,16 +27,10 @@ use crate::thread::Thread;
 use crate::thread::sys_thread_exit;
 use crate::vmspace::VmSpace;
 
-struct Mutable {
-    emitter: Option<EventEmitter>,
-    pending_events: VecDeque<(EventType, EventBody)>,
-}
-
 pub struct Process {
     name: ArrayString<PROCESS_NAME_MAX_LEN>,
     isolation: SharedRef<dyn Isolation>,
     handle_table: SpinLock<HandleTable>,
-    mutable: SpinLock<Mutable>,
 }
 
 impl Process {
@@ -48,10 +42,6 @@ impl Process {
             name,
             isolation,
             handle_table: SpinLock::new(HandleTable::new()),
-            mutable: SpinLock::new(Mutable {
-                emitter: None,
-                pending_events: VecDeque::new(),
-            }),
         })
     }
 
@@ -66,16 +56,6 @@ impl Process {
 
     pub fn handle_table(&self) -> &SpinLock<HandleTable> {
         &self.handle_table
-    }
-
-    fn set_event_emitter(&self, emitter: Option<EventEmitter>) {
-        let mut mutable = self.mutable.lock();
-        mutable.emitter = emitter;
-    }
-
-    pub fn push_event(&self, event_type: EventType, event_body: EventBody) {
-        let mut mutable = self.mutable.lock();
-        mutable.pending_events.push_back((event_type, event_body));
     }
 }
 
@@ -131,19 +111,7 @@ impl HandleTable {
     }
 }
 
-impl Handleable for Process {
-    fn read_event(
-        &self,
-        _handle_table: &mut HandleTable,
-    ) -> Result<Option<(EventType, EventBody)>, ErrorCode> {
-        let mut mutable = self.mutable.lock();
-        let Some(event) = mutable.pending_events.pop_front() else {
-            return Ok(None);
-        };
-
-        Ok(Some(event))
-    }
-}
+impl Handleable for Process {}
 
 fn read_process_name(
     current: &SharedRef<Thread>,
@@ -170,9 +138,9 @@ pub fn sys_process_create_sandboxed(
     a2: usize,
     a3: usize,
 ) -> Result<SyscallResult, ErrorCode> {
-    let sink_id = HandleId::from_raw(a0);
-    let vmspace_id = HandleId::from_raw(a1);
-    let name_slice = UserSlice::new(UserPtr::new(a2), a3)?;
+    let vmspace_id = HandleId::from_raw(a0);
+    let name_slice = UserSlice::new(UserPtr::new(a1), a2)?;
+    let sink_id = HandleId::from_raw(a3);
     let name = read_process_name(current, &name_slice)?;
 
     let mut handle_table = current.process().handle_table().lock();
@@ -208,10 +176,6 @@ pub static IDLE_PROCESS: SharedRef<Process> = {
         name: ArrayString::from_static("[idle]"),
         isolation: SharedRef::new_static(&ISOLATION_INNER) as SharedRef<dyn Isolation>,
         handle_table: SpinLock::new(HandleTable::new()),
-        mutable: SpinLock::new(Mutable {
-            emitter: None,
-            pending_events: VecDeque::new(),
-        }),
     });
     let process = SharedRef::new_static(&INNER);
     process as SharedRef<Process>

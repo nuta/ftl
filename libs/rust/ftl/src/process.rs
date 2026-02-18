@@ -17,8 +17,18 @@ pub struct Process {
 }
 
 impl Process {
-    pub fn create_sandboxed(sink: &Sink, vmspace: &VmSpace, name: &str) -> Result<Self, ErrorCode> {
-        let handle = sys_process_create_sandboxed(sink.handle().id(), vmspace.handle().id(), name)?;
+    pub fn create_sandboxed(vmspace: &VmSpace, name: &str) -> Result<Self, ErrorCode> {
+        let handle =
+            sys_process_create_sandboxed(vmspace.handle().id(), name, HandleId::from_raw(0))?;
+        Ok(Self { handle })
+    }
+
+    pub fn create_sandboxed_with_sink(
+        vmspace: &VmSpace,
+        name: &str,
+        sink: &Sink,
+    ) -> Result<Self, ErrorCode> {
+        let handle = sys_process_create_sandboxed(vmspace.handle().id(), name, sink.handle().id())?;
         Ok(Self { handle })
     }
 }
@@ -38,16 +48,16 @@ impl fmt::Debug for Process {
 }
 
 pub fn sys_process_create_sandboxed(
-    sink: HandleId,
     vmspace: HandleId,
     name: &str,
+    sink: HandleId,
 ) -> Result<OwnedHandle, ErrorCode> {
     let raw = syscall4(
         SYS_PROCESS_CREATE_SANDBOXED,
-        sink.as_usize(),
         vmspace.as_usize(),
         name.as_ptr() as usize,
         name.len(),
+        sink.as_usize(),
     )?;
 
     let handle = OwnedHandle::from_raw(HandleId::from_raw(raw));

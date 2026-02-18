@@ -1,9 +1,13 @@
+use alloc::collections::vec_deque::VecDeque;
 use core::cell::UnsafeCell;
 use core::mem::offset_of;
 
 use ftl_arrayvec::ArrayString;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
+use ftl_types::sink::EventBody;
+use ftl_types::sink::EventType;
+use ftl_types::sink::SyscallEvent;
 use ftl_types::syscall::ERROR_RETVAL_BASE;
 use ftl_utils::static_assert;
 
@@ -12,12 +16,14 @@ use crate::handle::Handle;
 use crate::handle::HandleRight;
 use crate::handle::Handleable;
 use crate::isolation::UserSlice;
+use crate::process::HandleTable;
 use crate::process::IDLE_PROCESS;
 use crate::process::Process;
 use crate::scheduler::SCHEDULER;
 use crate::service::SERVICE_NAME_MAX_LEN;
 use crate::service::Service;
 use crate::shared_ref::SharedRef;
+use crate::sink::EventEmitter;
 use crate::sink::Sink;
 use crate::spinlock::SpinLock;
 use crate::syscall::SyscallResult;
@@ -77,6 +83,8 @@ enum State {
 
 struct Mutable {
     state: State,
+    emitter: Option<EventEmitter>,
+    syscall_events: VecDeque<SyscallEvent>,
 }
 
 #[repr(C)]
@@ -104,6 +112,8 @@ impl Thread {
             process,
             mutable: SpinLock::new(Mutable {
                 state: State::Created,
+                emitter: None,
+                syscall_events: VecDeque::new(),
             }),
         })
     }
@@ -112,7 +122,11 @@ impl Thread {
         SharedRef::new(Self {
             arch: arch::Thread::new_idle(),
             process: IDLE_PROCESS.clone(),
-            mutable: SpinLock::new(Mutable { state: State::Idle }),
+            mutable: SpinLock::new(Mutable {
+                state: State::Idle,
+                emitter: None,
+                syscall_events: VecDeque::new(),
+            }),
         })
     }
 
@@ -123,6 +137,12 @@ impl Thread {
     pub fn block_on(&self, promise: Promise) {
         let mut mutable = self.mutable.lock();
         mutable.state = State::Blocked(promise);
+    }
+
+    pub fn block_on_sandboxed_syscall(&self, event: SyscallEvent) {
+        let mut mutable = self.mutable.lock();
+        mutable.state = State::Blocked(Promise::SandboxedSyscall);
+        mutable.syscall_events.push_back(event);
     }
 
     pub fn unblock(self: SharedRef<Self>) {
@@ -188,7 +208,25 @@ impl Thread {
     }
 }
 
-impl Handleable for Thread {}
+impl Handleable for Thread {
+    fn set_event_emitter(&self, emitter: Option<EventEmitter>) -> Result<(), ErrorCode> {
+        let mut mutable = self.mutable.lock();
+        mutable.emitter = emitter;
+        Ok(())
+    }
+
+    fn read_event(
+        &self,
+        _handle_table: &mut HandleTable,
+    ) -> Result<Option<(EventType, EventBody)>, ErrorCode> {
+        let mut mutable = self.mutable.lock();
+        let Some(event) = mutable.syscall_events.pop_front() else {
+            return Ok(None);
+        };
+
+        Ok(Some((EventType::SYSCALL, EventBody { syscall: event })))
+    }
+}
 
 pub fn sys_thread_exit(current: &SharedRef<Thread>) -> Result<SyscallResult, ErrorCode> {
     current.exit();

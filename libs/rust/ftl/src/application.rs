@@ -29,7 +29,7 @@ use crate::interrupt::Interrupt;
 use crate::service::Service;
 use crate::sink;
 use crate::sink::Sink;
-use crate::sink::SyscallRegs;
+use crate::sink::SyscallEvent;
 use crate::time::Timer;
 
 enum Object {
@@ -305,20 +305,11 @@ impl fmt::Debug for ReplyEvent {
 pub enum Event {
     Request(RequestEvent),
     Reply(ReplyEvent),
-    Interrupt {
-        interrupt: Rc<Interrupt>,
-    },
-    Timer {
-        timer: Rc<Timer>,
-    },
-    PeerClosed {
-        ch: Rc<Channel>,
-    },
+    Interrupt { interrupt: Rc<Interrupt> },
+    Timer { timer: Rc<Timer> },
+    PeerClosed { ch: Rc<Channel> },
     Connect(Channel),
-    Syscall {
-        thread_id: HandleId,
-        regs: SyscallRegs,
-    },
+    Syscall { regs: SyscallEvent },
 }
 
 impl fmt::Debug for Event {
@@ -330,12 +321,7 @@ impl fmt::Debug for Event {
             Event::Timer { .. } => f.debug_tuple("Timer").finish(),
             Event::PeerClosed { ch } => f.debug_tuple("PeerClosed").field(ch).finish(),
             Event::Connect(ch) => f.debug_tuple("Connect").field(ch).finish(),
-            Event::Syscall { thread_id, regs } => {
-                f.debug_struct("Syscall")
-                    .field("thread_id", thread_id)
-                    .field("regs", regs)
-                    .finish()
-            }
+            Event::Syscall { regs } => f.debug_tuple("Syscall").field(regs).finish(),
         }
     }
 }
@@ -577,8 +563,8 @@ impl EventLoop {
                         _ => panic!("unknown handle id from sink: {:?}", handle_id),
                     }
                 }
-                sink::Event::Syscall { thread_id, regs } => {
-                    return Event::Syscall { thread_id, regs };
+                sink::Event::Syscall { regs } => {
+                    return Event::Syscall { regs };
                 }
             }
         }

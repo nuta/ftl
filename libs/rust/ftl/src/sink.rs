@@ -10,7 +10,7 @@ use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use ftl_types::sink::EventType;
 use ftl_types::sink::RawEvent;
-pub use ftl_types::sink::SyscallRegs;
+pub use ftl_types::sink::SyscallEvent;
 use ftl_types::syscall::SYS_SINK_ADD;
 use ftl_types::syscall::SYS_SINK_CREATE;
 use ftl_types::syscall::SYS_SINK_REMOVE;
@@ -51,8 +51,7 @@ pub enum Event {
         ch: Channel,
     },
     Syscall {
-        thread_id: HandleId,
-        regs: SyscallRegs,
+        regs: SyscallEvent,
     },
 }
 
@@ -135,9 +134,8 @@ impl Sink {
                 Event::Client { ch }
             }
             EventType::SYSCALL => {
-                let thread_id = unsafe { raw.body.syscall.thread_id };
-                let regs = unsafe { raw.body.syscall.regs };
-                Event::Syscall { thread_id, regs }
+                let regs = unsafe { raw.body.syscall };
+                Event::Syscall { regs }
             }
             _ => {
                 return Err(ErrorCode::Unsupported);

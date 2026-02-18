@@ -4,7 +4,6 @@ use core::mem::offset_of;
 use ftl_types::sink::EventBody;
 use ftl_types::sink::EventType;
 use ftl_types::sink::SyscallEvent;
-use ftl_types::sink::SyscallRegs;
 
 use crate::arch::Thread;
 use crate::cpuvar::CpuVar;
@@ -128,10 +127,9 @@ extern "C" fn handle_sandboxed_syscall() -> ! {
     let cpuvar = super::get_cpuvar();
     let arch_thread = cpuvar.current_thread.arch_thread();
     let thread = cpuvar.current_thread.thread();
-    let process = thread.process();
 
     let regs = unsafe {
-        SyscallRegs {
+        SyscallEvent {
             rax: (*arch_thread).rax as u64,
             rdi: (*arch_thread).rdi as u64,
             rsi: (*arch_thread).rsi as u64,
@@ -142,12 +140,6 @@ extern "C" fn handle_sandboxed_syscall() -> ! {
         }
     };
 
-    thread.block_on(Promise::SandboxedSyscall);
-    process.push_event(
-        EventType::SYSCALL,
-        EventBody {
-            syscall: SyscallEvent { thread_id, regs },
-        },
-    );
+    thread.block_on_sandboxed_syscall(regs);
     return_to_user();
 }
