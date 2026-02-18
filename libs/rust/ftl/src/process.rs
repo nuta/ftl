@@ -7,6 +7,7 @@ use ftl_types::syscall::SYS_PROCESS_EXIT;
 
 use crate::handle::Handleable;
 use crate::handle::OwnedHandle;
+use crate::sink::Sink;
 use crate::syscall::syscall0;
 use crate::syscall::syscall4;
 use crate::vmspace::VmSpace;
@@ -16,11 +17,7 @@ pub struct Process {
 }
 
 impl Process {
-    pub fn create_sandboxed<H: Handleable>(
-        sink: &H,
-        vmspace: &VmSpace,
-        name: &str,
-    ) -> Result<Self, ErrorCode> {
+    pub fn create_sandboxed(sink: &Sink, vmspace: &VmSpace, name: &str) -> Result<Self, ErrorCode> {
         let handle = sys_process_create_sandboxed(sink.handle().id(), vmspace.handle().id(), name)?;
         Ok(Self { handle })
     }

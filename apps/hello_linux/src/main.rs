@@ -96,7 +96,7 @@ fn main() {
 
     let mut eventloop = EventLoop::new().unwrap();
     let proc = LxProcess::create(&eventloop).unwrap();
-    // eventloop.add_thread(&proc.thread()).unwrap();
+    // eventloop.add_process(&proc.ftl_process).unwrap();
     info!("thread started");
 
     loop {
