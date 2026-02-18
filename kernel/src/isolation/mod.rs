@@ -1,8 +1,12 @@
+use alloc::collections::vec_deque::VecDeque;
 use core::mem::MaybeUninit;
 
 use ftl_types::error::ErrorCode;
+use ftl_types::sink::SyscallRegs;
 
 use crate::shared_ref::SharedRef;
+use crate::sink::EventEmitter;
+use crate::spinlock::SpinLock;
 use crate::vmspace::VmSpace;
 
 /// A pointer in an isolation space.
@@ -101,6 +105,10 @@ pub trait Isolation: Send + Sync {
     fn is_inkernel(&self) -> bool;
     fn read_bytes(&self, slice: &UserSlice, buf: &mut [u8]) -> Result<(), ErrorCode>;
     fn write_bytes(&self, slice: &UserSlice, buf: &[u8]) -> Result<(), ErrorCode>;
+
+    fn handle_sandboxed_syscall(&self, _regs: SyscallRegs) {
+        unreachable!()
+    }
 }
 
 pub struct IdleIsolation {
@@ -169,11 +177,21 @@ impl Isolation for InKernelIsolation {
 
 pub struct SandboxIsolation {
     vmspace: SharedRef<VmSpace>,
+    emitter: SpinLock<Option<EventEmitter>>,
+    syscalls: SpinLock<VecDeque<SyscallRegs>>,
 }
 
 impl SandboxIsolation {
     pub fn new(vmspace: SharedRef<VmSpace>) -> Result<SharedRef<Self>, ErrorCode> {
-        SharedRef::new(Self { vmspace })
+        SharedRef::new(Self {
+            vmspace,
+            emitter: SpinLock::new(None),
+            syscalls: SpinLock::new(VecDeque::new()),
+        })
+    }
+
+    pub fn set_event_emitter(&self, emitter: Option<EventEmitter>) {
+        *self.emitter.lock() = emitter;
     }
 }
 
@@ -194,5 +212,12 @@ impl Isolation for SandboxIsolation {
     fn write_bytes(&self, _slice: &UserSlice, _buf: &[u8]) -> Result<(), ErrorCode> {
         // System calls from a sandboxed process won't be handled by the kernel.
         unreachable!()
+    }
+
+    fn handle_sandboxed_syscall(&self, regs: SyscallRegs) {
+        self.syscalls.lock().push_back(regs);
+        if let Some(ref emitter) = *self.emitter.lock() {
+            emitter.notify();
+        }
     }
 }

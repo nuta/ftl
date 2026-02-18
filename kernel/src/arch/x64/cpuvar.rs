@@ -13,6 +13,7 @@ static mut CPU_VARS: [MaybeUninit<crate::cpuvar::CpuVar>; NUM_CPUS_MAX] =
 #[repr(C)]
 pub struct CpuVar {
     magic: u64,
+    pub scratch: u64,
     pub(super) local_apic: LocalApic,
 }
 
@@ -21,6 +22,7 @@ impl CpuVar {
         let local_apic = LocalApic::init();
         Self {
             magic: MAGIC,
+            scratch: 0,
             local_apic,
         }
     }

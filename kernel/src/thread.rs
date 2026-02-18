@@ -30,6 +30,7 @@ pub enum Promise {
     ServiceLookup {
         name: ArrayString<SERVICE_NAME_MAX_LEN>,
     },
+    SandboxedSyscall,
 }
 
 impl Promise {
@@ -61,6 +62,7 @@ impl Promise {
                     Err(error) => Some(Err(error)),
                 }
             }
+            Promise::SandboxedSyscall => None,
         }
     }
 }
@@ -284,7 +286,7 @@ impl CurrentThread {
     }
 
     /// Returns the pointer to the arch-specific thread struct.
-    fn arch_thread(&self) -> *mut arch::Thread {
+    pub fn arch_thread(&self) -> *mut arch::Thread {
         static_assert!(offset_of!(Thread, arch) == 0);
 
         // SAFETY: The static_assert above guarantees arch::Thread is at the offset 0.
