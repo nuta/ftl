@@ -97,7 +97,7 @@ fn do_syscall(
         SYS_VMAREA_READ => crate::vmarea::sys_vmarea_read(thread, a0, a1, a2, a3),
         SYS_VMAREA_WRITE => crate::vmarea::sys_vmarea_write(thread, a0, a1, a2, a3),
         SYS_PROCESS_CREATE_SANDBOXED => {
-            crate::process::sys_process_create_sandboxed(thread, a0, a1, a2, a3)
+            crate::process::sys_process_create_sandboxed(thread, a0, a1, a2)
         }
         SYS_THREAD_CREATE => crate::thread::sys_thread_create(thread, a0, a1, a2, a3),
         SYS_THREAD_START => crate::thread::sys_thread_start(thread, a0),

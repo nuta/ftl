@@ -5,6 +5,7 @@ use ftl::application::Event;
 use ftl::application::EventLoop;
 use ftl::error::ErrorCode;
 use ftl::prelude::*;
+use ftl::rc::Rc;
 use ftl::thread::Thread;
 use ftl::vmarea::VmArea;
 use ftl::vmspace::PageAttrs;
@@ -19,6 +20,7 @@ enum Error {
     MapVmArea(ErrorCode),
     WriteVmArea(ErrorCode),
     ReadVmArea(ErrorCode),
+    AddThreadToEventLoop(ErrorCode),
     NotMappedAddr,
     StartThread(ErrorCode),
 }
@@ -37,19 +39,15 @@ impl Vma {
 
 struct LxProcess {
     ftl_process: ftl::process::Process,
-    threads: Vec<Thread>,
+    threads: Vec<Rc<Thread>>,
     vmspace: VmSpace,
     vmas: Vec<Vma>,
 }
 impl LxProcess {
-    pub fn create(eventloop: &EventLoop) -> Result<Self, Error> {
-        let vmspace = VmSpace::new().map_err(Error::CreateVmSpace)?;
-        let process = ftl::process::Process::create_sandboxed_with_sink(
-            &vmspace,
-            "hello_linux",
-            eventloop.sink(),
-        )
-        .map_err(Error::CreateProcess)?;
+    pub fn create(eventloop: &mut EventLoop) -> Result<Self, Error> {
+        let vmspace: VmSpace = VmSpace::new().map_err(Error::CreateVmSpace)?;
+        let process = ftl::process::Process::create_sandboxed(&vmspace, "hello_linux")
+            .map_err(Error::CreateProcess)?;
 
         const SYSCALL_BIN: &[u8] = include_bytes!("../syscall.bin");
         trace!("syscall.bin size: {}", SYSCALL_BIN.len());
@@ -67,6 +65,11 @@ impl LxProcess {
             .map_err(Error::MapVmArea)?;
 
         thread.start().map_err(Error::StartThread)?;
+
+        let thread = Rc::new(thread);
+        eventloop
+            .add_thread(thread.clone())
+            .map_err(Error::AddThreadToEventLoop)?;
 
         Ok(Self {
             ftl_process: process,
@@ -98,34 +101,17 @@ fn main() {
     info!("starting hello_linux");
 
     let mut eventloop = EventLoop::new().unwrap();
-    let proc = LxProcess::create(&eventloop).unwrap();
+    let _proc = LxProcess::create(&mut eventloop).unwrap();
     // eventloop.add_thread(&proc.threads[0]).unwrap();
     info!("thread started");
 
     loop {
         match eventloop.wait() {
-            Event::Syscall { regs } => {
-                const SYS_WRITE: u64 = 1;
-                match regs.rax {
-                    SYS_WRITE => {
-                        let fd = regs.rdi as usize;
-                        let buf = regs.rsi as usize;
-                        let len = regs.rdx as usize;
-                        info!("write: fd={}, buf={:x}, len={}", fd, buf, len);
-
-                        let mut tmp = [0; 32];
-                        proc.read_from_user(buf, &mut tmp).unwrap();
-                        info!("write: buf={:?}", core::str::from_utf8(&tmp));
-
-                        proc.return_from_syscall(len);
-                    }
-                    _ => {
-                        info!(
-                            "syscall: rax={:x}, rdi={:x}, rsi={:x}, rdx={:x}, r10={:x}, r8={:x}, r9={:x}",
-                            regs.rax, regs.rdi, regs.rsi, regs.rdx, regs.r10, regs.r8, regs.r9
-                        );
-                    }
-                }
+            Event::Syscall { thread, regs } => {
+                info!(
+                    "syscall event: rax={:x}, rdi={:x}, rsi={:x}, rdx={:x}, r10={:x}, r8={:x}, r9={:x}",
+                    regs.rax, regs.rdi, regs.rsi, regs.rdx, regs.r10, regs.r8, regs.r9
+                );
             }
             _ => {}
         }

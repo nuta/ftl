@@ -143,6 +143,9 @@ impl Thread {
         let mut mutable = self.mutable.lock();
         mutable.state = State::Blocked(Promise::SandboxedSyscall);
         mutable.syscall_events.push_back(event);
+        if let Some(emitter) = &mutable.emitter {
+            emitter.notify();
+        }
     }
 
     pub fn unblock(self: SharedRef<Self>) {

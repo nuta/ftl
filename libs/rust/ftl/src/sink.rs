@@ -51,7 +51,8 @@ pub enum Event {
         ch: Channel,
     },
     Syscall {
-        regs: SyscallEvent,
+        thread_id: HandleId,
+        raw: SyscallEvent,
     },
 }
 
@@ -135,7 +136,10 @@ impl Sink {
             }
             EventType::SYSCALL => {
                 let regs = unsafe { raw.body.syscall };
-                Event::Syscall { regs }
+                Event::Syscall {
+                    thread_id: raw.header.id,
+                    raw: regs,
+                }
             }
             _ => {
                 return Err(ErrorCode::Unsupported);

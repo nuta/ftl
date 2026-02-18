@@ -30,6 +30,7 @@ use crate::service::Service;
 use crate::sink;
 use crate::sink::Sink;
 use crate::sink::SyscallEvent;
+use crate::thread::Thread;
 use crate::time::Timer;
 
 enum Object {
@@ -37,6 +38,7 @@ enum Object {
     Interrupt(#[allow(unused)] Rc<Interrupt>),
     Timer(#[allow(unused)] Rc<Timer>),
     Service(#[allow(unused)] Rc<Service>),
+    Thread(#[allow(unused)] Rc<Thread>),
 }
 
 struct State {
@@ -305,11 +307,20 @@ impl fmt::Debug for ReplyEvent {
 pub enum Event {
     Request(RequestEvent),
     Reply(ReplyEvent),
-    Interrupt { interrupt: Rc<Interrupt> },
-    Timer { timer: Rc<Timer> },
-    PeerClosed { ch: Rc<Channel> },
+    Interrupt {
+        interrupt: Rc<Interrupt>,
+    },
+    Timer {
+        timer: Rc<Timer>,
+    },
+    PeerClosed {
+        ch: Rc<Channel>,
+    },
     Connect(Channel),
-    Syscall { regs: SyscallEvent },
+    Syscall {
+        thread: Rc<Thread>,
+        regs: SyscallEvent,
+    },
 }
 
 impl fmt::Debug for Event {
@@ -321,7 +332,9 @@ impl fmt::Debug for Event {
             Event::Timer { .. } => f.debug_tuple("Timer").finish(),
             Event::PeerClosed { ch } => f.debug_tuple("PeerClosed").field(ch).finish(),
             Event::Connect(ch) => f.debug_tuple("Connect").field(ch).finish(),
-            Event::Syscall { regs } => f.debug_tuple("Syscall").field(regs).finish(),
+            Event::Syscall { thread, regs } => {
+                f.debug_tuple("Syscall").field(thread).field(regs).finish()
+            }
         }
     }
 }
@@ -392,6 +405,18 @@ impl EventLoop {
             object.handle().id(),
             State {
                 object: Object::Service(object),
+            },
+        );
+        Ok(())
+    }
+
+    pub fn add_thread<T: Into<Rc<Thread>>>(&mut self, thread: T) -> Result<(), ErrorCode> {
+        let object = thread.into();
+        self.sink.add(object.as_ref())?;
+        self.states.insert(
+            object.handle().id(),
+            State {
+                object: Object::Thread(object),
             },
         );
         Ok(())
@@ -563,8 +588,18 @@ impl EventLoop {
                         _ => panic!("unknown handle id from sink: {:?}", handle_id),
                     }
                 }
-                sink::Event::Syscall { regs } => {
-                    return Event::Syscall { regs };
+                sink::Event::Syscall { thread_id, raw } => {
+                    match self.states.get(&thread_id) {
+                        Some(State {
+                            object: Object::Thread(thread),
+                        }) => {
+                            return Event::Syscall {
+                                thread: thread.clone(),
+                                regs: raw,
+                            };
+                        }
+                        _ => panic!("unknown handle id from sink: {:?}", thread_id),
+                    }
                 }
             }
         }

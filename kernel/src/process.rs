@@ -136,17 +136,12 @@ pub fn sys_process_create_sandboxed(
     a0: usize,
     a1: usize,
     a2: usize,
-    a3: usize,
 ) -> Result<SyscallResult, ErrorCode> {
     let vmspace_id = HandleId::from_raw(a0);
     let name_slice = UserSlice::new(UserPtr::new(a1), a2)?;
-    let sink_id = HandleId::from_raw(a3);
     let name = read_process_name(current, &name_slice)?;
 
     let mut handle_table = current.process().handle_table().lock();
-    let sink = handle_table
-        .get::<Sink>(sink_id)?
-        .authorize(HandleRight::WRITE)?;
     let vmspace = handle_table
         .get::<VmSpace>(vmspace_id)?
         .authorize(HandleRight::WRITE)?;
@@ -154,9 +149,6 @@ pub fn sys_process_create_sandboxed(
 
     let isolation = SandboxIsolation::new(vmspace)?;
     let new_process = Process::new(name, isolation)?;
-
-    let emitter = EventEmitter::new(sink, process_id);
-    new_process.set_event_emitter(Some(emitter));
 
     let id = handle_table.insert(Handle::new(new_process, HandleRight::ALL))?;
     debug_assert_eq!(id.as_usize(), process_id.as_usize());
