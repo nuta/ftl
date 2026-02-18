@@ -1,6 +1,9 @@
 use core::arch::naked_asm;
 use core::mem::offset_of;
 
+use ftl_types::sink::EventBody;
+use ftl_types::sink::EventType;
+use ftl_types::sink::SyscallEvent;
 use ftl_types::sink::SyscallRegs;
 
 use crate::arch::Thread;
@@ -140,6 +143,11 @@ extern "C" fn handle_sandboxed_syscall() -> ! {
     };
 
     thread.block_on(Promise::SandboxedSyscall);
-    process.isolation().handle_sandboxed_syscall(regs);
+    process.push_event(
+        EventType::SYSCALL,
+        EventBody {
+            syscall: SyscallEvent { thread_id, regs },
+        },
+    );
     return_to_user();
 }

@@ -1,9 +1,12 @@
 use alloc::collections::btree_map::BTreeMap;
+use alloc::collections::vec_deque::VecDeque;
 
 use ftl_arrayvec::ArrayString;
 use ftl_types::environ::PROCESS_NAME_MAX_LEN;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
+use ftl_types::sink::EventBody;
+use ftl_types::sink::EventType;
 
 use crate::handle::AnyHandle;
 use crate::handle::Handle;
@@ -16,16 +19,24 @@ use crate::isolation::UserPtr;
 use crate::isolation::UserSlice;
 use crate::shared_ref::RefCounted;
 use crate::shared_ref::SharedRef;
+use crate::sink::EventEmitter;
+use crate::sink::Sink;
 use crate::spinlock::SpinLock;
 use crate::syscall::SyscallResult;
 use crate::thread::Thread;
 use crate::thread::sys_thread_exit;
 use crate::vmspace::VmSpace;
 
+struct Mutable {
+    emitter: Option<EventEmitter>,
+    pending_events: VecDeque<(EventType, EventBody)>,
+}
+
 pub struct Process {
     name: ArrayString<PROCESS_NAME_MAX_LEN>,
     isolation: SharedRef<dyn Isolation>,
     handle_table: SpinLock<HandleTable>,
+    mutable: SpinLock<Mutable>,
 }
 
 impl Process {
@@ -37,6 +48,10 @@ impl Process {
             name,
             isolation,
             handle_table: SpinLock::new(HandleTable::new()),
+            mutable: SpinLock::new(Mutable {
+                emitter: None,
+                pending_events: VecDeque::new(),
+            }),
         })
     }
 
@@ -51,6 +66,16 @@ impl Process {
 
     pub fn handle_table(&self) -> &SpinLock<HandleTable> {
         &self.handle_table
+    }
+
+    fn set_event_emitter(&self, emitter: Option<EventEmitter>) {
+        let mut mutable = self.mutable.lock();
+        mutable.emitter = emitter;
+    }
+
+    pub fn push_event(&self, event_type: EventType, event_body: EventBody) {
+        let mut mutable = self.mutable.lock();
+        mutable.pending_events.push_back((event_type, event_body));
     }
 }
 
@@ -106,7 +131,19 @@ impl HandleTable {
     }
 }
 
-impl Handleable for Process {}
+impl Handleable for Process {
+    fn read_event(
+        &self,
+        _handle_table: &mut HandleTable,
+    ) -> Result<Option<(EventType, EventBody)>, ErrorCode> {
+        let mut mutable = self.mutable.lock();
+        let Some(event) = mutable.pending_events.pop_front() else {
+            return Ok(None);
+        };
+
+        Ok(Some(event))
+    }
+}
 
 fn read_process_name(
     current: &SharedRef<Thread>,
@@ -131,19 +168,30 @@ pub fn sys_process_create_sandboxed(
     a0: usize,
     a1: usize,
     a2: usize,
+    a3: usize,
 ) -> Result<SyscallResult, ErrorCode> {
-    let vmspace_id = HandleId::from_raw(a0);
-    let name_slice = UserSlice::new(UserPtr::new(a1), a2)?;
+    let sink_id = HandleId::from_raw(a0);
+    let vmspace_id = HandleId::from_raw(a1);
+    let name_slice = UserSlice::new(UserPtr::new(a2), a3)?;
     let name = read_process_name(current, &name_slice)?;
 
     let mut handle_table = current.process().handle_table().lock();
+    let sink = handle_table
+        .get::<Sink>(sink_id)?
+        .authorize(HandleRight::WRITE)?;
     let vmspace = handle_table
         .get::<VmSpace>(vmspace_id)?
         .authorize(HandleRight::WRITE)?;
+    let process_id = HandleId::from_raw(handle_table.next_id);
+
     let isolation = SandboxIsolation::new(vmspace)?;
     let new_process = Process::new(name, isolation)?;
 
+    let emitter = EventEmitter::new(sink, process_id);
+    new_process.set_event_emitter(Some(emitter));
+
     let id = handle_table.insert(Handle::new(new_process, HandleRight::ALL))?;
+    debug_assert_eq!(id.as_usize(), process_id.as_usize());
     Ok(SyscallResult::Return(id.as_usize()))
 }
 
@@ -160,6 +208,10 @@ pub static IDLE_PROCESS: SharedRef<Process> = {
         name: ArrayString::from_static("[idle]"),
         isolation: SharedRef::new_static(&ISOLATION_INNER) as SharedRef<dyn Isolation>,
         handle_table: SpinLock::new(HandleTable::new()),
+        mutable: SpinLock::new(Mutable {
+            emitter: None,
+            pending_events: VecDeque::new(),
+        }),
     });
     let process = SharedRef::new_static(&INNER);
     process as SharedRef<Process>

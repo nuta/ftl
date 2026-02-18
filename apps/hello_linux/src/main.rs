@@ -42,10 +42,11 @@ struct LxProcess {
     vmas: Vec<Vma>,
 }
 impl LxProcess {
-    pub fn create() -> Result<Self, Error> {
+    pub fn create(eventloop: &EventLoop) -> Result<Self, Error> {
         let vmspace = VmSpace::new().map_err(Error::CreateVmSpace)?;
-        let process = ftl::process::Process::create_sandboxed(&vmspace, "hello_linux")
-            .map_err(Error::CreateProcess)?;
+        let process =
+            ftl::process::Process::create_sandboxed(eventloop.sink(), &vmspace, "hello_linux")
+                .map_err(Error::CreateProcess)?;
 
         const SYSCALL_BIN: &[u8] = include_bytes!("../syscall.bin");
         trace!("syscall.bin size: {}", SYSCALL_BIN.len());
@@ -94,13 +95,13 @@ fn main() {
     info!("starting hello_linux");
 
     let mut eventloop = EventLoop::new().unwrap();
-    let proc = LxProcess::create().unwrap();
+    let proc = LxProcess::create(&eventloop).unwrap();
     // eventloop.add_thread(&proc.thread()).unwrap();
     info!("thread started");
 
     loop {
         match eventloop.wait() {
-            Event::Syscall { regs } => {
+            Event::Syscall { thread_id, regs } => {
                 const SYS_WRITE: u64 = 1;
                 match regs.rax {
                     SYS_WRITE => {

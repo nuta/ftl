@@ -305,11 +305,20 @@ impl fmt::Debug for ReplyEvent {
 pub enum Event {
     Request(RequestEvent),
     Reply(ReplyEvent),
-    Interrupt { interrupt: Rc<Interrupt> },
-    Timer { timer: Rc<Timer> },
-    PeerClosed { ch: Rc<Channel> },
+    Interrupt {
+        interrupt: Rc<Interrupt>,
+    },
+    Timer {
+        timer: Rc<Timer>,
+    },
+    PeerClosed {
+        ch: Rc<Channel>,
+    },
     Connect(Channel),
-    Syscall { regs: SyscallRegs },
+    Syscall {
+        thread_id: HandleId,
+        regs: SyscallRegs,
+    },
 }
 
 impl fmt::Debug for Event {
@@ -321,7 +330,12 @@ impl fmt::Debug for Event {
             Event::Timer { .. } => f.debug_tuple("Timer").finish(),
             Event::PeerClosed { ch } => f.debug_tuple("PeerClosed").field(ch).finish(),
             Event::Connect(ch) => f.debug_tuple("Connect").field(ch).finish(),
-            Event::Syscall { regs } => f.debug_tuple("Syscall").field(regs).finish(),
+            Event::Syscall { thread_id, regs } => {
+                f.debug_struct("Syscall")
+                    .field("thread_id", thread_id)
+                    .field("regs", regs)
+                    .finish()
+            }
         }
     }
 }
@@ -343,6 +357,10 @@ impl EventLoop {
             sink,
             states: HashMap::new(),
         })
+    }
+
+    pub fn sink(&self) -> &Sink {
+        &self.sink
     }
 
     pub fn add_channel<T: Into<Rc<Channel>>>(&mut self, ch: T) -> Result<(), ErrorCode> {
@@ -559,8 +577,8 @@ impl EventLoop {
                         _ => panic!("unknown handle id from sink: {:?}", handle_id),
                     }
                 }
-                sink::Event::Syscall { regs } => {
-                    return Event::Syscall { regs };
+                sink::Event::Syscall { thread_id, regs } => {
+                    return Event::Syscall { thread_id, regs };
                 }
             }
         }

@@ -40,7 +40,7 @@ pub union EventBody {
     pub peer_closed: PeerClosedEvent,
     pub timer: TimerEvent,
     pub client: ClientEvent,
-    pub syscall: SyscallRegs,
+    pub syscall: SyscallEvent,
 }
 
 #[derive(Clone, Copy)]
@@ -68,6 +68,13 @@ pub struct TimerEvent {}
 pub struct ClientEvent {
     /// The channel ID connected to the client.
     pub id: HandleId,
+}
+
+#[derive(Clone, Copy, Debug)]
+#[repr(C)]
+pub struct SyscallEvent {
+    pub thread_id: HandleId,
+    pub regs: SyscallRegs,
 }
 
 #[derive(Clone, Copy, Debug)]
