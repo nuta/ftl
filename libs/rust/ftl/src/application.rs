@@ -29,6 +29,7 @@ use crate::interrupt::Interrupt;
 use crate::service::Service;
 use crate::sink;
 use crate::sink::Sink;
+use crate::sink::SyscallRegs;
 use crate::time::Timer;
 
 enum Object {
@@ -308,6 +309,7 @@ pub enum Event {
     Timer { timer: Rc<Timer> },
     PeerClosed { ch: Rc<Channel> },
     Connect(Channel),
+    Syscall { regs: SyscallRegs },
 }
 
 impl fmt::Debug for Event {
@@ -319,6 +321,7 @@ impl fmt::Debug for Event {
             Event::Timer { .. } => f.debug_tuple("Timer").finish(),
             Event::PeerClosed { ch } => f.debug_tuple("PeerClosed").field(ch).finish(),
             Event::Connect(ch) => f.debug_tuple("Connect").field(ch).finish(),
+            Event::Syscall { regs } => f.debug_tuple("Syscall").field(regs).finish(),
         }
     }
 }
@@ -555,6 +558,9 @@ impl EventLoop {
                         }
                         _ => panic!("unknown handle id from sink: {:?}", handle_id),
                     }
+                }
+                sink::Event::Syscall { regs } => {
+                    return Event::Syscall { regs };
                 }
             }
         }

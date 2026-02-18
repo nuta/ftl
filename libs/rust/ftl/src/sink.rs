@@ -49,6 +49,22 @@ pub enum Event {
     Client {
         ch: Channel,
     },
+    Syscall {
+        regs: SyscallRegs,
+    },
+}
+
+#[cfg(target_arch = "x86_64")]
+#[derive(Debug)]
+#[repr(C)]
+pub struct SyscallRegs {
+    pub rax: u64,
+    pub rdi: u64,
+    pub rsi: u64,
+    pub rdx: u64,
+    pub r10: u64,
+    pub r8: u64,
+    pub r9: u64,
 }
 
 pub struct Sink {
