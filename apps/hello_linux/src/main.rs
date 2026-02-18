@@ -41,19 +41,26 @@ struct LxProcess {
     vmspace: VmSpace,
     vmas: Vec<Vma>,
 }
-
 impl LxProcess {
     pub fn create() -> Result<Self, Error> {
         let vmspace = VmSpace::new().map_err(Error::CreateVmSpace)?;
         let process = ftl::process::Process::create_sandboxed(&vmspace, "hello_linux")
             .map_err(Error::CreateProcess)?;
-        let thread = Thread::create(&process, 0x10000, 0, 0).map_err(Error::CreateThread)?;
+
+        const HELLO_WORLD_BIN: &[u8] = include_bytes!("../../../hello_world.bin");
+        trace!("hello_world.bin size: {}", HELLO_WORLD_BIN.len());
+        let base = 0x1000000;
+        let entry = 0x1001260;
+
+        let thread = Thread::create(&process, entry, sp, 0).map_err(Error::CreateThread)?;
 
         let vmarea = VmArea::new(4096).map_err(Error::CreateVmArea)?;
-        vmarea.write(0, &[0xcc; 4096]).map_err(Error::WriteVmArea)?;
+        vmarea
+            .write(0, HELLO_WORLD_BIN)
+            .map_err(Error::WriteVmArea)?;
 
         vmspace
-            .map(&vmarea, 0x10000, PageAttrs::WRITABLE)
+            .map(&vmarea, base, PageAttrs::WRITABLE)
             .map_err(Error::MapVmArea)?;
 
         thread.start().map_err(Error::StartThread)?;
@@ -62,7 +69,7 @@ impl LxProcess {
             ftl_process: process,
             threads: vec![thread],
             vmspace,
-            vmas: vec![Vma::new(vmarea, 0x10000, 0x10000 + 4096)],
+            vmas: vec![Vma::new(vmarea, base, base + HELLO_WORLD_BIN.len())],
         })
     }
 
