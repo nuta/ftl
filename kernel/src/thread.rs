@@ -160,6 +160,22 @@ impl Thread {
         SCHEDULER.push(self.clone());
     }
 
+    pub fn resume_with(self: &SharedRef<Self>, retval: usize) -> Result<(), ErrorCode> {
+        let mut mutable = self.mutable.lock();
+        if !matches!(mutable.state, State::Blocked(Promise::SandboxedSyscall)) {
+            return Err(ErrorCode::TryLater);
+        }
+        mutable.state = State::Runnable;
+        drop(mutable);
+
+        // SAFETY: A blocked thread is not running.
+        unsafe {
+            self.set_rax(retval);
+        }
+        SCHEDULER.push(self.clone());
+        Ok(())
+    }
+
     pub fn exit(&self) {
         let mut mutable = self.mutable.lock();
         mutable.state = State::Exited;
@@ -203,6 +219,16 @@ impl Thread {
             Err(error) => ERROR_RETVAL_BASE + error as usize,
         };
 
+        unsafe { self.set_rax(raw) };
+    }
+
+    /// Sets RAX for this thread.
+    ///
+    /// # Safety
+    ///
+    /// This function must be called only when the thread is not running on
+    /// another CPU. FIXME: Guarantee this!
+    unsafe fn set_rax(&self, raw: usize) {
         // FIXME: Terrible hack
         let arch_thread = &self.arch as *const arch::Thread as *mut arch::Thread;
         unsafe {
@@ -272,6 +298,25 @@ pub fn sys_thread_start(
         .get::<Thread>(thread_id)?
         .authorize(HandleRight::WRITE)?
         .start();
+
+    Ok(SyscallResult::Return(0))
+}
+
+pub fn sys_thread_resume_with(
+    current: &SharedRef<Thread>,
+    a0: usize,
+    a1: usize,
+) -> Result<SyscallResult, ErrorCode> {
+    let thread_id = HandleId::from_raw(a0);
+    let retval = a1;
+
+    current
+        .process()
+        .handle_table()
+        .lock()
+        .get::<Thread>(thread_id)?
+        .authorize(HandleRight::WRITE)?
+        .resume_with(retval)?;
 
     Ok(SyscallResult::Return(0))
 }

@@ -42,3 +42,4 @@ pub const SYS_VMAREA_WRITE: usize = 30;
 pub const SYS_THREAD_CREATE: usize = 32;
 pub const SYS_THREAD_START: usize = 33;
 pub const SYS_PROCESS_CREATE_SANDBOXED: usize = 34;
+pub const SYS_THREAD_RESUME_WITH: usize = 35;

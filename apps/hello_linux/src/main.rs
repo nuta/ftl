@@ -112,6 +112,14 @@ fn main() {
                     "syscall event: rax={:x}, rdi={:x}, rsi={:x}, rdx={:x}, r10={:x}, r8={:x}, r9={:x}",
                     regs.rax, regs.rdi, regs.rsi, regs.rdx, regs.r10, regs.r8, regs.r9
                 );
+
+                if regs.rax == 1 {
+                    info!("SYS_WRITE");
+                } else if regs.rax == 60 {
+                    panic!("SYS_EXIT");
+                }
+
+                thread.resume_with(regs.rdx as usize).unwrap();
             }
             _ => {}
         }
