@@ -2,6 +2,8 @@ use core::arch::asm;
 use core::mem::offset_of;
 
 use crate::arch::x64::boot::GDT_KERNEL_CS;
+use crate::arch::x64::boot::GDT_USER_CS;
+use crate::arch::x64::boot::GDT_USER_DS;
 
 #[derive(Default)]
 #[repr(C, packed)]
@@ -32,7 +34,7 @@ pub struct Thread {
 }
 
 impl Thread {
-    pub fn new(entry: usize, sp: usize, start_info: usize) -> Self {
+    pub fn new_kernel(entry: usize, sp: usize, start_info: usize) -> Self {
         trace!(
             "new thread: entry={:x}, sp={:x}, start_info={:x}",
             entry, sp, start_info
@@ -42,6 +44,22 @@ impl Thread {
             cs: GDT_KERNEL_CS as u64,
             rflags: 0x2, // interrupts disabled
             rsp: sp as u64,
+            gsbase: start_info as u64,
+            ..Default::default()
+        }
+    }
+
+    pub fn new_user(entry: usize, sp: usize, start_info: usize) -> Self {
+        trace!(
+            "new user thread: entry={:x}, sp={:x}, start_info={:x}",
+            entry, sp, start_info
+        );
+        Self {
+            rip: entry as u64,
+            cs: (GDT_USER_CS | 3) as u64,
+            rflags: 0x202, // interrupts enabled
+            rsp: sp as u64,
+            ss: (GDT_USER_DS | 3) as u64,
             gsbase: start_info as u64,
             ..Default::default()
         }

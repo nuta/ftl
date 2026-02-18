@@ -17,6 +17,8 @@ use crate::arch::x64::pvh;
 
 pub(super) const NUM_GDT_ENTRIES: usize = 8;
 pub(super) const GDT_KERNEL_CS: u16 = 8;
+pub(super) const GDT_USER_DS: u16 = 4 * 8;
+pub(super) const GDT_USER_CS: u16 = 5 * 8;
 const GDT_TSS: u16 = 6 * 8;
 
 #[repr(C, packed)]

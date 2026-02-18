@@ -166,3 +166,33 @@ impl Isolation for InKernelIsolation {
         Ok(())
     }
 }
+
+pub struct SandboxIsolation {
+    vmspace: SharedRef<VmSpace>,
+}
+
+impl SandboxIsolation {
+    pub fn new(vmspace: SharedRef<VmSpace>) -> Result<SharedRef<Self>, ErrorCode> {
+        SharedRef::new(Self { vmspace })
+    }
+}
+
+impl Isolation for SandboxIsolation {
+    fn vmspace(&self) -> &SharedRef<VmSpace> {
+        &self.vmspace
+    }
+
+    fn is_inkernel(&self) -> bool {
+        false
+    }
+
+    fn read_bytes(&self, _slice: &UserSlice, _buf: &mut [u8]) -> Result<(), ErrorCode> {
+        // System calls from a sandboxed process won't be handled by the kernel.
+        unreachable!()
+    }
+
+    fn write_bytes(&self, _slice: &UserSlice, _buf: &[u8]) -> Result<(), ErrorCode> {
+        // System calls from a sandboxed process won't be handled by the kernel.
+        unreachable!()
+    }
+}

@@ -10,8 +10,8 @@ use crate::handle::Handle;
 use crate::handle::HandleRight;
 use crate::handle::Handleable;
 use crate::isolation::IdleIsolation;
-use crate::isolation::InKernelIsolation;
 use crate::isolation::Isolation;
+use crate::isolation::SandboxIsolation;
 use crate::isolation::UserPtr;
 use crate::isolation::UserSlice;
 use crate::shared_ref::RefCounted;
@@ -38,14 +38,6 @@ impl Process {
             isolation,
             handle_table: SpinLock::new(HandleTable::new()),
         })
-    }
-
-    pub fn new_inkernel(
-        vmspace: SharedRef<VmSpace>,
-        name: ArrayString<PROCESS_NAME_MAX_LEN>,
-    ) -> Result<SharedRef<Self>, ErrorCode> {
-        let isolation = InKernelIsolation::new(vmspace)?;
-        Self::new(name, isolation)
     }
 
     #[allow(unused)] // For debugging
@@ -116,7 +108,25 @@ impl HandleTable {
 
 impl Handleable for Process {}
 
-pub fn sys_process_create_inkernel(
+fn read_process_name(
+    current: &SharedRef<Thread>,
+    name_slice: &UserSlice,
+) -> Result<ArrayString<PROCESS_NAME_MAX_LEN>, ErrorCode> {
+    if name_slice.len() == 0 || name_slice.len() > PROCESS_NAME_MAX_LEN {
+        return Err(ErrorCode::InvalidArgument);
+    }
+
+    let mut name_buf = [0; PROCESS_NAME_MAX_LEN];
+    current
+        .process()
+        .isolation()
+        .read_bytes(name_slice, &mut name_buf[..name_slice.len()])?;
+
+    ArrayString::from_ascii_str(&name_buf[..name_slice.len()])
+        .map_err(|_| ErrorCode::InvalidArgument)
+}
+
+pub fn sys_process_create_sandboxed(
     current: &SharedRef<Thread>,
     a0: usize,
     a1: usize,
@@ -124,19 +134,16 @@ pub fn sys_process_create_inkernel(
 ) -> Result<SyscallResult, ErrorCode> {
     let vmspace_id = HandleId::from_raw(a0);
     let name_slice = UserSlice::new(UserPtr::new(a1), a2)?;
+    let name = read_process_name(current, &name_slice)?;
 
-    let process = current.process();
-    let mut name_buf = [0; PROCESS_NAME_MAX_LEN];
-    process.isolation().read_bytes(&name_slice, &mut name_buf)?;
-    let name = ArrayString::from_ascii_str(&name_buf).map_err(|_| ErrorCode::InvalidArgument)?;
-
-    let mut handle_table = process.handle_table().lock();
+    let mut handle_table = current.process().handle_table().lock();
     let vmspace = handle_table
         .get::<VmSpace>(vmspace_id)?
         .authorize(HandleRight::WRITE)?;
-    let new_process = Process::new_inkernel(vmspace, name)?;
-    let id = handle_table.insert(Handle::new(new_process, HandleRight::ALL))?;
+    let isolation = SandboxIsolation::new(vmspace)?;
+    let new_process = Process::new(name, isolation)?;
 
+    let id = handle_table.insert(Handle::new(new_process, HandleRight::ALL))?;
     Ok(SyscallResult::Return(id.as_usize()))
 }
 

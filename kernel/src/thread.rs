@@ -91,8 +91,14 @@ impl Thread {
         sp: usize,
         start_info: usize,
     ) -> Result<SharedRef<Self>, ErrorCode> {
+        let arch = if process.isolation().is_inkernel() {
+            arch::Thread::new_kernel(entry, sp, start_info)
+        } else {
+            arch::Thread::new_user(entry, sp, start_info)
+        };
+
         SharedRef::new(Self {
-            arch: arch::Thread::new(entry, sp, start_info),
+            arch,
             process,
             mutable: SpinLock::new(Mutable {
                 state: State::Created,

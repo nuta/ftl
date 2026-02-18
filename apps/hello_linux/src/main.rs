@@ -45,7 +45,7 @@ struct LxProcess {
 impl LxProcess {
     pub fn create() -> Result<Self, Error> {
         let vmspace = VmSpace::new().map_err(Error::CreateVmSpace)?;
-        let process = ftl::process::Process::create_inkernel(&vmspace, "hello_linux")
+        let process = ftl::process::Process::create_sandboxed(&vmspace, "hello_linux")
             .map_err(Error::CreateProcess)?;
         let thread = Thread::create(&process, 0x10000, 0, 0).map_err(Error::CreateThread)?;
 
