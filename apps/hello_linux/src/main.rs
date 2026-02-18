@@ -35,14 +35,14 @@ impl Vma {
     }
 }
 
-struct Process {
+struct LxProcess {
     ftl_process: ftl::process::Process,
     threads: Vec<Thread>,
     vmspace: VmSpace,
     vmas: Vec<Vma>,
 }
 
-impl Process {
+impl LxProcess {
     pub fn create() -> Result<Self, Error> {
         let vmspace = VmSpace::new().map_err(Error::CreateVmSpace)?;
         let process = ftl::process::Process::create_inkernel(&vmspace, "hello_linux")
@@ -88,7 +88,7 @@ fn main() {
     info!("starting hello_linux");
 
     let mut eventloop = EventLoop::new().unwrap();
-    let proc = Process::create().unwrap();
+    let proc = LxProcess::create().unwrap();
     // eventloop.add_thread(&proc.thread()).unwrap();
     info!("thread started");
 
