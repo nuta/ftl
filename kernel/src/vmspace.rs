@@ -87,6 +87,7 @@ impl VmSpace {
 
     pub fn handle_page_fault(&self, uaddr: usize, required: PageAttrs) -> Result<(), ErrorCode> {
         let uaddr = align_down(uaddr, arch::MIN_PAGE_SIZE);
+        trace!("page fault at {uaddr:#x}");
 
         let mutable = self.mutable.lock();
         let mapping = mutable

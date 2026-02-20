@@ -32,6 +32,10 @@ extern "C" fn start() -> ! {
     );
 }
 
+unsafe extern "Rust" {
+    fn main();
+}
+
 extern "C" fn rust_start() -> ! {
     let image_base: u64;
     let relocs: *const Elf64Rela;
@@ -54,6 +58,7 @@ extern "C" fn rust_start() -> ! {
     crate::allocator::init();
 
     unsafe {
-        asm!("call main", "ud2", options(noreturn));
+        main();
     }
+    crate::process::process_exit();
 }

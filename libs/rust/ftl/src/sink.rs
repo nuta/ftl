@@ -10,6 +10,7 @@ use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use ftl_types::sink::EventType;
 use ftl_types::sink::RawEvent;
+pub use ftl_types::sink::SandboxedSyscallEvent;
 use ftl_types::syscall::SYS_SINK_ADD;
 use ftl_types::syscall::SYS_SINK_CREATE;
 use ftl_types::syscall::SYS_SINK_REMOVE;
@@ -48,6 +49,10 @@ pub enum Event {
     },
     Client {
         ch: Channel,
+    },
+    SandboxedSyscall {
+        thread_id: HandleId,
+        raw: SandboxedSyscallEvent,
     },
 }
 
@@ -128,6 +133,13 @@ impl Sink {
                 let id = unsafe { raw.body.client.id };
                 let ch = Channel::from_handle(OwnedHandle::from_raw(id));
                 Event::Client { ch }
+            }
+            EventType::SANDBOXED_SYSCALL => {
+                let regs = unsafe { raw.body.sandboxed_syscall };
+                Event::SandboxedSyscall {
+                    thread_id: raw.header.id,
+                    raw: regs,
+                }
             }
             _ => {
                 return Err(ErrorCode::Unsupported);

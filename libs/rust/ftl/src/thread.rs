@@ -3,12 +3,14 @@ use core::fmt;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use ftl_types::syscall::SYS_THREAD_CREATE;
+use ftl_types::syscall::SYS_THREAD_RESUME_WITH;
 use ftl_types::syscall::SYS_THREAD_START;
 
 use crate::handle::Handleable;
 use crate::handle::OwnedHandle;
 use crate::process::Process;
 use crate::syscall::syscall1;
+use crate::syscall::syscall2;
 use crate::syscall::syscall4;
 
 pub struct Thread {
@@ -28,6 +30,10 @@ impl Thread {
 
     pub fn start(&self) -> Result<(), ErrorCode> {
         sys_thread_start(self.handle.id())
+    }
+
+    pub fn resume_with(&self, retval: usize) -> Result<(), ErrorCode> {
+        sys_thread_resume_with(self.handle.id(), retval)
     }
 }
 
@@ -65,4 +71,13 @@ pub fn sys_thread_create(
 pub fn sys_thread_start(thread: HandleId) -> Result<(), ErrorCode> {
     syscall1(SYS_THREAD_START, thread.as_usize())?;
     Ok(())
+}
+
+pub fn sys_thread_resume_with(thread: HandleId, retval: usize) -> Result<(), ErrorCode> {
+    syscall2(SYS_THREAD_RESUME_WITH, thread.as_usize(), retval)?;
+    Ok(())
+}
+
+pub fn thread_resume_with(thread: HandleId, retval: usize) -> Result<(), ErrorCode> {
+    sys_thread_resume_with(thread, retval)
 }

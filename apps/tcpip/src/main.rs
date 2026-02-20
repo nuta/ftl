@@ -1052,6 +1052,9 @@ fn main() {
             Event::Interrupt { interrupt } => {
                 warn!("unexpected interrupt: {:?}", interrupt);
             }
+            event => {
+                warn!("unhandled event: {:?}", event);
+            }
         }
     }
 }

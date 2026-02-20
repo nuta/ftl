@@ -21,6 +21,7 @@ pub enum ErrorCode {
     AlreadyExists = 13,
     NotFound = 14,
     TryLater = 15,
+    InvalidState = 16,
 }
 
 impl From<usize> for ErrorCode {
@@ -42,6 +43,7 @@ impl From<usize> for ErrorCode {
             13 => Self::AlreadyExists,
             14 => Self::NotFound,
             15 => Self::TryLater,
+            16 => Self::InvalidState,
             _ => Self::Unknown,
         }
     }

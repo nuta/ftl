@@ -18,6 +18,7 @@ const GIGA_PAGE_SIZE: usize = 1024 * 1024 * 1024;
 // Page table entry flags.
 const PTE_V: u64 = 1 << 0;
 const PTE_W: u64 = 1 << 1;
+const PTE_U: u64 = 1 << 2;
 const PTE_HUGE: u64 = 1 << 7;
 
 /// A page table, at any level (PML4, PDPT, PDT, PT).
@@ -106,7 +107,8 @@ fn ensure_next_table(table: &mut Table, index: usize) -> Result<&mut Table, Erro
     let entry = &mut table.0[index];
     let next_table_paddr = if !entry.is_present() {
         let paddr = alloc_table()?;
-        *entry = Pte::new(paddr, PTE_V | PTE_W);
+        // User mappings require U/S at every page-table level.
+        *entry = Pte::new(paddr, PTE_V | PTE_W | PTE_U);
         paddr
     } else {
         if entry.is_huge() {
@@ -201,7 +203,7 @@ impl VmSpace {
             return Err(ErrorCode::AlreadyExists);
         }
 
-        *entry = Pte::new(paddr, PTE_V | attrs.as_usize() as u64);
+        *entry = Pte::new(paddr, PTE_V | PTE_U | attrs.as_usize() as u64);
         Ok(())
     }
 }

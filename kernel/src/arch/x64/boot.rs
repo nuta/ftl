@@ -17,6 +17,8 @@ use crate::arch::x64::pvh;
 
 pub(super) const NUM_GDT_ENTRIES: usize = 8;
 pub(super) const GDT_KERNEL_CS: u16 = 8;
+pub(super) const GDT_USER_DS: u16 = (4 * 8) | 3;
+pub(super) const GDT_USER_CS: u16 = (5 * 8) | 3;
 const GDT_TSS: u16 = 6 * 8;
 
 #[repr(C, packed)]
@@ -49,6 +51,38 @@ static mut GDT_ENTRIES: [MaybeUninit<[u64; NUM_GDT_ENTRIES]>; NUM_CPUS_MAX] =
 static mut TSS_ENTRIES: [MaybeUninit<Tss>; NUM_CPUS_MAX] =
     [const { MaybeUninit::uninit() }; NUM_CPUS_MAX];
 
+const MSR_IA32_STAR: u32 = 0xc000_0081;
+const MSR_IA32_LSTAR: u32 = 0xc000_0082;
+const MSR_IA32_FMASK: u32 = 0xc000_0084;
+const MSR_IA32_EFER: u32 = 0xc000_0080;
+const EFER_SCE: u64 = 1 << 0;
+const SYSCALL_FMASK: u64 = 1 << 9; // Clear IF on SYSCALL entry.
+
+unsafe fn rdmsr(msr: u32) -> u64 {
+    let low: u32;
+    let high: u32;
+    unsafe {
+        asm!(
+            "rdmsr",
+            in("ecx") msr,
+            out("eax") low,
+            out("edx") high,
+        );
+    }
+    ((high as u64) << 32) | (low as u64)
+}
+
+unsafe fn wrmsr(msr: u32, value: u64) {
+    unsafe {
+        asm!(
+            "wrmsr",
+            in("ecx") msr,
+            in("eax") value as u32,
+            in("edx") (value >> 32) as u32,
+        );
+    }
+}
+
 extern "C" fn rust_boot(multiboot_magic: u32, start_info: PAddr) -> ! {
     super::console::init();
 
@@ -71,7 +105,7 @@ extern "C" fn rust_boot(multiboot_magic: u32, start_info: PAddr) -> ! {
     let cpu_id = 0; // FIXME:
 
     // The interrupt stack.
-    let ist1 = BSP_STACK.as_ptr() as u64 + KERNEL_STACK_SIZE as u64;
+    let ist1 = kernel_stack_top(cpu_id);
 
     // Build a TSS.
     let tss_vaddr = unsafe {
@@ -126,6 +160,16 @@ extern "C" fn rust_boot(multiboot_magic: u32, start_info: PAddr) -> ! {
     unsafe {
         asm!("lgdt [{}]", in(reg) &gdtr);
         asm!("ltr ax", in("ax") GDT_TSS);
+    }
+
+    // Configure SYSCALL instructions. SYSRET (STAR[63:48]) is not set because
+    // we always use IRET.
+    unsafe {
+        let syscall_handler = super::syscall::user_syscall_handler as usize as u64;
+        wrmsr(MSR_IA32_EFER, rdmsr(MSR_IA32_EFER) | EFER_SCE);
+        wrmsr(MSR_IA32_STAR, (GDT_KERNEL_CS as u64) << 32);
+        wrmsr(MSR_IA32_LSTAR, syscall_handler);
+        wrmsr(MSR_IA32_FMASK, SYSCALL_FMASK);
     }
 
     super::idt::init();
@@ -184,6 +228,11 @@ struct Stack(#[allow(unused)] [u8; KERNEL_STACK_SIZE]);
 
 #[unsafe(link_section = ".data")]
 static BSP_STACK: MaybeUninit<Stack> = MaybeUninit::uninit();
+
+pub(super) fn kernel_stack_top(cpu_id: usize) -> u64 {
+    assert_eq!(cpu_id, 0); // TODO: SMP support
+    BSP_STACK.as_ptr() as u64 + KERNEL_STACK_SIZE as u64
+}
 
 #[unsafe(no_mangle)]
 #[unsafe(naked)]

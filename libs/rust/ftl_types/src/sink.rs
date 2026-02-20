@@ -12,6 +12,7 @@ impl EventType {
     pub const PEER_CLOSED: Self = Self(3);
     pub const TIMER: Self = Self(4);
     pub const CLIENT: Self = Self(5);
+    pub const SANDBOXED_SYSCALL: Self = Self(6);
 }
 
 #[derive(Clone, Copy)]
@@ -39,6 +40,7 @@ pub union EventBody {
     pub peer_closed: PeerClosedEvent,
     pub timer: TimerEvent,
     pub client: ClientEvent,
+    pub sandboxed_syscall: SandboxedSyscallEvent,
 }
 
 #[derive(Clone, Copy)]
@@ -66,4 +68,16 @@ pub struct TimerEvent {}
 pub struct ClientEvent {
     /// The channel ID connected to the client.
     pub id: HandleId,
+}
+
+#[derive(Clone, Copy, Debug)]
+#[repr(C)]
+pub struct SandboxedSyscallEvent {
+    pub rax: u64,
+    pub rdi: u64,
+    pub rsi: u64,
+    pub rdx: u64,
+    pub r10: u64,
+    pub r8: u64,
+    pub r9: u64,
 }
