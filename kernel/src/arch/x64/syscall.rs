@@ -42,8 +42,12 @@ pub extern "C" fn direct_syscall_handler(
         "mov [rax + {r14_offset}], r14",
         "mov [rax + {r15_offset}], r15",
 
+        // Switch to the kernel stack.
+        "mov rsp, gs:[{kernel_rsp_offset}]",
+
         "call {syscall_handler}",
         current_thread_offset = const offset_of!(CpuVar, current_thread),
+        kernel_rsp_offset = const offset_of!(CpuVar, arch.kernel_rsp),
         rip_offset = const offset_of!(Thread, rip),
         rflags_offset = const offset_of!(Thread, rflags),
         rbx_offset = const offset_of!(Thread, rbx),
