@@ -37,6 +37,10 @@ impl Handleable for Interrupt {
     fn handle(&self) -> &OwnedHandle {
         &self.handle
     }
+
+    fn into_handle(self) -> OwnedHandle {
+        self.handle
+    }
 }
 
 impl fmt::Debug for Interrupt {

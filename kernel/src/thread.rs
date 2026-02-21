@@ -2,7 +2,6 @@ use alloc::collections::vec_deque::VecDeque;
 use core::cell::UnsafeCell;
 use core::mem::offset_of;
 
-use ftl_arrayvec::ArrayString;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use ftl_types::sink::EventBody;
@@ -20,8 +19,6 @@ use crate::process::HandleTable;
 use crate::process::IDLE_PROCESS;
 use crate::process::Process;
 use crate::scheduler::SCHEDULER;
-use crate::service::SERVICE_NAME_MAX_LEN;
-use crate::service::Service;
 use crate::shared_ref::SharedRef;
 use crate::sink::EventEmitter;
 use crate::sink::Sink;
@@ -32,9 +29,6 @@ pub enum Promise {
     SinkWait {
         sink: SharedRef<Sink>,
         buf: UserSlice,
-    },
-    ServiceLookup {
-        name: ArrayString<SERVICE_NAME_MAX_LEN>,
     },
     SandboxedSyscall,
 }
@@ -51,20 +45,6 @@ impl Promise {
                         // Still not ready.
                         None
                     }
-                    Err(error) => Some(Err(error)),
-                }
-            }
-            Promise::ServiceLookup { name } => {
-                let ch = match Service::lookup(thread, name) {
-                    Ok(Some(ch)) => ch,
-                    Ok(None) => return None,
-                    Err(error) => return Some(Err(error)),
-                };
-
-                let process = thread.process();
-                let mut handle_table = process.handle_table().lock();
-                match handle_table.insert(Handle::new(ch, HandleRight::ALL)) {
-                    Ok(id) => Some(Ok(id.as_usize())),
                     Err(error) => Some(Err(error)),
                 }
             }

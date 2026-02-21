@@ -16,7 +16,6 @@ use ftl_types::syscall::SYS_SINK_CREATE;
 use ftl_types::syscall::SYS_SINK_REMOVE;
 use ftl_types::syscall::SYS_SINK_WAIT;
 
-use crate::channel::Channel;
 use crate::handle::Handleable;
 use crate::handle::OwnedHandle;
 use crate::syscall::syscall0;
@@ -47,9 +46,6 @@ pub enum Event {
     Timer {
         handle_id: HandleId,
     },
-    Client {
-        ch: Channel,
-    },
     SandboxedSyscall {
         thread_id: HandleId,
         raw: SandboxedSyscallEvent,
@@ -68,6 +64,11 @@ impl Sink {
 
     pub fn add<H: Handleable>(&self, handle: &H) -> Result<(), ErrorCode> {
         sys_sink_add(self.handle.id(), handle.handle().id())?;
+        Ok(())
+    }
+
+    pub fn add_raw(&self, id: HandleId) -> Result<(), ErrorCode> {
+        sys_sink_add(self.handle.id(), id)?;
         Ok(())
     }
 
@@ -129,11 +130,6 @@ impl Sink {
                     handle_id: raw.header.id,
                 }
             }
-            EventType::CLIENT => {
-                let id = unsafe { raw.body.client.id };
-                let ch = Channel::from_handle(OwnedHandle::from_raw(id));
-                Event::Client { ch }
-            }
             EventType::SANDBOXED_SYSCALL => {
                 let regs = unsafe { raw.body.sandboxed_syscall };
                 Event::SandboxedSyscall {
@@ -153,6 +149,10 @@ impl Sink {
 impl Handleable for Sink {
     fn handle(&self) -> &OwnedHandle {
         &self.handle
+    }
+
+    fn into_handle(self) -> OwnedHandle {
+        self.handle
     }
 }
 

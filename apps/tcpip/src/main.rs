@@ -23,7 +23,6 @@ use ftl::handle::Handleable;
 use ftl::log::*;
 use ftl::prelude::*;
 use ftl::rc::Rc;
-use ftl::service::Service;
 use ftl::time::Timer;
 use smoltcp::iface::Interface;
 use smoltcp::iface::PollResult;
@@ -188,7 +187,8 @@ impl smoltcp::phy::Device for Device {
 
 enum Context {
     Driver,
-    Client,
+    ServiceListener,
+    ControlClient,
     TcpConn {
         pending_reads: VecDeque<ReadCompleter>,
         pending_writes: VecDeque<WriteCompleter>,
@@ -203,7 +203,8 @@ impl fmt::Debug for Context {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Context::Driver => write!(f, "Driver"),
-            Context::Client => write!(f, "Client"),
+            Context::ServiceListener => write!(f, "ServiceListener"),
+            Context::ControlClient => write!(f, "ControlClient"),
             Context::TcpConn { .. } => write!(f, "TcpConn"),
             Context::TcpListener { .. } => write!(f, "TcpListener"),
         }
@@ -766,8 +767,10 @@ impl Main {
         let mut sockets = SocketSet::new(Vec::new());
         let dhcp_handle = sockets.add(dhcpv4::Socket::new());
 
-        let service = Service::register("tcpip").unwrap();
-        eventloop.add_service(service).unwrap();
+        let service_ch = Rc::new(Channel::register("tcpip").unwrap());
+        let service_id = service_ch.handle().id();
+        eventloop.add_channel(service_ch).unwrap();
+        states.insert(service_id, Context::ServiceListener);
 
         trace!("ready");
         Self {
@@ -792,7 +795,26 @@ impl Main {
                 pending_accepts.push_back(completer);
                 return;
             }
-            Some(Context::Client) => {}
+            Some(Context::ServiceListener) => {
+                let (our_ch, their_ch) = match Channel::new() {
+                    Ok(ch) => ch,
+                    Err(error) => {
+                        completer.error(error);
+                        return;
+                    }
+                };
+
+                let our_id = our_ch.handle().id();
+                if let Err(error) = eventloop.add_channel(our_ch) {
+                    completer.error(error);
+                    return;
+                }
+
+                self.contexts.insert(our_id, Context::ControlClient);
+                completer.complete(their_ch);
+                return;
+            }
+            Some(Context::ControlClient) => {}
             Some(Context::TcpConn { .. }) | Some(Context::Driver) => {
                 completer.error(ErrorCode::Unsupported);
                 return;
@@ -834,7 +856,7 @@ impl Main {
             Some(Context::TcpListener { .. }) => {
                 completer.error(ErrorCode::Unsupported);
             }
-            Some(Context::Driver) | Some(Context::Client) => {
+            Some(Context::Driver) | Some(Context::ServiceListener) | Some(Context::ControlClient) => {
                 completer.error(ErrorCode::Unsupported);
             }
             None => {
@@ -865,7 +887,7 @@ impl Main {
             Some(Context::TcpListener { .. }) => {
                 completer.error(ErrorCode::Unsupported);
             }
-            Some(Context::Driver) | Some(Context::Client) => {
+            Some(Context::Driver) | Some(Context::ServiceListener) | Some(Context::ControlClient) => {
                 completer.error(ErrorCode::Unsupported);
             }
             None => {
@@ -954,7 +976,7 @@ impl Main {
                 should_remove_channel = true;
                 should_reconnect_driver = true;
             }
-            Some(Context::Client) => {
+            Some(Context::ServiceListener) | Some(Context::ControlClient) => {
                 // Nothing to do.
                 should_remove_channel = true;
             }
@@ -983,11 +1005,6 @@ impl Main {
         self.poll(eventloop);
     }
 
-    fn on_connected(&mut self, eventloop: &mut EventLoop, ch: Channel) {
-        trace!("client connected");
-        self.contexts.insert(ch.handle().id(), Context::Client);
-        eventloop.add_channel(ch).unwrap();
-    }
 }
 
 #[ftl::main]
@@ -1045,9 +1062,6 @@ fn main() {
             }
             Event::Timer { timer: _ } => {
                 app.on_timer_expired(&mut eventloop);
-            }
-            Event::Connect(ch) => {
-                app.on_connected(&mut eventloop, ch);
             }
             Event::Interrupt { interrupt } => {
                 warn!("unexpected interrupt: {:?}", interrupt);

@@ -43,6 +43,10 @@ impl Handleable for Timer {
     fn handle(&self) -> &OwnedHandle {
         &self.handle
     }
+
+    fn into_handle(self) -> OwnedHandle {
+        self.handle
+    }
 }
 
 pub fn sys_time_now() -> Result<Monotonic, ErrorCode> {

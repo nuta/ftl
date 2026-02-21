@@ -102,6 +102,11 @@ impl<T> SharedRef<T> {
         &self.inner().value as *const T
     }
 
+    /// Returns true if the two `SharedRef`s point to the same object.
+    pub fn eq(a: &SharedRef<T>, b: &SharedRef<T>) -> bool {
+        core::ptr::eq(a.ptr.as_ptr(), b.ptr.as_ptr())
+    }
+
     /// Consumes the SharedRef, returning the wrapped pointer.
     ///
     /// To avoid a memory leak the pointer must be converted back to a SharedRef

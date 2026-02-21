@@ -32,6 +32,10 @@ impl Handleable for VmSpace {
     fn handle(&self) -> &OwnedHandle {
         &self.handle
     }
+
+    fn into_handle(self) -> OwnedHandle {
+        self.handle
+    }
 }
 
 impl fmt::Debug for VmSpace {

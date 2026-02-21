@@ -180,6 +180,35 @@ pub fn sys_process_exit(current: &SharedRef<Thread>) -> Result<SyscallResult, Er
     sys_thread_exit(current)
 }
 
+pub fn sys_process_inject_handle(
+    current: &SharedRef<Thread>,
+    a0: usize,
+    a1: usize,
+) -> Result<SyscallResult, ErrorCode> {
+    let process_id = HandleId::from_raw(a0);
+    let handle_id = HandleId::from_raw(a1);
+
+    let current_process = current.process();
+    let mut current_table = current_process.handle_table().lock();
+    let target_process = current_table
+        .get::<Process>(process_id)?
+        .authorize(HandleRight::WRITE)?;
+
+    if SharedRef::eq(&target_process, &current_process) {
+        // Cannot inject handle into the current process.
+        return Err(ErrorCode::InvalidArgument);
+    }
+
+    let handle = current_table.remove(handle_id)?;
+
+    drop(current_table);
+    let mut target_table = target_process.handle_table().lock();
+
+    // TODO: What if the target table is full? Should we roll back?
+    let id = target_table.insert(handle)?;
+    Ok(SyscallResult::Return(id.as_usize()))
+}
+
 pub static IDLE_PROCESS: SharedRef<Process> = {
     static ISOLATION_INNER: RefCounted<IdleIsolation> =
         RefCounted::new_static(IdleIsolation::new());

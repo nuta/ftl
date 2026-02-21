@@ -26,7 +26,6 @@ use crate::channel::Cookie;
 use crate::channel::Reply as ChannelReply;
 use crate::handle::Handleable;
 use crate::interrupt::Interrupt;
-use crate::service::Service;
 use crate::sink;
 use crate::sink::SandboxedSyscallEvent;
 use crate::sink::Sink;
@@ -37,7 +36,6 @@ enum Object {
     Channel(#[allow(unused)] Rc<Channel>),
     Interrupt(#[allow(unused)] Rc<Interrupt>),
     Timer(#[allow(unused)] Rc<Timer>),
-    Service(#[allow(unused)] Rc<Service>),
     Thread(#[allow(unused)] Rc<Thread>),
 }
 
@@ -316,7 +314,6 @@ pub enum Event {
     PeerClosed {
         ch: Rc<Channel>,
     },
-    Connect(Channel),
     SandboxedSyscall {
         thread: Rc<Thread>,
         regs: SandboxedSyscallEvent,
@@ -331,7 +328,6 @@ impl fmt::Debug for Event {
             Event::Interrupt { interrupt } => f.debug_tuple("Interrupt").field(interrupt).finish(),
             Event::Timer { .. } => f.debug_tuple("Timer").finish(),
             Event::PeerClosed { ch } => f.debug_tuple("PeerClosed").field(ch).finish(),
-            Event::Connect(ch) => f.debug_tuple("Connect").field(ch).finish(),
             Event::SandboxedSyscall { thread, regs } => {
                 f.debug_tuple("Syscall").field(thread).field(regs).finish()
             }
@@ -393,18 +389,6 @@ impl EventLoop {
             object.handle().id(),
             State {
                 object: Object::Timer(object),
-            },
-        );
-        Ok(())
-    }
-
-    pub fn add_service<T: Into<Rc<Service>>>(&mut self, service: T) -> Result<(), ErrorCode> {
-        let object = service.into();
-        self.sink.add(object.as_ref())?;
-        self.states.insert(
-            object.handle().id(),
-            State {
-                object: Object::Service(object),
             },
         );
         Ok(())
@@ -496,9 +480,6 @@ impl EventLoop {
                         }
                         _ => panic!("unknown handle id from sink: {:?}", handle_id),
                     }
-                }
-                sink::Event::Client { ch } => {
-                    return Event::Connect(ch);
                 }
                 sink::Event::PeerClosed { ch_id } => {
                     match self.states.get(&ch_id) {

@@ -1,8 +1,9 @@
 use core::mem::size_of;
 use core::slice;
 
+use ftl::application::EventLoop;
 use ftl::arch;
-use ftl::prelude::Vec;
+use ftl::channel::Channel;
 use ftl::prelude::trace;
 use ftl::process::PROCESS_NAME_MAX_LEN;
 use ftl::process::Process;
@@ -19,13 +20,7 @@ use crate::initfs::InitFs;
 
 const STACK_SIZE: usize = 1024 * 1024;
 
-fn map_elf(
-    vmspace: &VmSpace,
-    page_size: usize,
-    file: &initfs::File,
-    elf: &Elf<'_>,
-    image_size: usize,
-) {
+fn map_elf(vmspace: &VmSpace, file: &initfs::File, elf: &Elf<'_>, image_size: usize) {
     let vmarea = VmArea::new(image_size).expect("failed to create image vmarea");
     vmspace
         .map(&vmarea, 0, PageAttrs::READABLE | PageAttrs::WRITABLE)
@@ -90,7 +85,7 @@ fn map_start_info(vmspace: &VmSpace, page_size: usize, app_name: &str, start_inf
         .expect("failed to map start info");
 }
 
-pub fn load_app(file: &initfs::File, initfs: &InitFs) {
+pub fn load_app(file: &initfs::File) -> Channel {
     let app_name = file.name;
     let page_size = arch::min_page_size();
     let elf = Elf::parse(file.data).expect("failed to parse ELF");
@@ -99,19 +94,27 @@ pub fn load_app(file: &initfs::File, initfs: &InitFs) {
     let start_info_addr = align_up(stack_bottom + STACK_SIZE + page_size, page_size);
 
     let vmspace = VmSpace::new().expect("failed to create vmspace");
-    map_elf(&vmspace, page_size, file, &elf, image_size);
+    map_elf(&vmspace, file, &elf, image_size);
     let sp = map_stack(&vmspace, stack_bottom);
     map_start_info(&vmspace, page_size, app_name, start_info_addr);
 
     let process = Process::create_inkernel(&vmspace, file.name).expect("failed to create process");
+    let (our_ch, their_ch) = Channel::new().expect("failed to create control channel");
+    let their_id = process
+        .inject_handle(their_ch)
+        .expect("failed to inject control channel handle");
+    assert_eq!(their_id.as_usize(), 1);
+
     let thread = Thread::create(&process, elf.entry, sp, start_info_addr)
         .expect("failed to create initial thread");
     thread.start().expect("failed to start thread");
+    our_ch
 }
 
-pub fn load(initfs: &InitFs) {
+pub fn create_initfs_apps(eventloop: &mut EventLoop, initfs: &InitFs) {
     for file in initfs.iter() {
         trace!("loading app: {}", file.name);
-        load_app(&file, initfs);
+        let ch = load_app(&file);
+        eventloop.add_channel(ch).unwrap();
     }
 }

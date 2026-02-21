@@ -20,8 +20,7 @@ use ftl_types::syscall::SYS_PCI_SET_BUSMASTER;
 use ftl_types::syscall::SYS_PROCESS_CREATE_INKERNEL;
 use ftl_types::syscall::SYS_PROCESS_CREATE_SANDBOXED;
 use ftl_types::syscall::SYS_PROCESS_EXIT;
-use ftl_types::syscall::SYS_SERVICE_LOOKUP;
-use ftl_types::syscall::SYS_SERVICE_REGISTER;
+use ftl_types::syscall::SYS_PROCESS_INJECT_HANDLE;
 use ftl_types::syscall::SYS_SINK_ADD;
 use ftl_types::syscall::SYS_SINK_CREATE;
 use ftl_types::syscall::SYS_SINK_REMOVE;
@@ -88,11 +87,10 @@ fn do_syscall(
         SYS_INTERRUPT_ACQUIRE => crate::interrupt::sys_interrupt_acquire(thread, a0),
         SYS_INTERRUPT_ACKNOWLEDGE => crate::interrupt::sys_interrupt_acknowledge(thread, a0),
         SYS_PROCESS_EXIT => crate::process::sys_process_exit(thread),
+        SYS_PROCESS_INJECT_HANDLE => crate::process::sys_process_inject_handle(thread, a0, a1),
         SYS_TIME_NOW => crate::timer::sys_time_now(),
         SYS_TIMER_CREATE => crate::timer::sys_timer_create(thread),
         SYS_TIMER_SET => crate::timer::sys_timer_set(thread, a0, a1),
-        SYS_SERVICE_REGISTER => crate::service::sys_service_register(thread, a0, a1),
-        SYS_SERVICE_LOOKUP => crate::service::sys_service_lookup(thread, a0, a1),
         SYS_VMSPACE_CREATE => crate::vmspace::sys_vmspace_create(thread),
         SYS_VMSPACE_MAP => crate::vmspace::sys_vmspace_map(thread, a0, a1, a2, a3),
         SYS_VMAREA_CREATE => crate::vmarea::sys_vmarea_create(thread, a0),

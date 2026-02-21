@@ -22,7 +22,6 @@ mod memory;
 mod panic;
 mod process;
 mod scheduler;
-mod service;
 mod shared_ref;
 mod sink;
 mod spinlock;

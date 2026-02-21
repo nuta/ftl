@@ -1,4 +1,6 @@
 use alloc::boxed::Box;
+use alloc::format;
+use alloc::rc::Rc;
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::fmt;
@@ -22,12 +24,13 @@ use ftl_types::syscall::SYS_CHANNEL_CREATE;
 use ftl_types::syscall::SYS_CHANNEL_OOL_READ;
 use ftl_types::syscall::SYS_CHANNEL_OOL_WRITE;
 use ftl_types::syscall::SYS_CHANNEL_SEND;
-use ftl_types::syscall::SYS_SERVICE_LOOKUP;
 
+use crate::application::Event;
+use crate::application::EventLoop;
+use crate::application::ReplyEvent;
 use crate::handle::Handleable;
 use crate::handle::OwnedHandle;
 use crate::syscall::syscall1;
-use crate::syscall::syscall2;
 use crate::syscall::syscall5;
 
 pub enum Buffer {
@@ -162,15 +165,16 @@ impl Channel {
     }
 
     // TODO: Make this private
-    pub fn from_handle(handle: OwnedHandle) -> Self {
+    pub const fn from_handle(handle: OwnedHandle) -> Self {
         Self { handle }
     }
 
     pub fn connect(name: &str) -> Result<Self, ErrorCode> {
-        let id = sys_service_lookup(name)?;
-        let handle = OwnedHandle::from_raw(id);
-        let ch = Channel::from_handle(handle);
-        Ok(ch)
+        open_via_bootstrap(format!("connect:{}", name))
+    }
+
+    pub fn register(name: &str) -> Result<Self, ErrorCode> {
+        open_via_bootstrap(format!("register:{}", name))
     }
 
     pub fn send(&self, message: Message) -> Result<(), ErrorCode> {
@@ -294,6 +298,10 @@ impl Handleable for Channel {
     fn handle(&self) -> &OwnedHandle {
         &self.handle
     }
+
+    fn into_handle(self) -> OwnedHandle {
+        self.handle
+    }
 }
 
 fn sys_channel_create() -> Result<(OwnedHandle, OwnedHandle), ErrorCode> {
@@ -365,7 +373,34 @@ pub fn sys_channel_ool_write(
     )
 }
 
-pub fn sys_service_lookup(name: &str) -> Result<HandleId, ErrorCode> {
-    let id = syscall2(SYS_SERVICE_LOOKUP, name.as_ptr() as usize, name.len())?;
-    Ok(HandleId::from_raw(id))
+fn open_via_bootstrap(uri: String) -> Result<Channel, ErrorCode> {
+    let bootstrap_ch = Rc::new(Channel::from_handle(OwnedHandle::from_raw(
+        HandleId::from_raw(1),
+    )));
+
+    let mut eventloop = EventLoop::new()?;
+    eventloop.add_channel(bootstrap_ch.clone())?;
+    bootstrap_ch.send(Message::Open {
+        uri: Buffer::String(uri),
+    })?;
+
+    // FIXME:
+    mem::forget(bootstrap_ch);
+
+    loop {
+        match eventloop.wait() {
+            Event::Reply(ReplyEvent::Open { new_ch, .. }) => {
+                return Ok(new_ch);
+            }
+            Event::Reply(ReplyEvent::Error { error, .. }) => {
+                return Err(error);
+            }
+            Event::PeerClosed { .. } => {
+                return Err(ErrorCode::PeerClosed);
+            }
+            event => {
+                panic!("unexpected bootstrap event: {:?}", event);
+            }
+        }
+    }
 }

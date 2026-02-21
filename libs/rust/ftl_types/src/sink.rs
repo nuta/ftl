@@ -11,8 +11,7 @@ impl EventType {
     pub const IRQ: Self = Self(2);
     pub const PEER_CLOSED: Self = Self(3);
     pub const TIMER: Self = Self(4);
-    pub const CLIENT: Self = Self(5);
-    pub const SANDBOXED_SYSCALL: Self = Self(6);
+    pub const SANDBOXED_SYSCALL: Self = Self(5);
 }
 
 #[derive(Clone, Copy)]

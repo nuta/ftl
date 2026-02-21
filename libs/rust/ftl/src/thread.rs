@@ -41,6 +41,10 @@ impl Handleable for Thread {
     fn handle(&self) -> &OwnedHandle {
         &self.handle
     }
+
+    fn into_handle(self) -> OwnedHandle {
+        self.handle
+    }
 }
 
 impl fmt::Debug for Thread {

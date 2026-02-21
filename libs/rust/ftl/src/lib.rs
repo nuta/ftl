@@ -2,6 +2,7 @@
 
 extern crate alloc;
 
+pub use alloc::borrow;
 pub use alloc::boxed;
 pub use alloc::rc;
 
@@ -24,7 +25,6 @@ pub mod log;
 pub mod message;
 pub mod prelude;
 pub mod process;
-pub mod service;
 pub mod sink;
 pub mod syscall;
 pub mod thread;

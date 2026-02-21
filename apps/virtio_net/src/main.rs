@@ -9,12 +9,14 @@ use ftl::application::Event;
 use ftl::application::EventLoop;
 use ftl::application::ReadCompleter;
 use ftl::application::RequestEvent;
+use ftl::channel::Channel;
 use ftl::collections::vec_deque::VecDeque;
 use ftl::driver::DmaBuf;
 use ftl::driver::DmaBufPool;
 use ftl::error::ErrorCode;
+use ftl::handle::Handleable;
 use ftl::prelude::*;
-use ftl::service::Service;
+use ftl::rc::Rc;
 use ftl_virtio::VirtQueue;
 use ftl_virtio::virtio_pci::DeviceType;
 use ftl_virtio::virtio_pci::VirtioPci;
@@ -101,18 +103,36 @@ fn main() {
     ];
 
     // Register the service.
-    let service = Service::register("ethernet").unwrap();
-    eventloop.add_service(service).unwrap();
+    let service_ch = Channel::register("ethernet").unwrap();
+    eventloop.add_channel(service_ch).unwrap();
 
     trace!("ready: mac={mac:02x?}");
     let mut read_waiters = VecDeque::new();
     loop {
         match eventloop.wait() {
+            Event::Request(RequestEvent::Open { completer }) => {
+                // TODO: Check the context
+                let (server_ch, client_ch) = match Channel::new() {
+                    Ok(pair) => pair,
+                    Err(error) => {
+                        completer.error(error);
+                        continue;
+                    }
+                };
+
+                if let Err(error) = eventloop.add_channel(server_ch) {
+                    completer.error(error);
+                    continue;
+                }
+
+                completer.complete(client_ch);
+            }
             Event::Request(RequestEvent::Read {
                 offset: _,
                 len: _,
                 completer,
             }) => {
+                // TODO: Check the context
                 if let Some((dmabuf, total_len)) = rxq.pop() {
                     handle_rx(&mut rxq, dmabuf, total_len, completer);
                 } else if read_waiters.len() > READ_WAITERS_MAX {
@@ -126,6 +146,7 @@ fn main() {
                 len,
                 completer,
             }) => {
+                // TODO: Check the context
                 let Ok(mut dmabuf) = dmabuf_pool.alloc() else {
                     completer.error(ErrorCode::OutOfMemory);
                     continue;
@@ -159,6 +180,7 @@ fn main() {
                 completer.complete(payload_len);
             }
             Event::Request(RequestEvent::Invoke { completer }) => {
+                // TODO: Check the context
                 match completer.kind() {
                     1 => completer.complete_with(&mac),
                     _ => completer.error(ErrorCode::Unsupported),
@@ -180,11 +202,6 @@ fn main() {
                         let completer = read_waiters.pop_front().unwrap();
                         handle_rx(&mut rxq, dmabuf, total_len, completer);
                     }
-                }
-            }
-            Event::Connect(ch) => {
-                if let Err(error) = eventloop.add_channel(ch) {
-                    warn!("failed to register client channel: {:?}", error);
                 }
             }
             ev => {
