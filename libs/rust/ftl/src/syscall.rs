@@ -3,7 +3,7 @@ use ftl_types::syscall::ERROR_RETVAL_BASE;
 use ftl_types::syscall::SYS_CONSOLE_WRITE;
 use ftl_types::syscall::SYS_X64_IOPL;
 
-use crate::arch::get_start_info;
+use crate::arch::start_info;
 
 #[inline(always)]
 fn syscall(
@@ -14,8 +14,8 @@ fn syscall(
     a3: usize,
     a4: usize,
 ) -> Result<usize, ErrorCode> {
-    let start_info = get_start_info();
-    let result = (start_info.syscall)(a0, a1, a2, a3, a4, n);
+    let info = start_info();
+    let result = (info.syscall)(a0, a1, a2, a3, a4, n);
     if let Some(error) = result.checked_sub(ERROR_RETVAL_BASE) {
         Err(ErrorCode::from(error))
     } else {

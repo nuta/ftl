@@ -2,6 +2,7 @@
 
 extern crate alloc;
 
+pub use alloc::boxed;
 pub use alloc::rc;
 
 pub use ftl_macros::main;

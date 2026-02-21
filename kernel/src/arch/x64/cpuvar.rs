@@ -1,8 +1,8 @@
 use core::arch::asm;
 use core::mem::MaybeUninit;
 
-use super::boot::kernel_stack_top;
 use super::NUM_CPUS_MAX;
+use super::boot::kernel_stack_top;
 use super::local_apic::LocalApic;
 
 const MAGIC: u64 = 0xc12c_12c1_2c12_c12c;

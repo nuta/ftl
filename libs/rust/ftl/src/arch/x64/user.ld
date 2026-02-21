@@ -5,6 +5,9 @@ SECTIONS {
 
     . = ALIGN(16);
     .text : {
+        // Bootstrap's flat binary (objcopy -Obinary) assumes that the entry
+        // point is at the beginning of the executable.
+        *(.text.start);
         *(.text .text.*);
     }
 

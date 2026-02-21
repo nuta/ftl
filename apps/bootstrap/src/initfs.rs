@@ -3,6 +3,7 @@
 //! The format is a simple uncompressed tar archive.
 use core::slice;
 
+use ftl::arch;
 use ftl_utils::alignment::align_up;
 
 pub struct File {
@@ -17,6 +18,16 @@ pub struct InitFs {
 impl InitFs {
     pub fn new(data: &'static [u8]) -> Self {
         Self { data }
+    }
+
+    pub fn from_start_info() -> Self {
+        let info = arch::start_info();
+        if info.initfs_ptr.is_null() || info.initfs_size == 0 {
+            return Self::new(&[]);
+        }
+
+        let data = unsafe { slice::from_raw_parts(info.initfs_ptr, info.initfs_size) };
+        Self::new(data)
     }
 
     pub fn iter(&self) -> impl Iterator<Item = File> {

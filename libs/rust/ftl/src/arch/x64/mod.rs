@@ -4,7 +4,7 @@ mod start;
 
 use ftl_types::environ::StartInfo;
 
-pub(crate) fn get_start_info() -> &'static StartInfo {
+pub fn start_info() -> &'static StartInfo {
     unsafe {
         let start_info: *const StartInfo;
         asm!("rdgsbase {}", out(reg) start_info);
@@ -13,11 +13,11 @@ pub(crate) fn get_start_info() -> &'static StartInfo {
 }
 
 pub fn min_page_size() -> usize {
-    get_start_info().min_page_size
+    start_info().min_page_size
 }
 
 pub fn process_name() -> &'static str {
-    let info = get_start_info();
+    let info = start_info();
     let ptr = info.name.as_ptr() as *const u8;
     let len = info.name_len as usize;
 

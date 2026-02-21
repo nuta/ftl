@@ -23,12 +23,14 @@ async function cargoBuild(manifestPath: string, targetJSON: string, mode: 'debug
         argv.push('--release');
     }
 
+    await runCmd(argv, {
+        env: { ...process.env, CARGO_TERM_COLOR: 'always', CARGO_TERM_HYPERLINKS: 'false' },
+    });
+}
+
+export async function runCmd(argv: string[], options?: Parameters<typeof Bun.spawn>[1]) {
     const proc = Bun.spawn(argv, {
-        env: {
-            ...process.env,
-            CARGO_TERM_COLOR: 'always',
-            CARGO_TERM_HYPERLINKS: 'false',
-        },
+        ...options,
         stdio: [
             'inherit',
             'inherit',
@@ -38,20 +40,30 @@ async function cargoBuild(manifestPath: string, targetJSON: string, mode: 'debug
 
     await proc.exited;
     if (proc.exitCode !== 0) {
-        throw new Error(`build failed with ${proc.exitCode}`);
+        throw new Error(`command failed with ${proc.exitCode}`);
     }
 }
 
 export async function build(params: BuildParams) {
+    const targetJSON = `libs/rust/ftl/src/arch/${params.arch}/user.json`;
     const cargoArgs = [
         '-Z', 'build-std=core,alloc',
         '-Z', 'build-std-features=compiler-builtins-mem',
     ];
 
+    await cargoBuild('apps/bootstrap/Cargo.toml', targetJSON, params.mode, cargoArgs);
+    await runCmd([
+        'llvm-objcopy',
+        '-Obinary',
+        '--set-section-flags',
+        '.bss=alloc,load,contents',
+        `target/user/${params.mode}/bootstrap`,
+        'bootstrap.bin',
+    ]);
+
     const initfsFiles: Record<string, string> = {};
     for (const app of params.apps) {
         const manifestPath = `apps/${app}/Cargo.toml`;
-        const targetJSON = `libs/rust/ftl/src/arch/${params.arch}/user.json`;
         await cargoBuild(manifestPath, targetJSON, params.mode, cargoArgs);
         initfsFiles[app] = `target/user/debug/${app}`;
     }

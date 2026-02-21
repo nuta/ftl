@@ -11,4 +11,6 @@ pub struct StartInfo {
     pub name: [u8; PROCESS_NAME_MAX_LEN],
     /// The length of `name`.
     pub name_len: u8,
+    pub initfs_ptr: *const u8,
+    pub initfs_size: usize,
 }

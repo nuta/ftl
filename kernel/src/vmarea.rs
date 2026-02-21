@@ -76,6 +76,55 @@ enum Pager {
     Any,
 }
 
+struct PageChunksIter {
+    offset: usize,
+    buf_offset: usize,
+    remaining: usize,
+}
+
+impl PageChunksIter {
+    fn new(offset: usize, len: usize) -> Self {
+        Self {
+            offset,
+            buf_offset: 0,
+            remaining: len,
+        }
+    }
+}
+
+struct PageChunk {
+    len: usize,
+    page_index: usize,
+    buf_offset: usize,
+    page_offset: usize,
+}
+
+impl Iterator for PageChunksIter {
+    type Item = PageChunk;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.remaining == 0 {
+            return None;
+        }
+
+        let buf_offset = self.buf_offset;
+        let page_index = self.offset / MIN_PAGE_SIZE;
+        let page_offset = self.offset % MIN_PAGE_SIZE;
+        let len = (MIN_PAGE_SIZE - page_offset).min(self.remaining);
+
+        self.offset += len;
+        self.buf_offset += len;
+        self.remaining -= len;
+
+        Some(PageChunk {
+            len,
+            page_index,
+            buf_offset,
+            page_offset,
+        })
+    }
+}
+
 pub struct VmArea {
     pager: Pager,
     len: usize,
@@ -126,23 +175,24 @@ impl VmArea {
         offset: usize,
         buf: &UserSlice,
     ) -> Result<(), ErrorCode> {
-        if !is_aligned(offset, MIN_PAGE_SIZE) {
-            return Err(ErrorCode::InvalidArgument);
+        let Some(end) = offset.checked_add(buf.len()) else {
+            return Err(ErrorCode::OutOfBounds);
+        };
+
+        if end > self.len {
+            return Err(ErrorCode::OutOfBounds);
         }
 
-        if !is_aligned(buf.len(), MIN_PAGE_SIZE) {
-            return Err(ErrorCode::InvalidArgument);
-        }
-
-        let base = offset / MIN_PAGE_SIZE;
-        let n = buf.len() / MIN_PAGE_SIZE;
         let mut mutable = self.mutable.lock();
-        for i in 0..n {
-            let slice = buf.subslice(i * MIN_PAGE_SIZE, MIN_PAGE_SIZE)?;
-            let page = mutable.fill(&self.pager, base + i)?;
-            isolation.write_bytes(&slice, page.as_slice())?;
+        let chunk_iter = PageChunksIter::new(offset, buf.len());
+        for chunk in chunk_iter {
+            let page = mutable.fill(&self.pager, chunk.page_index)?;
+            let dst = buf.subslice(chunk.buf_offset, chunk.len)?;
+            isolation.write_bytes(
+                &dst,
+                &page.as_slice()[chunk.page_offset..chunk.page_offset + chunk.len],
+            )?;
         }
-
         Ok(())
     }
 
@@ -152,23 +202,24 @@ impl VmArea {
         offset: usize,
         buf: &UserSlice,
     ) -> Result<(), ErrorCode> {
-        if !is_aligned(offset, MIN_PAGE_SIZE) {
-            return Err(ErrorCode::InvalidArgument);
+        let Some(end) = offset.checked_add(buf.len()) else {
+            return Err(ErrorCode::OutOfBounds);
+        };
+
+        if end > self.len {
+            return Err(ErrorCode::OutOfBounds);
         }
 
-        if !is_aligned(buf.len(), MIN_PAGE_SIZE) {
-            return Err(ErrorCode::InvalidArgument);
-        }
-
-        let base = offset / MIN_PAGE_SIZE;
-        let n = buf.len() / MIN_PAGE_SIZE;
         let mut mutable = self.mutable.lock();
-        for i in 0..n {
-            let slice = buf.subslice(i * MIN_PAGE_SIZE, MIN_PAGE_SIZE)?;
-            let page = mutable.fill(&self.pager, base + i)?;
-            isolation.read_bytes(&slice, page.as_mut_slice())?;
+        let chunk_iter = PageChunksIter::new(offset, buf.len());
+        for chunk in chunk_iter {
+            let page = mutable.fill(&self.pager, chunk.page_index)?;
+            let src = buf.subslice(chunk.buf_offset, chunk.len)?;
+            isolation.read_bytes(
+                &src,
+                &mut page.as_mut_slice()[chunk.page_offset..chunk.page_offset + chunk.len],
+            )?;
         }
-
         Ok(())
     }
 }

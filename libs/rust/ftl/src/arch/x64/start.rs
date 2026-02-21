@@ -22,6 +22,7 @@ fn apply_relocations(image_base: u64, relocs: *const Elf64Rela, relocs_end: *con
 }
 #[unsafe(no_mangle)]
 #[unsafe(naked)]
+#[unsafe(link_section = ".text.start")]
 extern "C" fn start() -> ! {
     naked_asm!(
         // Do not jump into rust_start directly. Rust (x86-64 ABI) expects

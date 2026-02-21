@@ -10,6 +10,7 @@ use crate::handle::Handle;
 use crate::handle::HandleRight;
 use crate::handle::Handleable;
 use crate::isolation::IdleIsolation;
+use crate::isolation::InKernelIsolation;
 use crate::isolation::Isolation;
 use crate::isolation::SandboxIsolation;
 use crate::isolation::UserPtr;
@@ -140,13 +141,37 @@ pub fn sys_process_create_sandboxed(
     let vmspace = handle_table
         .get::<VmSpace>(vmspace_id)?
         .authorize(HandleRight::WRITE)?;
-    let process_id = HandleId::from_raw(handle_table.next_id);
 
     let isolation = SandboxIsolation::new(vmspace)?;
     let new_process = Process::new(name, isolation)?;
 
     let id = handle_table.insert(Handle::new(new_process, HandleRight::ALL))?;
-    debug_assert_eq!(id.as_usize(), process_id.as_usize());
+    Ok(SyscallResult::Return(id.as_usize()))
+}
+
+pub fn sys_process_create_inkernel(
+    current: &SharedRef<Thread>,
+    a0: usize,
+    a1: usize,
+    a2: usize,
+) -> Result<SyscallResult, ErrorCode> {
+    if !current.process().isolation().is_inkernel() {
+        return Err(ErrorCode::NotAllowed);
+    }
+
+    let vmspace_id = HandleId::from_raw(a0);
+    let name_slice = UserSlice::new(UserPtr::new(a1), a2)?;
+    let name = read_process_name(current, &name_slice)?;
+
+    let mut handle_table = current.process().handle_table().lock();
+    let vmspace = handle_table
+        .get::<VmSpace>(vmspace_id)?
+        .authorize(HandleRight::WRITE)?;
+
+    let isolation = InKernelIsolation::new(vmspace)?;
+    let new_process = Process::new(name, isolation)?;
+
+    let id = handle_table.insert(Handle::new(new_process, HandleRight::ALL))?;
     Ok(SyscallResult::Return(id.as_usize()))
 }
 
