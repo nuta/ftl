@@ -91,10 +91,8 @@ fn main() {
                             None => {
                                 let mut waiters = VecDeque::new();
                                 waiters.push_back(completer);
-                                services.insert(
-                                    service_name.to_owned(),
-                                    Service::Waiting { waiters },
-                                );
+                                services
+                                    .insert(service_name.to_owned(), Service::Waiting { waiters });
                             }
                         }
                     }
