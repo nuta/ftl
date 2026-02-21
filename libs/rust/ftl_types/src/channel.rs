@@ -13,8 +13,11 @@ impl MessageInfo {
     pub const READ_REPLY: Self = Self::new(5, false, 0, 0, size_of::<ReadReplyInline>());
     pub const WRITE: Self = Self::new(6, true, 0, 1, size_of::<WriteInline>());
     pub const WRITE_REPLY: Self = Self::new(7, false, 0, 0, size_of::<WriteReplyInline>());
-    pub const INVOKE: Self = Self::new(8, true, 0, 2, size_of::<InvokeInline>());
-    pub const INVOKE_REPLY: Self = Self::new(9, false, 0, 0, size_of::<InvokeReplyInline>());
+    pub const READ_URI: Self = Self::new(8, true, 0, 2, size_of::<ReadUriInline>());
+    pub const READ_URI_REPLY: Self = Self::new(9, false, 0, 0, size_of::<ReadUriReplyInline>());
+    pub const WRITE_URI: Self = Self::new(10, true, 0, 2, size_of::<WriteUriInline>());
+    pub const WRITE_URI_REPLY: Self =
+        Self::new(11, false, 0, 0, size_of::<WriteUriReplyInline>());
 
     const fn new(
         kind: u32,
@@ -47,7 +50,7 @@ impl MessageInfo {
     }
 
     pub const fn kind(self) -> u32 {
-        (self.0 >> 13) & 0b111
+        (self.0 >> 13) & 0b1_1111
     }
 
     pub const fn num_handles(self) -> usize {
@@ -130,9 +133,23 @@ pub struct WriteReplyInline {
 }
 
 #[repr(C)]
-pub struct InvokeInline {
-    pub kind: u32,
+pub struct ReadUriInline {
+    pub offset: usize,
+    pub len: usize,
 }
 
 #[repr(C)]
-pub struct InvokeReplyInline {}
+pub struct ReadUriReplyInline {
+    pub len: usize,
+}
+
+#[repr(C)]
+pub struct WriteUriInline {
+    pub offset: usize,
+    pub len: usize,
+}
+
+#[repr(C)]
+pub struct WriteUriReplyInline {
+    pub len: usize,
+}

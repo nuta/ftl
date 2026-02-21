@@ -179,15 +179,11 @@ impl Main {
             ReplyEvent::Write { ch, buf: _, len: _ } => {
                 self.send_next_or_close(eventloop, &ch);
             }
-            ReplyEvent::Invoke {
-                ch,
-                input: _,
-                output: _,
-            } => {
-                warn!("unexpected invoke reply from {:?}", ch.handle().id());
-            }
             ReplyEvent::Error { ch, error } => {
                 self.on_error_reply(eventloop, &ch, error);
+            }
+            _ => {
+                warn!("unexpected reply: {:?}", reply);
             }
         }
     }

@@ -27,6 +27,7 @@ const PAYLOAD_SIZE_MAX: usize = 1514;
 const BUFFER_SIZE: usize = 1514 + size_of::<VirtioNetHdr>();
 const HEADER_LEN: usize = size_of::<VirtioNetHdr>();
 const RX_QUEUE_MAX: usize = 16;
+const MAC_URI: &[u8] = b"ethernet:mac";
 
 pub const VIRTIO_NET_F_MAC: u32 = 1 << 5;
 
@@ -93,7 +94,7 @@ fn main() {
     virtio.notify(&rxq);
 
     // Read MAC address
-    let mut mac = [
+    let mac = [
         virtio.read_device_config8(0),
         virtio.read_device_config8(1),
         virtio.read_device_config8(2),
@@ -179,12 +180,34 @@ fn main() {
                 virtio.notify(&txq);
                 completer.complete(payload_len);
             }
-            Event::Request(RequestEvent::Invoke { completer }) => {
+            Event::Request(RequestEvent::ReadUri {
+                offset,
+                len,
+                completer,
+            }) => {
                 // TODO: Check the context
-                match completer.kind() {
-                    1 => completer.complete_with(&mac),
-                    _ => completer.error(ErrorCode::Unsupported),
+                let mut uri = [0; 32];
+                let uri_len = match completer.read_uri(0, &mut uri) {
+                    Ok(len) => len,
+                    Err(error) => {
+                        completer.error(error);
+                        continue;
+                    }
+                };
+
+                if offset != 0 || uri_len != MAC_URI.len() || &uri[..uri_len] != MAC_URI {
+                    completer.error(ErrorCode::NotFound);
+                    continue;
                 }
+
+                completer.complete_with(&mac);
+            }
+            Event::Request(RequestEvent::WriteUri {
+                offset: _,
+                len: _,
+                completer,
+            }) => {
+                completer.error(ErrorCode::Unsupported);
             }
             Event::Interrupt { interrupt } => {
                 if let Err(error) = interrupt.acknowledge() {

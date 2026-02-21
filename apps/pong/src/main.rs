@@ -50,9 +50,6 @@ fn main() {
             }) => {
                 completer.error(ErrorCode::Unsupported);
             }
-            Event::Request(RequestEvent::Invoke { completer }) => {
-                completer.error(ErrorCode::Unsupported);
-            }
             ev => {
                 warn!("[pong] unhandled event: {:?}", ev);
             }

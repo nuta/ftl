@@ -5,15 +5,17 @@ use core::ptr;
 use ftl_types::channel::CallId;
 use ftl_types::channel::ErrorReplyInline;
 use ftl_types::channel::INLINE_LEN_MAX;
-use ftl_types::channel::InvokeInline;
-use ftl_types::channel::InvokeReplyInline;
 use ftl_types::channel::MessageInfo;
 use ftl_types::channel::OpenInline;
 use ftl_types::channel::OpenReplyInline;
 use ftl_types::channel::ReadInline;
 use ftl_types::channel::ReadReplyInline;
+use ftl_types::channel::ReadUriInline;
+use ftl_types::channel::ReadUriReplyInline;
 use ftl_types::channel::WriteInline;
 use ftl_types::channel::WriteReplyInline;
+use ftl_types::channel::WriteUriInline;
+use ftl_types::channel::WriteUriReplyInline;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use hashbrown::HashMap;
@@ -121,13 +123,12 @@ impl WriteCompleter {
     }
 }
 
-pub struct InvokeCompleter {
+pub struct ReadUriCompleter {
     ch: Rc<Channel>,
-    kind: u32,
     call_id: CallId,
 }
 
-impl InvokeCompleter {
+impl ReadUriCompleter {
     pub fn channel(&self) -> &Rc<Channel> {
         &self.ch
     }
@@ -136,22 +137,25 @@ impl InvokeCompleter {
         self.ch.handle().id()
     }
 
-    pub fn complete(self) {
-        if let Err(error) = self.ch.reply(self.call_id, ChannelReply::InvokeReply {}) {
-            warn!("failed to complete invoke: {:?}", error);
+    pub fn complete(&self, len: usize) {
+        if let Err(error) = self.ch.reply(self.call_id, ChannelReply::ReadUriReply { len }) {
+            warn!("failed to complete read uri: {:?}", error);
         }
     }
 
-    pub fn kind(&self) -> u32 {
-        self.kind
+    pub fn read_uri(&self, offset: usize, uri: &mut [u8]) -> Result<usize, ErrorCode> {
+        self.ch.ool_read(self.call_id, 0, offset, uri)
     }
 
-    pub fn read_bytes(&self, offset: usize, data: &mut [u8]) -> Result<usize, ErrorCode> {
-        self.ch.ool_read(self.call_id, 0, offset, data)
-    }
-
-    pub fn write_bytes(&self, offset: usize, data: &[u8]) -> Result<usize, ErrorCode> {
+    pub fn write_data(&self, offset: usize, data: &[u8]) -> Result<usize, ErrorCode> {
         self.ch.ool_write(self.call_id, 1, offset, data)
+    }
+
+    pub fn complete_with(&self, data: &[u8]) {
+        match self.write_data(0, data) {
+            Ok(len) => self.complete(len),
+            Err(error) => self.error(error),
+        }
     }
 
     pub fn error(&self, error: ErrorCode) {
@@ -159,17 +163,46 @@ impl InvokeCompleter {
             .ch
             .reply(self.call_id, ChannelReply::ErrorReply { error })
         {
-            warn!("failed to error invoke: {:?}", send_error);
+            warn!("failed to error read uri: {:?}", send_error);
+        }
+    }
+}
+
+pub struct WriteUriCompleter {
+    ch: Rc<Channel>,
+    call_id: CallId,
+}
+
+impl WriteUriCompleter {
+    pub fn channel(&self) -> &Rc<Channel> {
+        &self.ch
+    }
+
+    pub fn handle_id(&self) -> HandleId {
+        self.ch.handle().id()
+    }
+
+    pub fn complete(&self, len: usize) {
+        if let Err(error) = self.ch.reply(self.call_id, ChannelReply::WriteUriReply { len }) {
+            warn!("failed to complete write uri: {:?}", error);
         }
     }
 
-    pub fn complete_with(self, data: &[u8]) {
-        if let Err(error) = self.write_bytes(0, data) {
-            self.error(error);
-            return;
-        }
+    pub fn read_uri(&self, offset: usize, uri: &mut [u8]) -> Result<usize, ErrorCode> {
+        self.ch.ool_read(self.call_id, 0, offset, uri)
+    }
 
-        self.complete();
+    pub fn read_data(&self, offset: usize, data: &mut [u8]) -> Result<usize, ErrorCode> {
+        self.ch.ool_read(self.call_id, 1, offset, data)
+    }
+
+    pub fn error(&self, error: ErrorCode) {
+        if let Err(send_error) = self
+            .ch
+            .reply(self.call_id, ChannelReply::ErrorReply { error })
+        {
+            warn!("failed to error write uri: {:?}", send_error);
+        }
     }
 }
 
@@ -221,8 +254,15 @@ pub enum RequestEvent {
         len: usize,
         completer: WriteCompleter,
     },
-    Invoke {
-        completer: InvokeCompleter,
+    ReadUri {
+        offset: usize,
+        len: usize,
+        completer: ReadUriCompleter,
+    },
+    WriteUri {
+        offset: usize,
+        len: usize,
+        completer: WriteUriCompleter,
     },
 }
 
@@ -242,7 +282,18 @@ impl fmt::Debug for RequestEvent {
                     .field("len", len)
                     .finish()
             }
-            RequestEvent::Invoke { .. } => f.debug_tuple("Invoke").finish(),
+            RequestEvent::ReadUri { offset, len, .. } => {
+                f.debug_struct("ReadUri")
+                    .field("offset", offset)
+                    .field("len", len)
+                    .finish()
+            }
+            RequestEvent::WriteUri { offset, len, .. } => {
+                f.debug_struct("WriteUri")
+                    .field("offset", offset)
+                    .field("len", len)
+                    .finish()
+            }
         }
     }
 }
@@ -263,10 +314,17 @@ pub enum ReplyEvent {
         buf: Buffer,
         len: usize,
     },
-    Invoke {
+    ReadUri {
         ch: Rc<Channel>,
-        input: Buffer,
-        output: BufferMut,
+        uri: Buffer,
+        buf: BufferMut,
+        len: usize,
+    },
+    WriteUri {
+        ch: Rc<Channel>,
+        uri: Buffer,
+        buf: Buffer,
+        len: usize,
     },
     Error {
         ch: Rc<Channel>,
@@ -280,7 +338,8 @@ impl ReplyEvent {
             ReplyEvent::Open { ch, .. }
             | ReplyEvent::Read { ch, .. }
             | ReplyEvent::Write { ch, .. }
-            | ReplyEvent::Invoke { ch, .. }
+            | ReplyEvent::ReadUri { ch, .. }
+            | ReplyEvent::WriteUri { ch, .. }
             | ReplyEvent::Error { ch, .. } => ch,
         }
     }
@@ -296,7 +355,8 @@ impl fmt::Debug for ReplyEvent {
             ReplyEvent::Open { .. } => f.debug_tuple("Open").finish(),
             ReplyEvent::Read { len, .. } => f.debug_tuple("Read").field(len).finish(),
             ReplyEvent::Write { len, .. } => f.debug_tuple("Write").field(len).finish(),
-            ReplyEvent::Invoke { .. } => f.debug_tuple("Invoke").finish(),
+            ReplyEvent::ReadUri { len, .. } => f.debug_tuple("ReadUri").field(len).finish(),
+            ReplyEvent::WriteUri { len, .. } => f.debug_tuple("WriteUri").field(len).finish(),
             ReplyEvent::Error { error, .. } => f.debug_tuple("Error").field(error).finish(),
         }
     }
@@ -454,14 +514,20 @@ impl EventLoop {
                                 completer: WriteCompleter { ch, call_id },
                             }
                         }
-                        MessageInfo::INVOKE => {
-                            let inline: InvokeInline = read_inline(&inline);
-                            RequestEvent::Invoke {
-                                completer: InvokeCompleter {
-                                    ch,
-                                    kind: inline.kind,
-                                    call_id,
-                                },
+                        MessageInfo::READ_URI => {
+                            let inline: ReadUriInline = read_inline(&inline);
+                            RequestEvent::ReadUri {
+                                offset: inline.offset,
+                                len: inline.len,
+                                completer: ReadUriCompleter { ch, call_id },
+                            }
+                        }
+                        MessageInfo::WRITE_URI => {
+                            let inline: WriteUriInline = read_inline(&inline);
+                            RequestEvent::WriteUri {
+                                offset: inline.offset,
+                                len: inline.len,
+                                completer: WriteUriCompleter { ch, call_id },
                             }
                         }
                         _ => panic!("unexpected message info: {:?}", info),
@@ -538,12 +604,29 @@ impl EventLoop {
                                 len: inline.len,
                             }
                         }
-                        MessageInfo::INVOKE_REPLY => {
-                            let _inline: InvokeReplyInline = read_inline(&inline);
-                            let Cookie::Invoke(input, output) = *cookie else {
+                        MessageInfo::READ_URI_REPLY => {
+                            let inline: ReadUriReplyInline = read_inline(&inline);
+                            let Cookie::ReadUri(uri, buf) = *cookie else {
                                 panic!("unexpected cookie type");
                             };
-                            ReplyEvent::Invoke { ch, input, output }
+                            ReplyEvent::ReadUri {
+                                ch,
+                                uri,
+                                buf,
+                                len: inline.len,
+                            }
+                        }
+                        MessageInfo::WRITE_URI_REPLY => {
+                            let inline: WriteUriReplyInline = read_inline(&inline);
+                            let Cookie::WriteUri(uri, buf) = *cookie else {
+                                panic!("unexpected cookie type");
+                            };
+                            ReplyEvent::WriteUri {
+                                ch,
+                                uri,
+                                buf,
+                                len: inline.len,
+                            }
                         }
                         MessageInfo::ERROR_REPLY => {
                             let inline: ErrorReplyInline = read_inline(&inline);

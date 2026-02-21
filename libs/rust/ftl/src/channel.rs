@@ -9,15 +9,17 @@ use core::mem::MaybeUninit;
 
 use ftl_types::channel::CallId;
 use ftl_types::channel::ErrorReplyInline;
-use ftl_types::channel::InvokeInline;
-use ftl_types::channel::InvokeReplyInline;
 use ftl_types::channel::MessageBody;
 use ftl_types::channel::MessageInfo;
 use ftl_types::channel::OutOfLine;
 use ftl_types::channel::ReadInline;
 use ftl_types::channel::ReadReplyInline;
+use ftl_types::channel::ReadUriInline;
+use ftl_types::channel::ReadUriReplyInline;
 use ftl_types::channel::WriteInline;
 use ftl_types::channel::WriteReplyInline;
+use ftl_types::channel::WriteUriInline;
+use ftl_types::channel::WriteUriReplyInline;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use ftl_types::syscall::SYS_CHANNEL_CREATE;
@@ -108,10 +110,21 @@ pub enum Message {
         /// the length of this buffer.
         data: Buffer,
     },
-    Invoke {
-        kind: u32,
-        input: Buffer,
-        output: BufferMut,
+    ReadUri {
+        /// The URI to read from.
+        uri: Buffer,
+        /// The resource offset to read from.
+        offset: usize,
+        /// The destination buffer.
+        data: BufferMut,
+    },
+    WriteUri {
+        /// The URI to write to.
+        uri: Buffer,
+        /// The resource offset to write to.
+        offset: usize,
+        /// The source buffer.
+        data: Buffer,
     },
 }
 
@@ -133,13 +146,21 @@ pub enum Reply {
         /// The length of the data actually written.
         len: usize,
     },
-    InvokeReply {},
+    ReadUriReply {
+        /// The length of the URI data actually read.
+        len: usize,
+    },
+    WriteUriReply {
+        /// The length of the URI data actually written.
+        len: usize,
+    },
 }
 
 pub(crate) enum Cookie {
     Buffer(Buffer),
     BufferMut(BufferMut),
-    Invoke(Buffer, BufferMut),
+    ReadUri(Buffer, BufferMut),
+    WriteUri(Buffer, Buffer),
 }
 
 impl Cookie {
@@ -205,16 +226,25 @@ impl Channel {
                 };
                 (MessageInfo::WRITE, Cookie::Buffer(data))
             }
-            Message::Invoke {
-                kind,
-                input,
-                output,
-            } => {
-                body.ools[0] = input.to_ool();
-                body.ools[1] = output.to_ool();
-                let inline = unsafe { &mut *(body.inline.as_mut_ptr() as *mut InvokeInline) };
-                *inline = InvokeInline { kind };
-                (MessageInfo::INVOKE, Cookie::Invoke(input, output))
+            Message::ReadUri { uri, offset, data } => {
+                body.ools[0] = uri.to_ool();
+                body.ools[1] = data.to_ool();
+                let inline = unsafe { &mut *(body.inline.as_mut_ptr() as *mut ReadUriInline) };
+                *inline = ReadUriInline {
+                    offset,
+                    len: body.ools[1].len,
+                };
+                (MessageInfo::READ_URI, Cookie::ReadUri(uri, data))
+            }
+            Message::WriteUri { uri, offset, data } => {
+                body.ools[0] = uri.to_ool();
+                body.ools[1] = data.to_ool();
+                let inline = unsafe { &mut *(body.inline.as_mut_ptr() as *mut WriteUriInline) };
+                *inline = WriteUriInline {
+                    offset,
+                    len: body.ools[1].len,
+                };
+                (MessageInfo::WRITE_URI, Cookie::WriteUri(uri, data))
             }
         };
 
@@ -254,10 +284,16 @@ impl Channel {
                 *inline = WriteReplyInline { len };
                 MessageInfo::WRITE_REPLY
             }
-            Reply::InvokeReply {} => {
-                let inline = unsafe { &mut *(body.inline.as_mut_ptr() as *mut InvokeReplyInline) };
-                *inline = InvokeReplyInline {};
-                MessageInfo::INVOKE_REPLY
+            Reply::ReadUriReply { len } => {
+                let inline = unsafe { &mut *(body.inline.as_mut_ptr() as *mut ReadUriReplyInline) };
+                *inline = ReadUriReplyInline { len };
+                MessageInfo::READ_URI_REPLY
+            }
+            Reply::WriteUriReply { len } => {
+                let inline =
+                    unsafe { &mut *(body.inline.as_mut_ptr() as *mut WriteUriReplyInline) };
+                *inline = WriteUriReplyInline { len };
+                MessageInfo::WRITE_URI_REPLY
             }
         };
 

@@ -254,10 +254,10 @@ impl Main {
         self.device.inflight_reads = 0;
         self.ready_to_serve = false;
 
-        if let Err(error) = driver_ch.send(Message::Invoke {
-            kind: 1,
-            input: Buffer::Static(VIRTIO_NET_MAC_URI),
-            output: BufferMut::Vec(vec![0; 6]),
+        if let Err(error) = driver_ch.send(Message::ReadUri {
+            uri: Buffer::Static(VIRTIO_NET_MAC_URI),
+            offset: 0,
+            data: BufferMut::Vec(vec![0; 6]),
         }) {
             trace!("failed to request MAC: {:?}", error);
         }
@@ -532,17 +532,18 @@ impl Main {
         }
     }
 
-    fn on_mac_read_reply(&mut self, buf: BufferMut) {
-        let data = match buf {
+    fn on_mac_read_reply(&mut self, buf: BufferMut, len: usize) {
+        let mut data = match buf {
             BufferMut::Vec(data) => data,
             _ => unreachable!(),
         };
 
-        if data.len() != 6 {
-            warn!("unexpected MAC length: {}", data.len());
+        if len != 6 {
+            warn!("unexpected MAC length: {}", len);
             return;
         }
 
+        data.truncate(len);
         let mac = [data[0], data[1], data[2], data[3], data[4], data[5]];
         let hwaddr = HardwareAddress::Ethernet(EthernetAddress::from_bytes(&mac));
         self.iface.set_hardware_addr(hwaddr);
@@ -750,10 +751,10 @@ impl Main {
 
         eventloop.add_channel(driver_ch.clone()).unwrap();
 
-        if let Err(error) = driver_ch.send(Message::Invoke {
-            kind: 1,
-            input: Buffer::Static(VIRTIO_NET_MAC_URI),
-            output: BufferMut::Vec(vec![0; 6]),
+        if let Err(error) = driver_ch.send(Message::ReadUri {
+            uri: Buffer::Static(VIRTIO_NET_MAC_URI),
+            offset: 0,
+            data: BufferMut::Vec(vec![0; 6]),
         }) {
             trace!("failed to request MAC: {:?}", error);
         }
@@ -856,7 +857,9 @@ impl Main {
             Some(Context::TcpListener { .. }) => {
                 completer.error(ErrorCode::Unsupported);
             }
-            Some(Context::Driver) | Some(Context::ServiceListener) | Some(Context::ControlClient) => {
+            Some(Context::Driver)
+            | Some(Context::ServiceListener)
+            | Some(Context::ControlClient) => {
                 completer.error(ErrorCode::Unsupported);
             }
             None => {
@@ -887,7 +890,9 @@ impl Main {
             Some(Context::TcpListener { .. }) => {
                 completer.error(ErrorCode::Unsupported);
             }
-            Some(Context::Driver) | Some(Context::ServiceListener) | Some(Context::ControlClient) => {
+            Some(Context::Driver)
+            | Some(Context::ServiceListener)
+            | Some(Context::ControlClient) => {
                 completer.error(ErrorCode::Unsupported);
             }
             None => {
@@ -923,24 +928,25 @@ impl Main {
         }
     }
 
-    fn on_invoke_reply(
+    fn on_read_uri_reply(
         &mut self,
         eventloop: &mut EventLoop,
         ch: &Rc<Channel>,
-        _input: Buffer,
-        output: BufferMut,
+        _uri: Buffer,
+        buf: BufferMut,
+        len: usize,
     ) {
         let handle_id = ch.handle().id();
         match self.contexts.get(&handle_id) {
             Some(Context::Driver) => {
-                self.on_mac_read_reply(output);
+                self.on_mac_read_reply(buf, len);
                 self.poll(eventloop);
             }
             Some(_) => {
-                trace!("unexpected invoke reply");
+                trace!("unexpected read uri reply");
             }
             None => {
-                trace!("state not found for invoke reply on {:?}", handle_id);
+                trace!("state not found for read uri reply on {:?}", handle_id);
             }
         }
     }
@@ -1004,7 +1010,6 @@ impl Main {
         trace!("timer expired");
         self.poll(eventloop);
     }
-
 }
 
 #[ftl::main]
@@ -1033,8 +1038,8 @@ fn main() {
                     } => {
                         app.on_write_request(&mut eventloop, completer, offset, len);
                     }
-                    RequestEvent::Invoke { completer } => {
-                        completer.error(ErrorCode::Unsupported);
+                    request => {
+                        warn!("unexpected request: {:?}", request);
                     }
                 }
             }
@@ -1049,8 +1054,11 @@ fn main() {
                     ReplyEvent::Write { ch, buf, len } => {
                         app.on_write_reply(&ch, buf, len);
                     }
-                    ReplyEvent::Invoke { ch, input, output } => {
-                        app.on_invoke_reply(&mut eventloop, &ch, input, output);
+                    ReplyEvent::ReadUri { ch, uri, buf, len } => {
+                        app.on_read_uri_reply(&mut eventloop, &ch, uri, buf, len);
+                    }
+                    ReplyEvent::WriteUri { ch, .. } => {
+                        warn!("unexpected write uri reply from {:?}", ch);
                     }
                     ReplyEvent::Error { ch, error } => {
                         warn!("error reply from {:?}: {:?}", ch, error);
