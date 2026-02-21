@@ -165,7 +165,7 @@ extern "C" fn rust_boot(multiboot_magic: u32, start_info: PAddr) -> ! {
     // Configure SYSCALL instructions. SYSRET (STAR[63:48]) is not set because
     // we always use IRET.
     unsafe {
-        let syscall_handler = super::syscall::user_syscall_handler as usize as u64;
+        let syscall_handler = super::syscall::user_syscall_handler as *const () as usize as u64;
         wrmsr(MSR_IA32_EFER, rdmsr(MSR_IA32_EFER) | EFER_SCE);
         wrmsr(MSR_IA32_STAR, (GDT_KERNEL_CS as u64) << 32);
         wrmsr(MSR_IA32_LSTAR, syscall_handler);

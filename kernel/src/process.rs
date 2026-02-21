@@ -1,12 +1,9 @@
 use alloc::collections::btree_map::BTreeMap;
-use alloc::collections::vec_deque::VecDeque;
 
 use ftl_arrayvec::ArrayString;
 use ftl_types::environ::PROCESS_NAME_MAX_LEN;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
-use ftl_types::sink::EventBody;
-use ftl_types::sink::EventType;
 
 use crate::handle::AnyHandle;
 use crate::handle::Handle;
@@ -19,8 +16,6 @@ use crate::isolation::UserPtr;
 use crate::isolation::UserSlice;
 use crate::shared_ref::RefCounted;
 use crate::shared_ref::SharedRef;
-use crate::sink::EventEmitter;
-use crate::sink::Sink;
 use crate::spinlock::SpinLock;
 use crate::syscall::SyscallResult;
 use crate::thread::Thread;

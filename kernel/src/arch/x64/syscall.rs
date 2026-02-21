@@ -1,13 +1,10 @@
 use core::arch::naked_asm;
 use core::mem::offset_of;
 
-use ftl_types::sink::EventBody;
-use ftl_types::sink::EventType;
 use ftl_types::sink::SandboxedSyscallEvent;
 
 use crate::arch::Thread;
 use crate::cpuvar::CpuVar;
-use crate::thread::Promise;
 use crate::thread::return_to_user;
 
 #[unsafe(naked)]
