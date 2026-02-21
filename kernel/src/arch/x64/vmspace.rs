@@ -168,6 +168,15 @@ impl VmSpace {
     }
 
     pub fn switch(&self) {
+        let current_cr3: u64;
+        unsafe {
+            asm!("mov {prev_cr3}, cr3", prev_cr3 = out(reg) current_cr3);
+        }
+
+        if current_cr3 == self.cr3 {
+            return;
+        }
+
         unsafe {
             asm!("mov cr3, {cr3}", cr3 = in(reg) self.cr3);
         }
