@@ -5,7 +5,6 @@ use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use ftl_types::vmspace::PageAttrs;
 use ftl_utils::alignment::align_down;
-use ftl_utils::alignment::align_up;
 use ftl_utils::alignment::is_aligned;
 
 use crate::arch;
@@ -77,12 +76,6 @@ impl VmSpace {
             return Err(ErrorCode::AlreadyExists);
         }
 
-        for offset in (0..vmarea.len()).step_by(arch::MIN_PAGE_SIZE) {
-            let paddr = vmarea.fill(offset)?;
-            self.arch
-                .map(uaddr + offset, paddr, arch::MIN_PAGE_SIZE, attrs)?;
-        }
-
         mutable.mappings.push(Mapping {
             uaddr,
             uaddr_end,
@@ -108,7 +101,7 @@ impl VmSpace {
 
         let paddr = mapping.vmarea.fill(uaddr - mapping.uaddr)?;
         self.arch
-            .map(uaddr, paddr, mapping.vmarea.len(), mapping.attrs)?;
+            .map(uaddr, paddr, arch::MIN_PAGE_SIZE, mapping.attrs)?;
         Ok(())
     }
 
