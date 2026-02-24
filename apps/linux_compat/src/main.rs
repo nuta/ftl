@@ -4,6 +4,8 @@
 
 use ftl::prelude::*;
 
+mod elf;
+mod fs;
 mod process;
 mod thread;
 
