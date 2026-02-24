@@ -13,7 +13,9 @@ members = [
     "apps/virtio_net",
     "apps/http_server",
     "kernel",
-    "libs/rust/*", "apps/bootstrap",
+    "libs/rust/*",
+    "apps/bootstrap",
+    "apps/linux_compat",
 ]
 
 [workspace.dependencies]

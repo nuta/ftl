@@ -1,0 +1,9 @@
+[package]
+name = "linux_compat"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+
+[dependencies]
+ftl = { workspace = true }
+spin = { workspace = true }

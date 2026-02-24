@@ -5,6 +5,7 @@ extern crate alloc;
 pub use alloc::borrow;
 pub use alloc::boxed;
 pub use alloc::rc;
+pub use alloc::sync;
 
 pub use ftl_macros::main;
 
