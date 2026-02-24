@@ -5,8 +5,10 @@
 use ftl::prelude::*;
 
 mod elf;
+mod errno;
 mod fs;
 mod process;
+mod syscall;
 mod thread;
 
 #[ftl::main]
