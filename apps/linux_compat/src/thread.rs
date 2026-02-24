@@ -6,6 +6,7 @@ use crate::process::LxProcess;
 
 pub enum Error {
     ThreadCreate(ErrorCode),
+    ThreadResume(ErrorCode),
 }
 
 pub struct LxThread {
@@ -21,5 +22,9 @@ impl LxThread {
         let this = Arc::new(Self { process, thread });
         process.add_thread(this.clone());
         Ok(())
+    }
+
+    pub fn resume_with(&self, retval: usize) -> Result<(), ErrorCode> {
+        self.thread.resume_with(retval)
     }
 }
