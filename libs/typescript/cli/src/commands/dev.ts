@@ -72,7 +72,16 @@ export async function main(args: string[]) {
                 await qemu.exited;
             }
             qemu = await startQemu({
-                inheritStdin: false // Enable Ctrl-C to exit QEMU
+                portForwarding: [
+                    // HTTP server
+                    {
+                        protocol: "tcp",
+                        hostPort: 30080,
+                        guestPort: 80,
+                    },
+                ],
+                // Do not inherit stdin, so that Ctrl-C will exit QEMU
+                stdio: [null, 'inherit', 'inherit'],
             });
         } catch (error) {
             console.error(`failed to run: ${error}`);

@@ -5,7 +5,15 @@ export async function main(args: string[]) {
     await build.main([]);
 
     const qemu = await startQemu({
-        inheritStdin: true
+        portForwarding: [
+            // HTTP server
+            {
+                protocol: "tcp",
+                hostPort: 30080,
+                guestPort: 80,
+            },
+        ],
+        stdio: ['inherit', 'inherit', 'inherit'],
     });
     await qemu.exited;
     if (qemu.exitCode !== 0) {
