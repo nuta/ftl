@@ -128,11 +128,7 @@ fn main() {
 
                 completer.complete(client_ch);
             }
-            Event::Request(RequestEvent::Read {
-                offset: _,
-                len: _,
-                completer,
-            }) => {
+            Event::Request(RequestEvent::Read { completer, .. }) => {
                 // TODO: Check the context
                 if let Some((dmabuf, total_len)) = rxq.pop() {
                     handle_rx(&mut rxq, dmabuf, total_len, completer);
@@ -142,11 +138,7 @@ fn main() {
                     read_waiters.push_back(completer);
                 }
             }
-            Event::Request(RequestEvent::Write {
-                offset: _,
-                len,
-                completer,
-            }) => {
+            Event::Request(RequestEvent::Write { len, completer, .. }) => {
                 // TODO: Check the context
                 let Ok(mut dmabuf) = dmabuf_pool.alloc() else {
                     completer.error(ErrorCode::OutOfMemory);
@@ -201,13 +193,6 @@ fn main() {
                 }
 
                 completer.complete_with(&mac);
-            }
-            Event::Request(RequestEvent::WriteUri {
-                offset: _,
-                len: _,
-                completer,
-            }) => {
-                completer.error(ErrorCode::Unsupported);
             }
             Event::Interrupt { interrupt } => {
                 if let Err(error) = interrupt.acknowledge() {
