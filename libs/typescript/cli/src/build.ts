@@ -1,6 +1,6 @@
 import { createInitfs } from "./initfs";
 import { Arch } from "./types";
-import fs from 'fs/promises';
+import * as fs from 'node:fs/promises';
 
 export interface BuildParams {
     mode: 'debug' | 'release';

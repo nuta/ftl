@@ -1,7 +1,7 @@
 import { startQemu } from "../qemu";
 import * as buildCommand from "./build";
-import fs from 'fs/promises';
-import path from 'path';
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
 
 const SOURCE_EXTENSIONS = new Set([
     '.rs',

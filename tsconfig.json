@@ -1,14 +1,25 @@
 {
+    "$schema": "https://json.schemastore.org/tsconfig",
     "compilerOptions": {
-        "lib": [
-            "ESNext"
-        ],
         "target": "ESNext",
         "module": "Preserve",
         "strict": true,
         "skipLibCheck": true,
         "noFallthroughCasesInSwitch": true,
         "noUncheckedIndexedAccess": true,
-        "noImplicitOverride": true,
-    }
+        "noImplicitOverride": true
+    },
+    "typeAcquisition": {
+        "enable": true,
+        "include": [
+            "bun",
+            "node"
+        ]
+    },
+    "include": [
+        "**/*.ts"
+    ],
+    "exclude": [
+        "node_modules"
+    ]
 }
