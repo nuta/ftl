@@ -12,17 +12,26 @@ const SOURCE_EXTENSIONS = new Set([
     '.html',
 ]);
 
-async function debounce(ms: number, fn: () => Promise<void>): Promise<void> {
+function createDebouncer(ms: number, fn: (filename?: string) => Promise<void>) {
     let timeout: NodeJS.Timeout | null = null;
-    return new Promise((resolve, reject) => {
+    let promise = Promise.resolve();
+
+    return (filename: string) => {
         if (timeout) {
             clearTimeout(timeout);
         }
 
         timeout = setTimeout(() => {
-            fn().then(resolve).catch(reject);
+            promise = promise
+                .then(() => fn(filename))
+                .catch((error) => {
+                    console.error(`failed to run: ${error}`);
+                })
+                .finally(() => {
+                    timeout = null;
+                });
         }, ms);
-    });
+    };
 }
 
 export async function main(args: string[]) {
@@ -73,6 +82,7 @@ export async function main(args: string[]) {
     const watchDir = path.resolve(import.meta.dir, '..', '..', '..', '..', '..');
     console.log(`Watching for changes in ${watchDir}...`);
     await rebuild();
+    const scheduleRebuild = createDebouncer(50, rebuild);
     const watcher = fs.watch(watchDir, { recursive: true });
     for await (const { eventType, filename } of watcher) {
         if (!filename || filename.startsWith('build/') || filename.startsWith('target/')) {
@@ -83,8 +93,6 @@ export async function main(args: string[]) {
             continue;
         }
 
-        await debounce(5, async () => {
-            await rebuild(filename);
-        });
+        scheduleRebuild(filename);
     }
 }
