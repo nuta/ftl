@@ -3,7 +3,7 @@ import { AddressInfo } from "node:net";
 import * as net from "node:net";
 import { QemuParams, startQemu } from "../../libs/typescript/cli/src/qemu";
 
-async function getRandomPort(): Promise<number> {
+export async function getRandomPort(): Promise<number> {
     const socket = new net.Server();
     return new Promise((resolve, reject) => {
         socket.on('error', reject);

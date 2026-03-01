@@ -91,6 +91,8 @@ impl Main {
                 let listen_ch_id = new_ch.handle().id();
                 eventloop.add_channel(Rc::new(new_ch)).unwrap();
                 self.states.insert(listen_ch_id, State::TcpListener);
+
+                info!("listening on 80");
             }
             Some(State::TcpListener) => {
                 let conn_ch_id = new_ch.handle().id();
