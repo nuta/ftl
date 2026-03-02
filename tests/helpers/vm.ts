@@ -69,7 +69,7 @@ export async function boot(params: BootParams) {
 
     const emitLog = createDebouncer((line: string) => {
         emitter.emit('log');
-    }, 1);
+    }, 10);
 
     const logs: string[] = [];
     streamToLines(child.stdout, (line) => {
