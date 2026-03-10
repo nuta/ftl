@@ -111,14 +111,16 @@ impl Attr {
 #[derive(Clone, Copy)]
 #[repr(C)]
 pub struct MessageBody {
-    pub handles: [HandleId; NUM_HANDLES_MAX],
-    pub ools: [OutOfLine; NUM_OOLS_MAX],
-    pub inline: [u8; INLINE_LEN_MAX],
+    pub handle: HandleId,
+    pub ool_addr: usize,
+    pub ool_len: usize,
+    pub inline: MessageInlineBody,
 }
 
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub union MessageInlineBody {
+    pub raw: [u8; INLINE_LEN_MAX],
     pub open: OpenInline,
     pub read: ReadInline,
     pub write: WriteInline,

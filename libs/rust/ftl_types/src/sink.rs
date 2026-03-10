@@ -3,7 +3,7 @@ use crate::channel::MessageBody;
 use crate::channel::MessageInfo;
 use crate::handle::HandleId;
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct EventType(u32);
 
 impl EventType {
@@ -16,20 +16,17 @@ impl EventType {
 
 #[derive(Clone, Copy)]
 #[repr(C)]
-pub struct RawEvent {
+pub struct Event {
     pub header: EventHeader,
     pub body: EventBody,
 }
 
 #[derive(Clone, Copy)]
 #[repr(C)]
-pub struct IrqEvent {
-    pub irq: u8,
+pub struct EventHeader {
+    pub ty: EventType,
+    pub id: HandleId,
 }
-
-#[derive(Clone, Copy)]
-#[repr(C)]
-pub struct PeerClosedEvent {}
 
 #[derive(Clone, Copy)]
 #[repr(C)]
@@ -38,15 +35,7 @@ pub union EventBody {
     pub irq: IrqEvent,
     pub peer_closed: PeerClosedEvent,
     pub timer: TimerEvent,
-    pub client: ClientEvent,
     pub sandboxed_syscall: SandboxedSyscallEvent,
-}
-
-#[derive(Clone, Copy)]
-#[repr(C)]
-pub struct EventHeader {
-    pub ty: EventType,
-    pub id: HandleId,
 }
 
 #[derive(Clone, Copy)]
@@ -64,10 +53,13 @@ pub struct TimerEvent {}
 
 #[derive(Clone, Copy)]
 #[repr(C)]
-pub struct ClientEvent {
-    /// The channel ID connected to the client.
-    pub id: HandleId,
+pub struct IrqEvent {
+    pub irq: u8,
 }
+
+#[derive(Clone, Copy)]
+#[repr(C)]
+pub struct PeerClosedEvent {}
 
 #[derive(Clone, Copy, Debug)]
 #[repr(C)]

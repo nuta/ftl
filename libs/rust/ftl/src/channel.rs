@@ -1,4 +1,3 @@
-use alloc::boxed::Box;
 use alloc::format;
 use alloc::rc::Rc;
 use alloc::string::String;
@@ -9,28 +8,19 @@ use core::mem::MaybeUninit;
 
 pub use ftl_types::channel::Attr;
 use ftl_types::channel::CallId;
-use ftl_types::channel::ErrorReplyInline;
-use ftl_types::channel::GetattrInline;
-use ftl_types::channel::GetattrReplyInline;
 use ftl_types::channel::MessageBody;
 use ftl_types::channel::MessageInfo;
 use ftl_types::channel::OutOfLine;
-use ftl_types::channel::ReadInline;
-use ftl_types::channel::ReadReplyInline;
-use ftl_types::channel::SetattrInline;
-use ftl_types::channel::SetattrReplyInline;
-use ftl_types::channel::WriteInline;
-use ftl_types::channel::WriteReplyInline;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use ftl_types::syscall::SYS_CHANNEL_CREATE;
 use ftl_types::syscall::SYS_CHANNEL_OOL_READ;
 use ftl_types::syscall::SYS_CHANNEL_OOL_WRITE;
 use ftl_types::syscall::SYS_CHANNEL_SEND;
+use log::warn;
 
-use crate::application::Event;
-use crate::application::EventLoop;
-use crate::application::ReplyEvent;
+use crate::eventloop::Event;
+use crate::eventloop::EventLoop;
 use crate::handle::Handleable;
 use crate::handle::OwnedHandle;
 use crate::syscall::syscall1;
@@ -91,85 +81,6 @@ impl BufferMut {
     }
 }
 
-/// A message constructor to send to a channel.
-pub enum Message {
-    Open {
-        /// The URI to open.
-        uri: Buffer,
-    },
-    Read {
-        /// The offset to read from.
-        offset: usize,
-        /// The buffer to read into. The receiver will write this buffer up
-        /// to the length of this buffer.
-        data: BufferMut,
-    },
-    Write {
-        /// The offset to write to.
-        offset: usize,
-        /// The buffer to write from. The sender will read this buffer up to
-        /// the length of this buffer.
-        data: Buffer,
-    },
-    Getattr {
-        /// The attribute to read.
-        attr: Attr,
-        /// The destination buffer.
-        data: BufferMut,
-    },
-    Setattr {
-        /// The attribute to write.
-        attr: Attr,
-        /// The source buffer.
-        data: Buffer,
-    },
-}
-
-/// A reply message constructor.
-pub enum Reply {
-    ErrorReply {
-        /// The error code.
-        error: ErrorCode,
-    },
-    OpenReply {
-        /// The channel connected to the opened resource.
-        ch: Channel,
-    },
-    ReadReply {
-        /// The length of the data actually read.
-        len: usize,
-    },
-    WriteReply {
-        /// The length of the data actually written.
-        len: usize,
-    },
-    GetattrReply {
-        /// The length of the attribute data actually read.
-        len: usize,
-    },
-    SetattrReply {
-        /// The length of the attribute data actually written.
-        len: usize,
-    },
-}
-
-pub(crate) enum Cookie {
-    Buffer(Buffer),
-    BufferMut(BufferMut),
-    Getattr(Attr, BufferMut),
-    Setattr(Attr, Buffer),
-}
-
-impl Cookie {
-    pub(crate) fn into_raw(self) -> usize {
-        Box::into_raw(Box::new(self)) as usize
-    }
-
-    pub(crate) unsafe fn from_raw(raw: usize) -> Box<Self> {
-        unsafe { Box::from_raw(raw as *mut Self) }
-    }
-}
-
 pub struct Channel {
     handle: OwnedHandle,
 }
@@ -195,103 +106,23 @@ impl Channel {
         open_via_bootstrap(format!("register:{}", name))
     }
 
-    pub fn send(&self, message: Message) -> Result<(), ErrorCode> {
-        let body = MaybeUninit::<MessageBody>::uninit();
-        // TODO: Double check the safety of this.
-        let mut body = unsafe { body.assume_init() };
-        let (info, cookie) = match message {
-            Message::Open { uri } => {
-                body.ools[0] = uri.to_ool();
-                (MessageInfo::OPEN, Cookie::Buffer(uri))
-            }
-            Message::Read { offset, data } => {
-                body.ools[0] = data.to_ool();
-                // FIXME: Ugly unsafe code. Alignment is not guaranteed.
-                let inline = unsafe { &mut *(body.inline.as_mut_ptr() as *mut ReadInline) };
-                *inline = ReadInline {
-                    offset,
-                    len: body.ools[0].len, // TODO: Should we add len field to Message?
-                };
-                (MessageInfo::READ, Cookie::BufferMut(data))
-            }
-            Message::Write { offset, data } => {
-                body.ools[0] = data.to_ool();
-                let inline = unsafe { &mut *(body.inline.as_mut_ptr() as *mut WriteInline) };
-                *inline = WriteInline {
-                    offset,
-                    len: body.ools[0].len,
-                };
-                (MessageInfo::WRITE, Cookie::Buffer(data))
-            }
-            Message::Getattr { attr, data } => {
-                body.ools[0] = data.to_ool();
-                let inline = unsafe { &mut *(body.inline.as_mut_ptr() as *mut GetattrInline) };
-                *inline = GetattrInline {
-                    attr,
-                    len: body.ools[0].len,
-                };
-                (MessageInfo::GETATTR, Cookie::Getattr(attr, data))
-            }
-            Message::Setattr { attr, data } => {
-                body.ools[0] = data.to_ool();
-                let inline = unsafe { &mut *(body.inline.as_mut_ptr() as *mut SetattrInline) };
-                *inline = SetattrInline {
-                    attr,
-                    len: body.ools[0].len,
-                };
-                (MessageInfo::SETATTR, Cookie::Setattr(attr, data))
-            }
-        };
-
-        sys_channel_send(
-            self.handle.id(),
-            info,
-            &body,
-            cookie.into_raw(),
-            CallId::new(0),
-        )?;
+    pub(crate) fn call(
+        &self,
+        info: MessageInfo,
+        body: &MessageBody,
+        cookie: usize,
+    ) -> Result<(), ErrorCode> {
+        sys_channel_send(self.handle.id(), info, body, cookie, CallId::new(0))?;
         Ok(())
     }
 
-    // TODO: Make this private
-    pub fn reply(&self, call_id: CallId, reply: Reply) -> Result<(), ErrorCode> {
-        let body = MaybeUninit::<MessageBody>::uninit();
-        // TODO: Double check the safety of this.
-        let mut body = unsafe { body.assume_init() };
-        let info = match reply {
-            Reply::ErrorReply { error } => {
-                let inline = unsafe { &mut *(body.inline.as_mut_ptr() as *mut ErrorReplyInline) };
-                *inline = ErrorReplyInline { error };
-                MessageInfo::ERROR_REPLY
-            }
-            Reply::OpenReply { ch } => {
-                body.handles[0] = ch.handle.id();
-                mem::forget(ch); // Will be moved by the kernel. Don't drop it.
-                MessageInfo::OPEN_REPLY
-            }
-            Reply::ReadReply { len } => {
-                let inline = unsafe { &mut *(body.inline.as_mut_ptr() as *mut ReadReplyInline) };
-                *inline = ReadReplyInline { len };
-                MessageInfo::READ_REPLY
-            }
-            Reply::WriteReply { len } => {
-                let inline = unsafe { &mut *(body.inline.as_mut_ptr() as *mut WriteReplyInline) };
-                *inline = WriteReplyInline { len };
-                MessageInfo::WRITE_REPLY
-            }
-            Reply::GetattrReply { len } => {
-                let inline = unsafe { &mut *(body.inline.as_mut_ptr() as *mut GetattrReplyInline) };
-                *inline = GetattrReplyInline { len };
-                MessageInfo::GETATTR_REPLY
-            }
-            Reply::SetattrReply { len } => {
-                let inline = unsafe { &mut *(body.inline.as_mut_ptr() as *mut SetattrReplyInline) };
-                *inline = SetattrReplyInline { len };
-                MessageInfo::SETATTR_REPLY
-            }
-        };
-
-        sys_channel_send(self.handle.id(), info, &body, 0, call_id)?;
+    pub(crate) fn reply(
+        &self,
+        info: MessageInfo,
+        body: &MessageBody,
+        call_id: CallId,
+    ) -> Result<(), ErrorCode> {
+        sys_channel_send(self.handle.id(), info, body, 0, call_id)?;
         Ok(())
     }
 
@@ -404,29 +235,28 @@ pub fn sys_channel_ool_write(
 }
 
 fn open_via_bootstrap(uri: String) -> Result<Channel, ErrorCode> {
-    let bootstrap_ch = Rc::new(Channel::from_handle(OwnedHandle::from_raw(
+    let bootstrap_ch: Rc<Channel> = Rc::new(Channel::from_handle(OwnedHandle::from_raw(
         HandleId::from_raw(1),
     )));
 
-    let mut eventloop = EventLoop::new()?;
-    eventloop.add_channel(bootstrap_ch.clone())?;
-    bootstrap_ch.send(Message::Open {
-        uri: Buffer::String(uri),
-    })?;
+    let mut eventloop = EventLoop::new().unwrap();
+    let client = eventloop.add_channel(bootstrap_ch.clone(), ()).unwrap();
+    client.open(Buffer::String(uri), ()).unwrap();
 
     // FIXME:
     mem::forget(bootstrap_ch);
 
     loop {
         match eventloop.wait() {
-            Event::Reply(ReplyEvent::Open { new_ch, .. }) => {
+            Event::OpenReply { new_ch, cookie, .. } => {
                 return Ok(new_ch);
             }
-            Event::Reply(ReplyEvent::Error { error, .. }) => {
+            Event::ErrorReply { error, .. } => {
+                warn!("service discovery failed: {:?}", error);
                 return Err(error);
             }
-            Event::PeerClosed { .. } => {
-                return Err(ErrorCode::PeerClosed);
+            Event::SinkError(error) => {
+                return Err(error);
             }
             event => {
                 panic!("unexpected bootstrap event: {:?}", event);
