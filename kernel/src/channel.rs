@@ -7,8 +7,6 @@ use ftl_types::channel::CallId;
 use ftl_types::channel::INLINE_LEN_MAX;
 use ftl_types::channel::MessageBody;
 use ftl_types::channel::MessageInfo;
-use ftl_types::channel::NUM_HANDLES_MAX;
-use ftl_types::channel::NUM_OOLS_MAX;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use ftl_types::sink::EventBody;
