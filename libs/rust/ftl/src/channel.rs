@@ -87,8 +87,7 @@ impl Channel {
         Ok((ch0, ch1))
     }
 
-    // TODO: Make this private
-    pub const fn from_handle(handle: OwnedHandle) -> Self {
+    pub(crate) const fn from_handle(handle: OwnedHandle) -> Self {
         Self { handle }
     }
 
@@ -120,7 +119,7 @@ impl Channel {
         Ok(())
     }
 
-    pub fn ool_read(
+    pub(crate) fn ool_read(
         &self,
         call_id: CallId,
         index: usize,
@@ -130,7 +129,7 @@ impl Channel {
         sys_channel_ool_read(self.handle.id(), call_id, index, offset, buf)
     }
 
-    pub fn ool_write(
+    pub(crate) fn ool_write(
         &self,
         call_id: CallId,
         index: usize,
