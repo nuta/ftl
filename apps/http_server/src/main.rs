@@ -3,11 +3,8 @@
 
 use core::ops::ControlFlow;
 
-use ftl::channel::Buffer;
 use ftl::channel::BufferMut;
 use ftl::channel::Channel;
-use ftl::collections::HashMap;
-use ftl::error::ErrorCode;
 use ftl::eventloop::Client;
 use ftl::eventloop::Event;
 use ftl::eventloop::EventLoop;
@@ -36,6 +33,12 @@ enum Context {
     Tcpip,
     TcpListener,
     TcpConn(Connection),
+}
+
+fn remove_channel(eventloop: &mut EventLoop<Context, Cookie>, id: HandleId) {
+    if let Err(error) = eventloop.remove(id) {
+        warn!("failed to remove channel {:?}: {:?}", id, error);
+    }
 }
 
 #[ftl::main]
