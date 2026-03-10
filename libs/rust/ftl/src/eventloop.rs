@@ -98,7 +98,7 @@ struct Entry<C> {
 
 pub struct EventLoop<C, K> {
     sink: Sink,
-    contexts: HashMap<HandleId, Entry<C>>,
+    entries: HashMap<HandleId, Entry<C>>,
     _pd: PhantomData<K>,
 }
 
@@ -107,7 +107,7 @@ impl<C, K> EventLoop<C, K> {
         let sink = Sink::new().map_err(Error::SinkCreate)?;
         Ok(Self {
             sink,
-            contexts: HashMap::new(),
+            entries: HashMap::new(),
             _pd: PhantomData,
         })
     }
@@ -115,7 +115,7 @@ impl<C, K> EventLoop<C, K> {
     pub fn add_channel(&mut self, channel: impl Into<Rc<Channel>>, ctx: C) -> Result<(), Error> {
         let ch = channel.into();
         self.sink.add(ch.as_ref()).map_err(Error::SinkAdd)?;
-        self.contexts.insert(
+        self.entries.insert(
             ch.handle().id(),
             Entry {
                 object: Object::Channel(ch),
@@ -132,7 +132,7 @@ impl<C, K> EventLoop<C, K> {
     ) -> Result<(), Error> {
         let interrupt = interrupt.into();
         self.sink.add(interrupt.as_ref()).map_err(Error::SinkAdd)?;
-        self.contexts.insert(
+        self.entries.insert(
             interrupt.handle().id(),
             Entry {
                 object: Object::Interrupt(interrupt),
@@ -145,7 +145,7 @@ impl<C, K> EventLoop<C, K> {
     pub fn add_timer(&mut self, timer: impl Into<Rc<Timer>>, ctx: C) -> Result<(), Error> {
         let timer = timer.into();
         self.sink.add(timer.as_ref()).map_err(Error::SinkAdd)?;
-        self.contexts.insert(
+        self.entries.insert(
             timer.handle().id(),
             Entry {
                 object: Object::Timer(timer),
@@ -158,7 +158,7 @@ impl<C, K> EventLoop<C, K> {
     pub fn add_thread(&mut self, thread: impl Into<Rc<Thread>>, ctx: C) -> Result<(), Error> {
         let thread = thread.into();
         self.sink.add(thread.as_ref()).map_err(Error::SinkAdd)?;
-        self.contexts.insert(
+        self.entries.insert(
             thread.handle().id(),
             Entry {
                 object: Object::Thread(thread),
@@ -170,7 +170,7 @@ impl<C, K> EventLoop<C, K> {
 
     pub fn remove(&mut self, id: HandleId) -> Result<(), Error> {
         self.sink.remove(id).map_err(Error::SinkRemove)?;
-        self.contexts.remove(&id);
+        self.entries.remove(&id);
         Ok(())
     }
 
@@ -184,7 +184,7 @@ impl<C, K> EventLoop<C, K> {
                 handles,
                 inline,
             }) => {
-                let (ch, ctx) = match self.contexts.get_mut(&ch_id) {
+                let (ch, ctx) = match self.entries.get_mut(&ch_id) {
                     Some(Entry {
                         object: Object::Channel(ch),
                         ctx,
