@@ -57,10 +57,14 @@ pub enum Event<'a, C> {
     Read {
         ctx: &'a mut C,
         completer: ReadCompleter,
+        offset: usize,
+        len: usize,
     },
     Write {
         ctx: &'a mut C,
         completer: WriteCompleter,
+        offset: usize,
+        len: usize,
     },
     ReadUri {
         ctx: &'a mut C,
@@ -204,12 +208,16 @@ impl<C, K> EventLoop<C, K> {
                     MessageInfo::READ => {
                         Event::Read {
                             ctx,
+                            offset: unsafe { inline_body.read.offset },
+                            len: unsafe { inline_body.read.len },
                             completer: ReadCompleter { ch, call_id },
                         }
                     }
                     MessageInfo::WRITE => {
                         Event::Write {
                             ctx,
+                            offset: unsafe { inline_body.write.offset },
+                            len: unsafe { inline_body.write.len },
                             completer: WriteCompleter { ch, call_id },
                         }
                     }
