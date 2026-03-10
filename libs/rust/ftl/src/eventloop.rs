@@ -1,5 +1,3 @@
-#![allow(unused)]
-
 use alloc::boxed::Box;
 use alloc::rc::Rc;
 use core::marker::PhantomData;
@@ -10,44 +8,14 @@ use ftl_types::channel::MessageInlineBody;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use hashbrown::HashMap;
+use log::warn;
 
 use crate::channel::Channel;
+use crate::channel::Reply;
 use crate::handle::Handleable;
 use crate::interrupt::Interrupt;
 use crate::sink;
 use crate::sink::Sink;
-use crate::thread::Thread;
-use crate::time::Timer;
-
-#[derive(Debug)]
-pub struct OpenCompleter {
-    ch: Rc<Channel>,
-    call_id: CallId,
-}
-
-#[derive(Debug)]
-pub struct ReadCompleter {
-    ch: Rc<Channel>,
-    call_id: CallId,
-}
-
-#[derive(Debug)]
-pub struct WriteCompleter {
-    ch: Rc<Channel>,
-    call_id: CallId,
-}
-
-#[derive(Debug)]
-pub struct ReadUriCompleter {
-    ch: Rc<Channel>,
-    call_id: CallId,
-}
-
-#[derive(Debug)]
-pub struct WriteUriCompleter {
-    ch: Rc<Channel>,
-    call_id: CallId,
-}
 
 #[derive(Debug)]
 pub enum Event<'a, C, K> {
@@ -135,8 +103,6 @@ pub enum Error {
 enum Object {
     Channel(Rc<Channel>),
     Interrupt(Rc<Interrupt>),
-    Timer(Rc<Timer>),
-    Thread(Rc<Thread>),
 }
 
 struct Entry<C> {
@@ -209,32 +175,6 @@ impl<C, K: SmartPointer> EventLoop<C, K> {
             interrupt.handle().id(),
             Entry {
                 object: Object::Interrupt(interrupt),
-                ctx,
-            },
-        );
-        Ok(())
-    }
-
-    pub fn add_timer(&mut self, timer: impl Into<Rc<Timer>>, ctx: C) -> Result<(), Error> {
-        let timer = timer.into();
-        self.sink.add(timer.as_ref()).map_err(Error::SinkAdd)?;
-        self.entries.insert(
-            timer.handle().id(),
-            Entry {
-                object: Object::Timer(timer),
-                ctx,
-            },
-        );
-        Ok(())
-    }
-
-    pub fn add_thread(&mut self, thread: impl Into<Rc<Thread>>, ctx: C) -> Result<(), Error> {
-        let thread = thread.into();
-        self.sink.add(thread.as_ref()).map_err(Error::SinkAdd)?;
-        self.entries.insert(
-            thread.handle().id(),
-            Entry {
-                object: Object::Thread(thread),
                 ctx,
             },
         );
@@ -400,4 +340,98 @@ impl<C, K: SmartPointer> EventLoop<C, K> {
             Err(error) => Event::SinkError(error),
         }
     }
+}
+
+#[derive(Debug)]
+pub struct OpenCompleter {
+    ch: Rc<Channel>,
+    call_id: CallId,
+}
+
+impl OpenCompleter {
+    pub fn channel(&self) -> &Rc<Channel> {
+        &self.ch
+    }
+
+    pub fn complete(&self, ch: Channel) {
+        if let Err(error) = self.ch.reply(self.call_id, Reply::OpenReply { ch }) {
+            warn!("failed to complete open: {:?}", error);
+        }
+    }
+
+    pub fn error(&self, error: ErrorCode) {
+        if let Err(error) = self.ch.reply(self.call_id, Reply::ErrorReply { error }) {
+            warn!("failed to error open: {:?}", error);
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct ReadCompleter {
+    ch: Rc<Channel>,
+    call_id: CallId,
+}
+
+impl ReadCompleter {
+    pub fn channel(&self) -> &Rc<Channel> {
+        &self.ch
+    }
+
+    pub fn error(&self, error: ErrorCode) {
+        if let Err(error) = self.ch.reply(self.call_id, Reply::ErrorReply { error }) {
+            warn!("failed to error read: {:?}", error);
+        }
+    }
+
+    pub fn write(&self, offset: usize, data: &[u8]) -> Result<usize, ErrorCode> {
+        self.ch.ool_write(self.call_id, 0, offset, data)
+    }
+
+    pub fn complete(&self, len: usize) {
+        if let Err(error) = self.ch.reply(self.call_id, Reply::ReadReply { len }) {
+            warn!("failed to complete read: {:?}", error);
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct WriteCompleter {
+    ch: Rc<Channel>,
+    call_id: CallId,
+}
+
+impl WriteCompleter {
+    pub fn channel(&self) -> &Rc<Channel> {
+        &self.ch
+    }
+}
+
+impl WriteCompleter {
+    pub fn read(&self, offset: usize, data: &mut [u8]) -> Result<usize, ErrorCode> {
+        self.ch.ool_read(self.call_id, 0, offset, data)
+    }
+
+    pub fn complete(&self, len: usize) {
+        if let Err(error) = self.ch.reply(self.call_id, Reply::WriteReply { len }) {
+            warn!("failed to complete write: {:?}", error);
+        }
+    }
+
+    pub fn error(&self, error: ErrorCode) {
+        if let Err(error) = self.ch.reply(self.call_id, Reply::ErrorReply { error }) {
+            warn!("failed to error write: {:?}", error);
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct ReadUriCompleter {
+    ch: Rc<Channel>,
+    call_id: CallId,
+}
+
+#[derive(Debug)]
+pub struct WriteUriCompleter {
+    ch: Rc<Channel>,
+    call_id: CallId,
 }
