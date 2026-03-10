@@ -130,12 +130,12 @@ struct Entry<C> {
     ctx: C,
 }
 
-pub trait Cookieable {
+pub trait SmartPointer {
     fn into_raw(self) -> usize;
     fn from_raw(raw: usize) -> Self;
 }
 
-impl<T> Cookieable for Box<T> {
+impl<T> SmartPointer for Box<T> {
     fn into_raw(self) -> usize {
         Box::into_raw(self) as usize
     }
@@ -145,7 +145,7 @@ impl<T> Cookieable for Box<T> {
     }
 }
 
-impl<T> Cookieable for Rc<T> {
+impl<T> SmartPointer for Rc<T> {
     fn into_raw(self) -> usize {
         Rc::into_raw(self) as usize
     }
@@ -155,13 +155,13 @@ impl<T> Cookieable for Rc<T> {
     }
 }
 
-pub struct EventLoop<C, K: Cookieable> {
+pub struct EventLoop<C, K: SmartPointer> {
     sink: Sink,
     entries: HashMap<HandleId, Entry<C>>,
     _pd: PhantomData<K>,
 }
 
-impl<C, K: Cookieable> EventLoop<C, K> {
+impl<C, K: SmartPointer> EventLoop<C, K> {
     pub fn new() -> Result<Self, Error> {
         let sink = Sink::new().map_err(Error::SinkCreate)?;
         Ok(Self {

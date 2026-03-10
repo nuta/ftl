@@ -138,7 +138,10 @@ impl ReadUriCompleter {
     }
 
     pub fn complete(&self, len: usize) {
-        if let Err(error) = self.ch.reply(self.call_id, ChannelReply::ReadUriReply { len }) {
+        if let Err(error) = self
+            .ch
+            .reply(self.call_id, ChannelReply::ReadUriReply { len })
+        {
             warn!("failed to complete read uri: {:?}", error);
         }
     }
@@ -183,7 +186,10 @@ impl WriteUriCompleter {
     }
 
     pub fn complete(&self, len: usize) {
-        if let Err(error) = self.ch.reply(self.call_id, ChannelReply::WriteUriReply { len }) {
+        if let Err(error) = self
+            .ch
+            .reply(self.call_id, ChannelReply::WriteUriReply { len })
+        {
             warn!("failed to complete write uri: {:?}", error);
         }
     }
