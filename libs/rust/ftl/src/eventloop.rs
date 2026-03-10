@@ -76,37 +76,51 @@ pub enum Event<'a, C, K> {
         completer: WriteUriCompleter,
     },
     OpenReply {
+        ctx: &'a mut C,
         ch: &'a Rc<Channel>,
         cookie: K,
     },
     ReadReply {
+        ctx: &'a mut C,
         ch: &'a Rc<Channel>,
         cookie: K,
         len: usize,
     },
     WriteReply {
+        ctx: &'a mut C,
         ch: &'a Rc<Channel>,
         cookie: K,
         len: usize,
     },
     ReadUriReply {
+        ctx: &'a mut C,
         ch: &'a Rc<Channel>,
         cookie: K,
         len: usize,
     },
     WriteUriReply {
+        ctx: &'a mut C,
         ch: &'a Rc<Channel>,
         cookie: K,
         len: usize,
     },
     ErrorReply {
+        ctx: &'a mut C,
         ch: &'a Rc<Channel>,
         cookie: K,
         error: ErrorCode,
     },
+    PeerClosed {
+        ctx: &'a mut C,
+        ch: &'a Rc<Channel>,
+    },
     UnknownMessage {
         ctx: &'a mut C,
         info: MessageInfo,
+    },
+    Irq {
+        ctx: &'a mut C,
+        interrupt: &'a Rc<Interrupt>,
     },
     SinkError(ErrorCode),
 }
@@ -310,35 +324,72 @@ impl<C, K: SmartPointer> EventLoop<C, K> {
                 let inline_body = unsafe { &*(inline.as_ptr() as *const MessageInlineBody) };
                 let cookie = K::from_raw(cookie);
                 match info {
-                    MessageInfo::OPEN_REPLY => Event::OpenReply { ch, cookie },
+                    MessageInfo::OPEN_REPLY => Event::OpenReply { ctx, ch, cookie },
                     MessageInfo::READ_REPLY => {
                         let len = unsafe { inline_body.read_reply.len };
-                        Event::ReadReply { ch, cookie, len }
+                        Event::ReadReply {
+                            ctx,
+                            ch,
+                            cookie,
+                            len,
+                        }
                     }
                     MessageInfo::WRITE_REPLY => {
                         let len = unsafe { inline_body.write_reply.len };
-                        Event::WriteReply { ch, cookie, len }
+                        Event::WriteReply {
+                            ctx,
+                            ch,
+                            cookie,
+                            len,
+                        }
                     }
                     MessageInfo::READ_URI_REPLY => {
                         let len = unsafe { inline_body.read_uri_reply.len };
-                        Event::ReadUriReply { ch, cookie, len }
+                        Event::ReadUriReply {
+                            ctx,
+                            ch,
+                            cookie,
+                            len,
+                        }
                     }
                     MessageInfo::WRITE_URI_REPLY => {
                         let len = unsafe { inline_body.write_uri_reply.len };
-                        Event::WriteUriReply { ch, cookie, len }
+                        Event::WriteUriReply {
+                            ctx,
+                            ch,
+                            cookie,
+                            len,
+                        }
                     }
                     MessageInfo::ERROR_REPLY => {
                         let error = unsafe { inline_body.error_reply.error };
-                        Event::ErrorReply { ch, cookie, error }
+                        Event::ErrorReply {
+                            ctx,
+                            ch,
+                            cookie,
+                            error,
+                        }
                     }
                     _ => Event::UnknownMessage { ctx, info },
                 }
             }
             Ok(sink::Event::PeerClosed { ch_id }) => {
-                todo!()
+                match self.entries.get_mut(&ch_id) {
+                    Some(Entry {
+                        object: Object::Channel(ch),
+                        ctx,
+                    }) => Event::PeerClosed { ctx, ch },
+                    _ => panic!("unknown handle id from sink: {:?}", ch_id),
+                }
             }
             Ok(sink::Event::Irq { handle_id, irq }) => {
-                todo!()
+                match self.entries.get_mut(&handle_id) {
+                    Some(Entry {
+                        object: Object::Interrupt(interrupt),
+                        ctx,
+                    }) => Event::Irq { ctx, interrupt },
+                    _ => panic!("unknown handle id from sink: {:?}", handle_id),
+                }
             }
             Ok(sink::Event::Timer { handle_id }) => {
                 todo!()
