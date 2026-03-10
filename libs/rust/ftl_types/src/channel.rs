@@ -16,8 +16,7 @@ impl MessageInfo {
     pub const READ_URI: Self = Self::new(8, true, 0, 2, size_of::<ReadUriInline>());
     pub const READ_URI_REPLY: Self = Self::new(9, false, 0, 0, size_of::<ReadUriReplyInline>());
     pub const WRITE_URI: Self = Self::new(10, true, 0, 2, size_of::<WriteUriInline>());
-    pub const WRITE_URI_REPLY: Self =
-        Self::new(11, false, 0, 0, size_of::<WriteUriReplyInline>());
+    pub const WRITE_URI_REPLY: Self = Self::new(11, false, 0, 0, size_of::<WriteUriReplyInline>());
 
     const fn new(
         kind: u32,
@@ -66,7 +65,7 @@ impl MessageInfo {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct CallId(u32);
 
 impl CallId {
@@ -100,56 +99,77 @@ pub struct MessageBody {
 }
 
 #[repr(C)]
+#[derive(Clone, Copy)]
+pub union MessageInlineBody {
+    pub open: OpenInline,
+    pub read: ReadInline,
+    pub write: WriteInline,
+    pub read_uri: ReadUriInline,
+    pub write_uri: WriteUriInline,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
 pub struct ErrorReplyInline {
     pub error: ErrorCode,
 }
 
 #[repr(C)]
+#[derive(Clone, Copy)]
 pub struct OpenInline {}
 
 #[repr(C)]
+#[derive(Clone, Copy)]
 pub struct OpenReplyInline {}
 
 #[repr(C)]
+#[derive(Clone, Copy)]
 pub struct ReadInline {
     pub offset: usize,
     pub len: usize,
 }
 
 #[repr(C)]
+#[derive(Clone, Copy)]
 pub struct ReadReplyInline {
     pub len: usize,
 }
 
 #[repr(C)]
+#[derive(Clone, Copy)]
 pub struct WriteInline {
     pub offset: usize,
     pub len: usize,
 }
 
 #[repr(C)]
+#[derive(Clone, Copy)]
 pub struct WriteReplyInline {
     pub len: usize,
 }
 
 #[repr(C)]
+#[derive(Clone, Copy)]
 pub struct ReadUriInline {
     pub offset: usize,
     pub len: usize,
 }
 
 #[repr(C)]
+#[derive(Clone, Copy)]
 pub struct ReadUriReplyInline {
     pub len: usize,
 }
 
 #[repr(C)]
+#[derive(Clone, Copy)]
 pub struct WriteUriInline {
     pub offset: usize,
     pub len: usize,
 }
 
 #[repr(C)]
+#[derive(Clone, Copy)]
 pub struct WriteUriReplyInline {
     pub len: usize,
 }
