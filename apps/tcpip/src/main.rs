@@ -4,13 +4,6 @@
 use core::fmt;
 use core::net::Ipv4Addr;
 
-use ftl::application::Event;
-use ftl::application::EventLoop;
-use ftl::application::OpenCompleter;
-use ftl::application::ReadCompleter;
-use ftl::application::ReplyEvent;
-use ftl::application::RequestEvent;
-use ftl::application::WriteCompleter;
 use ftl::channel::Attr;
 use ftl::channel::Buffer;
 use ftl::channel::BufferMut;
@@ -19,6 +12,13 @@ use ftl::channel::Message;
 use ftl::collections::HashMap;
 use ftl::collections::VecDeque;
 use ftl::error::ErrorCode;
+use ftl::eventloop::Event;
+use ftl::eventloop::EventLoop;
+use ftl::eventloop::OpenCompleter;
+use ftl::eventloop::ReadCompleter;
+use ftl::eventloop::ReplyEvent;
+use ftl::eventloop::RequestEvent;
+use ftl::eventloop::WriteCompleter;
 use ftl::handle::HandleId;
 use ftl::handle::Handleable;
 use ftl::log::*;

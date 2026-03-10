@@ -1,12 +1,12 @@
 #![no_std]
 #![no_main]
 
-use ftl::application::Event;
-use ftl::application::EventLoop;
-use ftl::application::ReplyEvent;
 use ftl::channel::Buffer;
 use ftl::channel::Channel;
 use ftl::channel::Message;
+use ftl::eventloop::Event;
+use ftl::eventloop::EventLoop;
+use ftl::eventloop::ReplyEvent;
 use ftl::handle::HandleId;
 use ftl::handle::OwnedHandle;
 use ftl::log::*;

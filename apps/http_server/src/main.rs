@@ -3,15 +3,15 @@
 
 use core::ops::ControlFlow;
 
-use ftl::application::Event;
-use ftl::application::EventLoop;
-use ftl::application::ReplyEvent;
 use ftl::channel::Buffer;
 use ftl::channel::BufferMut;
 use ftl::channel::Channel;
 use ftl::channel::Message;
 use ftl::collections::HashMap;
 use ftl::error::ErrorCode;
+use ftl::eventloop::Event;
+use ftl::eventloop::EventLoop;
+use ftl::eventloop::ReplyEvent;
 use ftl::handle::HandleId;
 use ftl::handle::Handleable;
 use ftl::log::*;

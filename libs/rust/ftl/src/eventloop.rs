@@ -1,384 +1,51 @@
-use alloc::boxed::Box;
 use alloc::rc::Rc;
-use core::marker::PhantomData;
+use core::fmt;
+use core::ptr;
 
 use ftl_types::channel::Attr;
 use ftl_types::channel::CallId;
+use ftl_types::channel::ErrorReplyInline;
+use ftl_types::channel::GetattrInline;
+use ftl_types::channel::GetattrReplyInline;
+use ftl_types::channel::INLINE_LEN_MAX;
 use ftl_types::channel::MessageInfo;
-use ftl_types::channel::MessageInlineBody;
+use ftl_types::channel::OpenInline;
+use ftl_types::channel::OpenReplyInline;
+use ftl_types::channel::ReadInline;
+use ftl_types::channel::ReadReplyInline;
+use ftl_types::channel::SetattrInline;
+use ftl_types::channel::SetattrReplyInline;
+use ftl_types::channel::WriteInline;
+use ftl_types::channel::WriteReplyInline;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use hashbrown::HashMap;
 use log::warn;
 
+use crate::channel::Buffer;
+use crate::channel::BufferMut;
 use crate::channel::Channel;
-use crate::channel::Reply;
+use crate::channel::Cookie;
+use crate::channel::Reply as ChannelReply;
 use crate::handle::Handleable;
 use crate::interrupt::Interrupt;
 use crate::sink;
+use crate::sink::SandboxedSyscallEvent;
 use crate::sink::Sink;
-
-#[derive(Debug)]
-pub enum Event<'a, C, K> {
-    Open {
-        ctx: &'a mut C,
-        completer: OpenCompleter,
-    },
-    Read {
-        ctx: &'a mut C,
-        completer: ReadCompleter,
-        offset: usize,
-        len: usize,
-    },
-    Write {
-        ctx: &'a mut C,
-        completer: WriteCompleter,
-        offset: usize,
-        len: usize,
-    },
-    Getattr {
-        ctx: &'a mut C,
-        completer: GetattrCompleter,
-        attr: Attr,
-        len: usize,
-    },
-    Setattr {
-        ctx: &'a mut C,
-        completer: SetattrCompleter,
-        attr: Attr,
-        len: usize,
-    },
-    OpenReply {
-        ctx: &'a mut C,
-        ch: &'a Rc<Channel>,
-        cookie: K,
-    },
-    ReadReply {
-        ctx: &'a mut C,
-        ch: &'a Rc<Channel>,
-        cookie: K,
-        len: usize,
-    },
-    WriteReply {
-        ctx: &'a mut C,
-        ch: &'a Rc<Channel>,
-        cookie: K,
-        len: usize,
-    },
-    GetattrReply {
-        ctx: &'a mut C,
-        ch: &'a Rc<Channel>,
-        cookie: K,
-        len: usize,
-    },
-    SetattrReply {
-        ctx: &'a mut C,
-        ch: &'a Rc<Channel>,
-        cookie: K,
-        len: usize,
-    },
-    ErrorReply {
-        ctx: &'a mut C,
-        ch: &'a Rc<Channel>,
-        cookie: K,
-        error: ErrorCode,
-    },
-    PeerClosed {
-        ctx: &'a mut C,
-        ch: &'a Rc<Channel>,
-    },
-    UnknownMessage {
-        ctx: &'a mut C,
-        info: MessageInfo,
-    },
-    Irq {
-        ctx: &'a mut C,
-        interrupt: &'a Rc<Interrupt>,
-    },
-    SinkError(ErrorCode),
-}
-
-#[derive(Debug)]
-pub enum Error {
-    SinkCreate(ErrorCode),
-    SinkRemove(ErrorCode),
-    SinkAdd(ErrorCode),
-}
+use crate::thread::Thread;
+use crate::time::Timer;
 
 enum Object {
-    Channel(Rc<Channel>),
-    Interrupt(Rc<Interrupt>),
+    Channel(#[allow(unused)] Rc<Channel>),
+    Interrupt(#[allow(unused)] Rc<Interrupt>),
+    Timer(#[allow(unused)] Rc<Timer>),
+    Thread(#[allow(unused)] Rc<Thread>),
 }
 
-struct Entry<C> {
+struct State {
     object: Object,
-    ctx: C,
 }
 
-pub trait SmartPointer {
-    fn into_raw(self) -> usize;
-    fn from_raw(raw: usize) -> Self;
-}
-
-impl<T> SmartPointer for Box<T> {
-    fn into_raw(self) -> usize {
-        Box::into_raw(self) as usize
-    }
-
-    fn from_raw(raw: usize) -> Self {
-        unsafe { Box::from_raw(raw as *mut T) }
-    }
-}
-
-impl<T> SmartPointer for Rc<T> {
-    fn into_raw(self) -> usize {
-        Rc::into_raw(self) as usize
-    }
-
-    fn from_raw(raw: usize) -> Self {
-        unsafe { Rc::from_raw(raw as *mut T) }
-    }
-}
-
-pub struct EventLoop<C, K: SmartPointer> {
-    sink: Sink,
-    entries: HashMap<HandleId, Entry<C>>,
-    _pd: PhantomData<K>,
-}
-
-impl<C, K: SmartPointer> EventLoop<C, K> {
-    pub fn new() -> Result<Self, Error> {
-        let sink = Sink::new().map_err(Error::SinkCreate)?;
-        Ok(Self {
-            sink,
-            entries: HashMap::new(),
-            _pd: PhantomData,
-        })
-    }
-
-    pub fn add_channel(&mut self, channel: impl Into<Rc<Channel>>, ctx: C) -> Result<(), Error> {
-        let ch = channel.into();
-        self.sink.add(ch.as_ref()).map_err(Error::SinkAdd)?;
-        self.entries.insert(
-            ch.handle().id(),
-            Entry {
-                object: Object::Channel(ch),
-                ctx,
-            },
-        );
-        Ok(())
-    }
-
-    pub fn add_interrupt(
-        &mut self,
-        interrupt: impl Into<Rc<Interrupt>>,
-        ctx: C,
-    ) -> Result<(), Error> {
-        let interrupt = interrupt.into();
-        self.sink.add(interrupt.as_ref()).map_err(Error::SinkAdd)?;
-        self.entries.insert(
-            interrupt.handle().id(),
-            Entry {
-                object: Object::Interrupt(interrupt),
-                ctx,
-            },
-        );
-        Ok(())
-    }
-
-    pub fn remove(&mut self, id: HandleId) -> Result<(), Error> {
-        self.sink.remove(id).map_err(Error::SinkRemove)?;
-        self.entries.remove(&id);
-        Ok(())
-    }
-
-    pub fn wait(&mut self) -> Event<'_, C, K> {
-        let result = self.sink.wait();
-        match result {
-            Ok(sink::Event::CallMessage {
-                ch_id,
-                info,
-                call_id,
-                handles: _,
-                inline,
-            }) => {
-                let (ch, ctx) = match self.entries.get_mut(&ch_id) {
-                    Some(Entry {
-                        object: Object::Channel(ch),
-                        ctx,
-                    }) => (ch.clone(), ctx),
-                    _ => panic!("unknown handle id from sink: {:?}", ch_id),
-                };
-
-                // FIXME: Guarantee the alignment of the inline body.
-                let inline_body = unsafe { &*(inline.as_ptr() as *const MessageInlineBody) };
-                match info {
-                    MessageInfo::OPEN => {
-                        Event::Open {
-                            ctx,
-                            completer: OpenCompleter { ch, call_id },
-                        }
-                    }
-                    MessageInfo::READ => {
-                        Event::Read {
-                            ctx,
-                            offset: unsafe { inline_body.read.offset },
-                            len: unsafe { inline_body.read.len },
-                            completer: ReadCompleter { ch, call_id },
-                        }
-                    }
-                    MessageInfo::WRITE => {
-                        Event::Write {
-                            ctx,
-                            offset: unsafe { inline_body.write.offset },
-                            len: unsafe { inline_body.write.len },
-                            completer: WriteCompleter { ch, call_id },
-                        }
-                    }
-                    MessageInfo::GETATTR => {
-                        Event::Getattr {
-                            ctx,
-                            attr: unsafe { inline_body.getattr.attr },
-                            len: unsafe { inline_body.getattr.len },
-                            completer: GetattrCompleter { ch, call_id },
-                        }
-                    }
-                    MessageInfo::SETATTR => {
-                        Event::Setattr {
-                            ctx,
-                            attr: unsafe { inline_body.setattr.attr },
-                            len: unsafe { inline_body.setattr.len },
-                            completer: SetattrCompleter { ch, call_id },
-                        }
-                    }
-                    _ => Event::UnknownMessage { ctx, info },
-                }
-            }
-            Ok(sink::Event::ReplyMessage {
-                ch_id,
-                info,
-                cookie,
-                handles: _,
-                inline,
-            }) => {
-                let (ch, ctx) = match self.entries.get_mut(&ch_id) {
-                    Some(Entry {
-                        object: Object::Channel(ch),
-                        ctx,
-                    }) => (ch, ctx),
-                    _ => panic!("unknown handle id from sink: {:?}", ch_id),
-                };
-
-                // FIXME: Guarantee the alignment of the inline body.
-                let inline_body = unsafe { &*(inline.as_ptr() as *const MessageInlineBody) };
-                let cookie = K::from_raw(cookie);
-                match info {
-                    MessageInfo::OPEN_REPLY => Event::OpenReply { ctx, ch, cookie },
-                    MessageInfo::READ_REPLY => {
-                        let len = unsafe { inline_body.read_reply.len };
-                        Event::ReadReply {
-                            ctx,
-                            ch,
-                            cookie,
-                            len,
-                        }
-                    }
-                    MessageInfo::WRITE_REPLY => {
-                        let len = unsafe { inline_body.write_reply.len };
-                        Event::WriteReply {
-                            ctx,
-                            ch,
-                            cookie,
-                            len,
-                        }
-                    }
-                    MessageInfo::GETATTR_REPLY => {
-                        let len = unsafe { inline_body.getattr_reply.len };
-                        Event::GetattrReply {
-                            ctx,
-                            ch,
-                            cookie,
-                            len,
-                        }
-                    }
-                    MessageInfo::SETATTR_REPLY => {
-                        let len = unsafe { inline_body.setattr_reply.len };
-                        Event::SetattrReply {
-                            ctx,
-                            ch,
-                            cookie,
-                            len,
-                        }
-                    }
-                    MessageInfo::ERROR_REPLY => {
-                        let error = unsafe { inline_body.error_reply.error };
-                        Event::ErrorReply {
-                            ctx,
-                            ch,
-                            cookie,
-                            error,
-                        }
-                    }
-                    _ => Event::UnknownMessage { ctx, info },
-                }
-            }
-            Ok(sink::Event::PeerClosed { ch_id }) => {
-                match self.entries.get_mut(&ch_id) {
-                    Some(Entry {
-                        object: Object::Channel(ch),
-                        ctx,
-                    }) => Event::PeerClosed { ctx, ch },
-                    _ => panic!("unknown handle id from sink: {:?}", ch_id),
-                }
-            }
-            Ok(sink::Event::Irq { handle_id, irq: _ }) => {
-                match self.entries.get_mut(&handle_id) {
-                    Some(Entry {
-                        object: Object::Interrupt(interrupt),
-                        ctx,
-                    }) => Event::Irq { ctx, interrupt },
-                    _ => panic!("unknown handle id from sink: {:?}", handle_id),
-                }
-            }
-            Ok(sink::Event::Timer { handle_id: _ }) => {
-                todo!()
-            }
-            Ok(sink::Event::SandboxedSyscall {
-                thread_id: _,
-                raw: _,
-            }) => {
-                todo!()
-            }
-            Err(error) => Event::SinkError(error),
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct OpenCompleter {
-    ch: Rc<Channel>,
-    call_id: CallId,
-}
-
-impl OpenCompleter {
-    pub fn channel(&self) -> &Rc<Channel> {
-        &self.ch
-    }
-
-    pub fn complete(&self, ch: Channel) {
-        if let Err(error) = self.ch.reply(self.call_id, Reply::OpenReply { ch }) {
-            warn!("failed to complete open: {:?}", error);
-        }
-    }
-
-    pub fn error(&self, error: ErrorCode) {
-        if let Err(error) = self.ch.reply(self.call_id, Reply::ErrorReply { error }) {
-            warn!("failed to error open: {:?}", error);
-        }
-    }
-}
-
-#[derive(Debug)]
 pub struct ReadCompleter {
     ch: Rc<Channel>,
     call_id: CallId,
@@ -389,24 +56,41 @@ impl ReadCompleter {
         &self.ch
     }
 
-    pub fn error(&self, error: ErrorCode) {
-        if let Err(error) = self.ch.reply(self.call_id, Reply::ErrorReply { error }) {
-            warn!("failed to error read: {:?}", error);
-        }
-    }
-
-    pub fn write(&self, offset: usize, data: &[u8]) -> Result<usize, ErrorCode> {
-        self.ch.ool_write(self.call_id, 0, offset, data)
+    pub fn handle_id(&self) -> HandleId {
+        self.ch.handle().id()
     }
 
     pub fn complete(&self, len: usize) {
-        if let Err(error) = self.ch.reply(self.call_id, Reply::ReadReply { len }) {
+        if let Err(error) = self.ch.reply(self.call_id, ChannelReply::ReadReply { len }) {
             warn!("failed to complete read: {:?}", error);
+        }
+    }
+
+    pub fn error(&self, error: ErrorCode) {
+        if let Err(send_error) = self
+            .ch
+            .reply(self.call_id, ChannelReply::ErrorReply { error })
+        {
+            warn!("failed to error read: {:?}", send_error);
+        }
+    }
+
+    pub fn write_data(&self, offset: usize, data: &[u8]) -> Result<usize, ErrorCode> {
+        self.ch.ool_write(self.call_id, 0, offset, data)
+    }
+
+    pub fn write(&self, offset: usize, data: &[u8]) -> Result<usize, ErrorCode> {
+        self.write_data(offset, data)
+    }
+
+    pub fn complete_with(&self, data: &[u8]) {
+        match self.write_data(0, data) {
+            Ok(len) => self.complete(len),
+            Err(error) => self.error(error),
         }
     }
 }
 
-#[derive(Debug)]
 pub struct WriteCompleter {
     ch: Rc<Channel>,
     call_id: CallId,
@@ -416,27 +100,38 @@ impl WriteCompleter {
     pub fn channel(&self) -> &Rc<Channel> {
         &self.ch
     }
-}
 
-impl WriteCompleter {
-    pub fn read(&self, offset: usize, data: &mut [u8]) -> Result<usize, ErrorCode> {
-        self.ch.ool_read(self.call_id, 0, offset, data)
+    pub fn handle_id(&self) -> HandleId {
+        self.ch.handle().id()
     }
 
     pub fn complete(&self, len: usize) {
-        if let Err(error) = self.ch.reply(self.call_id, Reply::WriteReply { len }) {
+        if let Err(error) = self
+            .ch
+            .reply(self.call_id, ChannelReply::WriteReply { len })
+        {
             warn!("failed to complete write: {:?}", error);
         }
     }
 
     pub fn error(&self, error: ErrorCode) {
-        if let Err(error) = self.ch.reply(self.call_id, Reply::ErrorReply { error }) {
-            warn!("failed to error write: {:?}", error);
+        if let Err(send_error) = self
+            .ch
+            .reply(self.call_id, ChannelReply::ErrorReply { error })
+        {
+            warn!("failed to error write: {:?}", send_error);
         }
+    }
+
+    pub fn read_data(&self, offset: usize, data: &mut [u8]) -> Result<usize, ErrorCode> {
+        self.ch.ool_read(self.call_id, 0, offset, data)
+    }
+
+    pub fn read(&self, offset: usize, data: &mut [u8]) -> Result<usize, ErrorCode> {
+        self.read_data(offset, data)
     }
 }
 
-#[derive(Debug)]
 pub struct GetattrCompleter {
     ch: Rc<Channel>,
     call_id: CallId,
@@ -447,24 +142,44 @@ impl GetattrCompleter {
         &self.ch
     }
 
-    pub fn write(&self, offset: usize, data: &[u8]) -> Result<usize, ErrorCode> {
-        self.ch.ool_write(self.call_id, 0, offset, data)
+    pub fn handle_id(&self) -> HandleId {
+        self.ch.handle().id()
     }
 
     pub fn complete(&self, len: usize) {
-        if let Err(error) = self.ch.reply(self.call_id, Reply::GetattrReply { len }) {
+        if let Err(error) = self
+            .ch
+            .reply(self.call_id, ChannelReply::GetattrReply { len })
+        {
             warn!("failed to complete getattr: {:?}", error);
         }
     }
 
+    pub fn write_data(&self, offset: usize, data: &[u8]) -> Result<usize, ErrorCode> {
+        self.ch.ool_write(self.call_id, 0, offset, data)
+    }
+
+    pub fn write(&self, offset: usize, data: &[u8]) -> Result<usize, ErrorCode> {
+        self.write_data(offset, data)
+    }
+
+    pub fn complete_with(&self, data: &[u8]) {
+        match self.write_data(0, data) {
+            Ok(len) => self.complete(len),
+            Err(error) => self.error(error),
+        }
+    }
+
     pub fn error(&self, error: ErrorCode) {
-        if let Err(error) = self.ch.reply(self.call_id, Reply::ErrorReply { error }) {
-            warn!("failed to error getattr: {:?}", error);
+        if let Err(send_error) = self
+            .ch
+            .reply(self.call_id, ChannelReply::ErrorReply { error })
+        {
+            warn!("failed to error getattr: {:?}", send_error);
         }
     }
 }
 
-#[derive(Debug)]
 pub struct SetattrCompleter {
     ch: Rc<Channel>,
     call_id: CallId,
@@ -475,19 +190,497 @@ impl SetattrCompleter {
         &self.ch
     }
 
-    pub fn read(&self, offset: usize, data: &mut [u8]) -> Result<usize, ErrorCode> {
-        self.ch.ool_read(self.call_id, 0, offset, data)
+    pub fn handle_id(&self) -> HandleId {
+        self.ch.handle().id()
     }
 
     pub fn complete(&self, len: usize) {
-        if let Err(error) = self.ch.reply(self.call_id, Reply::SetattrReply { len }) {
+        if let Err(error) = self
+            .ch
+            .reply(self.call_id, ChannelReply::SetattrReply { len })
+        {
             warn!("failed to complete setattr: {:?}", error);
         }
     }
 
+    pub fn read_data(&self, offset: usize, data: &mut [u8]) -> Result<usize, ErrorCode> {
+        self.ch.ool_read(self.call_id, 0, offset, data)
+    }
+
+    pub fn read(&self, offset: usize, data: &mut [u8]) -> Result<usize, ErrorCode> {
+        self.read_data(offset, data)
+    }
+
     pub fn error(&self, error: ErrorCode) {
-        if let Err(error) = self.ch.reply(self.call_id, Reply::ErrorReply { error }) {
-            warn!("failed to error setattr: {:?}", error);
+        if let Err(send_error) = self
+            .ch
+            .reply(self.call_id, ChannelReply::ErrorReply { error })
+        {
+            warn!("failed to error setattr: {:?}", send_error);
+        }
+    }
+}
+
+pub struct OpenCompleter {
+    ch: Rc<Channel>,
+    call_id: CallId,
+}
+
+impl OpenCompleter {
+    pub fn channel(&self) -> &Rc<Channel> {
+        &self.ch
+    }
+
+    pub fn handle_id(&self) -> HandleId {
+        self.ch.handle().id()
+    }
+
+    pub fn read_uri(&self, offset: usize, uri: &mut [u8]) -> Result<usize, ErrorCode> {
+        self.ch.ool_read(self.call_id, 0, offset, uri)
+    }
+
+    pub fn complete(&self, ch: Channel) {
+        if let Err(error) = self.ch.reply(self.call_id, ChannelReply::OpenReply { ch }) {
+            warn!("failed to complete open: {:?}", error);
+        }
+    }
+
+    pub fn error(&self, error: ErrorCode) {
+        if let Err(send_error) = self
+            .ch
+            .reply(self.call_id, ChannelReply::ErrorReply { error })
+        {
+            warn!("failed to error open: {:?}", send_error);
+        }
+    }
+}
+
+pub enum RequestEvent {
+    Open {
+        completer: OpenCompleter,
+    },
+    Read {
+        offset: usize,
+        len: usize,
+        completer: ReadCompleter,
+    },
+    Write {
+        offset: usize,
+        len: usize,
+        completer: WriteCompleter,
+    },
+    Getattr {
+        attr: Attr,
+        len: usize,
+        completer: GetattrCompleter,
+    },
+    Setattr {
+        attr: Attr,
+        len: usize,
+        completer: SetattrCompleter,
+    },
+}
+
+impl fmt::Debug for RequestEvent {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            RequestEvent::Open { .. } => f.debug_tuple("Open").finish(),
+            RequestEvent::Read { offset, len, .. } => {
+                f.debug_struct("Read")
+                    .field("offset", offset)
+                    .field("len", len)
+                    .finish()
+            }
+            RequestEvent::Write { offset, len, .. } => {
+                f.debug_struct("Write")
+                    .field("offset", offset)
+                    .field("len", len)
+                    .finish()
+            }
+            RequestEvent::Getattr { attr, len, .. } => {
+                f.debug_struct("Getattr")
+                    .field("attr", attr)
+                    .field("len", len)
+                    .finish()
+            }
+            RequestEvent::Setattr { attr, len, .. } => {
+                f.debug_struct("Setattr")
+                    .field("attr", attr)
+                    .field("len", len)
+                    .finish()
+            }
+        }
+    }
+}
+
+pub enum ReplyEvent {
+    Open {
+        ch: Rc<Channel>,
+        uri: Buffer,
+        new_ch: Channel,
+    },
+    Read {
+        ch: Rc<Channel>,
+        buf: BufferMut,
+        len: usize,
+    },
+    Write {
+        ch: Rc<Channel>,
+        buf: Buffer,
+        len: usize,
+    },
+    Getattr {
+        ch: Rc<Channel>,
+        attr: Attr,
+        buf: BufferMut,
+        len: usize,
+    },
+    Setattr {
+        ch: Rc<Channel>,
+        attr: Attr,
+        buf: Buffer,
+        len: usize,
+    },
+    Error {
+        ch: Rc<Channel>,
+        error: ErrorCode,
+    },
+}
+
+impl ReplyEvent {
+    pub fn channel(&self) -> &Rc<Channel> {
+        match self {
+            ReplyEvent::Open { ch, .. }
+            | ReplyEvent::Read { ch, .. }
+            | ReplyEvent::Write { ch, .. }
+            | ReplyEvent::Getattr { ch, .. }
+            | ReplyEvent::Setattr { ch, .. }
+            | ReplyEvent::Error { ch, .. } => ch,
+        }
+    }
+
+    pub fn handle_id(&self) -> HandleId {
+        self.channel().handle().id()
+    }
+}
+
+impl fmt::Debug for ReplyEvent {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ReplyEvent::Open { .. } => f.debug_tuple("Open").finish(),
+            ReplyEvent::Read { len, .. } => f.debug_tuple("Read").field(len).finish(),
+            ReplyEvent::Write { len, .. } => f.debug_tuple("Write").field(len).finish(),
+            ReplyEvent::Getattr { len, .. } => f.debug_tuple("Getattr").field(len).finish(),
+            ReplyEvent::Setattr { len, .. } => f.debug_tuple("Setattr").field(len).finish(),
+            ReplyEvent::Error { error, .. } => f.debug_tuple("Error").field(error).finish(),
+        }
+    }
+}
+
+pub enum Event {
+    Request(RequestEvent),
+    Reply(ReplyEvent),
+    Interrupt {
+        interrupt: Rc<Interrupt>,
+    },
+    Timer {
+        timer: Rc<Timer>,
+    },
+    PeerClosed {
+        ch: Rc<Channel>,
+    },
+    SandboxedSyscall {
+        thread: Rc<Thread>,
+        regs: SandboxedSyscallEvent,
+    },
+}
+
+impl fmt::Debug for Event {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Event::Request(request) => f.debug_tuple("Request").field(request).finish(),
+            Event::Reply(reply) => f.debug_tuple("Reply").field(reply).finish(),
+            Event::Interrupt { interrupt } => f.debug_tuple("Interrupt").field(interrupt).finish(),
+            Event::Timer { .. } => f.debug_tuple("Timer").finish(),
+            Event::PeerClosed { ch } => f.debug_tuple("PeerClosed").field(ch).finish(),
+            Event::SandboxedSyscall { thread, regs } => {
+                f.debug_tuple("Syscall").field(thread).field(regs).finish()
+            }
+        }
+    }
+}
+
+fn read_inline<T>(inline: &[u8; INLINE_LEN_MAX]) -> T {
+    // SAFETY: Inline data is provided by the kernel and sized by MessageInfo.
+    unsafe { ptr::read_unaligned(inline.as_ptr() as *const T) }
+}
+
+pub struct EventLoop {
+    sink: Sink,
+    states: HashMap<HandleId, State>,
+}
+
+impl EventLoop {
+    pub fn new() -> Result<Self, ErrorCode> {
+        let sink = Sink::new()?;
+        Ok(Self {
+            sink,
+            states: HashMap::new(),
+        })
+    }
+
+    pub fn sink(&self) -> &Sink {
+        &self.sink
+    }
+
+    pub fn add_channel<T: Into<Rc<Channel>>>(&mut self, ch: T) -> Result<(), ErrorCode> {
+        let object = ch.into();
+        self.sink.add(object.as_ref())?;
+        self.states.insert(
+            object.handle().id(),
+            State {
+                object: Object::Channel(object),
+            },
+        );
+        Ok(())
+    }
+
+    pub fn add_interrupt<T: Into<Rc<Interrupt>>>(&mut self, interrupt: T) -> Result<(), ErrorCode> {
+        let object = interrupt.into();
+        self.sink.add(object.as_ref())?;
+        self.states.insert(
+            object.handle().id(),
+            State {
+                object: Object::Interrupt(object),
+            },
+        );
+        Ok(())
+    }
+
+    pub fn add_timer<T: Into<Rc<Timer>>>(&mut self, timer: T) -> Result<(), ErrorCode> {
+        let object = timer.into();
+        self.sink.add(object.as_ref())?;
+        self.states.insert(
+            object.handle().id(),
+            State {
+                object: Object::Timer(object),
+            },
+        );
+        Ok(())
+    }
+
+    pub fn add_thread<T: Into<Rc<Thread>>>(&mut self, thread: T) -> Result<(), ErrorCode> {
+        let object = thread.into();
+        self.sink.add(object.as_ref())?;
+        self.states.insert(
+            object.handle().id(),
+            State {
+                object: Object::Thread(object),
+            },
+        );
+        Ok(())
+    }
+
+    pub fn remove(&mut self, id: HandleId) -> Result<(), ErrorCode> {
+        self.sink.remove(id)?;
+        self.states.remove(&id);
+        Ok(())
+    }
+
+    pub fn wait(&mut self) -> Event {
+        loop {
+            let event = self.sink.wait().unwrap();
+            match event {
+                sink::Event::CallMessage {
+                    ch_id,
+                    info,
+                    call_id,
+                    handles,
+                    inline,
+                } => {
+                    debug_assert!(handles.is_empty());
+                    let ch = match self.states.get(&ch_id) {
+                        Some(State {
+                            object: Object::Channel(ch),
+                        }) => ch.clone(),
+                        _ => panic!("unknown handle id from sink: {:?}", ch_id),
+                    };
+
+                    let request = match info {
+                        MessageInfo::OPEN => {
+                            let _inline: OpenInline = read_inline(&inline);
+                            RequestEvent::Open {
+                                completer: OpenCompleter { ch, call_id },
+                            }
+                        }
+                        MessageInfo::READ => {
+                            let inline: ReadInline = read_inline(&inline);
+                            RequestEvent::Read {
+                                offset: inline.offset,
+                                len: inline.len,
+                                completer: ReadCompleter { ch, call_id },
+                            }
+                        }
+                        MessageInfo::WRITE => {
+                            let inline: WriteInline = read_inline(&inline);
+                            RequestEvent::Write {
+                                offset: inline.offset,
+                                len: inline.len,
+                                completer: WriteCompleter { ch, call_id },
+                            }
+                        }
+                        MessageInfo::GETATTR => {
+                            let inline: GetattrInline = read_inline(&inline);
+                            RequestEvent::Getattr {
+                                attr: inline.attr,
+                                len: inline.len,
+                                completer: GetattrCompleter { ch, call_id },
+                            }
+                        }
+                        MessageInfo::SETATTR => {
+                            let inline: SetattrInline = read_inline(&inline);
+                            RequestEvent::Setattr {
+                                attr: inline.attr,
+                                len: inline.len,
+                                completer: SetattrCompleter { ch, call_id },
+                            }
+                        }
+                        _ => panic!("unexpected message info: {:?}", info),
+                    };
+
+                    return Event::Request(request);
+                }
+                sink::Event::Irq { handle_id, irq: _ } => {
+                    match self.states.get(&handle_id) {
+                        Some(State {
+                            object: Object::Interrupt(interrupt),
+                        }) => {
+                            return Event::Interrupt {
+                                interrupt: interrupt.clone(),
+                            };
+                        }
+                        _ => panic!("unknown handle id from sink: {:?}", handle_id),
+                    }
+                }
+                sink::Event::PeerClosed { ch_id } => {
+                    match self.states.get(&ch_id) {
+                        Some(State {
+                            object: Object::Channel(ch),
+                        }) => {
+                            return Event::PeerClosed { ch: ch.clone() };
+                        }
+                        _ => panic!("unknown handle id from sink: {:?}", ch_id),
+                    }
+                }
+                sink::Event::ReplyMessage {
+                    ch_id,
+                    info,
+                    cookie,
+                    mut handles,
+                    inline,
+                } => {
+                    let ch = match self.states.get(&ch_id) {
+                        Some(State {
+                            object: Object::Channel(ch),
+                        }) => ch.clone(),
+                        _ => panic!("unknown handle id from sink: {:?}", ch_id),
+                    };
+
+                    // FIXME: Cookie is not guaranteed to be Box<Cookie>.
+                    let cookie = unsafe { Cookie::from_raw(cookie) };
+                    let reply = match info {
+                        MessageInfo::OPEN_REPLY => {
+                            let _inline: OpenReplyInline = read_inline(&inline);
+                            let Cookie::Buffer(uri) = *cookie else {
+                                panic!("unexpected cookie type");
+                            };
+                            let new_ch = Channel::from_handle(handles.pop().unwrap());
+                            ReplyEvent::Open { ch, uri, new_ch }
+                        }
+                        MessageInfo::READ_REPLY => {
+                            let inline: ReadReplyInline = read_inline(&inline);
+                            let Cookie::BufferMut(buf) = *cookie else {
+                                panic!("unexpected cookie type");
+                            };
+                            ReplyEvent::Read {
+                                ch,
+                                buf,
+                                len: inline.len,
+                            }
+                        }
+                        MessageInfo::WRITE_REPLY => {
+                            let inline: WriteReplyInline = read_inline(&inline);
+                            let Cookie::Buffer(buf) = *cookie else {
+                                panic!("unexpected cookie type");
+                            };
+                            ReplyEvent::Write {
+                                ch,
+                                buf,
+                                len: inline.len,
+                            }
+                        }
+                        MessageInfo::GETATTR_REPLY => {
+                            let inline: GetattrReplyInline = read_inline(&inline);
+                            let Cookie::Getattr(attr, buf) = *cookie else {
+                                panic!("unexpected cookie type");
+                            };
+                            ReplyEvent::Getattr {
+                                ch,
+                                attr,
+                                buf,
+                                len: inline.len,
+                            }
+                        }
+                        MessageInfo::SETATTR_REPLY => {
+                            let inline: SetattrReplyInline = read_inline(&inline);
+                            let Cookie::Setattr(attr, buf) = *cookie else {
+                                panic!("unexpected cookie type");
+                            };
+                            ReplyEvent::Setattr {
+                                ch,
+                                attr,
+                                buf,
+                                len: inline.len,
+                            }
+                        }
+                        MessageInfo::ERROR_REPLY => {
+                            let inline: ErrorReplyInline = read_inline(&inline);
+                            ReplyEvent::Error {
+                                ch,
+                                error: inline.error,
+                            }
+                        }
+                        _ => panic!("unexpected message info: {:?}", info),
+                    };
+
+                    return Event::Reply(reply);
+                }
+                sink::Event::Timer { handle_id } => {
+                    match self.states.get(&handle_id) {
+                        Some(State {
+                            object: Object::Timer(timer),
+                        }) => {
+                            return Event::Timer {
+                                timer: timer.clone(),
+                            };
+                        }
+                        _ => panic!("unknown handle id from sink: {:?}", handle_id),
+                    }
+                }
+                sink::Event::SandboxedSyscall { thread_id, raw } => {
+                    match self.states.get(&thread_id) {
+                        Some(State {
+                            object: Object::Thread(thread),
+                        }) => {
+                            return Event::SandboxedSyscall {
+                                thread: thread.clone(),
+                                regs: raw,
+                            };
+                        }
+                        _ => panic!("unknown handle id from sink: {:?}", thread_id),
+                    }
+                }
+            }
         }
     }
 }

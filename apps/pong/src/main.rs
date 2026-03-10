@@ -1,11 +1,11 @@
 #![no_std]
 #![no_main]
 
-use ftl::application::Event;
-use ftl::application::EventLoop;
-use ftl::application::RequestEvent;
 use ftl::channel::Channel;
 use ftl::error::ErrorCode;
+use ftl::eventloop::Event;
+use ftl::eventloop::EventLoop;
+use ftl::eventloop::RequestEvent;
 use ftl::handle::HandleId;
 use ftl::handle::OwnedHandle;
 use ftl::log::*;
