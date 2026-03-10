@@ -42,6 +42,18 @@ impl Buffer {
     }
 }
 
+impl Into<Buffer> for &'static str {
+    fn into(self) -> Buffer {
+        Buffer::Static(self.as_bytes())
+    }
+}
+
+impl Into<Buffer> for String {
+    fn into(self) -> Buffer {
+        Buffer::String(self)
+    }
+}
+
 #[derive(Debug)]
 pub enum BufferMut {
     String(String),
@@ -54,6 +66,12 @@ impl BufferMut {
             BufferMut::String(s) => (s.as_ptr() as usize, s.len()),
             BufferMut::Vec(v) => (v.as_ptr() as usize, v.len()),
         }
+    }
+}
+
+impl Into<BufferMut> for Vec<u8> {
+    fn into(self) -> BufferMut {
+        BufferMut::Vec(self)
     }
 }
 

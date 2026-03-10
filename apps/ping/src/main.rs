@@ -1,12 +1,11 @@
 #![no_std]
 #![no_main]
 
-use ftl::application::Event;
-use ftl::application::EventLoop;
-use ftl::application::ReplyEvent;
 use ftl::channel::Buffer;
 use ftl::channel::Channel;
-use ftl::channel::Message;
+use ftl::eventloop::Client;
+use ftl::eventloop::Event;
+use ftl::eventloop::EventLoop;
 use ftl::handle::HandleId;
 use ftl::handle::OwnedHandle;
 use ftl::log::*;
@@ -14,31 +13,30 @@ use ftl::prelude::format;
 use ftl::rc::Rc;
 
 struct Main {
+    client: Client<()>,
     counter: usize,
 }
 
 impl Main {
-    fn new(eventloop: &mut EventLoop) -> Self {
+    fn new(eventloop: &mut EventLoop<(), ()>) -> Self {
         let ch_id = HandleId::from_raw(1);
         let ch = Rc::new(Channel::from_handle(OwnedHandle::from_raw(ch_id)));
+        let client = eventloop.add_channel(ch, ()).unwrap();
 
-        ch.send(Message::Write {
-            offset: 0,
-            data: Buffer::Static(b"Hello, world!"),
-        })
-        .unwrap();
+        client.write(0, Buffer::Static(b"Hello, world!"), ()).unwrap();
 
-        eventloop.add_channel(ch).unwrap();
-        Self { counter: 0 }
+        Self { client, counter: 0 }
     }
 
-    fn on_write_reply(&mut self, ch: &Rc<Channel>, len: usize) {
+    fn on_write_reply(&mut self, len: usize) {
         trace!("[ping] received write reply: {} bytes written", len);
-        ch.send(Message::Write {
-            offset: 0,
-            data: Buffer::String(format!("Ping({})", self.counter)),
-        })
-        .unwrap();
+        self.client
+            .write(
+                0,
+                Buffer::String(format!("Ping({})", self.counter)),
+                (),
+            )
+            .unwrap();
         self.counter += 1;
     }
 }
@@ -50,8 +48,8 @@ fn main() {
 
     loop {
         match eventloop.wait() {
-            Event::Reply(ReplyEvent::Write { ch, buf: _, len }) => {
-                app.on_write_reply(&ch, len);
+            Event::WriteReply { len, .. } => {
+                app.on_write_reply(len);
             }
             ev => {
                 warn!("[ping] unhandled event: {:?}", ev);

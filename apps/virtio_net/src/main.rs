@@ -174,7 +174,7 @@ fn main() {
                 virtio.notify(&txq);
                 completer.complete(payload_len);
             }
-            Event::Getattr {
+            Event::GetAttr {
                 attr, completer, ..
             } => {
                 // TODO: Check the context

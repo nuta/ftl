@@ -78,8 +78,8 @@ impl CallId {
     }
 }
 
-pub const NUM_HANDLES_MAX: usize = 2;
-pub const NUM_OOLS_MAX: usize = 2;
+pub const NUM_HANDLES_MAX: usize = 1;
+pub const NUM_OOLS_MAX: usize = 1;
 pub const INLINE_LEN_MAX: usize =
     128 - size_of::<[HandleId; NUM_HANDLES_MAX]>() - size_of::<[OutOfLine; NUM_OOLS_MAX]>();
 

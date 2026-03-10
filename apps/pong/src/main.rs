@@ -1,11 +1,10 @@
 #![no_std]
 #![no_main]
 
-use ftl::application::Event;
-use ftl::application::EventLoop;
-use ftl::application::RequestEvent;
 use ftl::channel::Channel;
 use ftl::error::ErrorCode;
+use ftl::eventloop::Event;
+use ftl::eventloop::EventLoop;
 use ftl::handle::HandleId;
 use ftl::handle::OwnedHandle;
 use ftl::log::*;
@@ -16,17 +15,15 @@ fn main() {
 
     let ch_id = HandleId::from_raw(1);
     let ch = Channel::from_handle(OwnedHandle::from_raw(ch_id));
-    eventloop.add_channel(ch).unwrap();
+    eventloop.add_channel(ch, ()).unwrap();
 
     loop {
         match eventloop.wait() {
-            Event::Request(RequestEvent::Write {
-                offset,
-                len: _,
-                completer,
-            }) => {
+            Event::Write {
+                offset, completer, ..
+            } => {
                 let mut buf = [0; 512];
-                match completer.read_data(offset, &mut buf) {
+                match completer.read(offset, &mut buf) {
                     Ok(len) => {
                         trace!(
                             "[pong] OOL read ({len} bytes): {:?}",
@@ -40,14 +37,10 @@ fn main() {
                     }
                 }
             }
-            Event::Request(RequestEvent::Open { completer }) => {
+            Event::Open { completer, .. } => {
                 completer.error(ErrorCode::Unsupported);
             }
-            Event::Request(RequestEvent::Read {
-                offset: _,
-                len: _,
-                completer,
-            }) => {
+            Event::Read { completer, .. } => {
                 completer.error(ErrorCode::Unsupported);
             }
             ev => {

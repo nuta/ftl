@@ -4,21 +4,19 @@
 use core::fmt;
 use core::net::Ipv4Addr;
 
-use ftl::application::Event;
-use ftl::application::EventLoop;
-use ftl::application::OpenCompleter;
-use ftl::application::ReadCompleter;
-use ftl::application::ReplyEvent;
-use ftl::application::RequestEvent;
-use ftl::application::WriteCompleter;
 use ftl::channel::Attr;
 use ftl::channel::Buffer;
 use ftl::channel::BufferMut;
 use ftl::channel::Channel;
-use ftl::channel::Message;
 use ftl::collections::HashMap;
 use ftl::collections::VecDeque;
 use ftl::error::ErrorCode;
+use ftl::eventloop::Client;
+use ftl::eventloop::Event;
+use ftl::eventloop::EventLoop;
+use ftl::eventloop::OpenCompleter;
+use ftl::eventloop::ReadCompleter;
+use ftl::eventloop::WriteCompleter;
 use ftl::handle::HandleId;
 use ftl::handle::Handleable;
 use ftl::log::*;
@@ -46,6 +44,7 @@ enum Uri {
 const TCP_BUFFER_SIZE: usize = 4096;
 const NET_RX_BUFFER_SIZE: usize = 1514;
 const RX_QUEUE_SIZE: usize = 1;
+type AppEventLoop = EventLoop<(), ()>;
 
 // TODO: Remove this default timeout once we solve leaks.
 const TCP_SOCKET_TIMEOUT: smoltcp::time::Duration = smoltcp::time::Duration::from_secs(30);
@@ -63,11 +62,11 @@ impl smoltcp::phy::RxToken for RxToken {
     }
 }
 
-struct TxToken<'a> {
-    ch: &'a Channel,
+struct TxToken {
+    ch: Rc<Channel>,
 }
 
-impl smoltcp::phy::TxToken for TxToken<'_> {
+impl smoltcp::phy::TxToken for TxToken {
     fn consume<R, F>(self, len: usize, f: F) -> R
     where
         F: FnOnce(&mut [u8]) -> R,
@@ -75,12 +74,7 @@ impl smoltcp::phy::TxToken for TxToken<'_> {
         let mut buf = vec![0u8; len];
         let result = f(&mut buf);
 
-        let msg = Message::Write {
-            offset: 0,
-            data: Buffer::Vec(buf),
-        };
-
-        if let Err(error) = self.ch.send(msg) {
+        if let Err(error) = Client::new(self.ch).write(0, Buffer::Vec(buf), ()) {
             // TODO: Add a semaphore to limit the number of inflight writes.
             trace!("failed to send packet: {:?}", error);
         }
@@ -128,12 +122,11 @@ impl Device {
 
     fn fill_rx(&mut self) {
         while self.rx_queue.len() + self.inflight_reads < RX_QUEUE_SIZE {
-            let msg = Message::Read {
-                offset: 0,
-                data: BufferMut::Vec(vec![0u8; NET_RX_BUFFER_SIZE]),
-            };
-
-            match self.ch.send(msg) {
+            match Client::new(self.ch.clone()).read(
+                0,
+                BufferMut::Vec(vec![0u8; NET_RX_BUFFER_SIZE]),
+                (),
+            ) {
                 Ok(()) => {
                     self.inflight_reads += 1;
                 }
@@ -148,7 +141,7 @@ impl Device {
 
 impl smoltcp::phy::Device for Device {
     type RxToken<'a> = RxToken;
-    type TxToken<'a> = TxToken<'a>;
+    type TxToken<'a> = TxToken;
 
     fn receive(
         &mut self,
@@ -160,7 +153,7 @@ impl smoltcp::phy::Device for Device {
             self.fill_rx();
             let rx = RxToken { buffer: packet };
             let tx = TxToken {
-                ch: self.ch.as_ref(),
+                ch: self.ch.clone(),
             };
             Some((rx, tx))
         } else {
@@ -173,7 +166,7 @@ impl smoltcp::phy::Device for Device {
 
     fn transmit(&mut self, _timestamp: smoltcp::time::Instant) -> Option<Self::TxToken<'_>> {
         Some(TxToken {
-            ch: self.ch.as_ref(),
+            ch: self.ch.clone(),
         })
     }
 
@@ -242,9 +235,9 @@ struct Main {
 }
 
 impl Main {
-    fn connect_driver(&mut self, eventloop: &mut EventLoop) -> Result<(), ErrorCode> {
+    fn connect_driver(&mut self, eventloop: &mut AppEventLoop) -> Result<(), ErrorCode> {
         let driver_ch = Rc::new(Channel::connect("ethernet")?);
-        eventloop.add_channel(driver_ch.clone())?;
+        eventloop.add_channel(driver_ch.clone(), ())?;
 
         let driver_id = driver_ch.handle().id();
         self.contexts.insert(driver_id, Context::Driver);
@@ -254,10 +247,9 @@ impl Main {
         self.device.inflight_reads = 0;
         self.ready_to_serve = false;
 
-        if let Err(error) = driver_ch.send(Message::Getattr {
-            attr: Attr::MAC,
-            data: BufferMut::Vec(vec![0; 6]),
-        }) {
+        if let Err(error) =
+            Client::new(driver_ch.clone()).getattr(Attr::MAC, BufferMut::Vec(vec![0; 6]), ())
+        {
             trace!("failed to request MAC: {:?}", error);
         }
 
@@ -301,13 +293,13 @@ impl Main {
 
     pub fn tcp_listen(
         &mut self,
-        eventloop: &mut EventLoop,
+        eventloop: &mut AppEventLoop,
         endpoint: IpListenEndpoint,
     ) -> Result<Channel, ErrorCode> {
         let (our_ch, their_ch) = Channel::new()?;
         let handle = self.do_tcp_listen(endpoint)?;
         let ch_id = our_ch.handle().id();
-        eventloop.add_channel(our_ch)?;
+        eventloop.add_channel(our_ch, ())?;
 
         self.contexts.insert(
             ch_id,
@@ -321,13 +313,13 @@ impl Main {
 
     pub fn tcp_accept(
         &mut self,
-        eventloop: &mut EventLoop,
+        eventloop: &mut AppEventLoop,
         accepted_handle: SocketHandle,
         endpoint: IpListenEndpoint,
     ) -> Result<Channel, ErrorCode> {
         let (our_ch, their_ch) = Channel::new()?;
         let new_ch_id = our_ch.handle().id();
-        eventloop.add_channel(our_ch)?;
+        eventloop.add_channel(our_ch, ())?;
 
         // Create a new listen socket.
         let new_listen_handle = self.do_tcp_listen(endpoint)?;
@@ -348,7 +340,7 @@ impl Main {
         Ok(their_ch)
     }
 
-    pub fn poll(&mut self, eventloop: &mut EventLoop) {
+    pub fn poll(&mut self, eventloop: &mut AppEventLoop) {
         if !self.ready_to_serve {
             return;
         }
@@ -438,7 +430,7 @@ impl Main {
         }
     }
 
-    fn do_poll(&mut self, eventloop: &mut EventLoop) {
+    fn do_poll(&mut self, eventloop: &mut AppEventLoop) {
         use smoltcp::socket::Socket;
 
         let mut accepted_sockets = Vec::new();
@@ -573,7 +565,7 @@ fn tcp_read_write(socket: &mut tcp::Socket, state: &mut Context) {
             //
             // > Call f with the largest contiguous slice of octets in the receive
             // > buffer, and dequeue the amount of elements returned by f.
-            let read_len = match completer.write_data(0, buf) {
+            let read_len = match completer.write(0, buf) {
                 Ok(len) => {
                     // TODO: Reuse the completer if the entire buffer was written.
                     completer.complete(len);
@@ -606,7 +598,7 @@ fn tcp_read_write(socket: &mut tcp::Socket, state: &mut Context) {
             // > Call f with the largest contiguous slice of octets in the
             // > transmit buffer, and enqueue the amount of elements returned
             // > by f.
-            let write_len = match completer.read_data(0, buf) {
+            let write_len = match completer.read(0, buf) {
                 Ok(len) => {
                     // TODO: Reuse the completer if the entire buffer was written.
                     completer.complete(len);
@@ -694,7 +686,7 @@ fn tcp_peer_closed(socket: &mut tcp::Socket, state: &mut Context) {
 
 fn parse_uri(completer: &OpenCompleter) -> Result<Uri, ErrorCode> {
     let mut buf = [0; 256];
-    let len = completer.read_uri(0, &mut buf)?;
+    let len = completer.read_path(0, &mut buf)?;
 
     let Ok(uri) = core::str::from_utf8(&buf[..len]) else {
         return Err(ErrorCode::InvalidArgument);
@@ -736,7 +728,7 @@ fn parse_uri(completer: &OpenCompleter) -> Result<Uri, ErrorCode> {
 }
 
 impl Main {
-    fn new(eventloop: &mut EventLoop) -> Self {
+    fn new(eventloop: &mut AppEventLoop) -> Self {
         trace!("starting...");
         let smol_clock = SmolClock::new();
         let hwaddr = HardwareAddress::Ethernet(EthernetAddress::from_bytes(&[0; 6]));
@@ -748,18 +740,17 @@ impl Main {
         let driver_id = driver_ch.handle().id();
         states.insert(driver_id, Context::Driver);
 
-        eventloop.add_channel(driver_ch.clone()).unwrap();
+        eventloop.add_channel(driver_ch.clone(), ()).unwrap();
 
-        if let Err(error) = driver_ch.send(Message::Getattr {
-            attr: Attr::MAC,
-            data: BufferMut::Vec(vec![0; 6]),
-        }) {
+        if let Err(error) =
+            Client::new(driver_ch.clone()).getattr(Attr::MAC, BufferMut::Vec(vec![0; 6]), ())
+        {
             trace!("failed to request MAC: {:?}", error);
         }
 
         let mut device = Device::new(driver_ch);
         let timer = Rc::new(Timer::new().expect("failed to create poll timer"));
-        eventloop.add_timer(timer.clone()).unwrap();
+        eventloop.add_timer(timer.clone(), ()).unwrap();
 
         let iface = Interface::new(config, &mut device, smol_clock.now());
 
@@ -768,7 +759,7 @@ impl Main {
 
         let service_ch = Rc::new(Channel::register("tcpip").unwrap());
         let service_id = service_ch.handle().id();
-        eventloop.add_channel(service_ch).unwrap();
+        eventloop.add_channel(service_ch, ()).unwrap();
         states.insert(service_id, Context::ServiceListener);
 
         trace!("ready");
@@ -785,7 +776,7 @@ impl Main {
         }
     }
 
-    fn on_open_request(&mut self, eventloop: &mut EventLoop, completer: OpenCompleter) {
+    fn on_open_request(&mut self, eventloop: &mut AppEventLoop, completer: OpenCompleter) {
         let handle_id = completer.handle_id();
         match self.contexts.get_mut(&handle_id) {
             Some(Context::TcpListener {
@@ -804,8 +795,8 @@ impl Main {
                 };
 
                 let our_id = our_ch.handle().id();
-                if let Err(error) = eventloop.add_channel(our_ch) {
-                    completer.error(error);
+                if let Err(error) = eventloop.add_channel(our_ch, ()) {
+                    completer.error(error.into());
                     return;
                 }
 
@@ -840,7 +831,7 @@ impl Main {
 
     fn on_read_request(
         &mut self,
-        eventloop: &mut EventLoop,
+        eventloop: &mut AppEventLoop,
         completer: ReadCompleter,
         _offset: usize,
         _len: usize,
@@ -873,7 +864,7 @@ impl Main {
 
     fn on_write_request(
         &mut self,
-        eventloop: &mut EventLoop,
+        eventloop: &mut AppEventLoop,
         completer: WriteCompleter,
         _offset: usize,
         _len: usize,
@@ -906,7 +897,7 @@ impl Main {
 
     fn on_read_reply(
         &mut self,
-        eventloop: &mut EventLoop,
+        eventloop: &mut AppEventLoop,
         ch: &Rc<Channel>,
         buf: BufferMut,
         len: usize,
@@ -928,9 +919,8 @@ impl Main {
 
     fn on_getattr_reply(
         &mut self,
-        eventloop: &mut EventLoop,
+        eventloop: &mut AppEventLoop,
         ch: &Rc<Channel>,
-        _attr: Attr,
         buf: BufferMut,
         len: usize,
     ) {
@@ -964,7 +954,7 @@ impl Main {
         }
     }
 
-    fn on_peer_closed(&mut self, eventloop: &mut EventLoop, ch: &Rc<Channel>) {
+    fn on_peer_closed(&mut self, eventloop: &mut AppEventLoop, ch: &Rc<Channel>) {
         let handle_id = ch.handle().id();
         let mut should_remove_channel = false;
         let mut should_reconnect_driver = false;
@@ -1004,77 +994,160 @@ impl Main {
         self.poll(eventloop);
     }
 
-    fn on_timer_expired(&mut self, eventloop: &mut EventLoop) {
+    fn on_timer_expired(&mut self, eventloop: &mut AppEventLoop) {
         trace!("timer expired");
         self.poll(eventloop);
     }
 }
 
+enum MainAction {
+    Open(OpenCompleter),
+    Read {
+        completer: ReadCompleter,
+        offset: usize,
+        len: usize,
+    },
+    Write {
+        completer: WriteCompleter,
+        offset: usize,
+        len: usize,
+    },
+    ReadReply {
+        ch: Rc<Channel>,
+        buf: BufferMut,
+        len: usize,
+    },
+    WriteReply {
+        ch: Rc<Channel>,
+        buf: Buffer,
+        len: usize,
+    },
+    GetAttrReply {
+        ch: Rc<Channel>,
+        buf: BufferMut,
+        len: usize,
+    },
+    PeerClosed(Rc<Channel>),
+    Timer,
+}
+
 #[ftl::main]
 fn main() {
-    let mut eventloop = EventLoop::new().unwrap();
+    let mut eventloop: AppEventLoop = EventLoop::new().unwrap();
     let mut app = Main::new(&mut eventloop);
 
     loop {
-        match eventloop.wait() {
-            Event::Request(request) => {
-                match request {
-                    RequestEvent::Open { completer } => {
-                        app.on_open_request(&mut eventloop, completer);
-                    }
-                    RequestEvent::Read {
-                        offset,
-                        len,
-                        completer,
-                    } => {
-                        app.on_read_request(&mut eventloop, completer, offset, len);
-                    }
-                    RequestEvent::Write {
-                        offset,
-                        len,
-                        completer,
-                    } => {
-                        app.on_write_request(&mut eventloop, completer, offset, len);
-                    }
-                    request => {
-                        warn!("unexpected request: {:?}", request);
-                    }
-                }
+        let action = match eventloop.wait() {
+            Event::Open { completer, .. } => Some(MainAction::Open(completer)),
+            Event::Read {
+                offset,
+                len,
+                completer,
+                ..
+            } => {
+                Some(MainAction::Read {
+                    completer,
+                    offset,
+                    len,
+                })
             }
-            Event::Reply(reply) => {
-                match reply {
-                    ReplyEvent::Open { .. } => {
-                        warn!("unexpected open reply");
-                    }
-                    ReplyEvent::Read { ch, buf, len } => {
-                        app.on_read_reply(&mut eventloop, &ch, buf, len);
-                    }
-                    ReplyEvent::Write { ch, buf, len } => {
-                        app.on_write_reply(&ch, buf, len);
-                    }
-                    ReplyEvent::Getattr { ch, attr, buf, len } => {
-                        app.on_getattr_reply(&mut eventloop, &ch, attr, buf, len);
-                    }
-                    ReplyEvent::Setattr { ch, .. } => {
-                        warn!("unexpected setattr reply from {:?}", ch);
-                    }
-                    ReplyEvent::Error { ch, error } => {
-                        warn!("error reply from {:?}: {:?}", ch, error);
-                    }
-                }
+            Event::Write {
+                offset,
+                len,
+                completer,
+                ..
+            } => {
+                Some(MainAction::Write {
+                    completer,
+                    offset,
+                    len,
+                })
             }
-            Event::PeerClosed { ch } => {
-                app.on_peer_closed(&mut eventloop, &ch);
+            Event::OpenReply { .. } => {
+                warn!("unexpected open reply");
+                None
             }
-            Event::Timer { timer: _ } => {
-                app.on_timer_expired(&mut eventloop);
+            Event::ReadReply {
+                client, buf, len, ..
+            } => {
+                Some(MainAction::ReadReply {
+                    ch: client.channel().clone(),
+                    buf,
+                    len,
+                })
             }
-            Event::Interrupt { interrupt } => {
+            Event::WriteReply {
+                client, buf, len, ..
+            } => {
+                Some(MainAction::WriteReply {
+                    ch: client.channel().clone(),
+                    buf,
+                    len,
+                })
+            }
+            Event::GetAttrReply {
+                client, buf, len, ..
+            } => {
+                Some(MainAction::GetAttrReply {
+                    ch: client.channel().clone(),
+                    buf,
+                    len,
+                })
+            }
+            Event::SetAttrReply { client, .. } => {
+                warn!("unexpected setattr reply from {:?}", client.channel());
+                None
+            }
+            Event::ErrorReply { client, error, .. } => {
+                warn!("error reply from {:?}: {:?}", client.channel(), error);
+                None
+            }
+            Event::PeerClosed { ch, .. } => Some(MainAction::PeerClosed(ch.clone())),
+            Event::Timer { .. } => Some(MainAction::Timer),
+            Event::Irq { interrupt, .. } => {
                 warn!("unexpected interrupt: {:?}", interrupt);
+                None
             }
             event => {
                 warn!("unhandled event: {:?}", event);
+                None
             }
+        };
+
+        match action {
+            Some(MainAction::Open(completer)) => {
+                app.on_open_request(&mut eventloop, completer);
+            }
+            Some(MainAction::Read {
+                completer,
+                offset,
+                len,
+            }) => {
+                app.on_read_request(&mut eventloop, completer, offset, len);
+            }
+            Some(MainAction::Write {
+                completer,
+                offset,
+                len,
+            }) => {
+                app.on_write_request(&mut eventloop, completer, offset, len);
+            }
+            Some(MainAction::ReadReply { ch, buf, len }) => {
+                app.on_read_reply(&mut eventloop, &ch, buf, len);
+            }
+            Some(MainAction::WriteReply { ch, buf, len }) => {
+                app.on_write_reply(&ch, buf, len);
+            }
+            Some(MainAction::GetAttrReply { ch, buf, len }) => {
+                app.on_getattr_reply(&mut eventloop, &ch, buf, len);
+            }
+            Some(MainAction::PeerClosed(ch)) => {
+                app.on_peer_closed(&mut eventloop, &ch);
+            }
+            Some(MainAction::Timer) => {
+                app.on_timer_expired(&mut eventloop);
+            }
+            None => {}
         }
     }
 }

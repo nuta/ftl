@@ -3,21 +3,16 @@
 
 extern crate alloc;
 
-use ftl::application::Event;
-use ftl::application::EventLoop;
-use ftl::application::OpenCompleter;
-use ftl::application::ReplyEvent;
-use ftl::application::RequestEvent;
 use ftl::borrow::ToOwned;
-use ftl::channel::Buffer;
 use ftl::channel::Channel;
-use ftl::channel::Message;
 use ftl::collections::HashMap;
 use ftl::collections::VecDeque;
 use ftl::error::ErrorCode;
-use ftl::handle::Handleable;
+use ftl::eventloop::Client;
+use ftl::eventloop::Event;
+use ftl::eventloop::EventLoop;
+use ftl::eventloop::OpenCompleter;
 use ftl::prelude::*;
-use ftl::rc::Rc;
 
 use crate::initfs::InitFs;
 
@@ -35,7 +30,7 @@ impl UriReader {
     }
 
     pub fn read(&mut self, completer: &OpenCompleter) -> Result<(&str, &str), ErrorCode> {
-        let len = completer.read_uri(0, self.buf.as_mut_slice())?;
+        let len = completer.read_path(0, self.buf.as_mut_slice())?;
         let uri = core::str::from_utf8(&self.buf[..len]).map_err(|_| ErrorCode::InvalidArgument)?;
         match uri.split_once(':') {
             Some((scheme, rest)) => Ok((scheme, rest)),
@@ -44,9 +39,14 @@ impl UriReader {
     }
 }
 
+#[derive(Debug)]
+enum Cookie {
+    Connect(OpenCompleter),
+}
+
 enum Service {
     Waiting { waiters: VecDeque<OpenCompleter> },
-    Registered { server_ch: Rc<Channel> },
+    Registered { server_ch: Client<Cookie> },
 }
 
 #[ftl::main]
@@ -58,10 +58,9 @@ fn main() {
 
     let mut uri_reader = UriReader::new();
     let mut services = HashMap::new();
-    let mut opening = HashMap::new();
     loop {
         match eventloop.wait() {
-            Event::Request(RequestEvent::Open { completer }) => {
+            Event::Open { completer, .. } => {
                 let (scheme, service_name) = match uri_reader.read(&completer) {
                     Ok(parsed_uri) => parsed_uri,
                     Err(error) => {
@@ -77,16 +76,12 @@ fn main() {
                                 waiters.push_back(completer);
                             }
                             Some(Service::Registered { server_ch }) => {
-                                let msg = Message::Open {
-                                    uri: Buffer::String(format!("connect:{}", service_name)),
-                                };
-
-                                if let Err(err) = server_ch.send(msg) {
+                                if let Err(err) = server_ch.open(
+                                    format!("connect:{}", service_name),
+                                    Cookie::Connect(completer),
+                                ) {
                                     warn!("failed to send open message to server: {:?}", err);
-                                    continue;
                                 }
-
-                                opening.insert(server_ch.handle().id(), completer);
                             }
                             None => {
                                 let mut waiters = VecDeque::new();
@@ -105,32 +100,26 @@ fn main() {
                             }
                         };
 
-                        let our_ch = Rc::new(our_ch);
+                        let server_ch = eventloop.add_channel(our_ch, ()).unwrap();
                         let service = Service::Registered {
-                            server_ch: our_ch.clone(),
+                            server_ch: server_ch.clone(),
                         };
-
                         if let Some(service) = services.insert(service_name.to_owned(), service) {
                             let Service::Waiting { mut waiters } = service else {
                                 unreachable!();
                             };
 
                             for waiter in waiters.drain(..) {
-                                let msg = Message::Open {
-                                    uri: Buffer::String(format!("connect:{}", service_name)),
-                                };
-
-                                if let Err(err) = our_ch.send(msg) {
+                                if let Err(err) = server_ch.open(
+                                    format!("connect:{}", service_name),
+                                    Cookie::Connect(waiter),
+                                ) {
                                     warn!("failed to send open message to waiter: {:?}", err);
-                                    continue;
                                 }
-
-                                opening.insert(our_ch.handle().id(), waiter);
                             }
                         }
 
                         trace!("registered service: {}", service_name);
-                        eventloop.add_channel(our_ch.clone()).unwrap();
                         completer.complete(their_ch);
                     }
                     _ => {
@@ -138,15 +127,24 @@ fn main() {
                     }
                 }
             }
-            Event::Reply(ReplyEvent::Open { ch, new_ch, .. }) => {
-                let Some(completer) = opening.remove(&ch.handle().id()) else {
-                    warn!("unexpected open reply from {:?}", ch.handle().id());
-                    continue;
-                };
-
-                completer.complete(new_ch);
+            Event::OpenReply {
+                cookie: Cookie::Connect(waiter),
+                new_ch,
+                ..
+            } => {
+                waiter.complete(new_ch);
             }
-            event => warn!("unhandled event: {:?}", event),
+            Event::ErrorReply {
+                cookie: Cookie::Connect(waiter),
+                error,
+                ..
+            } => {
+                warn!("failed to connect to service: {:?}", error);
+                waiter.error(error);
+            }
+            event => {
+                warn!("unhandled event: {:?}", event);
+            }
         }
     }
 }

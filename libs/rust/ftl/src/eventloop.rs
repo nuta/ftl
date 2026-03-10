@@ -9,7 +9,6 @@ use ftl_types::channel::Attr;
 use ftl_types::channel::CallId;
 use ftl_types::channel::MessageBody;
 use ftl_types::channel::MessageInfo;
-use ftl_types::channel::MessageInlineBody;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use ftl_types::sink::EventType;
@@ -24,6 +23,7 @@ use crate::handle::OwnedHandle;
 use crate::interrupt::Interrupt;
 use crate::sink;
 use crate::sink::Sink;
+use crate::time::Timer;
 
 #[derive(Debug)]
 pub enum Event<'a, C, K> {
@@ -43,13 +43,13 @@ pub enum Event<'a, C, K> {
         offset: usize,
         len: usize,
     },
-    Getattr {
+    GetAttr {
         ctx: &'a mut C,
         completer: GetattrCompleter,
         attr: Attr,
         len: usize,
     },
-    Setattr {
+    SetAttr {
         ctx: &'a mut C,
         completer: SetattrCompleter,
         attr: Attr,
@@ -64,35 +64,35 @@ pub enum Event<'a, C, K> {
     },
     ReadReply {
         ctx: &'a mut C,
-        ch: &'a Rc<Channel>,
+        client: Client<K>,
         cookie: K,
         buf: BufferMut,
         len: usize,
     },
     WriteReply {
         ctx: &'a mut C,
-        ch: &'a Rc<Channel>,
+        client: Client<K>,
         cookie: K,
         buf: Buffer,
         len: usize,
     },
-    GetattrReply {
+    GetAttrReply {
         ctx: &'a mut C,
-        ch: &'a Rc<Channel>,
+        client: Client<K>,
         cookie: K,
         buf: BufferMut,
         len: usize,
     },
-    SetattrReply {
+    SetAttrReply {
         ctx: &'a mut C,
-        ch: &'a Rc<Channel>,
+        client: Client<K>,
         cookie: K,
         buf: Buffer,
         len: usize,
     },
     ErrorReply {
         ctx: &'a mut C,
-        ch: &'a Rc<Channel>,
+        client: Client<K>,
         cookie: K,
         error: ErrorCode,
     },
@@ -108,6 +108,10 @@ pub enum Event<'a, C, K> {
         ctx: &'a mut C,
         interrupt: &'a Rc<Interrupt>,
     },
+    Timer {
+        ctx: &'a mut C,
+        timer: &'a Rc<Timer>,
+    },
     SinkError(ErrorCode),
 }
 
@@ -118,10 +122,19 @@ pub enum Error {
     SinkAdd(ErrorCode),
 }
 
+impl From<Error> for ErrorCode {
+    fn from(error: Error) -> Self {
+        match error {
+            Error::SinkCreate(error) | Error::SinkRemove(error) | Error::SinkAdd(error) => error,
+        }
+    }
+}
+
 #[derive(Debug)]
 enum Object {
     Channel(Rc<Channel>),
     Interrupt(Rc<Interrupt>),
+    Timer(Rc<Timer>),
 }
 
 struct Entry<C> {
@@ -151,6 +164,7 @@ impl<C, K> EventLoop<C, K> {
         ctx: C,
     ) -> Result<Client<K>, Error> {
         let ch: Rc<Channel> = channel.into();
+        // FIXME: Close or return the channel if the syscall fails.
         self.sink.add(ch.as_ref()).map_err(Error::SinkAdd)?;
         self.entries.insert(
             ch.handle().id(),
@@ -174,6 +188,19 @@ impl<C, K> EventLoop<C, K> {
             interrupt.handle().id(),
             Entry {
                 object: Object::Interrupt(interrupt),
+                ctx,
+            },
+        );
+        Ok(())
+    }
+
+    pub fn add_timer(&mut self, timer: impl Into<Rc<Timer>>, ctx: C) -> Result<(), Error> {
+        let timer = timer.into();
+        self.sink.add(timer.as_ref()).map_err(Error::SinkAdd)?;
+        self.entries.insert(
+            timer.handle().id(),
+            Entry {
+                object: Object::Timer(timer),
                 ctx,
             },
         );
@@ -240,7 +267,7 @@ impl<C, K> EventLoop<C, K> {
                         }
                     }
                     MessageInfo::GETATTR => {
-                        Event::Getattr {
+                        Event::GetAttr {
                             ctx,
                             attr: unsafe { inline.getattr.attr },
                             len: unsafe { inline.getattr.len },
@@ -251,7 +278,7 @@ impl<C, K> EventLoop<C, K> {
                         }
                     }
                     MessageInfo::SETATTR => {
-                        Event::Setattr {
+                        Event::SetAttr {
                             ctx,
                             attr: unsafe { inline.setattr.attr },
                             len: unsafe { inline.setattr.len },
@@ -284,7 +311,7 @@ impl<C, K> EventLoop<C, K> {
 
                         Event::ReadReply {
                             ctx,
-                            ch,
+                            client: Client::new(ch.clone()),
                             cookie,
                             buf,
                             len: unsafe { inline.read_reply.len },
@@ -298,7 +325,7 @@ impl<C, K> EventLoop<C, K> {
 
                         Event::WriteReply {
                             ctx,
-                            ch,
+                            client: Client::new(ch.clone()),
                             cookie,
                             buf,
                             len: unsafe { inline.write_reply.len },
@@ -310,9 +337,9 @@ impl<C, K> EventLoop<C, K> {
                             unreachable!()
                         };
 
-                        Event::GetattrReply {
+                        Event::GetAttrReply {
                             ctx,
-                            ch,
+                            client: Client::new(ch.clone()),
                             cookie,
                             buf,
                             len: unsafe { inline.getattr_reply.len },
@@ -324,16 +351,22 @@ impl<C, K> EventLoop<C, K> {
                             unreachable!()
                         };
 
-                        Event::SetattrReply {
+                        Event::SetAttrReply {
                             ctx,
-                            ch,
+                            client: Client::new(ch.clone()),
                             cookie,
                             buf,
                             len: unsafe { inline.setattr_reply.len },
                         }
                     }
                     MessageInfo::ERROR_REPLY => {
-                        todo!("handle buf")
+                        let (cookie, _buf) = CookieWrapper::from_raw(event_body.cookie);
+                        Event::ErrorReply {
+                            ctx,
+                            client: Client::new(ch.clone()),
+                            cookie,
+                            error: unsafe { inline.error_reply.error },
+                        }
                     }
                     _ => {
                         Event::UnknownMessage {
@@ -358,7 +391,11 @@ impl<C, K> EventLoop<C, K> {
                 Event::Irq { ctx, interrupt }
             }
             EventType::TIMER => {
-                todo!()
+                let Object::Timer(timer) = object else {
+                    panic!("expected timer object, got {:?}", object);
+                };
+
+                Event::Timer { ctx, timer }
             }
             EventType::SANDBOXED_SYSCALL => {
                 todo!()
@@ -379,22 +416,28 @@ impl OpenCompleter {
         &self.ch
     }
 
+    pub fn handle_id(&self) -> HandleId {
+        self.ch.handle().id()
+    }
+
+    pub fn read_path(&self, offset: usize, data: &mut [u8]) -> Result<usize, ErrorCode> {
+        self.ch.ool_read(self.call_id, 0, offset, data)
+    }
+
     pub fn complete(&self, ch: Channel) {
-        let mut body = MaybeUninit::<MessageBody>::uninit();
-        let body = unsafe { body.assume_init_mut() };
+        let mut body = new_message_body();
         body.handle = ch.handle().id();
         mem::forget(ch);
 
-        if let Err(error) = self.ch.reply(MessageInfo::OPEN_REPLY, body, self.call_id) {
+        if let Err(error) = self.ch.reply(MessageInfo::OPEN_REPLY, &body, self.call_id) {
             warn!("failed to complete open: {:?}", error);
         }
     }
 
     pub fn error(&self, error: ErrorCode) {
-        let mut body = MaybeUninit::<MessageBody>::uninit();
-        let body = unsafe { body.assume_init_mut() };
+        let mut body = new_message_body();
         body.inline.error_reply.error = error;
-        if let Err(error) = self.ch.reply(MessageInfo::ERROR_REPLY, body, self.call_id) {
+        if let Err(error) = self.ch.reply(MessageInfo::ERROR_REPLY, &body, self.call_id) {
             warn!("failed to error open: {:?}", error);
         }
     }
@@ -411,11 +454,14 @@ impl ReadCompleter {
         &self.ch
     }
 
+    pub fn handle_id(&self) -> HandleId {
+        self.ch.handle().id()
+    }
+
     pub fn error(&self, error: ErrorCode) {
-        let mut body = MaybeUninit::<MessageBody>::uninit();
-        let body = unsafe { body.assume_init_mut() };
+        let mut body = new_message_body();
         body.inline.error_reply.error = error;
-        if let Err(error) = self.ch.reply(MessageInfo::ERROR_REPLY, body, self.call_id) {
+        if let Err(error) = self.ch.reply(MessageInfo::ERROR_REPLY, &body, self.call_id) {
             warn!("failed to error read: {:?}", error);
         }
     }
@@ -425,10 +471,9 @@ impl ReadCompleter {
     }
 
     pub fn complete(&self, len: usize) {
-        let mut body = MaybeUninit::<MessageBody>::uninit();
-        let body = unsafe { body.assume_init_mut() };
+        let mut body = new_message_body();
         body.inline.read_reply.len = len;
-        if let Err(error) = self.ch.reply(MessageInfo::READ_REPLY, body, self.call_id) {
+        if let Err(error) = self.ch.reply(MessageInfo::READ_REPLY, &body, self.call_id) {
             warn!("failed to complete read: {:?}", error);
         }
     }
@@ -444,6 +489,10 @@ impl WriteCompleter {
     pub fn channel(&self) -> &Rc<Channel> {
         &self.ch
     }
+
+    pub fn handle_id(&self) -> HandleId {
+        self.ch.handle().id()
+    }
 }
 
 impl WriteCompleter {
@@ -452,19 +501,17 @@ impl WriteCompleter {
     }
 
     pub fn complete(&self, len: usize) {
-        let mut body = MaybeUninit::<MessageBody>::uninit();
-        let body = unsafe { body.assume_init_mut() };
+        let mut body = new_message_body();
         body.inline.write_reply.len = len;
-        if let Err(error) = self.ch.reply(MessageInfo::WRITE_REPLY, body, self.call_id) {
+        if let Err(error) = self.ch.reply(MessageInfo::WRITE_REPLY, &body, self.call_id) {
             warn!("failed to complete write: {:?}", error);
         }
     }
 
     pub fn error(&self, error: ErrorCode) {
-        let mut body = MaybeUninit::<MessageBody>::uninit();
-        let body = unsafe { body.assume_init_mut() };
+        let mut body = new_message_body();
         body.inline.error_reply.error = error;
-        if let Err(error) = self.ch.reply(MessageInfo::ERROR_REPLY, body, self.call_id) {
+        if let Err(error) = self.ch.reply(MessageInfo::ERROR_REPLY, &body, self.call_id) {
             warn!("failed to error write: {:?}", error);
         }
     }
@@ -481,27 +528,29 @@ impl GetattrCompleter {
         &self.ch
     }
 
+    pub fn handle_id(&self) -> HandleId {
+        self.ch.handle().id()
+    }
+
     pub fn write(&self, offset: usize, data: &[u8]) -> Result<usize, ErrorCode> {
         self.ch.ool_write(self.call_id, 0, offset, data)
     }
 
     pub fn complete(&self, len: usize) {
-        let mut body = MaybeUninit::<MessageBody>::uninit();
-        let body = unsafe { body.assume_init_mut() };
+        let mut body = new_message_body();
         body.inline.getattr_reply.len = len;
         if let Err(error) = self
             .ch
-            .reply(MessageInfo::GETATTR_REPLY, body, self.call_id)
+            .reply(MessageInfo::GETATTR_REPLY, &body, self.call_id)
         {
             warn!("failed to complete getattr: {:?}", error);
         }
     }
 
     pub fn error(&self, error: ErrorCode) {
-        let mut body = MaybeUninit::<MessageBody>::uninit();
-        let body = unsafe { body.assume_init_mut() };
+        let mut body = new_message_body();
         body.inline.error_reply.error = error;
-        if let Err(error) = self.ch.reply(MessageInfo::ERROR_REPLY, body, self.call_id) {
+        if let Err(error) = self.ch.reply(MessageInfo::ERROR_REPLY, &body, self.call_id) {
             warn!("failed to error getattr: {:?}", error);
         }
     }
@@ -518,27 +567,29 @@ impl SetattrCompleter {
         &self.ch
     }
 
+    pub fn handle_id(&self) -> HandleId {
+        self.ch.handle().id()
+    }
+
     pub fn read(&self, offset: usize, data: &mut [u8]) -> Result<usize, ErrorCode> {
         self.ch.ool_read(self.call_id, 0, offset, data)
     }
 
     pub fn complete(&self, len: usize) {
-        let mut body = MaybeUninit::<MessageBody>::uninit();
-        let body = unsafe { body.assume_init_mut() };
+        let mut body = new_message_body();
         body.inline.setattr_reply.len = len;
         if let Err(error) = self
             .ch
-            .reply(MessageInfo::SETATTR_REPLY, body, self.call_id)
+            .reply(MessageInfo::SETATTR_REPLY, &body, self.call_id)
         {
             warn!("failed to complete setattr: {:?}", error);
         }
     }
 
     pub fn error(&self, error: ErrorCode) {
-        let mut body = MaybeUninit::<MessageBody>::uninit();
-        let body = unsafe { body.assume_init_mut() };
+        let mut body = new_message_body();
         body.inline.error_reply.error = error;
-        if let Err(error) = self.ch.reply(MessageInfo::ERROR_REPLY, body, self.call_id) {
+        if let Err(error) = self.ch.reply(MessageInfo::ERROR_REPLY, &body, self.call_id) {
             warn!("failed to error setattr: {:?}", error);
         }
     }
@@ -566,10 +617,23 @@ impl<K> CookieWrapper<K> {
     }
 }
 
+fn new_message_body() -> MessageBody {
+    unsafe { MaybeUninit::<MessageBody>::zeroed().assume_init() }
+}
+
 #[derive(Debug)]
 pub struct Client<K> {
     ch: Rc<Channel>,
     _cookie: PhantomData<K>,
+}
+
+impl<K> Clone for Client<K> {
+    fn clone(&self) -> Self {
+        Self {
+            ch: self.ch.clone(),
+            _cookie: PhantomData,
+        }
+    }
 }
 
 impl<K> Client<K> {
@@ -584,10 +648,25 @@ impl<K> Client<K> {
         &self.ch
     }
 
+    fn call_with_cookie(
+        &self,
+        info: MessageInfo,
+        body: &MessageBody,
+        wrapper: CookieWrapper<K>,
+    ) -> Result<(), ErrorCode> {
+        let raw = wrapper.into_raw();
+        match self.ch.call(info, body, raw) {
+            Ok(()) => Ok(()),
+            Err(error) => {
+                let _ = CookieWrapper::<K>::from_raw(raw);
+                Err(error)
+            }
+        }
+    }
+
     /// Sends an open request.
     pub fn open(&self, path: impl Into<Buffer>, cookie: K) -> Result<(), ErrorCode> {
-        let mut body = MaybeUninit::<MessageBody>::uninit();
-        let body = unsafe { body.assume_init_mut() };
+        let mut body = new_message_body();
 
         let path = path.into();
         let (addr, len) = path.addr_and_len();
@@ -595,7 +674,7 @@ impl<K> Client<K> {
         body.ool_len = len;
 
         let wrapper = CookieWrapper::new(cookie, BufferWrapper::Buffer(path));
-        self.ch.call(MessageInfo::OPEN, body, wrapper.into_raw())
+        self.call_with_cookie(MessageInfo::OPEN, &body, wrapper)
     }
 
     /// Sends a read request.
@@ -605,18 +684,18 @@ impl<K> Client<K> {
         data: impl Into<BufferMut>,
         cookie: K,
     ) -> Result<(), ErrorCode> {
-        let mut body = MaybeUninit::<MessageBody>::uninit();
-        let body = unsafe { body.assume_init_mut() };
+        let mut body = new_message_body();
 
         body.inline.read.offset = offset;
 
         let data = data.into();
         let (addr, len) = data.addr_and_len();
+        body.inline.read.len = len;
         body.ool_addr = addr;
         body.ool_len = len;
 
         let wrapper = CookieWrapper::new(cookie, BufferWrapper::BufferMut(data));
-        self.ch.call(MessageInfo::READ, body, wrapper.into_raw())
+        self.call_with_cookie(MessageInfo::READ, &body, wrapper)
     }
 
     /// Sends a write request.
@@ -626,18 +705,18 @@ impl<K> Client<K> {
         data: impl Into<Buffer>,
         cookie: K,
     ) -> Result<(), ErrorCode> {
-        let mut body = MaybeUninit::<MessageBody>::uninit();
-        let body = unsafe { body.assume_init_mut() };
+        let mut body = new_message_body();
 
         body.inline.write.offset = offset;
 
         let data = data.into();
         let (addr, len) = data.addr_and_len();
+        body.inline.write.len = len;
         body.ool_addr = addr;
         body.ool_len = len;
 
         let wrapper = CookieWrapper::new(cookie, BufferWrapper::Buffer(data));
-        self.ch.call(MessageInfo::WRITE, body, wrapper.into_raw())
+        self.call_with_cookie(MessageInfo::WRITE, &body, wrapper)
     }
 
     /// Sends a getattr request.
@@ -647,33 +726,33 @@ impl<K> Client<K> {
         data: impl Into<BufferMut>,
         cookie: K,
     ) -> Result<(), ErrorCode> {
-        let mut body = MaybeUninit::<MessageBody>::uninit();
-        let body = unsafe { body.assume_init_mut() };
+        let mut body = new_message_body();
 
         body.inline.getattr.attr = attr;
 
         let data = data.into();
         let (addr, len) = data.addr_and_len();
+        body.inline.getattr.len = len;
         body.ool_addr = addr;
         body.ool_len = len;
 
         let wrapper = CookieWrapper::new(cookie, BufferWrapper::BufferMut(data));
-        self.ch.call(MessageInfo::GETATTR, body, wrapper.into_raw())
+        self.call_with_cookie(MessageInfo::GETATTR, &body, wrapper)
     }
 
     /// Sends a setattr request.
     pub fn setattr(&self, attr: Attr, data: impl Into<Buffer>, cookie: K) -> Result<(), ErrorCode> {
-        let mut body = MaybeUninit::<MessageBody>::uninit();
-        let body = unsafe { body.assume_init_mut() };
+        let mut body = new_message_body();
 
         body.inline.setattr.attr = attr;
 
         let data = data.into();
         let (addr, len) = data.addr_and_len();
+        body.inline.setattr.len = len;
         body.ool_addr = addr;
         body.ool_len = len;
 
         let wrapper = CookieWrapper::new(cookie, BufferWrapper::Buffer(data));
-        self.ch.call(MessageInfo::SETATTR, body, wrapper.into_raw())
+        self.call_with_cookie(MessageInfo::SETATTR, &body, wrapper)
     }
 }
