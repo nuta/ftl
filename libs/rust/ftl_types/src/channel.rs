@@ -6,33 +6,27 @@ use crate::handle::HandleId;
 pub struct MessageInfo(u32);
 
 impl MessageInfo {
-    pub const ERROR_REPLY: Self = Self::new(1, false, 0, 0, size_of::<ErrorReplyInline>());
-    pub const OPEN: Self = Self::new(2, true, 0, 1, size_of::<OpenInline>());
-    pub const OPEN_REPLY: Self = Self::new(3, false, 1, 0, size_of::<OpenReplyInline>());
-    pub const READ: Self = Self::new(4, true, 0, 1, size_of::<ReadInline>());
-    pub const READ_REPLY: Self = Self::new(5, false, 0, 0, size_of::<ReadReplyInline>());
-    pub const WRITE: Self = Self::new(6, true, 0, 1, size_of::<WriteInline>());
-    pub const WRITE_REPLY: Self = Self::new(7, false, 0, 0, size_of::<WriteReplyInline>());
-    pub const GETATTR: Self = Self::new(8, true, 0, 1, size_of::<GetattrInline>());
-    pub const GETATTR_REPLY: Self = Self::new(9, false, 0, 0, size_of::<GetattrReplyInline>());
-    pub const SETATTR: Self = Self::new(10, true, 0, 1, size_of::<SetattrInline>());
-    pub const SETATTR_REPLY: Self = Self::new(11, false, 0, 0, size_of::<SetattrReplyInline>());
+    pub const ERROR_REPLY: Self = Self::new(1, false, false, false, size_of::<ErrorReplyInline>());
+    pub const OPEN: Self = Self::new(2, true, false, true, size_of::<OpenInline>());
+    pub const OPEN_REPLY: Self = Self::new(3, false, true, false, size_of::<OpenReplyInline>());
+    pub const READ: Self = Self::new(4, true, false, true, size_of::<ReadInline>());
+    pub const READ_REPLY: Self = Self::new(5, false, false, false, size_of::<ReadReplyInline>());
+    pub const WRITE: Self = Self::new(6, true, false, true, size_of::<WriteInline>());
+    pub const WRITE_REPLY: Self = Self::new(7, false, false, false, size_of::<WriteReplyInline>());
+    pub const GETATTR: Self = Self::new(8, true, false, true, size_of::<GetattrInline>());
+    pub const GETATTR_REPLY: Self =
+        Self::new(9, false, false, false, size_of::<GetattrReplyInline>());
+    pub const SETATTR: Self = Self::new(10, true, false, true, size_of::<SetattrInline>());
+    pub const SETATTR_REPLY: Self =
+        Self::new(11, false, false, false, size_of::<SetattrReplyInline>());
 
-    const fn new(
-        kind: u32,
-        is_call: bool,
-        num_handles: u32,
-        num_ools: u32,
-        inline_len: usize,
-    ) -> Self {
+    const fn new(kind: u32, is_call: bool, handle: bool, ool: bool, inline_len: usize) -> Self {
         debug_assert!(kind <= 0b11111);
-        debug_assert!(num_handles <= NUM_HANDLES_MAX as u32);
-        debug_assert!(num_ools <= NUM_OOLS_MAX as u32);
         debug_assert!(inline_len <= INLINE_LEN_MAX);
         Self(
             (kind << 13)
                 | ((is_call as u32) << 12)
-                | (num_handles << 10 | (num_ools << 8) | (inline_len as u32)),
+                | ((handle as u32) << 9 | (ool as u32) << 8 | (inline_len as u32)),
         )
     }
 
@@ -52,12 +46,12 @@ impl MessageInfo {
         (self.0 >> 13) & 0b1_1111
     }
 
-    pub const fn num_handles(self) -> usize {
-        ((self.0 >> 10) & 0b11) as usize
+    pub const fn contains_handle(self) -> bool {
+        ((self.0 >> 9) & 1) != 0
     }
 
-    pub const fn num_ools(self) -> usize {
-        ((self.0 >> 8) & 0b11) as usize
+    pub const fn contains_ool(self) -> bool {
+        ((self.0 >> 8) & 1) != 0
     }
 
     pub const fn inline_len(self) -> usize {

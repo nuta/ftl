@@ -104,14 +104,6 @@ impl Channel {
         cookie: usize,
         call_id: CallId,
     ) -> Result<(), ErrorCode> {
-        if info.num_handles() > NUM_HANDLES_MAX {
-            return Err(ErrorCode::InvalidMessage);
-        }
-
-        if info.num_ools() > NUM_OOLS_MAX {
-            return Err(ErrorCode::InvalidMessage);
-        }
-
         if info.inline_len() > INLINE_LEN_MAX {
             return Err(ErrorCode::InvalidMessage);
         }
@@ -121,11 +113,12 @@ impl Channel {
 
         let body: MessageBody = crate::isolation::read(isolation, body_slice, 0)?;
 
-        let handle = match info.num_handles() {
-            0 => None,
-            1 => Some(handle_table.remove(body.handle)?),
-            _ => return Err(ErrorCode::InvalidMessage),
+        let handle = if info.contains_handle() {
+            Some(handle_table.remove(body.handle)?)
+        } else {
+            None
         };
+
         let call = if info.is_call() {
             None
         } else {
@@ -148,17 +141,15 @@ impl Channel {
             assert!(!peer_mutable.calls.contains_key(&call_id.as_u32())); // FIXME: Retry with a different ID
             peer_mutable.next_call_id += 1; // FIXME: wrapping around
 
-            let ool = match info.num_ools() {
-                0 => None,
-                1 => {
-                    let ptr = UserPtr::new(body.ool_addr);
-                    let slice = UserSlice::new(ptr, body.ool_len)?;
-                    Some(Ool {
-                        isolation: isolation.clone(),
-                        slice,
-                    })
-                }
-                _ => return Err(ErrorCode::InvalidMessage),
+            let ool = if info.contains_ool() {
+                let ptr = UserPtr::new(body.ool_addr);
+                let slice = UserSlice::new(ptr, body.ool_len)?;
+                Some(Ool {
+                    isolation: isolation.clone(),
+                    slice,
+                })
+            } else {
+                None
             };
 
             peer_mutable
