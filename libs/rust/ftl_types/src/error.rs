@@ -22,6 +22,9 @@ pub enum ErrorCode {
     NotFound = 14,
     TryLater = 15,
     InvalidState = 16,
+    InternalError = 17,
+    OutOfResources = 18,
+    BadAccess = 19,
 }
 
 impl From<usize> for ErrorCode {
@@ -44,6 +47,9 @@ impl From<usize> for ErrorCode {
             14 => Self::NotFound,
             15 => Self::TryLater,
             16 => Self::InvalidState,
+            17 => Self::InternalError,
+            18 => Self::OutOfResources,
+            19 => Self::BadAccess,
             _ => Self::Unknown,
         }
     }

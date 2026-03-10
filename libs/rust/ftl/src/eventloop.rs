@@ -38,10 +38,14 @@ pub enum Event<'a, C, K> {
     ReadUri {
         ctx: &'a mut C,
         completer: ReadUriCompleter,
+        offset: usize,
+        len: usize,
     },
     WriteUri {
         ctx: &'a mut C,
         completer: WriteUriCompleter,
+        offset: usize,
+        len: usize,
     },
     OpenReply {
         ctx: &'a mut C,
@@ -233,12 +237,16 @@ impl<C, K: SmartPointer> EventLoop<C, K> {
                     MessageInfo::READ_URI => {
                         Event::ReadUri {
                             ctx,
+                            offset: unsafe { inline_body.read_uri.offset },
+                            len: unsafe { inline_body.read_uri.len },
                             completer: ReadUriCompleter { ch, call_id },
                         }
                     }
                     MessageInfo::WRITE_URI => {
                         Event::WriteUri {
                             ctx,
+                            offset: unsafe { inline_body.write_uri.offset },
+                            len: unsafe { inline_body.write_uri.len },
                             completer: WriteUriCompleter { ch, call_id },
                         }
                     }
@@ -430,8 +438,60 @@ pub struct ReadUriCompleter {
     call_id: CallId,
 }
 
+impl ReadUriCompleter {
+    pub fn channel(&self) -> &Rc<Channel> {
+        &self.ch
+    }
+
+    pub fn read_uri(&self, offset: usize, uri: &mut [u8]) -> Result<usize, ErrorCode> {
+        self.ch.ool_read(self.call_id, 0, offset, uri)
+    }
+
+    pub fn write(&self, offset: usize, data: &[u8]) -> Result<usize, ErrorCode> {
+        self.ch.ool_write(self.call_id, 1, offset, data)
+    }
+
+    pub fn complete(&self, len: usize) {
+        if let Err(error) = self.ch.reply(self.call_id, Reply::ReadUriReply { len }) {
+            warn!("failed to complete read uri: {:?}", error);
+        }
+    }
+
+    pub fn error(&self, error: ErrorCode) {
+        if let Err(error) = self.ch.reply(self.call_id, Reply::ErrorReply { error }) {
+            warn!("failed to error read uri: {:?}", error);
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct WriteUriCompleter {
     ch: Rc<Channel>,
     call_id: CallId,
+}
+
+impl WriteUriCompleter {
+    pub fn channel(&self) -> &Rc<Channel> {
+        &self.ch
+    }
+
+    pub fn read_uri(&self, offset: usize, uri: &mut [u8]) -> Result<usize, ErrorCode> {
+        self.ch.ool_read(self.call_id, 0, offset, uri)
+    }
+
+    pub fn read(&self, offset: usize, data: &mut [u8]) -> Result<usize, ErrorCode> {
+        self.ch.ool_read(self.call_id, 1, offset, data)
+    }
+
+    pub fn complete(&self, len: usize) {
+        if let Err(error) = self.ch.reply(self.call_id, Reply::WriteUriReply { len }) {
+            warn!("failed to complete write uri: {:?}", error);
+        }
+    }
+
+    pub fn error(&self, error: ErrorCode) {
+        if let Err(error) = self.ch.reply(self.call_id, Reply::ErrorReply { error }) {
+            warn!("failed to error write uri: {:?}", error);
+        }
+    }
 }
