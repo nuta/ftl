@@ -28,9 +28,9 @@ use ftl_types::syscall::SYS_CHANNEL_OOL_READ;
 use ftl_types::syscall::SYS_CHANNEL_OOL_WRITE;
 use ftl_types::syscall::SYS_CHANNEL_SEND;
 
-use crate::eventloop::Event;
-use crate::eventloop::EventLoop;
-use crate::eventloop::ReplyEvent;
+use crate::application::Event;
+use crate::application::EventLoop;
+use crate::application::ReplyEvent;
 use crate::handle::Handleable;
 use crate::handle::OwnedHandle;
 use crate::syscall::syscall1;
