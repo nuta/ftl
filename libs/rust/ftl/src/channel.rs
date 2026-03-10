@@ -26,6 +26,7 @@ use crate::handle::OwnedHandle;
 use crate::syscall::syscall1;
 use crate::syscall::syscall5;
 
+#[derive(Debug)]
 pub enum Buffer {
     Static(&'static [u8]),
     String(String),
@@ -57,6 +58,7 @@ impl Buffer {
     }
 }
 
+#[derive(Debug)]
 pub enum BufferMut {
     String(String),
     Vec(Vec<u8>),
