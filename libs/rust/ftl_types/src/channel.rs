@@ -13,10 +13,10 @@ impl MessageInfo {
     pub const READ_REPLY: Self = Self::new(5, false, 0, 0, size_of::<ReadReplyInline>());
     pub const WRITE: Self = Self::new(6, true, 0, 1, size_of::<WriteInline>());
     pub const WRITE_REPLY: Self = Self::new(7, false, 0, 0, size_of::<WriteReplyInline>());
-    pub const READ_URI: Self = Self::new(8, true, 0, 2, size_of::<ReadUriInline>());
-    pub const READ_URI_REPLY: Self = Self::new(9, false, 0, 0, size_of::<ReadUriReplyInline>());
-    pub const WRITE_URI: Self = Self::new(10, true, 0, 2, size_of::<WriteUriInline>());
-    pub const WRITE_URI_REPLY: Self = Self::new(11, false, 0, 0, size_of::<WriteUriReplyInline>());
+    pub const GETATTR: Self = Self::new(8, true, 0, 1, size_of::<GetattrInline>());
+    pub const GETATTR_REPLY: Self = Self::new(9, false, 0, 0, size_of::<GetattrReplyInline>());
+    pub const SETATTR: Self = Self::new(10, true, 0, 1, size_of::<SetattrInline>());
+    pub const SETATTR_REPLY: Self = Self::new(11, false, 0, 0, size_of::<SetattrReplyInline>());
 
     const fn new(
         kind: u32,
@@ -90,6 +90,24 @@ pub struct OutOfLine {
     pub len: usize,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Attr(u32);
+
+impl Attr {
+    pub const MAC: Self = Self::from_str("mac");
+
+    const fn from_str(s: &'static str) -> Self {
+        assert!(s.len() <= 4);
+        let mut attrs = 0;
+        let mut i = 0;
+        while i < s.len() {
+            attrs |= (s.as_bytes()[i] as u32) << (i * 8);
+            i += 1;
+        }
+        Self(attrs)
+    }
+}
+
 #[derive(Clone, Copy)]
 #[repr(C)]
 pub struct MessageBody {
@@ -104,12 +122,12 @@ pub union MessageInlineBody {
     pub open: OpenInline,
     pub read: ReadInline,
     pub write: WriteInline,
-    pub read_uri: ReadUriInline,
-    pub write_uri: WriteUriInline,
+    pub getattr: GetattrInline,
+    pub setattr: SetattrInline,
     pub read_reply: ReadReplyInline,
     pub write_reply: WriteReplyInline,
-    pub read_uri_reply: ReadUriReplyInline,
-    pub write_uri_reply: WriteUriReplyInline,
+    pub getattr_reply: GetattrReplyInline,
+    pub setattr_reply: SetattrReplyInline,
     pub error_reply: ErrorReplyInline,
 }
 
@@ -155,26 +173,26 @@ pub struct WriteReplyInline {
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-pub struct ReadUriInline {
-    pub offset: usize,
+pub struct GetattrInline {
+    pub attr: Attr,
     pub len: usize,
 }
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-pub struct ReadUriReplyInline {
+pub struct GetattrReplyInline {
     pub len: usize,
 }
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-pub struct WriteUriInline {
-    pub offset: usize,
+pub struct SetattrInline {
+    pub attr: Attr,
     pub len: usize,
 }
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-pub struct WriteUriReplyInline {
+pub struct SetattrReplyInline {
     pub len: usize,
 }

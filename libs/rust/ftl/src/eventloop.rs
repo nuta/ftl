@@ -2,6 +2,7 @@ use alloc::boxed::Box;
 use alloc::rc::Rc;
 use core::marker::PhantomData;
 
+use ftl_types::channel::Attr;
 use ftl_types::channel::CallId;
 use ftl_types::channel::MessageInfo;
 use ftl_types::channel::MessageInlineBody;
@@ -35,16 +36,16 @@ pub enum Event<'a, C, K> {
         offset: usize,
         len: usize,
     },
-    ReadUri {
+    Getattr {
         ctx: &'a mut C,
-        completer: ReadUriCompleter,
-        offset: usize,
+        completer: GetattrCompleter,
+        attr: Attr,
         len: usize,
     },
-    WriteUri {
+    Setattr {
         ctx: &'a mut C,
-        completer: WriteUriCompleter,
-        offset: usize,
+        completer: SetattrCompleter,
+        attr: Attr,
         len: usize,
     },
     OpenReply {
@@ -64,13 +65,13 @@ pub enum Event<'a, C, K> {
         cookie: K,
         len: usize,
     },
-    ReadUriReply {
+    GetattrReply {
         ctx: &'a mut C,
         ch: &'a Rc<Channel>,
         cookie: K,
         len: usize,
     },
-    WriteUriReply {
+    SetattrReply {
         ctx: &'a mut C,
         ch: &'a Rc<Channel>,
         cookie: K,
@@ -198,7 +199,7 @@ impl<C, K: SmartPointer> EventLoop<C, K> {
                 ch_id,
                 info,
                 call_id,
-                handles,
+                handles: _,
                 inline,
             }) => {
                 let (ch, ctx) = match self.entries.get_mut(&ch_id) {
@@ -234,20 +235,20 @@ impl<C, K: SmartPointer> EventLoop<C, K> {
                             completer: WriteCompleter { ch, call_id },
                         }
                     }
-                    MessageInfo::READ_URI => {
-                        Event::ReadUri {
+                    MessageInfo::GETATTR => {
+                        Event::Getattr {
                             ctx,
-                            offset: unsafe { inline_body.read_uri.offset },
-                            len: unsafe { inline_body.read_uri.len },
-                            completer: ReadUriCompleter { ch, call_id },
+                            attr: unsafe { inline_body.getattr.attr },
+                            len: unsafe { inline_body.getattr.len },
+                            completer: GetattrCompleter { ch, call_id },
                         }
                     }
-                    MessageInfo::WRITE_URI => {
-                        Event::WriteUri {
+                    MessageInfo::SETATTR => {
+                        Event::Setattr {
                             ctx,
-                            offset: unsafe { inline_body.write_uri.offset },
-                            len: unsafe { inline_body.write_uri.len },
-                            completer: WriteUriCompleter { ch, call_id },
+                            attr: unsafe { inline_body.setattr.attr },
+                            len: unsafe { inline_body.setattr.len },
+                            completer: SetattrCompleter { ch, call_id },
                         }
                     }
                     _ => Event::UnknownMessage { ctx, info },
@@ -257,7 +258,7 @@ impl<C, K: SmartPointer> EventLoop<C, K> {
                 ch_id,
                 info,
                 cookie,
-                handles,
+                handles: _,
                 inline,
             }) => {
                 let (ch, ctx) = match self.entries.get_mut(&ch_id) {
@@ -291,18 +292,18 @@ impl<C, K: SmartPointer> EventLoop<C, K> {
                             len,
                         }
                     }
-                    MessageInfo::READ_URI_REPLY => {
-                        let len = unsafe { inline_body.read_uri_reply.len };
-                        Event::ReadUriReply {
+                    MessageInfo::GETATTR_REPLY => {
+                        let len = unsafe { inline_body.getattr_reply.len };
+                        Event::GetattrReply {
                             ctx,
                             ch,
                             cookie,
                             len,
                         }
                     }
-                    MessageInfo::WRITE_URI_REPLY => {
-                        let len = unsafe { inline_body.write_uri_reply.len };
-                        Event::WriteUriReply {
+                    MessageInfo::SETATTR_REPLY => {
+                        let len = unsafe { inline_body.setattr_reply.len };
+                        Event::SetattrReply {
                             ctx,
                             ch,
                             cookie,
@@ -330,7 +331,7 @@ impl<C, K: SmartPointer> EventLoop<C, K> {
                     _ => panic!("unknown handle id from sink: {:?}", ch_id),
                 }
             }
-            Ok(sink::Event::Irq { handle_id, irq }) => {
+            Ok(sink::Event::Irq { handle_id, irq: _ }) => {
                 match self.entries.get_mut(&handle_id) {
                     Some(Entry {
                         object: Object::Interrupt(interrupt),
@@ -339,10 +340,13 @@ impl<C, K: SmartPointer> EventLoop<C, K> {
                     _ => panic!("unknown handle id from sink: {:?}", handle_id),
                 }
             }
-            Ok(sink::Event::Timer { handle_id }) => {
+            Ok(sink::Event::Timer { handle_id: _ }) => {
                 todo!()
             }
-            Ok(sink::Event::SandboxedSyscall { thread_id, raw }) => {
+            Ok(sink::Event::SandboxedSyscall {
+                thread_id: _,
+                raw: _,
+            }) => {
                 todo!()
             }
             Err(error) => Event::SinkError(error),
@@ -433,65 +437,57 @@ impl WriteCompleter {
 }
 
 #[derive(Debug)]
-pub struct ReadUriCompleter {
+pub struct GetattrCompleter {
     ch: Rc<Channel>,
     call_id: CallId,
 }
 
-impl ReadUriCompleter {
+impl GetattrCompleter {
     pub fn channel(&self) -> &Rc<Channel> {
         &self.ch
     }
 
-    pub fn read_uri(&self, offset: usize, uri: &mut [u8]) -> Result<usize, ErrorCode> {
-        self.ch.ool_read(self.call_id, 0, offset, uri)
-    }
-
     pub fn write(&self, offset: usize, data: &[u8]) -> Result<usize, ErrorCode> {
-        self.ch.ool_write(self.call_id, 1, offset, data)
+        self.ch.ool_write(self.call_id, 0, offset, data)
     }
 
     pub fn complete(&self, len: usize) {
-        if let Err(error) = self.ch.reply(self.call_id, Reply::ReadUriReply { len }) {
-            warn!("failed to complete read uri: {:?}", error);
+        if let Err(error) = self.ch.reply(self.call_id, Reply::GetattrReply { len }) {
+            warn!("failed to complete getattr: {:?}", error);
         }
     }
 
     pub fn error(&self, error: ErrorCode) {
         if let Err(error) = self.ch.reply(self.call_id, Reply::ErrorReply { error }) {
-            warn!("failed to error read uri: {:?}", error);
+            warn!("failed to error getattr: {:?}", error);
         }
     }
 }
 
 #[derive(Debug)]
-pub struct WriteUriCompleter {
+pub struct SetattrCompleter {
     ch: Rc<Channel>,
     call_id: CallId,
 }
 
-impl WriteUriCompleter {
+impl SetattrCompleter {
     pub fn channel(&self) -> &Rc<Channel> {
         &self.ch
     }
 
-    pub fn read_uri(&self, offset: usize, uri: &mut [u8]) -> Result<usize, ErrorCode> {
-        self.ch.ool_read(self.call_id, 0, offset, uri)
-    }
-
     pub fn read(&self, offset: usize, data: &mut [u8]) -> Result<usize, ErrorCode> {
-        self.ch.ool_read(self.call_id, 1, offset, data)
+        self.ch.ool_read(self.call_id, 0, offset, data)
     }
 
     pub fn complete(&self, len: usize) {
-        if let Err(error) = self.ch.reply(self.call_id, Reply::WriteUriReply { len }) {
-            warn!("failed to complete write uri: {:?}", error);
+        if let Err(error) = self.ch.reply(self.call_id, Reply::SetattrReply { len }) {
+            warn!("failed to complete setattr: {:?}", error);
         }
     }
 
     pub fn error(&self, error: ErrorCode) {
         if let Err(error) = self.ch.reply(self.call_id, Reply::ErrorReply { error }) {
-            warn!("failed to error write uri: {:?}", error);
+            warn!("failed to error setattr: {:?}", error);
         }
     }
 }

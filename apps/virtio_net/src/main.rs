@@ -5,12 +5,12 @@
 use core::cmp::min;
 use core::mem::size_of;
 
+use ftl::channel::Attr;
 use ftl::channel::Channel;
 use ftl::collections::vec_deque::VecDeque;
 use ftl::driver::DmaBuf;
 use ftl::driver::DmaBufPool;
 use ftl::error::ErrorCode;
-use ftl::eventloop::Error as EventLoopError;
 use ftl::eventloop::Event;
 use ftl::eventloop::EventLoop;
 use ftl::eventloop::ReadCompleter;
@@ -26,8 +26,6 @@ const PAYLOAD_SIZE_MAX: usize = 1514;
 const BUFFER_SIZE: usize = 1514 + size_of::<VirtioNetHdr>();
 const HEADER_LEN: usize = size_of::<VirtioNetHdr>();
 const RX_QUEUE_MAX: usize = 16;
-const MAC_URI: &[u8] = b"ethernet:mac";
-
 pub const VIRTIO_NET_F_MAC: u32 = 1 << 5;
 
 #[repr(C, packed)]
@@ -176,20 +174,11 @@ fn main() {
                 virtio.notify(&txq);
                 completer.complete(payload_len);
             }
-            Event::ReadUri {
-                offset, completer, ..
+            Event::Getattr {
+                attr, completer, ..
             } => {
                 // TODO: Check the context
-                let mut uri = [0; 32];
-                let uri_len = match completer.read_uri(0, &mut uri) {
-                    Ok(len) => len,
-                    Err(error) => {
-                        completer.error(ErrorCode::BadAccess);
-                        continue;
-                    }
-                };
-
-                if offset != 0 || uri_len != MAC_URI.len() || &uri[..uri_len] != MAC_URI {
+                if attr != Attr::MAC {
                     completer.error(ErrorCode::InvalidArgument);
                     continue;
                 }

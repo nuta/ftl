@@ -2,20 +2,21 @@ use alloc::rc::Rc;
 use core::fmt;
 use core::ptr;
 
+use ftl_types::channel::Attr;
 use ftl_types::channel::CallId;
 use ftl_types::channel::ErrorReplyInline;
+use ftl_types::channel::GetattrInline;
+use ftl_types::channel::GetattrReplyInline;
 use ftl_types::channel::INLINE_LEN_MAX;
 use ftl_types::channel::MessageInfo;
 use ftl_types::channel::OpenInline;
 use ftl_types::channel::OpenReplyInline;
 use ftl_types::channel::ReadInline;
 use ftl_types::channel::ReadReplyInline;
-use ftl_types::channel::ReadUriInline;
-use ftl_types::channel::ReadUriReplyInline;
+use ftl_types::channel::SetattrInline;
+use ftl_types::channel::SetattrReplyInline;
 use ftl_types::channel::WriteInline;
 use ftl_types::channel::WriteReplyInline;
-use ftl_types::channel::WriteUriInline;
-use ftl_types::channel::WriteUriReplyInline;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use hashbrown::HashMap;
@@ -123,12 +124,12 @@ impl WriteCompleter {
     }
 }
 
-pub struct ReadUriCompleter {
+pub struct GetattrCompleter {
     ch: Rc<Channel>,
     call_id: CallId,
 }
 
-impl ReadUriCompleter {
+impl GetattrCompleter {
     pub fn channel(&self) -> &Rc<Channel> {
         &self.ch
     }
@@ -140,18 +141,14 @@ impl ReadUriCompleter {
     pub fn complete(&self, len: usize) {
         if let Err(error) = self
             .ch
-            .reply(self.call_id, ChannelReply::ReadUriReply { len })
+            .reply(self.call_id, ChannelReply::GetattrReply { len })
         {
-            warn!("failed to complete read uri: {:?}", error);
+            warn!("failed to complete getattr: {:?}", error);
         }
     }
 
-    pub fn read_uri(&self, offset: usize, uri: &mut [u8]) -> Result<usize, ErrorCode> {
-        self.ch.ool_read(self.call_id, 0, offset, uri)
-    }
-
     pub fn write_data(&self, offset: usize, data: &[u8]) -> Result<usize, ErrorCode> {
-        self.ch.ool_write(self.call_id, 1, offset, data)
+        self.ch.ool_write(self.call_id, 0, offset, data)
     }
 
     pub fn complete_with(&self, data: &[u8]) {
@@ -166,17 +163,17 @@ impl ReadUriCompleter {
             .ch
             .reply(self.call_id, ChannelReply::ErrorReply { error })
         {
-            warn!("failed to error read uri: {:?}", send_error);
+            warn!("failed to error getattr: {:?}", send_error);
         }
     }
 }
 
-pub struct WriteUriCompleter {
+pub struct SetattrCompleter {
     ch: Rc<Channel>,
     call_id: CallId,
 }
 
-impl WriteUriCompleter {
+impl SetattrCompleter {
     pub fn channel(&self) -> &Rc<Channel> {
         &self.ch
     }
@@ -188,18 +185,14 @@ impl WriteUriCompleter {
     pub fn complete(&self, len: usize) {
         if let Err(error) = self
             .ch
-            .reply(self.call_id, ChannelReply::WriteUriReply { len })
+            .reply(self.call_id, ChannelReply::SetattrReply { len })
         {
-            warn!("failed to complete write uri: {:?}", error);
+            warn!("failed to complete setattr: {:?}", error);
         }
     }
 
-    pub fn read_uri(&self, offset: usize, uri: &mut [u8]) -> Result<usize, ErrorCode> {
-        self.ch.ool_read(self.call_id, 0, offset, uri)
-    }
-
     pub fn read_data(&self, offset: usize, data: &mut [u8]) -> Result<usize, ErrorCode> {
-        self.ch.ool_read(self.call_id, 1, offset, data)
+        self.ch.ool_read(self.call_id, 0, offset, data)
     }
 
     pub fn error(&self, error: ErrorCode) {
@@ -207,7 +200,7 @@ impl WriteUriCompleter {
             .ch
             .reply(self.call_id, ChannelReply::ErrorReply { error })
         {
-            warn!("failed to error write uri: {:?}", send_error);
+            warn!("failed to error setattr: {:?}", send_error);
         }
     }
 }
@@ -260,15 +253,15 @@ pub enum RequestEvent {
         len: usize,
         completer: WriteCompleter,
     },
-    ReadUri {
-        offset: usize,
+    Getattr {
+        attr: Attr,
         len: usize,
-        completer: ReadUriCompleter,
+        completer: GetattrCompleter,
     },
-    WriteUri {
-        offset: usize,
+    Setattr {
+        attr: Attr,
         len: usize,
-        completer: WriteUriCompleter,
+        completer: SetattrCompleter,
     },
 }
 
@@ -288,15 +281,15 @@ impl fmt::Debug for RequestEvent {
                     .field("len", len)
                     .finish()
             }
-            RequestEvent::ReadUri { offset, len, .. } => {
-                f.debug_struct("ReadUri")
-                    .field("offset", offset)
+            RequestEvent::Getattr { attr, len, .. } => {
+                f.debug_struct("Getattr")
+                    .field("attr", attr)
                     .field("len", len)
                     .finish()
             }
-            RequestEvent::WriteUri { offset, len, .. } => {
-                f.debug_struct("WriteUri")
-                    .field("offset", offset)
+            RequestEvent::Setattr { attr, len, .. } => {
+                f.debug_struct("Setattr")
+                    .field("attr", attr)
                     .field("len", len)
                     .finish()
             }
@@ -320,15 +313,15 @@ pub enum ReplyEvent {
         buf: Buffer,
         len: usize,
     },
-    ReadUri {
+    Getattr {
         ch: Rc<Channel>,
-        uri: Buffer,
+        attr: Attr,
         buf: BufferMut,
         len: usize,
     },
-    WriteUri {
+    Setattr {
         ch: Rc<Channel>,
-        uri: Buffer,
+        attr: Attr,
         buf: Buffer,
         len: usize,
     },
@@ -344,8 +337,8 @@ impl ReplyEvent {
             ReplyEvent::Open { ch, .. }
             | ReplyEvent::Read { ch, .. }
             | ReplyEvent::Write { ch, .. }
-            | ReplyEvent::ReadUri { ch, .. }
-            | ReplyEvent::WriteUri { ch, .. }
+            | ReplyEvent::Getattr { ch, .. }
+            | ReplyEvent::Setattr { ch, .. }
             | ReplyEvent::Error { ch, .. } => ch,
         }
     }
@@ -361,8 +354,8 @@ impl fmt::Debug for ReplyEvent {
             ReplyEvent::Open { .. } => f.debug_tuple("Open").finish(),
             ReplyEvent::Read { len, .. } => f.debug_tuple("Read").field(len).finish(),
             ReplyEvent::Write { len, .. } => f.debug_tuple("Write").field(len).finish(),
-            ReplyEvent::ReadUri { len, .. } => f.debug_tuple("ReadUri").field(len).finish(),
-            ReplyEvent::WriteUri { len, .. } => f.debug_tuple("WriteUri").field(len).finish(),
+            ReplyEvent::Getattr { len, .. } => f.debug_tuple("Getattr").field(len).finish(),
+            ReplyEvent::Setattr { len, .. } => f.debug_tuple("Setattr").field(len).finish(),
             ReplyEvent::Error { error, .. } => f.debug_tuple("Error").field(error).finish(),
         }
     }
@@ -520,20 +513,20 @@ impl EventLoop {
                                 completer: WriteCompleter { ch, call_id },
                             }
                         }
-                        MessageInfo::READ_URI => {
-                            let inline: ReadUriInline = read_inline(&inline);
-                            RequestEvent::ReadUri {
-                                offset: inline.offset,
+                        MessageInfo::GETATTR => {
+                            let inline: GetattrInline = read_inline(&inline);
+                            RequestEvent::Getattr {
+                                attr: inline.attr,
                                 len: inline.len,
-                                completer: ReadUriCompleter { ch, call_id },
+                                completer: GetattrCompleter { ch, call_id },
                             }
                         }
-                        MessageInfo::WRITE_URI => {
-                            let inline: WriteUriInline = read_inline(&inline);
-                            RequestEvent::WriteUri {
-                                offset: inline.offset,
+                        MessageInfo::SETATTR => {
+                            let inline: SetattrInline = read_inline(&inline);
+                            RequestEvent::Setattr {
+                                attr: inline.attr,
                                 len: inline.len,
-                                completer: WriteUriCompleter { ch, call_id },
+                                completer: SetattrCompleter { ch, call_id },
                             }
                         }
                         _ => panic!("unexpected message info: {:?}", info),
@@ -610,26 +603,26 @@ impl EventLoop {
                                 len: inline.len,
                             }
                         }
-                        MessageInfo::READ_URI_REPLY => {
-                            let inline: ReadUriReplyInline = read_inline(&inline);
-                            let Cookie::ReadUri(uri, buf) = *cookie else {
+                        MessageInfo::GETATTR_REPLY => {
+                            let inline: GetattrReplyInline = read_inline(&inline);
+                            let Cookie::Getattr(attr, buf) = *cookie else {
                                 panic!("unexpected cookie type");
                             };
-                            ReplyEvent::ReadUri {
+                            ReplyEvent::Getattr {
                                 ch,
-                                uri,
+                                attr,
                                 buf,
                                 len: inline.len,
                             }
                         }
-                        MessageInfo::WRITE_URI_REPLY => {
-                            let inline: WriteUriReplyInline = read_inline(&inline);
-                            let Cookie::WriteUri(uri, buf) = *cookie else {
+                        MessageInfo::SETATTR_REPLY => {
+                            let inline: SetattrReplyInline = read_inline(&inline);
+                            let Cookie::Setattr(attr, buf) = *cookie else {
                                 panic!("unexpected cookie type");
                             };
-                            ReplyEvent::WriteUri {
+                            ReplyEvent::Setattr {
                                 ch,
-                                uri,
+                                attr,
                                 buf,
                                 len: inline.len,
                             }

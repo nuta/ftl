@@ -11,6 +11,7 @@ use ftl::application::ReadCompleter;
 use ftl::application::ReplyEvent;
 use ftl::application::RequestEvent;
 use ftl::application::WriteCompleter;
+use ftl::channel::Attr;
 use ftl::channel::Buffer;
 use ftl::channel::BufferMut;
 use ftl::channel::Channel;
@@ -45,7 +46,6 @@ enum Uri {
 const TCP_BUFFER_SIZE: usize = 4096;
 const NET_RX_BUFFER_SIZE: usize = 1514;
 const RX_QUEUE_SIZE: usize = 1;
-const VIRTIO_NET_MAC_URI: &[u8] = b"ethernet:mac";
 
 // TODO: Remove this default timeout once we solve leaks.
 const TCP_SOCKET_TIMEOUT: smoltcp::time::Duration = smoltcp::time::Duration::from_secs(30);
@@ -254,9 +254,8 @@ impl Main {
         self.device.inflight_reads = 0;
         self.ready_to_serve = false;
 
-        if let Err(error) = driver_ch.send(Message::ReadUri {
-            uri: Buffer::Static(VIRTIO_NET_MAC_URI),
-            offset: 0,
+        if let Err(error) = driver_ch.send(Message::Getattr {
+            attr: Attr::MAC,
             data: BufferMut::Vec(vec![0; 6]),
         }) {
             trace!("failed to request MAC: {:?}", error);
@@ -751,9 +750,8 @@ impl Main {
 
         eventloop.add_channel(driver_ch.clone()).unwrap();
 
-        if let Err(error) = driver_ch.send(Message::ReadUri {
-            uri: Buffer::Static(VIRTIO_NET_MAC_URI),
-            offset: 0,
+        if let Err(error) = driver_ch.send(Message::Getattr {
+            attr: Attr::MAC,
             data: BufferMut::Vec(vec![0; 6]),
         }) {
             trace!("failed to request MAC: {:?}", error);
@@ -928,11 +926,11 @@ impl Main {
         }
     }
 
-    fn on_read_uri_reply(
+    fn on_getattr_reply(
         &mut self,
         eventloop: &mut EventLoop,
         ch: &Rc<Channel>,
-        _uri: Buffer,
+        _attr: Attr,
         buf: BufferMut,
         len: usize,
     ) {
@@ -943,10 +941,10 @@ impl Main {
                 self.poll(eventloop);
             }
             Some(_) => {
-                trace!("unexpected read uri reply");
+                trace!("unexpected getattr reply");
             }
             None => {
-                trace!("state not found for read uri reply on {:?}", handle_id);
+                trace!("state not found for getattr reply on {:?}", handle_id);
             }
         }
     }
@@ -1054,11 +1052,11 @@ fn main() {
                     ReplyEvent::Write { ch, buf, len } => {
                         app.on_write_reply(&ch, buf, len);
                     }
-                    ReplyEvent::ReadUri { ch, uri, buf, len } => {
-                        app.on_read_uri_reply(&mut eventloop, &ch, uri, buf, len);
+                    ReplyEvent::Getattr { ch, attr, buf, len } => {
+                        app.on_getattr_reply(&mut eventloop, &ch, attr, buf, len);
                     }
-                    ReplyEvent::WriteUri { ch, .. } => {
-                        warn!("unexpected write uri reply from {:?}", ch);
+                    ReplyEvent::Setattr { ch, .. } => {
+                        warn!("unexpected setattr reply from {:?}", ch);
                     }
                     ReplyEvent::Error { ch, error } => {
                         warn!("error reply from {:?}: {:?}", ch, error);

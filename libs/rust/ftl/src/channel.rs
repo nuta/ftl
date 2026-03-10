@@ -7,19 +7,20 @@ use core::fmt;
 use core::mem;
 use core::mem::MaybeUninit;
 
+pub use ftl_types::channel::Attr;
 use ftl_types::channel::CallId;
 use ftl_types::channel::ErrorReplyInline;
+use ftl_types::channel::GetattrInline;
+use ftl_types::channel::GetattrReplyInline;
 use ftl_types::channel::MessageBody;
 use ftl_types::channel::MessageInfo;
 use ftl_types::channel::OutOfLine;
 use ftl_types::channel::ReadInline;
 use ftl_types::channel::ReadReplyInline;
-use ftl_types::channel::ReadUriInline;
-use ftl_types::channel::ReadUriReplyInline;
+use ftl_types::channel::SetattrInline;
+use ftl_types::channel::SetattrReplyInline;
 use ftl_types::channel::WriteInline;
 use ftl_types::channel::WriteReplyInline;
-use ftl_types::channel::WriteUriInline;
-use ftl_types::channel::WriteUriReplyInline;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use ftl_types::syscall::SYS_CHANNEL_CREATE;
@@ -110,19 +111,15 @@ pub enum Message {
         /// the length of this buffer.
         data: Buffer,
     },
-    ReadUri {
-        /// The URI to read from.
-        uri: Buffer,
-        /// The resource offset to read from.
-        offset: usize,
+    Getattr {
+        /// The attribute to read.
+        attr: Attr,
         /// The destination buffer.
         data: BufferMut,
     },
-    WriteUri {
-        /// The URI to write to.
-        uri: Buffer,
-        /// The resource offset to write to.
-        offset: usize,
+    Setattr {
+        /// The attribute to write.
+        attr: Attr,
         /// The source buffer.
         data: Buffer,
     },
@@ -146,12 +143,12 @@ pub enum Reply {
         /// The length of the data actually written.
         len: usize,
     },
-    ReadUriReply {
-        /// The length of the URI data actually read.
+    GetattrReply {
+        /// The length of the attribute data actually read.
         len: usize,
     },
-    WriteUriReply {
-        /// The length of the URI data actually written.
+    SetattrReply {
+        /// The length of the attribute data actually written.
         len: usize,
     },
 }
@@ -159,8 +156,8 @@ pub enum Reply {
 pub(crate) enum Cookie {
     Buffer(Buffer),
     BufferMut(BufferMut),
-    ReadUri(Buffer, BufferMut),
-    WriteUri(Buffer, Buffer),
+    Getattr(Attr, BufferMut),
+    Setattr(Attr, Buffer),
 }
 
 impl Cookie {
@@ -226,25 +223,23 @@ impl Channel {
                 };
                 (MessageInfo::WRITE, Cookie::Buffer(data))
             }
-            Message::ReadUri { uri, offset, data } => {
-                body.ools[0] = uri.to_ool();
-                body.ools[1] = data.to_ool();
-                let inline = unsafe { &mut *(body.inline.as_mut_ptr() as *mut ReadUriInline) };
-                *inline = ReadUriInline {
-                    offset,
-                    len: body.ools[1].len,
+            Message::Getattr { attr, data } => {
+                body.ools[0] = data.to_ool();
+                let inline = unsafe { &mut *(body.inline.as_mut_ptr() as *mut GetattrInline) };
+                *inline = GetattrInline {
+                    attr,
+                    len: body.ools[0].len,
                 };
-                (MessageInfo::READ_URI, Cookie::ReadUri(uri, data))
+                (MessageInfo::GETATTR, Cookie::Getattr(attr, data))
             }
-            Message::WriteUri { uri, offset, data } => {
-                body.ools[0] = uri.to_ool();
-                body.ools[1] = data.to_ool();
-                let inline = unsafe { &mut *(body.inline.as_mut_ptr() as *mut WriteUriInline) };
-                *inline = WriteUriInline {
-                    offset,
-                    len: body.ools[1].len,
+            Message::Setattr { attr, data } => {
+                body.ools[0] = data.to_ool();
+                let inline = unsafe { &mut *(body.inline.as_mut_ptr() as *mut SetattrInline) };
+                *inline = SetattrInline {
+                    attr,
+                    len: body.ools[0].len,
                 };
-                (MessageInfo::WRITE_URI, Cookie::WriteUri(uri, data))
+                (MessageInfo::SETATTR, Cookie::Setattr(attr, data))
             }
         };
 
@@ -284,16 +279,15 @@ impl Channel {
                 *inline = WriteReplyInline { len };
                 MessageInfo::WRITE_REPLY
             }
-            Reply::ReadUriReply { len } => {
-                let inline = unsafe { &mut *(body.inline.as_mut_ptr() as *mut ReadUriReplyInline) };
-                *inline = ReadUriReplyInline { len };
-                MessageInfo::READ_URI_REPLY
+            Reply::GetattrReply { len } => {
+                let inline = unsafe { &mut *(body.inline.as_mut_ptr() as *mut GetattrReplyInline) };
+                *inline = GetattrReplyInline { len };
+                MessageInfo::GETATTR_REPLY
             }
-            Reply::WriteUriReply { len } => {
-                let inline =
-                    unsafe { &mut *(body.inline.as_mut_ptr() as *mut WriteUriReplyInline) };
-                *inline = WriteUriReplyInline { len };
-                MessageInfo::WRITE_URI_REPLY
+            Reply::SetattrReply { len } => {
+                let inline = unsafe { &mut *(body.inline.as_mut_ptr() as *mut SetattrReplyInline) };
+                *inline = SetattrReplyInline { len };
+                MessageInfo::SETATTR_REPLY
             }
         };
 
