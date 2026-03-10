@@ -10,7 +10,6 @@ pub use ftl_types::channel::Attr;
 use ftl_types::channel::CallId;
 use ftl_types::channel::MessageBody;
 use ftl_types::channel::MessageInfo;
-use ftl_types::channel::OutOfLine;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use ftl_types::syscall::SYS_CHANNEL_CREATE;
@@ -33,54 +32,10 @@ pub enum Buffer {
     Vec(Vec<u8>),
 }
 
-impl Buffer {
-    fn to_ool(&self) -> OutOfLine {
-        match self {
-            Buffer::Static(b) => {
-                OutOfLine {
-                    addr: b.as_ptr() as usize,
-                    len: b.len(),
-                }
-            }
-            Buffer::String(s) => {
-                OutOfLine {
-                    addr: s.as_ptr() as usize,
-                    len: s.len(),
-                }
-            }
-            Buffer::Vec(v) => {
-                OutOfLine {
-                    addr: v.as_ptr() as usize,
-                    len: v.len(),
-                }
-            }
-        }
-    }
-}
-
 #[derive(Debug)]
 pub enum BufferMut {
     String(String),
     Vec(Vec<u8>),
-}
-
-impl BufferMut {
-    fn to_ool(&self) -> OutOfLine {
-        match self {
-            BufferMut::String(s) => {
-                OutOfLine {
-                    addr: s.as_ptr() as usize,
-                    len: s.len(),
-                }
-            }
-            BufferMut::Vec(v) => {
-                OutOfLine {
-                    addr: v.as_ptr() as usize,
-                    len: v.len(),
-                }
-            }
-        }
-    }
 }
 
 pub struct Channel {
@@ -250,7 +205,7 @@ fn open_via_bootstrap(uri: String) -> Result<Channel, ErrorCode> {
 
     loop {
         match eventloop.wait() {
-            Event::OpenReply { new_ch, cookie, .. } => {
+            Event::OpenReply { new_ch, .. } => {
                 return Ok(new_ch);
             }
             Event::ErrorReply { error, .. } => {
