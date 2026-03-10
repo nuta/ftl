@@ -262,10 +262,12 @@ impl<C, K> EventLoop<C, K> {
                         }
                     }
                     MessageInfo::OPEN_REPLY => {
-                        let wrapper = CookieWrapper::from_raw(event_body.cookie);
+                        let (cookie, uri) = CookieWrapper::from_raw(event_body.cookie);
+                        let BufferWrapper::Buffer(uri) = uri else {
+                            unreachable!()
+                        };
                         let new_ch_id = event_body.body.handle;
                         let new_ch = Channel::from_handle(OwnedHandle::from_raw(new_ch_id));
-                        let (cookie, uri) = wrapper.into_inner();
                         Event::OpenReply {
                             ctx,
                             ch,
@@ -275,8 +277,11 @@ impl<C, K> EventLoop<C, K> {
                         }
                     }
                     MessageInfo::READ_REPLY => {
-                        let wrapper = CookieWrapper::from_raw(event_body.cookie);
-                        let (cookie, buf) = wrapper.into_inner();
+                        let (cookie, buf) = CookieWrapper::from_raw(event_body.cookie);
+                        let BufferWrapper::BufferMut(buf) = buf else {
+                            unreachable!()
+                        };
+
                         Event::ReadReply {
                             ctx,
                             ch,
@@ -286,8 +291,11 @@ impl<C, K> EventLoop<C, K> {
                         }
                     }
                     MessageInfo::WRITE_REPLY => {
-                        let wrapper = CookieWrapper::from_raw(event_body.cookie);
-                        let (cookie, buf) = wrapper.into_inner();
+                        let (cookie, buf) = CookieWrapper::from_raw(event_body.cookie);
+                        let BufferWrapper::Buffer(buf) = buf else {
+                            unreachable!()
+                        };
+
                         Event::WriteReply {
                             ctx,
                             ch,
@@ -297,8 +305,11 @@ impl<C, K> EventLoop<C, K> {
                         }
                     }
                     MessageInfo::GETATTR_REPLY => {
-                        let wrapper = CookieWrapper::from_raw(event_body.cookie);
-                        let (cookie, buf) = wrapper.into_inner();
+                        let (cookie, buf) = CookieWrapper::from_raw(event_body.cookie);
+                        let BufferWrapper::BufferMut(buf) = buf else {
+                            unreachable!()
+                        };
+
                         Event::GetattrReply {
                             ctx,
                             ch,
@@ -308,8 +319,11 @@ impl<C, K> EventLoop<C, K> {
                         }
                     }
                     MessageInfo::SETATTR_REPLY => {
-                        let wrapper = CookieWrapper::from_raw(event_body.cookie);
-                        let (cookie, buf) = wrapper.into_inner();
+                        let (cookie, buf) = CookieWrapper::from_raw(event_body.cookie);
+                        let BufferWrapper::Buffer(buf) = buf else {
+                            unreachable!()
+                        };
+
                         Event::SetattrReply {
                             ctx,
                             ch,
@@ -530,23 +544,25 @@ impl SetattrCompleter {
     }
 }
 
-pub struct CookieWrapper<K, B>(Box<(K, B)>);
+enum BufferWrapper {
+    Buffer(Buffer),
+    BufferMut(BufferMut),
+}
 
-impl<K, B> CookieWrapper<K, B> {
-    pub fn new(cookie: K, buf: B) -> Self {
+struct CookieWrapper<K>(Box<(K, BufferWrapper)>);
+
+impl<K> CookieWrapper<K> {
+    fn new(cookie: K, buf: BufferWrapper) -> Self {
         Self(Box::new((cookie, buf)))
     }
 
-    pub fn into_raw(self) -> usize {
+    fn into_raw(self) -> usize {
         Box::into_raw(self.0) as usize
     }
 
-    pub fn from_raw(raw: usize) -> Self {
-        Self(unsafe { Box::from_raw(raw as *mut (K, B)) })
-    }
-
-    pub fn into_inner(self) -> (K, B) {
-        *self.0
+    fn from_raw(raw: usize) -> (K, BufferWrapper) {
+        let wrapper = unsafe { Box::from_raw(raw as *mut (K, BufferWrapper)) };
+        *wrapper
     }
 }
 
@@ -572,9 +588,13 @@ impl<K> Client<K> {
     pub fn open(&self, path: impl Into<Buffer>, cookie: K) -> Result<(), ErrorCode> {
         let mut body = MaybeUninit::<MessageBody>::uninit();
         let body = unsafe { body.assume_init_mut() };
-        todo!("data handling");
 
-        let wrapper = CookieWrapper::new(cookie, path);
+        let path = path.into();
+        let (addr, len) = path.addr_and_len();
+        body.ool_addr = addr;
+        body.ool_len = len;
+
+        let wrapper = CookieWrapper::new(cookie, BufferWrapper::Buffer(path));
         self.ch.call(MessageInfo::OPEN, body, wrapper.into_raw())
     }
 
@@ -587,10 +607,15 @@ impl<K> Client<K> {
     ) -> Result<(), ErrorCode> {
         let mut body = MaybeUninit::<MessageBody>::uninit();
         let body = unsafe { body.assume_init_mut() };
-        body.inline.read.offset = offset;
-        todo!("data handling");
 
-        let wrapper = CookieWrapper::new(cookie, data);
+        body.inline.read.offset = offset;
+
+        let data = data.into();
+        let (addr, len) = data.addr_and_len();
+        body.ool_addr = addr;
+        body.ool_len = len;
+
+        let wrapper = CookieWrapper::new(cookie, BufferWrapper::BufferMut(data));
         self.ch.call(MessageInfo::READ, body, wrapper.into_raw())
     }
 
@@ -603,10 +628,15 @@ impl<K> Client<K> {
     ) -> Result<(), ErrorCode> {
         let mut body = MaybeUninit::<MessageBody>::uninit();
         let body = unsafe { body.assume_init_mut() };
-        body.inline.write.offset = offset;
-        todo!("data handling");
 
-        let wrapper = CookieWrapper::new(cookie, data);
+        body.inline.write.offset = offset;
+
+        let data = data.into();
+        let (addr, len) = data.addr_and_len();
+        body.ool_addr = addr;
+        body.ool_len = len;
+
+        let wrapper = CookieWrapper::new(cookie, BufferWrapper::Buffer(data));
         self.ch.call(MessageInfo::WRITE, body, wrapper.into_raw())
     }
 
@@ -619,10 +649,15 @@ impl<K> Client<K> {
     ) -> Result<(), ErrorCode> {
         let mut body = MaybeUninit::<MessageBody>::uninit();
         let body = unsafe { body.assume_init_mut() };
-        body.inline.getattr.attr = attr;
-        todo!("data handling");
 
-        let wrapper = CookieWrapper::new(cookie, data);
+        body.inline.getattr.attr = attr;
+
+        let data = data.into();
+        let (addr, len) = data.addr_and_len();
+        body.ool_addr = addr;
+        body.ool_len = len;
+
+        let wrapper = CookieWrapper::new(cookie, BufferWrapper::BufferMut(data));
         self.ch.call(MessageInfo::GETATTR, body, wrapper.into_raw())
     }
 
@@ -630,10 +665,15 @@ impl<K> Client<K> {
     pub fn setattr(&self, attr: Attr, data: impl Into<Buffer>, cookie: K) -> Result<(), ErrorCode> {
         let mut body = MaybeUninit::<MessageBody>::uninit();
         let body = unsafe { body.assume_init_mut() };
-        body.inline.setattr.attr = attr;
-        todo!("data handling");
 
-        let wrapper = CookieWrapper::new(cookie, data);
+        body.inline.setattr.attr = attr;
+
+        let data = data.into();
+        let (addr, len) = data.addr_and_len();
+        body.ool_addr = addr;
+        body.ool_len = len;
+
+        let wrapper = CookieWrapper::new(cookie, BufferWrapper::Buffer(data));
         self.ch.call(MessageInfo::SETATTR, body, wrapper.into_raw())
     }
 }

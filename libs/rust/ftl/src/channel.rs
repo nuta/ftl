@@ -32,10 +32,29 @@ pub enum Buffer {
     Vec(Vec<u8>),
 }
 
+impl Buffer {
+    pub(crate) fn addr_and_len(&self) -> (usize, usize) {
+        match self {
+            Buffer::Static(b) => (b.as_ptr() as usize, b.len()),
+            Buffer::String(s) => (s.as_ptr() as usize, s.len()),
+            Buffer::Vec(v) => (v.as_ptr() as usize, v.len()),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum BufferMut {
     String(String),
     Vec(Vec<u8>),
+}
+
+impl BufferMut {
+    pub(crate) fn addr_and_len(&self) -> (usize, usize) {
+        match self {
+            BufferMut::String(s) => (s.as_ptr() as usize, s.len()),
+            BufferMut::Vec(v) => (v.as_ptr() as usize, v.len()),
+        }
+    }
 }
 
 pub struct Channel {
