@@ -207,10 +207,13 @@ impl<C, K> EventLoop<C, K> {
         Ok(())
     }
 
-    pub fn remove(&mut self, id: HandleId) -> Result<(), Error> {
-        self.sink.remove(id).map_err(Error::SinkRemove)?;
+    pub fn remove(&mut self, id: HandleId) {
+        if let Err(err) = self.sink.remove(id) {
+            // Not much things we can do here.
+            warn!("failed to remove handle {:?}: {:?}", id, err);
+        }
+
         self.entries.remove(&id);
-        Ok(())
     }
 
     pub fn wait(&mut self) -> Event<'_, C, K> {

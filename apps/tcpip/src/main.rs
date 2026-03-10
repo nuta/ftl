@@ -517,9 +517,7 @@ impl Main {
             self.sockets.remove(handle);
             self.socket2id.remove(&handle);
             self.contexts.remove(&channel_id);
-            if let Err(error) = eventloop.remove(channel_id) {
-                trace!("failed to remove channel: {:?}", error);
-            }
+            eventloop.remove(channel_id);
         }
     }
 
@@ -982,7 +980,7 @@ impl Main {
 
         if should_remove_channel {
             self.contexts.remove(&handle_id);
-            eventloop.remove(handle_id).unwrap();
+            eventloop.remove(handle_id);
         }
         if should_reconnect_driver {
             if let Err(error) = self.connect_driver(eventloop) {

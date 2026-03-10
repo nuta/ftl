@@ -8,7 +8,6 @@ use ftl::channel::Channel;
 use ftl::eventloop::Client;
 use ftl::eventloop::Event;
 use ftl::eventloop::EventLoop;
-use ftl::handle::HandleId;
 use ftl::handle::Handleable;
 use ftl::log::*;
 use ftl::prelude::vec;
@@ -35,12 +34,6 @@ enum Context {
     TcpConn(Connection),
 }
 
-fn remove_channel(eventloop: &mut EventLoop<Context, Cookie>, id: HandleId) {
-    if let Err(error) = eventloop.remove(id) {
-        warn!("failed to remove channel {:?}: {:?}", id, error);
-    }
-}
-
 #[ftl::main]
 fn main() {
     let mut eventloop = EventLoop::new().unwrap();
@@ -61,30 +54,48 @@ fn main() {
                 ..
             } => {
                 trace!("listening on 80");
-                tcpip_client
-                    .open("", Cookie::OpenConn)
-                    .expect("failed to send open message");
+                let listener = match eventloop.add_channel(new_ch, Context::TcpListener) {
+                    Ok(client) => client,
+                    Err(err) => {
+                        warn!("failed to add listener to event loop: {:?}", err);
+                        return;
+                    }
+                };
+
+                // Accept the first connection asynchronously.
+                if let Err(error) = listener.open("", Cookie::OpenConn) {
+                    warn!("failed to queue accept: {:?}", error);
+                }
             }
             Event::OpenReply {
-                ctx: Context::Tcpip,
+                ctx: Context::TcpListener,
                 cookie: Cookie::OpenConn,
+                ch,
                 new_ch,
                 ..
             } => {
                 trace!("accepted a connection");
+                let listener = Client::new(ch.clone());
+                if let Err(error) = listener.open("", Cookie::OpenConn) {
+                    warn!("failed to queue accept: {:?}", error);
+                }
+
+                // Add the connection to the event loop.
                 let conn = Connection::new();
                 let client = match eventloop.add_channel(new_ch, Context::TcpConn(conn)) {
                     Ok(client) => client,
                     Err(err) => {
                         warn!("failed to add connection to event loop: {:?}", err);
-                        return;
+                        continue;
                     }
                 };
 
                 // Read the first chunk of data asynchronously.
-                client
-                    .read(0, vec![0; RECV_BUFFER_SIZE], Cookie::Read)
-                    .expect("failed to send read message");
+                if let Err(error) = client.read(0, vec![0; RECV_BUFFER_SIZE], Cookie::Read) {
+                    warn!("failed to send read message: {:?}", error);
+                    let id = client.channel().handle().id();
+                    eventloop.remove(id);
+                }
             }
             Event::ReadReply {
                 ctx: Context::TcpConn(conn),
@@ -102,17 +113,22 @@ fn main() {
 
                 buf.truncate(len);
                 if matches!(conn.handle_recv(buf), ControlFlow::Continue(())) {
-                    client
-                        .read(0, vec![0; RECV_BUFFER_SIZE], Cookie::Read)
-                        .expect("failed to send read message");
+                    if let Err(error) = client.read(0, vec![0; RECV_BUFFER_SIZE], Cookie::Read) {
+                        warn!("failed to send read message: {:?}", error);
+                        let id = client.channel().handle().id();
+                        eventloop.remove(id);
+                    }
                 } else {
                     if let Some(data) = conn.poll_send() {
                         if let Err(error) = client.write(0, data, Cookie::Write) {
                             warn!("failed to send write message: {:?}", error);
-                            // TODO: Close channel
+                            let id = client.channel().handle().id();
+                            eventloop.remove(id);
                         }
                     } else {
-                        // TODO: Close channel
+                        // No more data to send.
+                        let id = client.channel().handle().id();
+                        eventloop.remove(id);
                     }
                 }
             }
@@ -127,21 +143,37 @@ fn main() {
                 if let Some(data) = conn.poll_send() {
                     if let Err(error) = client.write(0, data, Cookie::Write) {
                         warn!("failed to send write message: {:?}", error);
-                        // TODO: Close channel
+                        let id = client.channel().handle().id();
+                        eventloop.remove(id);
                     }
                 } else {
-                    // TODO: Close channel
+                    let id = client.channel().handle().id();
+                    eventloop.remove(id);
                 }
             }
+            Event::ErrorReply {
+                ctx: Context::TcpConn(_),
+                client,
+                error,
+                ..
+            } => {
+                warn!("error reply from {:?}: {:?}", client.channel(), error);
+                let id = client.channel().handle().id();
+                eventloop.remove(id);
+            }
             Event::ErrorReply { client, error, .. } => {
-                warn!("error reply from {:?}", error);
-                // TODO: Close channel
+                warn!("error reply from {:?}: {:?}", client.channel(), error);
+            }
+            Event::PeerClosed {
+                ctx: Context::TcpConn(_),
+                ch,
+            } => {
+                trace!("peer closed: {:?}", ch);
+                let id = ch.handle().id();
+                eventloop.remove(id);
             }
             Event::PeerClosed { ch, .. } => {
                 trace!("peer closed: {:?}", ch);
-                // TODO: Close channel
-                let id = ch.handle().id();
-                eventloop.remove(id).unwrap();
             }
             event => {
                 warn!("unhandled event: {:?}", event);
