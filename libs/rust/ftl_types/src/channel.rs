@@ -106,6 +106,11 @@ pub union MessageInlineBody {
     pub write: WriteInline,
     pub read_uri: ReadUriInline,
     pub write_uri: WriteUriInline,
+    pub read_reply: ReadReplyInline,
+    pub write_reply: WriteReplyInline,
+    pub read_uri_reply: ReadUriReplyInline,
+    pub write_uri_reply: WriteUriReplyInline,
+    pub error_reply: ErrorReplyInline,
 }
 
 #[repr(C)]

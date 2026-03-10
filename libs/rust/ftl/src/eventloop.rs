@@ -1,5 +1,6 @@
 #![allow(unused)]
 
+use alloc::boxed::Box;
 use alloc::rc::Rc;
 use core::marker::PhantomData;
 
@@ -49,7 +50,7 @@ pub struct WriteUriCompleter {
 }
 
 #[derive(Debug)]
-pub enum Event<'a, C> {
+pub enum Event<'a, C, K> {
     Open {
         ctx: &'a mut C,
         completer: OpenCompleter,
@@ -73,6 +74,35 @@ pub enum Event<'a, C> {
     WriteUri {
         ctx: &'a mut C,
         completer: WriteUriCompleter,
+    },
+    OpenReply {
+        ch: &'a Rc<Channel>,
+        cookie: K,
+    },
+    ReadReply {
+        ch: &'a Rc<Channel>,
+        cookie: K,
+        len: usize,
+    },
+    WriteReply {
+        ch: &'a Rc<Channel>,
+        cookie: K,
+        len: usize,
+    },
+    ReadUriReply {
+        ch: &'a Rc<Channel>,
+        cookie: K,
+        len: usize,
+    },
+    WriteUriReply {
+        ch: &'a Rc<Channel>,
+        cookie: K,
+        len: usize,
+    },
+    ErrorReply {
+        ch: &'a Rc<Channel>,
+        cookie: K,
+        error: ErrorCode,
     },
     UnknownMessage {
         ctx: &'a mut C,
@@ -100,13 +130,38 @@ struct Entry<C> {
     ctx: C,
 }
 
-pub struct EventLoop<C, K> {
+pub trait Cookieable {
+    fn into_raw(self) -> usize;
+    fn from_raw(raw: usize) -> Self;
+}
+
+impl<T> Cookieable for Box<T> {
+    fn into_raw(self) -> usize {
+        Box::into_raw(self) as usize
+    }
+
+    fn from_raw(raw: usize) -> Self {
+        unsafe { Box::from_raw(raw as *mut T) }
+    }
+}
+
+impl<T> Cookieable for Rc<T> {
+    fn into_raw(self) -> usize {
+        Rc::into_raw(self) as usize
+    }
+
+    fn from_raw(raw: usize) -> Self {
+        unsafe { Rc::from_raw(raw as *mut T) }
+    }
+}
+
+pub struct EventLoop<C, K: Cookieable> {
     sink: Sink,
     entries: HashMap<HandleId, Entry<C>>,
     _pd: PhantomData<K>,
 }
 
-impl<C, K> EventLoop<C, K> {
+impl<C, K: Cookieable> EventLoop<C, K> {
     pub fn new() -> Result<Self, Error> {
         let sink = Sink::new().map_err(Error::SinkCreate)?;
         Ok(Self {
@@ -178,7 +233,7 @@ impl<C, K> EventLoop<C, K> {
         Ok(())
     }
 
-    pub fn wait(&mut self) -> Event<'_, C> {
+    pub fn wait(&mut self) -> Event<'_, C, K> {
         let result = self.sink.wait();
         match result {
             Ok(sink::Event::CallMessage {
@@ -243,7 +298,41 @@ impl<C, K> EventLoop<C, K> {
                 handles,
                 inline,
             }) => {
-                todo!()
+                let (ch, ctx) = match self.entries.get_mut(&ch_id) {
+                    Some(Entry {
+                        object: Object::Channel(ch),
+                        ctx,
+                    }) => (ch, ctx),
+                    _ => panic!("unknown handle id from sink: {:?}", ch_id),
+                };
+
+                // FIXME: Guarantee the alignment of the inline body.
+                let inline_body = unsafe { &*(inline.as_ptr() as *const MessageInlineBody) };
+                let cookie = K::from_raw(cookie);
+                match info {
+                    MessageInfo::OPEN_REPLY => Event::OpenReply { ch, cookie },
+                    MessageInfo::READ_REPLY => {
+                        let len = unsafe { inline_body.read_reply.len };
+                        Event::ReadReply { ch, cookie, len }
+                    }
+                    MessageInfo::WRITE_REPLY => {
+                        let len = unsafe { inline_body.write_reply.len };
+                        Event::WriteReply { ch, cookie, len }
+                    }
+                    MessageInfo::READ_URI_REPLY => {
+                        let len = unsafe { inline_body.read_uri_reply.len };
+                        Event::ReadUriReply { ch, cookie, len }
+                    }
+                    MessageInfo::WRITE_URI_REPLY => {
+                        let len = unsafe { inline_body.write_uri_reply.len };
+                        Event::WriteUriReply { ch, cookie, len }
+                    }
+                    MessageInfo::ERROR_REPLY => {
+                        let error = unsafe { inline_body.error_reply.error };
+                        Event::ErrorReply { ch, cookie, error }
+                    }
+                    _ => Event::UnknownMessage { ctx, info },
+                }
             }
             Ok(sink::Event::PeerClosed { ch_id }) => {
                 todo!()
