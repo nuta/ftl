@@ -251,7 +251,7 @@ impl<C, K> EventLoop<C, K> {
                         Event::Read {
                             ctx,
                             offset: unsafe { inline.read.offset },
-                            len: unsafe { inline.read.len },
+                            len: event_body.ool_len,
                             completer: ReadCompleter {
                                 ch: ch.clone(),
                                 call_id: event_body.call_id,
@@ -262,7 +262,7 @@ impl<C, K> EventLoop<C, K> {
                         Event::Write {
                             ctx,
                             offset: unsafe { inline.write.offset },
-                            len: unsafe { inline.write.len },
+                            len: event_body.ool_len,
                             completer: WriteCompleter {
                                 ch: ch.clone(),
                                 call_id: event_body.call_id,
@@ -273,7 +273,7 @@ impl<C, K> EventLoop<C, K> {
                         Event::GetAttr {
                             ctx,
                             attr: unsafe { inline.getattr.attr },
-                            len: unsafe { inline.getattr.len },
+                            len: event_body.ool_len,
                             completer: GetattrCompleter {
                                 ch: ch.clone(),
                                 call_id: event_body.call_id,
@@ -284,7 +284,7 @@ impl<C, K> EventLoop<C, K> {
                         Event::SetAttr {
                             ctx,
                             attr: unsafe { inline.setattr.attr },
-                            len: unsafe { inline.setattr.len },
+                            len: event_body.ool_len,
                             completer: SetattrCompleter {
                                 ch: ch.clone(),
                                 call_id: event_body.call_id,
@@ -693,7 +693,6 @@ impl<K> Client<K> {
 
         let data = data.into();
         let (addr, len) = data.addr_and_len();
-        body.inline.read.len = len;
         body.ool_addr = addr;
         body.ool_len = len;
 
@@ -714,7 +713,6 @@ impl<K> Client<K> {
 
         let data = data.into();
         let (addr, len) = data.addr_and_len();
-        body.inline.write.len = len;
         body.ool_addr = addr;
         body.ool_len = len;
 
@@ -735,7 +733,6 @@ impl<K> Client<K> {
 
         let data = data.into();
         let (addr, len) = data.addr_and_len();
-        body.inline.getattr.len = len;
         body.ool_addr = addr;
         body.ool_len = len;
 
@@ -751,7 +748,6 @@ impl<K> Client<K> {
 
         let data = data.into();
         let (addr, len) = data.addr_and_len();
-        body.inline.setattr.len = len;
         body.ool_addr = addr;
         body.ool_len = len;
 

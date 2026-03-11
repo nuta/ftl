@@ -142,7 +142,6 @@ pub struct OpenReplyInline {}
 #[derive(Clone, Copy)]
 pub struct ReadInline {
     pub offset: usize,
-    pub len: usize,
 }
 
 #[repr(C)]
@@ -155,7 +154,6 @@ pub struct ReadReplyInline {
 #[derive(Clone, Copy)]
 pub struct WriteInline {
     pub offset: usize,
-    pub len: usize,
 }
 
 #[repr(C)]
@@ -168,7 +166,6 @@ pub struct WriteReplyInline {
 #[derive(Clone, Copy)]
 pub struct GetattrInline {
     pub attr: Attr,
-    pub len: usize,
 }
 
 #[repr(C)]
@@ -181,7 +178,6 @@ pub struct GetattrReplyInline {
 #[derive(Clone, Copy)]
 pub struct SetattrInline {
     pub attr: Attr,
-    pub len: usize,
 }
 
 #[repr(C)]

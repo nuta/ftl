@@ -38,6 +38,7 @@ enum Message {
         call_id: CallId,
         info: MessageInfo,
         handle: Option<AnyHandle>,
+        ool_len: usize,
         inline: [u8; INLINE_LEN_MAX],
     },
     Reply {
@@ -158,6 +159,7 @@ impl Channel {
                 call_id,
                 info,
                 handle,
+                ool_len: body.ool_len,
                 inline: unsafe { body.inline.raw },
             }
         } else {
@@ -318,9 +320,11 @@ impl Handleable for Channel {
                 call_id,
                 info,
                 handle,
+                ool_len,
                 inline,
             } => {
                 event.call_id = call_id;
+                event.ool_len = ool_len;
                 (info, handle, inline)
             }
             Message::Reply {

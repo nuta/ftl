@@ -44,6 +44,7 @@ pub struct MessageEvent {
     pub info: MessageInfo,
     pub cookie: usize,
     pub call_id: CallId,
+    pub ool_len: usize,
     pub body: MessageBody,
 }
 
