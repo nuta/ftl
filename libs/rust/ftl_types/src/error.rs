@@ -27,6 +27,12 @@ pub enum ErrorCode {
     BadAccess = 19,
 }
 
+impl ErrorCode {
+    pub fn as_usize(self) -> usize {
+        self as usize
+    }
+}
+
 impl From<usize> for ErrorCode {
     fn from(value: usize) -> Self {
         // TODO: Optimize this conversion.

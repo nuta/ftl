@@ -84,6 +84,15 @@ impl Attr {
         }
         Self(attrs)
     }
+
+    pub fn from_usize(value: usize) -> Self {
+        debug_assert!(value <= 0xffffffff);
+        Self(value as u32)
+    }
+
+    pub fn as_usize(self) -> usize {
+        self.0 as usize
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -92,83 +101,5 @@ pub struct MessageBody {
     pub handle: HandleId,
     pub ool_addr: usize,
     pub ool_len: usize,
-    pub inline: MessageInlineBody,
-}
-
-#[repr(C)]
-#[derive(Clone, Copy)]
-pub union MessageInlineBody {
-    pub raw: usize,
-    pub open: OpenInline,
-    pub read: ReadInline,
-    pub write: WriteInline,
-    pub getattr: GetattrInline,
-    pub setattr: SetattrInline,
-    pub read_reply: ReadReplyInline,
-    pub write_reply: WriteReplyInline,
-    pub getattr_reply: GetattrReplyInline,
-    pub setattr_reply: SetattrReplyInline,
-    pub error_reply: ErrorReplyInline,
-}
-
-#[repr(C)]
-#[derive(Clone, Copy)]
-pub struct ErrorReplyInline {
-    pub error: ErrorCode,
-}
-
-#[repr(C)]
-#[derive(Clone, Copy)]
-pub struct OpenInline {}
-
-#[repr(C)]
-#[derive(Clone, Copy)]
-pub struct OpenReplyInline {}
-
-#[repr(C)]
-#[derive(Clone, Copy)]
-pub struct ReadInline {
-    pub offset: usize,
-}
-
-#[repr(C)]
-#[derive(Clone, Copy)]
-pub struct ReadReplyInline {
-    pub len: usize,
-}
-
-#[repr(C)]
-#[derive(Clone, Copy)]
-pub struct WriteInline {
-    pub offset: usize,
-}
-
-#[repr(C)]
-#[derive(Clone, Copy)]
-pub struct WriteReplyInline {
-    pub len: usize,
-}
-
-#[repr(C)]
-#[derive(Clone, Copy)]
-pub struct GetattrInline {
-    pub attr: Attr,
-}
-
-#[repr(C)]
-#[derive(Clone, Copy)]
-pub struct GetattrReplyInline {
-    pub len: usize,
-}
-
-#[repr(C)]
-#[derive(Clone, Copy)]
-pub struct SetattrInline {
-    pub attr: Attr,
-}
-
-#[repr(C)]
-#[derive(Clone, Copy)]
-pub struct SetattrReplyInline {
-    pub len: usize,
+    pub inline: usize,
 }

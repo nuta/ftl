@@ -45,13 +45,13 @@ pub enum Event<'a, C, K> {
     },
     GetAttr {
         ctx: &'a mut C,
-        completer: GetattrCompleter,
+        completer: GetAttrCompleter,
         attr: Attr,
         len: usize,
     },
     SetAttr {
         ctx: &'a mut C,
-        completer: SetattrCompleter,
+        completer: SetAttrCompleter,
         attr: Attr,
         len: usize,
     },
@@ -235,69 +235,68 @@ impl<C, K> EventLoop<C, K> {
                 };
 
                 // FIXME: Guarantee the alignment of the inline body.
-                let event_body = unsafe { &event.body.message };
-                let inline = &unsafe { event_body.body.inline };
-                match event_body.info {
+                let body = unsafe { &event.body.message };
+                match body.info {
                     MessageInfo::OPEN => {
                         Event::Open {
                             ctx,
                             completer: OpenCompleter {
                                 ch: ch.clone(),
-                                call_id: event_body.call_id,
+                                call_id: body.call_id,
                             },
                         }
                     }
                     MessageInfo::READ => {
                         Event::Read {
                             ctx,
-                            offset: unsafe { inline.read.offset },
-                            len: event_body.ool_len,
+                            offset: body.inline,
+                            len: body.ool_len,
                             completer: ReadCompleter {
                                 ch: ch.clone(),
-                                call_id: event_body.call_id,
+                                call_id: body.call_id,
                             },
                         }
                     }
                     MessageInfo::WRITE => {
                         Event::Write {
                             ctx,
-                            offset: unsafe { inline.write.offset },
-                            len: event_body.ool_len,
+                            offset: body.inline,
+                            len: body.ool_len,
                             completer: WriteCompleter {
                                 ch: ch.clone(),
-                                call_id: event_body.call_id,
+                                call_id: body.call_id,
                             },
                         }
                     }
                     MessageInfo::GETATTR => {
                         Event::GetAttr {
                             ctx,
-                            attr: unsafe { inline.getattr.attr },
-                            len: event_body.ool_len,
-                            completer: GetattrCompleter {
+                            attr: Attr::from_usize(body.inline),
+                            len: body.ool_len,
+                            completer: GetAttrCompleter {
                                 ch: ch.clone(),
-                                call_id: event_body.call_id,
+                                call_id: body.call_id,
                             },
                         }
                     }
                     MessageInfo::SETATTR => {
                         Event::SetAttr {
                             ctx,
-                            attr: unsafe { inline.setattr.attr },
-                            len: event_body.ool_len,
-                            completer: SetattrCompleter {
+                            attr: Attr::from_usize(body.inline),
+                            len: body.ool_len,
+                            completer: SetAttrCompleter {
                                 ch: ch.clone(),
-                                call_id: event_body.call_id,
+                                call_id: body.call_id,
                             },
                         }
                     }
                     MessageInfo::OPEN_REPLY => {
-                        let (cookie, uri) = CookieWrapper::from_raw(event_body.cookie);
+                        let (cookie, uri) = CookieWrapper::from_raw(body.cookie);
                         let BufferWrapper::Buffer(uri) = uri else {
                             unreachable!()
                         };
-                        let new_ch_id = event_body.body.handle;
-                        let new_ch = Channel::from_handle(OwnedHandle::from_raw(new_ch_id));
+
+                        let new_ch = Channel::from_handle(OwnedHandle::from_raw(body.handle));
                         Event::OpenReply {
                             ctx,
                             ch,
@@ -307,7 +306,7 @@ impl<C, K> EventLoop<C, K> {
                         }
                     }
                     MessageInfo::READ_REPLY => {
-                        let (cookie, buf) = CookieWrapper::from_raw(event_body.cookie);
+                        let (cookie, buf) = CookieWrapper::from_raw(body.cookie);
                         let BufferWrapper::BufferMut(buf) = buf else {
                             unreachable!()
                         };
@@ -317,11 +316,11 @@ impl<C, K> EventLoop<C, K> {
                             client: Client::new(ch.clone()),
                             cookie,
                             buf,
-                            len: unsafe { inline.read_reply.len },
+                            len: body.inline,
                         }
                     }
                     MessageInfo::WRITE_REPLY => {
-                        let (cookie, buf) = CookieWrapper::from_raw(event_body.cookie);
+                        let (cookie, buf) = CookieWrapper::from_raw(body.cookie);
                         let BufferWrapper::Buffer(buf) = buf else {
                             unreachable!()
                         };
@@ -331,11 +330,11 @@ impl<C, K> EventLoop<C, K> {
                             client: Client::new(ch.clone()),
                             cookie,
                             buf,
-                            len: unsafe { inline.write_reply.len },
+                            len: body.inline,
                         }
                     }
                     MessageInfo::GETATTR_REPLY => {
-                        let (cookie, buf) = CookieWrapper::from_raw(event_body.cookie);
+                        let (cookie, buf) = CookieWrapper::from_raw(body.cookie);
                         let BufferWrapper::BufferMut(buf) = buf else {
                             unreachable!()
                         };
@@ -345,11 +344,11 @@ impl<C, K> EventLoop<C, K> {
                             client: Client::new(ch.clone()),
                             cookie,
                             buf,
-                            len: unsafe { inline.getattr_reply.len },
+                            len: body.inline,
                         }
                     }
                     MessageInfo::SETATTR_REPLY => {
-                        let (cookie, buf) = CookieWrapper::from_raw(event_body.cookie);
+                        let (cookie, buf) = CookieWrapper::from_raw(body.cookie);
                         let BufferWrapper::Buffer(buf) = buf else {
                             unreachable!()
                         };
@@ -359,22 +358,22 @@ impl<C, K> EventLoop<C, K> {
                             client: Client::new(ch.clone()),
                             cookie,
                             buf,
-                            len: unsafe { inline.setattr_reply.len },
+                            len: body.inline,
                         }
                     }
                     MessageInfo::ERROR_REPLY => {
-                        let (cookie, _buf) = CookieWrapper::from_raw(event_body.cookie);
+                        let (cookie, _buf) = CookieWrapper::from_raw(body.cookie);
                         Event::ErrorReply {
                             ctx,
                             client: Client::new(ch.clone()),
                             cookie,
-                            error: unsafe { inline.error_reply.error },
+                            error: ErrorCode::from(body.inline),
                         }
                     }
                     _ => {
                         Event::UnknownMessage {
                             ctx,
-                            info: event_body.info,
+                            info: body.info,
                         }
                     }
                 }
@@ -439,7 +438,7 @@ impl OpenCompleter {
 
     pub fn error(&self, error: ErrorCode) {
         let mut body = new_message_body();
-        body.inline.error_reply.error = error;
+        body.inline = error.as_usize();
         if let Err(error) = self.ch.reply(MessageInfo::ERROR_REPLY, &body, self.call_id) {
             warn!("failed to error open: {:?}", error);
         }
@@ -463,7 +462,7 @@ impl ReadCompleter {
 
     pub fn error(&self, error: ErrorCode) {
         let mut body = new_message_body();
-        body.inline.error_reply.error = error;
+        body.inline = error.as_usize();
         if let Err(error) = self.ch.reply(MessageInfo::ERROR_REPLY, &body, self.call_id) {
             warn!("failed to error read: {:?}", error);
         }
@@ -475,7 +474,7 @@ impl ReadCompleter {
 
     pub fn complete(&self, len: usize) {
         let mut body = new_message_body();
-        body.inline.read_reply.len = len;
+        body.inline = len;
         if let Err(error) = self.ch.reply(MessageInfo::READ_REPLY, &body, self.call_id) {
             warn!("failed to complete read: {:?}", error);
         }
@@ -505,7 +504,7 @@ impl WriteCompleter {
 
     pub fn complete(&self, len: usize) {
         let mut body = new_message_body();
-        body.inline.write_reply.len = len;
+        body.inline = len;
         if let Err(error) = self.ch.reply(MessageInfo::WRITE_REPLY, &body, self.call_id) {
             warn!("failed to complete write: {:?}", error);
         }
@@ -513,7 +512,7 @@ impl WriteCompleter {
 
     pub fn error(&self, error: ErrorCode) {
         let mut body = new_message_body();
-        body.inline.error_reply.error = error;
+        body.inline = error.as_usize();
         if let Err(error) = self.ch.reply(MessageInfo::ERROR_REPLY, &body, self.call_id) {
             warn!("failed to error write: {:?}", error);
         }
@@ -521,12 +520,12 @@ impl WriteCompleter {
 }
 
 #[derive(Debug)]
-pub struct GetattrCompleter {
+pub struct GetAttrCompleter {
     ch: Rc<Channel>,
     call_id: CallId,
 }
 
-impl GetattrCompleter {
+impl GetAttrCompleter {
     pub fn channel(&self) -> &Rc<Channel> {
         &self.ch
     }
@@ -541,7 +540,7 @@ impl GetattrCompleter {
 
     pub fn complete(&self, len: usize) {
         let mut body = new_message_body();
-        body.inline.getattr_reply.len = len;
+        body.inline = len;
         if let Err(error) = self
             .ch
             .reply(MessageInfo::GETATTR_REPLY, &body, self.call_id)
@@ -552,7 +551,7 @@ impl GetattrCompleter {
 
     pub fn error(&self, error: ErrorCode) {
         let mut body = new_message_body();
-        body.inline.error_reply.error = error;
+        body.inline = error.as_usize();
         if let Err(error) = self.ch.reply(MessageInfo::ERROR_REPLY, &body, self.call_id) {
             warn!("failed to error getattr: {:?}", error);
         }
@@ -560,12 +559,12 @@ impl GetattrCompleter {
 }
 
 #[derive(Debug)]
-pub struct SetattrCompleter {
+pub struct SetAttrCompleter {
     ch: Rc<Channel>,
     call_id: CallId,
 }
 
-impl SetattrCompleter {
+impl SetAttrCompleter {
     pub fn channel(&self) -> &Rc<Channel> {
         &self.ch
     }
@@ -580,7 +579,7 @@ impl SetattrCompleter {
 
     pub fn complete(&self, len: usize) {
         let mut body = new_message_body();
-        body.inline.setattr_reply.len = len;
+        body.inline = len;
         if let Err(error) = self
             .ch
             .reply(MessageInfo::SETATTR_REPLY, &body, self.call_id)
@@ -591,7 +590,7 @@ impl SetattrCompleter {
 
     pub fn error(&self, error: ErrorCode) {
         let mut body = new_message_body();
-        body.inline.error_reply.error = error;
+        body.inline = error.as_usize();
         if let Err(error) = self.ch.reply(MessageInfo::ERROR_REPLY, &body, self.call_id) {
             warn!("failed to error setattr: {:?}", error);
         }
@@ -689,12 +688,11 @@ impl<K> Client<K> {
     ) -> Result<(), ErrorCode> {
         let mut body = new_message_body();
 
-        body.inline.read.offset = offset;
-
         let data = data.into();
         let (addr, len) = data.addr_and_len();
         body.ool_addr = addr;
         body.ool_len = len;
+        body.inline = offset;
 
         let wrapper = CookieWrapper::new(cookie, BufferWrapper::BufferMut(data));
         self.call_with_cookie(MessageInfo::READ, &body, wrapper)
@@ -709,12 +707,11 @@ impl<K> Client<K> {
     ) -> Result<(), ErrorCode> {
         let mut body = new_message_body();
 
-        body.inline.write.offset = offset;
-
         let data = data.into();
         let (addr, len) = data.addr_and_len();
         body.ool_addr = addr;
         body.ool_len = len;
+        body.inline = offset;
 
         let wrapper = CookieWrapper::new(cookie, BufferWrapper::Buffer(data));
         self.call_with_cookie(MessageInfo::WRITE, &body, wrapper)
@@ -729,12 +726,11 @@ impl<K> Client<K> {
     ) -> Result<(), ErrorCode> {
         let mut body = new_message_body();
 
-        body.inline.getattr.attr = attr;
-
         let data = data.into();
         let (addr, len) = data.addr_and_len();
         body.ool_addr = addr;
         body.ool_len = len;
+        body.inline = attr.as_usize();
 
         let wrapper = CookieWrapper::new(cookie, BufferWrapper::BufferMut(data));
         self.call_with_cookie(MessageInfo::GETATTR, &body, wrapper)
@@ -744,12 +740,11 @@ impl<K> Client<K> {
     pub fn setattr(&self, attr: Attr, data: impl Into<Buffer>, cookie: K) -> Result<(), ErrorCode> {
         let mut body = new_message_body();
 
-        body.inline.setattr.attr = attr;
-
         let data = data.into();
         let (addr, len) = data.addr_and_len();
         body.ool_addr = addr;
         body.ool_len = len;
+        body.inline = attr.as_usize();
 
         let wrapper = CookieWrapper::new(cookie, BufferWrapper::Buffer(data));
         self.call_with_cookie(MessageInfo::SETATTR, &body, wrapper)

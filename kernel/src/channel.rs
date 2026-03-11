@@ -155,14 +155,14 @@ impl Channel {
                 info,
                 handle,
                 ool_len: body.ool_len,
-                inline: unsafe { body.inline.raw },
+                inline: body.inline,
             }
         } else {
             Message::Reply {
                 cookie: call.unwrap().cookie, // TODO: refactor
                 info,
                 handle,
-                inline: unsafe { body.inline.raw },
+                inline: body.inline,
             }
         };
 
@@ -319,7 +319,7 @@ impl Handleable for Channel {
                 inline,
             } => {
                 event.info = info;
-                event.body.inline.raw = inline;
+                event.inline = inline;
                 event.call_id = call_id;
                 event.ool_len = ool_len;
                 handle
@@ -331,7 +331,7 @@ impl Handleable for Channel {
                 inline,
             } => {
                 event.info = info;
-                event.body.inline.raw = inline;
+                event.inline = inline;
                 event.cookie = cookie;
                 handle
             }
@@ -339,7 +339,7 @@ impl Handleable for Channel {
 
         if let Some(handle) = handle {
             let id = handle_table.insert(handle)?; // TODO: What if this fails?
-            event.body.handle = id;
+            event.handle = id;
         }
 
         Ok(Some((EventType::MESSAGE, EventBody { message: event })))

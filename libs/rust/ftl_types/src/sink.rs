@@ -43,9 +43,10 @@ pub union EventBody {
 pub struct MessageEvent {
     pub info: MessageInfo,
     pub cookie: usize,
+    pub handle: HandleId,
     pub call_id: CallId,
     pub ool_len: usize,
-    pub body: MessageBody,
+    pub inline: usize,
 }
 
 #[derive(Clone, Copy)]
