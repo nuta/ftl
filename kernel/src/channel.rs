@@ -4,7 +4,6 @@ use core::cmp::min;
 use core::mem::MaybeUninit;
 
 use ftl_types::channel::CallId;
-use ftl_types::channel::INLINE_LEN_MAX;
 use ftl_types::channel::MessageBody;
 use ftl_types::channel::MessageInfo;
 use ftl_types::error::ErrorCode;
@@ -39,13 +38,13 @@ enum Message {
         info: MessageInfo,
         handle: Option<AnyHandle>,
         ool_len: usize,
-        inline: [u8; INLINE_LEN_MAX],
+        inline: usize,
     },
     Reply {
         cookie: usize,
         info: MessageInfo,
         handle: Option<AnyHandle>,
-        inline: [u8; INLINE_LEN_MAX],
+        inline: usize,
     },
 }
 
@@ -103,10 +102,6 @@ impl Channel {
         cookie: usize,
         call_id: CallId,
     ) -> Result<(), ErrorCode> {
-        if info.inline_len() > INLINE_LEN_MAX {
-            return Err(ErrorCode::InvalidMessage);
-        }
-
         let mut mutable = self.mutable.lock();
         let peer = mutable.peer.as_ref().ok_or(ErrorCode::PeerClosed)?.clone();
 
@@ -315,7 +310,7 @@ impl Handleable for Channel {
 
         let mut event = unsafe { MaybeUninit::<MessageEvent>::zeroed().assume_init() };
 
-        let (info, handle, inline) = match message {
+        let handle = match message {
             Message::Call {
                 call_id,
                 info,
@@ -323,9 +318,11 @@ impl Handleable for Channel {
                 ool_len,
                 inline,
             } => {
+                event.info = info;
+                event.body.inline.raw = inline;
                 event.call_id = call_id;
                 event.ool_len = ool_len;
-                (info, handle, inline)
+                handle
             }
             Message::Reply {
                 cookie,
@@ -333,14 +330,12 @@ impl Handleable for Channel {
                 handle,
                 inline,
             } => {
+                event.info = info;
+                event.body.inline.raw = inline;
                 event.cookie = cookie;
-                (info, handle, inline)
+                handle
             }
         };
-
-        let inline_len = info.inline_len();
-        event.info = info;
-        unsafe { event.body.inline.raw[..inline_len].copy_from_slice(&inline[..inline_len]) };
 
         if let Some(handle) = handle {
             let id = handle_table.insert(handle)?; // TODO: What if this fails?
