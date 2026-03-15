@@ -411,7 +411,7 @@ impl OpenRequest {
     }
 
     pub fn path(&self, buf: &mut [u8]) -> Result<usize, ErrorCode> {
-        self.ch.ool_read(self.request_id, 0, 0, buf)
+        self.ch.ool_read(self.request_id, 0, buf)
     }
 
     pub fn reply(self, ch: Channel) {
@@ -472,7 +472,7 @@ impl ReadRequest {
     }
 
     pub fn write_at(&self, buf: &[u8], offset: usize) -> Result<usize, ErrorCode> {
-        self.ch.ool_write(self.request_id, 0, offset, buf)
+        self.ch.ool_write(self.request_id, offset, buf)
     }
 
     pub fn reply(self, len: usize) {
@@ -527,7 +527,7 @@ impl WriteRequest {
     }
 
     pub fn read_at(&self, buf: &mut [u8], offset: usize) -> Result<usize, ErrorCode> {
-        self.ch.ool_read(self.request_id, 0, offset, buf)
+        self.ch.ool_read(self.request_id, offset, buf)
     }
 
     pub fn reply(self, len: usize) {
@@ -583,7 +583,7 @@ impl GetAttrRequest {
     }
 
     pub fn write_at(&self, buf: &[u8], offset: usize) -> Result<usize, ErrorCode> {
-        self.ch.ool_write(self.request_id, 0, offset, buf)
+        self.ch.ool_write(self.request_id, offset, buf)
     }
 
     pub fn reply(self, len: usize) {
@@ -639,7 +639,7 @@ impl SetAttrRequest {
     }
 
     pub fn read_at(&self, buf: &mut [u8], offset: usize) -> Result<usize, ErrorCode> {
-        self.ch.ool_read(self.request_id, 0, offset, buf)
+        self.ch.ool_read(self.request_id, offset, buf)
     }
 
     pub fn reply(self, len: usize) {

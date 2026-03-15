@@ -178,14 +178,9 @@ impl Channel {
         &self,
         dst_isolation: &SharedRef<dyn Isolation>,
         request_id: RequestId,
-        index: usize,
         offset: usize,
         dst_slice: &UserSlice,
     ) -> Result<usize, ErrorCode> {
-        if index != 0 {
-            return Err(ErrorCode::InvalidArgument);
-        }
-
         let mutable = self.mutable.lock();
         let call = mutable
             .requests
@@ -222,14 +217,9 @@ impl Channel {
         &self,
         src_isolation: &SharedRef<dyn Isolation>,
         request_id: RequestId,
-        index: usize,
         offset: usize,
         src_slice: &UserSlice,
     ) -> Result<usize, ErrorCode> {
-        if index != 0 {
-            return Err(ErrorCode::InvalidArgument);
-        }
-
         let mutable = self.mutable.lock();
         let call = mutable
             .requests
@@ -408,8 +398,7 @@ pub fn sys_channel_ool_read(
     a4: usize,
 ) -> Result<SyscallResult, ErrorCode> {
     let handle_id = HandleId::from_raw(a0);
-    let request_id = RequestId::new((a1 >> 4) as u32);
-    let index = a1 & 0b1111;
+    let request_id = RequestId::new(a1 as u32);
     let offset = a2;
     let buf = UserSlice::new(UserPtr::new(a3), a4)?;
 
@@ -419,7 +408,7 @@ pub fn sys_channel_ool_read(
         .get::<Channel>(handle_id)?
         .authorize(HandleRight::READ)?;
 
-    let read_len = ch.read_ool(process.isolation(), request_id, index, offset, &buf)?;
+    let read_len = ch.read_ool(process.isolation(), request_id, offset, &buf)?;
     Ok(SyscallResult::Return(read_len))
 }
 
@@ -432,8 +421,7 @@ pub fn sys_channel_ool_write(
     a4: usize,
 ) -> Result<SyscallResult, ErrorCode> {
     let handle_id = HandleId::from_raw(a0);
-    let request_id = RequestId::new((a1 >> 4) as u32);
-    let index = a1 & 0b1111;
+    let request_id = RequestId::new(a1 as u32);
     let offset = a2;
     let buf = UserSlice::new(UserPtr::new(a3), a4)?;
 
@@ -443,6 +431,6 @@ pub fn sys_channel_ool_write(
         .get::<Channel>(handle_id)?
         .authorize(HandleRight::WRITE)?;
 
-    let written_len = ch.write_ool(process.isolation(), request_id, index, offset, &buf)?;
+    let written_len = ch.write_ool(process.isolation(), request_id, offset, &buf)?;
     Ok(SyscallResult::Return(written_len))
 }

@@ -72,21 +72,19 @@ impl Channel {
     pub(crate) fn ool_read(
         &self,
         request_id: RequestId,
-        index: usize,
         offset: usize,
         buf: &mut [u8],
     ) -> Result<usize, ErrorCode> {
-        sys_channel_ool_read(self.handle.id(), request_id, index, offset, buf)
+        sys_channel_ool_read(self.handle.id(), request_id, offset, buf)
     }
 
     pub(crate) fn ool_write(
         &self,
         request_id: RequestId,
-        index: usize,
         offset: usize,
         buf: &[u8],
     ) -> Result<usize, ErrorCode> {
-        sys_channel_ool_write(self.handle.id(), request_id, index, offset, buf)
+        sys_channel_ool_write(self.handle.id(), request_id, offset, buf)
     }
 }
 
@@ -138,18 +136,13 @@ pub fn sys_channel_send(
 pub fn sys_channel_ool_read(
     ch: HandleId,
     request_id: RequestId,
-    index: usize,
     offset: usize,
     buf: &mut [u8],
 ) -> Result<usize, ErrorCode> {
-    // FIXME: Define call ID & ool index ranges.
-    debug_assert!(index < 16);
-    debug_assert!(request_id.as_u32() < 0xfff_ffff);
-
     syscall5(
         SYS_CHANNEL_OOL_READ,
         ch.as_usize(),
-        (request_id.as_u32() as usize) << 4 | index,
+        request_id.as_u32() as usize,
         offset,
         buf.as_ptr() as usize,
         buf.len(),
@@ -159,18 +152,13 @@ pub fn sys_channel_ool_read(
 pub fn sys_channel_ool_write(
     ch: HandleId,
     request_id: RequestId,
-    index: usize,
     offset: usize,
     buf: &[u8],
 ) -> Result<usize, ErrorCode> {
-    // FIXME: Define call ID & ool index ranges.
-    debug_assert!(index < 16);
-    debug_assert!(request_id.as_u32() < 0xfff_ffff);
-
     syscall5(
         SYS_CHANNEL_OOL_WRITE,
         ch.as_usize(),
-        (request_id.as_u32() as usize) << 4 | index,
+        request_id.as_u32() as usize,
         offset,
         buf.as_ptr() as usize,
         buf.len(),
