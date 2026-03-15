@@ -33,8 +33,8 @@ struct Ool {
 }
 
 enum Message {
-    Call {
-        request_id: RequestId,
+    Request {
+        id: RequestId,
         info: MessageInfo,
         handle: Option<AnyHandle>,
         ool_len: usize,
@@ -57,7 +57,7 @@ struct Mutable {
     peer: Option<SharedRef<Channel>>,
     queue: VecDeque<Message>,
     emitter: Option<EventEmitter>,
-    calls: BTreeMap<u32 /* call id */, Call>,
+    requests: BTreeMap<u32 /* RequestId */, Call>,
     next_request_id: u32,
     peer_closed_notified: bool, // TODO: State: Connected(peer_ch), PeerClosed, Draining /* notified */
 }
@@ -73,7 +73,7 @@ impl Channel {
                 peer: None,
                 queue: VecDeque::new(),
                 emitter: None,
-                calls: BTreeMap::new(),
+                requests: BTreeMap::new(),
                 next_request_id: 1,
                 peer_closed_notified: false,
             }),
@@ -83,7 +83,7 @@ impl Channel {
                 peer: Some(ch0.clone()),
                 queue: VecDeque::new(),
                 emitter: None,
-                calls: BTreeMap::new(),
+                requests: BTreeMap::new(),
                 next_request_id: 1,
                 peer_closed_notified: false,
             }),
@@ -118,7 +118,7 @@ impl Channel {
         } else {
             Some(
                 mutable
-                    .calls
+                    .requests
                     .remove(&request_id.as_u32())
                     .ok_or(ErrorCode::InvalidMessage)?,
             )
@@ -131,8 +131,8 @@ impl Channel {
         let mut peer_mutable = peer.mutable.lock();
 
         let message = if info.is_call() {
-            let request_id: RequestId = RequestId::new(peer_mutable.next_request_id);
-            assert!(!peer_mutable.calls.contains_key(&request_id.as_u32())); // FIXME: Retry with a different ID
+            let id = RequestId::new(peer_mutable.next_request_id);
+            assert!(!peer_mutable.requests.contains_key(&id.as_u32())); // FIXME: Retry with a different ID
             peer_mutable.next_request_id += 1; // FIXME: wrapping around
 
             let ool = if info.contains_ool() {
@@ -147,11 +147,11 @@ impl Channel {
             };
 
             peer_mutable
-                .calls
-                .insert(request_id.as_u32(), Call { cookie, ool });
+                .requests
+                .insert(id.as_u32(), Call { cookie, ool });
 
-            Message::Call {
-                request_id,
+            Message::Request {
+                id,
                 info,
                 handle,
                 ool_len: body.ool_len,
@@ -188,7 +188,7 @@ impl Channel {
 
         let mutable = self.mutable.lock();
         let call = mutable
-            .calls
+            .requests
             .get(&request_id.as_u32())
             .ok_or(ErrorCode::InvalidArgument)?;
 
@@ -232,7 +232,7 @@ impl Channel {
 
         let mutable = self.mutable.lock();
         let call = mutable
-            .calls
+            .requests
             .get(&request_id.as_u32())
             .ok_or(ErrorCode::InvalidArgument)?;
 
@@ -311,8 +311,8 @@ impl Handleable for Channel {
         let mut event = unsafe { MaybeUninit::<MessageEvent>::zeroed().assume_init() };
 
         let handle = match message {
-            Message::Call {
-                request_id,
+            Message::Request {
+                id,
                 info,
                 handle,
                 ool_len,
@@ -320,7 +320,7 @@ impl Handleable for Channel {
             } => {
                 event.info = info;
                 event.inline = inline;
-                event.request_id = request_id;
+                event.request_id = id;
                 event.ool_len = ool_len;
                 handle
             }
