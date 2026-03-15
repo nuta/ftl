@@ -113,7 +113,7 @@ impl Channel {
             None
         };
 
-        let call = if info.is_call() {
+        let call = if info.is_request() {
             None
         } else {
             Some(
@@ -130,7 +130,7 @@ impl Channel {
 
         let mut peer_mutable = peer.mutable.lock();
 
-        let message = if info.is_call() {
+        let message = if info.is_request() {
             let id = RequestId::new(peer_mutable.next_request_id);
             assert!(!peer_mutable.requests.contains_key(&id.as_u32())); // FIXME: Retry with a different ID
             peer_mutable.next_request_id += 1; // FIXME: wrapping around

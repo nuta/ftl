@@ -30,7 +30,7 @@ impl MessageInfo {
         Self(raw)
     }
 
-    pub const fn is_call(self) -> bool {
+    pub const fn is_request(self) -> bool {
         (self.0 >> 2) & 0b1 == 1
     }
 
