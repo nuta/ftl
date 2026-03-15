@@ -1,7 +1,7 @@
+use core::fmt;
 use core::ops::ControlFlow;
 
-use ftl::channel::Buffer;
-use ftl::channel::Message;
+use ftl::buffer::Buffer;
 use ftl::collections::vec_deque::VecDeque;
 use ftl::prelude::format;
 use ftl::prelude::vec::Vec;
@@ -26,10 +26,10 @@ impl Connection {
     }
 
     /// Returns true if it finished.
-    pub fn handle_recv(&mut self, buf: Vec<u8>) -> ControlFlow<()> {
+    pub fn handle_recv(&mut self, buf: &[u8]) -> ControlFlow<()> {
         match self {
             Self::ReadingHeaders { read_buf } => {
-                read_buf.extend_from_slice(&buf);
+                read_buf.extend_from_slice(buf);
                 let mut headers = [EMPTY_HEADER; MAX_HEADERS];
                 let mut req = Request::new(&mut headers);
                 match req.parse(read_buf) {
@@ -55,7 +55,7 @@ impl Connection {
         }
     }
 
-    pub fn poll_send(&mut self) -> Option<Message> {
+    pub fn poll_send(&mut self) -> Option<Buffer> {
         let Self::WritingResponse { chunks } = self else {
             return None;
         };
@@ -65,7 +65,7 @@ impl Connection {
             return None;
         };
 
-        Some(Message::Write { offset: 0, data })
+        Some(data)
     }
 }
 
@@ -81,7 +81,18 @@ fn process_request(req: Request) -> VecDeque<Buffer> {
     );
 
     let mut chunks = VecDeque::with_capacity(2);
-    chunks.push_back(Buffer::String(headers));
-    chunks.push_back(Buffer::Static(body));
+    chunks.push_back(headers.into());
+    chunks.push_back(body.into());
     chunks
+}
+
+impl fmt::Debug for Connection {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::ReadingHeaders { .. } => write!(f, "ReadingHeaders"),
+            Self::WritingResponse { .. } => write!(f, "WritingResponse"),
+            Self::Errored => write!(f, "Errored"),
+            Self::Completed => write!(f, "Completed"),
+        }
+    }
 }

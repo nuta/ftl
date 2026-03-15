@@ -1,57 +1,67 @@
 #![no_std]
 #![no_main]
 
-use ftl::application::Event;
-use ftl::application::EventLoop;
-use ftl::application::RequestEvent;
 use ftl::channel::Channel;
-use ftl::error::ErrorCode;
-use ftl::handle::HandleId;
-use ftl::handle::OwnedHandle;
+use ftl::eventloop::Event;
+use ftl::eventloop::EventLoop;
+use ftl::eventloop::Request;
 use ftl::log::*;
+
+#[derive(Debug)]
+enum Context {
+    Listener,
+    Client,
+}
 
 #[ftl::main]
 fn main() {
-    let mut eventloop = EventLoop::new().unwrap();
-
-    let ch_id = HandleId::from_raw(1);
-    let ch = Channel::from_handle(OwnedHandle::from_raw(ch_id));
-    eventloop.add_channel(ch).unwrap();
+    let mut eventloop: EventLoop<Context, ()> = EventLoop::new().unwrap();
+    let ch = Channel::register("pong").unwrap();
+    eventloop.add_channel(ch, Context::Listener).unwrap();
 
     loop {
         match eventloop.wait() {
-            Event::Request(RequestEvent::Write {
-                offset,
-                len: _,
-                completer,
-            }) => {
+            Event::Request {
+                ctx: Context::Listener,
+                request: Request::Open(request),
+            } => {
+                let (our_ch, their_ch) = match Channel::new() {
+                    Ok(pair) => pair,
+                    Err(error) => {
+                        request.reply_error(error);
+                        continue;
+                    }
+                };
+
+                if let Err(error) = eventloop.add_channel(our_ch, Context::Client) {
+                    request.reply_error(error.into());
+                    continue;
+                }
+
+                request.reply(their_ch);
+            }
+            Event::Request {
+                ctx: Context::Client,
+                request: Request::Write(request),
+                ..
+            } => {
                 let mut buf = [0; 512];
-                match completer.read_data(offset, &mut buf) {
+                match request.read_at(&mut buf, request.offset()) {
                     Ok(len) => {
                         trace!(
-                            "[pong] OOL read ({len} bytes): {:?}",
+                            "OOL read ({len} bytes): {:?}",
                             core::str::from_utf8(&buf[..len])
                         );
-                        completer.complete(len);
+                        request.reply(len);
                     }
                     Err(error) => {
-                        warn!("[pong] failed to read write payload: {:?}", error);
-                        completer.error(error);
+                        warn!("failed to read write payload: {:?}", error);
+                        request.reply_error(error);
                     }
                 }
             }
-            Event::Request(RequestEvent::Open { completer }) => {
-                completer.error(ErrorCode::Unsupported);
-            }
-            Event::Request(RequestEvent::Read {
-                offset: _,
-                len: _,
-                completer,
-            }) => {
-                completer.error(ErrorCode::Unsupported);
-            }
             ev => {
-                warn!("[pong] unhandled event: {:?}", ev);
+                warn!("unhandled event: {:?}", ev);
             }
         }
     }

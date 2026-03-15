@@ -16,10 +16,11 @@ pub mod allocator;
 pub mod arch;
 mod panic;
 
-pub mod application;
+pub mod buffer;
 pub mod collections;
 pub mod driver;
 pub mod error;
+pub mod eventloop;
 pub mod handle;
 pub mod log;
 pub mod message;

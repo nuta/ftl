@@ -5,16 +5,16 @@
 use core::cmp::min;
 use core::mem::size_of;
 
-use ftl::application::Event;
-use ftl::application::EventLoop;
-use ftl::application::ReadCompleter;
-use ftl::application::RequestEvent;
+use ftl::channel::Attr;
 use ftl::channel::Channel;
 use ftl::collections::vec_deque::VecDeque;
 use ftl::driver::DmaBuf;
 use ftl::driver::DmaBufPool;
 use ftl::error::ErrorCode;
-use ftl::handle::Handleable;
+use ftl::eventloop::Event;
+use ftl::eventloop::EventLoop;
+use ftl::eventloop::ReadRequest;
+use ftl::eventloop::Request;
 use ftl::prelude::*;
 use ftl::rc::Rc;
 use ftl_virtio::VirtQueue;
@@ -27,8 +27,6 @@ const PAYLOAD_SIZE_MAX: usize = 1514;
 const BUFFER_SIZE: usize = 1514 + size_of::<VirtioNetHdr>();
 const HEADER_LEN: usize = size_of::<VirtioNetHdr>();
 const RX_QUEUE_MAX: usize = 16;
-const MAC_URI: &[u8] = b"ethernet:mac";
-
 pub const VIRTIO_NET_F_MAC: u32 = 1 << 5;
 
 #[repr(C, packed)]
@@ -41,15 +39,13 @@ pub struct VirtioNetHdr {
     csum_offset: u16,
 }
 
-fn handle_rx(
-    rxq: &mut VirtQueue<DmaBuf>,
-    dmabuf: DmaBuf,
-    total_len: usize,
-    completer: ReadCompleter,
-) {
+fn handle_rx(rxq: &mut VirtQueue<DmaBuf>, dmabuf: DmaBuf, total_len: usize, request: ReadRequest) {
     // Reply to the request.
     let payload = &dmabuf.as_slice()[HEADER_LEN..HEADER_LEN + total_len];
-    completer.complete_with(payload);
+    match request.write(payload) {
+        Ok(len) => request.reply(len),
+        Err(error) => request.reply_error(error),
+    }
 
     // Re-push the buffer to the RX queue.
     let token = rxq.reserve().unwrap();
@@ -60,9 +56,16 @@ fn handle_rx(
     rxq.push(token, chain, dmabuf);
 }
 
+#[derive(Debug)]
+enum Context {
+    Service,
+    Client,
+    Interrupt,
+}
+
 #[ftl::main]
 fn main() {
-    let mut eventloop = EventLoop::new().unwrap();
+    let mut eventloop: EventLoop<Context, ()> = EventLoop::new().unwrap();
 
     // Initialize virtio device.
     let prober = VirtioPci::probe(DeviceType::Network).unwrap();
@@ -72,7 +75,9 @@ fn main() {
     // Only advertise features we actually support.
     let guest_features = device_features & VIRTIO_NET_F_MAC;
     let (virtio, interrupt) = prober.finish(guest_features);
-    eventloop.add_interrupt(interrupt).unwrap();
+    eventloop
+        .add_interrupt(interrupt, Context::Interrupt)
+        .unwrap();
 
     // Prepare virtqueues.
     let mut rxq = virtio.setup_virtqueue(0).unwrap();
@@ -103,56 +108,67 @@ fn main() {
         virtio.read_device_config8(5),
     ];
 
-    // Register the service.
-    let service_ch = Channel::register("ethernet").unwrap();
-    eventloop.add_channel(service_ch).unwrap();
+    // Keep the returned channel alive so bootstrap can forward connect
+    // requests for the registered service.
+    eventloop
+        .add_channel(Channel::register("ethernet").unwrap(), Context::Service)
+        .unwrap();
 
     trace!("ready: mac={mac:02x?}");
+    trace!("registered service");
     let mut read_waiters = VecDeque::new();
     loop {
         match eventloop.wait() {
-            Event::Request(RequestEvent::Open { completer }) => {
-                // TODO: Check the context
-                let (server_ch, client_ch) = match Channel::new() {
+            Event::Request {
+                ctx: Context::Service,
+                request: Request::Open(request),
+            } => {
+                let (ours, theirs) = match Channel::new() {
                     Ok(pair) => pair,
                     Err(error) => {
-                        completer.error(error);
+                        error!("failed to create channel: {:?}", error);
+                        request.reply_error(ErrorCode::OutOfResources);
                         continue;
                     }
                 };
 
-                if let Err(error) = eventloop.add_channel(server_ch) {
-                    completer.error(error);
+                if let Err(error) = eventloop.add_channel(ours, Context::Client) {
+                    error!("failed to add channel: {:?}", error);
+                    request.reply_error(ErrorCode::OutOfResources);
                     continue;
                 }
 
-                completer.complete(client_ch);
+                request.reply(theirs);
             }
-            Event::Request(RequestEvent::Read { completer, .. }) => {
-                // TODO: Check the context
+            Event::Request {
+                ctx: Context::Client,
+                request: Request::Read(request),
+            } => {
                 if let Some((dmabuf, total_len)) = rxq.pop() {
-                    handle_rx(&mut rxq, dmabuf, total_len, completer);
+                    handle_rx(&mut rxq, dmabuf, total_len, request);
                 } else if read_waiters.len() > READ_WAITERS_MAX {
-                    completer.error(ErrorCode::TryLater);
+                    request.reply_error(ErrorCode::TryLater);
                 } else {
-                    read_waiters.push_back(completer);
+                    read_waiters.push_back(request);
                 }
             }
-            Event::Request(RequestEvent::Write { len, completer, .. }) => {
-                // TODO: Check the context
+            Event::Request {
+                ctx: Context::Client,
+                request: Request::Write(request),
+            } => {
                 let Ok(mut dmabuf) = dmabuf_pool.alloc() else {
-                    completer.error(ErrorCode::OutOfMemory);
+                    request.reply_error(ErrorCode::OutOfResources);
                     continue;
                 };
 
                 let header_slice = &mut dmabuf.as_mut_slice()[..HEADER_LEN];
                 header_slice.fill(0);
 
-                let payload_len = min(len, PAYLOAD_SIZE_MAX);
+                let payload_len = min(request.len(), PAYLOAD_SIZE_MAX);
                 let payload_slice =
                     &mut dmabuf.as_mut_slice()[HEADER_LEN..HEADER_LEN + payload_len];
-                if let Err(err) = completer.read_data(0, payload_slice) {
-                    completer.error(err);
+                if let Err(err) = request.read(payload_slice) {
+                    request.reply_error(ErrorCode::BadAccess);
                     dmabuf_pool.free(dmabuf);
                     continue;
                 }
@@ -163,38 +179,34 @@ fn main() {
                 }];
 
                 let Some(token) = txq.reserve() else {
-                    completer.error(ErrorCode::TryLater);
+                    request.reply_error(ErrorCode::BadAccess);
                     dmabuf_pool.free(dmabuf);
                     continue;
                 };
 
                 txq.push(token, chain, dmabuf);
                 virtio.notify(&txq);
-                completer.complete(payload_len);
+                request.reply(payload_len);
             }
-            Event::Request(RequestEvent::ReadUri {
-                offset,
-                len,
-                completer,
-            }) => {
-                // TODO: Check the context
-                let mut uri = [0; 32];
-                let uri_len = match completer.read_uri(0, &mut uri) {
-                    Ok(len) => len,
-                    Err(error) => {
-                        completer.error(error);
-                        continue;
-                    }
-                };
-
-                if offset != 0 || uri_len != MAC_URI.len() || &uri[..uri_len] != MAC_URI {
-                    completer.error(ErrorCode::NotFound);
+            Event::Request {
+                ctx: Context::Client,
+                request: Request::GetAttr(request),
+            } => {
+                if request.attr() != Attr::MAC {
+                    request.reply_error(ErrorCode::InvalidArgument);
                     continue;
                 }
 
-                completer.complete_with(&mac);
+                match request.write(&mac) {
+                    Ok(len) => request.reply(len),
+                    Err(_error) => request.reply_error(ErrorCode::BadAccess),
+                }
             }
-            Event::Interrupt { interrupt } => {
+            Event::Irq {
+                ctx: Context::Interrupt,
+                interrupt,
+                ..
+            } => {
                 if let Err(error) = interrupt.acknowledge() {
                     warn!("failed to acknowledge interrupt: {:?}", error);
                 }

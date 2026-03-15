@@ -1,3 +1,4 @@
+use core::fmt;
 use core::time::Duration;
 
 use ftl_types::error::ErrorCode;
@@ -46,6 +47,14 @@ impl Handleable for Timer {
 
     fn into_handle(self) -> OwnedHandle {
         self.handle
+    }
+}
+
+impl fmt::Debug for Timer {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("Timer")
+            .field(&self.handle.id().as_usize())
+            .finish()
     }
 }
 

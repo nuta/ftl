@@ -3,13 +3,9 @@ use alloc::collections::vec_deque::VecDeque;
 use core::cmp::min;
 use core::mem::MaybeUninit;
 
-use ftl_arrayvec::ArrayVec;
 use ftl_types::channel::CallId;
-use ftl_types::channel::INLINE_LEN_MAX;
-use ftl_types::channel::MessageBody;
+use ftl_types::channel::RawMessage;
 use ftl_types::channel::MessageInfo;
-use ftl_types::channel::NUM_HANDLES_MAX;
-use ftl_types::channel::NUM_OOLS_MAX;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use ftl_types::sink::EventBody;
@@ -40,20 +36,21 @@ enum Message {
     Call {
         call_id: CallId,
         info: MessageInfo,
-        handles: ArrayVec<AnyHandle, NUM_HANDLES_MAX>,
-        inline: [u8; INLINE_LEN_MAX],
+        handle: Option<AnyHandle>,
+        ool_len: usize,
+        inline: usize,
     },
     Reply {
         cookie: usize,
         info: MessageInfo,
-        handles: ArrayVec<AnyHandle, NUM_HANDLES_MAX>,
-        inline: [u8; INLINE_LEN_MAX],
+        handle: Option<AnyHandle>,
+        inline: usize,
     },
 }
 
 struct Call {
     cookie: usize,
-    ools: ArrayVec<Ool, NUM_OOLS_MAX>,
+    ool: Option<Ool>,
 }
 
 struct Mutable {
@@ -105,33 +102,17 @@ impl Channel {
         cookie: usize,
         call_id: CallId,
     ) -> Result<(), ErrorCode> {
-        if info.num_handles() > NUM_HANDLES_MAX {
-            return Err(ErrorCode::InvalidMessage);
-        }
-
-        if info.num_ools() > NUM_OOLS_MAX {
-            return Err(ErrorCode::InvalidMessage);
-        }
-
-        if info.inline_len() > INLINE_LEN_MAX {
-            return Err(ErrorCode::InvalidMessage);
-        }
-
         let mut mutable = self.mutable.lock();
         let peer = mutable.peer.as_ref().ok_or(ErrorCode::PeerClosed)?.clone();
 
-        let body: MessageBody = crate::isolation::read(isolation, body_slice, 0)?;
+        let body: RawMessage = crate::isolation::read(isolation, body_slice, 0)?;
 
-        let mut handles = ArrayVec::new();
-        for i in 0..info.num_handles() {
-            // TODO: Check if all handles can be transferred. That is, make this
-            //       operation atomic.
-            let handle = handle_table.remove(body.handles[i])?;
-            if handles.try_push(handle).is_err() {
-                // We've checked the # of handles in the MessageInfo above.
-                unreachable!();
-            }
-        }
+        let handle = if info.contains_handle() {
+            Some(handle_table.remove(body.handle)?)
+        } else {
+            None
+        };
+
         let call = if info.is_call() {
             None
         } else {
@@ -154,37 +135,33 @@ impl Channel {
             assert!(!peer_mutable.calls.contains_key(&call_id.as_u32())); // FIXME: Retry with a different ID
             peer_mutable.next_call_id += 1; // FIXME: wrapping around
 
-            let mut ools = ArrayVec::new();
-            for i in 0..info.num_ools() {
-                let ptr = UserPtr::new(body.ools[i].addr);
-                // FIXME: We should not fail here.
-                let slice = UserSlice::new(ptr, body.ools[i].len)?;
-                let ool = Ool {
+            let ool = if info.contains_ool() {
+                let ptr = UserPtr::new(body.ool_addr);
+                let slice = UserSlice::new(ptr, body.ool_len)?;
+                Some(Ool {
                     isolation: isolation.clone(),
                     slice,
-                };
-
-                if ools.try_push(ool).is_err() {
-                    // We've checked the # of ools in the MessageInfo above.
-                    unreachable!();
-                }
-            }
+                })
+            } else {
+                None
+            };
 
             peer_mutable
                 .calls
-                .insert(call_id.as_u32(), Call { cookie, ools });
+                .insert(call_id.as_u32(), Call { cookie, ool });
 
             Message::Call {
                 call_id,
                 info,
-                handles,
+                handle,
+                ool_len: body.ool_len,
                 inline: body.inline,
             }
         } else {
             Message::Reply {
                 cookie: call.unwrap().cookie, // TODO: refactor
                 info,
-                handles,
+                handle,
                 inline: body.inline,
             }
         };
@@ -205,13 +182,17 @@ impl Channel {
         offset: usize,
         dst_slice: &UserSlice,
     ) -> Result<usize, ErrorCode> {
+        if index != 0 {
+            return Err(ErrorCode::InvalidArgument);
+        }
+
         let mutable = self.mutable.lock();
         let call = mutable
             .calls
             .get(&call_id.as_u32())
             .ok_or(ErrorCode::InvalidArgument)?;
 
-        let ool = call.ools.get(index).ok_or(ErrorCode::InvalidArgument)?;
+        let ool = call.ool.as_ref().ok_or(ErrorCode::InvalidArgument)?;
         let src_isolation = &ool.isolation;
         let src_slice = &ool.slice;
 
@@ -245,13 +226,17 @@ impl Channel {
         offset: usize,
         src_slice: &UserSlice,
     ) -> Result<usize, ErrorCode> {
+        if index != 0 {
+            return Err(ErrorCode::InvalidArgument);
+        }
+
         let mutable = self.mutable.lock();
         let call = mutable
             .calls
             .get(&call_id.as_u32())
             .ok_or(ErrorCode::InvalidArgument)?;
 
-        let ool = call.ools.get(index).ok_or(ErrorCode::InvalidArgument)?;
+        let ool = call.ool.as_ref().ok_or(ErrorCode::InvalidArgument)?;
         let dst_isolation = &ool.isolation;
         let dst_slice = &ool.slice;
 
@@ -323,41 +308,38 @@ impl Handleable for Channel {
             return Ok(None);
         };
 
-        // FIXME: Ugly unsafe code. This leaks kernel memory.
-        let event = MaybeUninit::<MessageEvent>::uninit();
-        let mut event = unsafe { event.assume_init() };
+        let mut event = unsafe { MaybeUninit::<MessageEvent>::zeroed().assume_init() };
 
-        let (info, mut handles, inline) = match message {
+        let handle = match message {
             Message::Call {
                 call_id,
                 info,
-                handles,
+                handle,
+                ool_len,
                 inline,
             } => {
+                event.info = info;
+                event.inline = inline;
                 event.call_id = call_id;
-                (info, handles, inline)
+                event.ool_len = ool_len;
+                handle
             }
             Message::Reply {
                 cookie,
                 info,
-                handles,
+                handle,
                 inline,
             } => {
+                event.info = info;
+                event.inline = inline;
                 event.cookie = cookie;
-                (info, handles, inline)
+                handle
             }
         };
 
-        let inline_len = info.inline_len();
-        event.info = info;
-        event.body.inline[..inline_len].copy_from_slice(&inline[..inline_len]);
-
-        // Move handles to our process.
-        debug_assert_eq!(handles.len(), info.num_handles());
-        for i in 0..info.num_handles() {
-            let handle = handles.pop().unwrap();
+        if let Some(handle) = handle {
             let id = handle_table.insert(handle)?; // TODO: What if this fails?
-            event.body.handles[i] = id;
+            event.handle = id;
         }
 
         Ok(Some((EventType::MESSAGE, EventBody { message: event })))
@@ -395,7 +377,7 @@ pub fn sys_channel_send(
 ) -> Result<SyscallResult, ErrorCode> {
     let handle_id = HandleId::from_raw(a0);
     let info = MessageInfo::from_raw(a1 as u32);
-    let body = UserSlice::new(UserPtr::new(a2), size_of::<MessageBody>())?;
+    let body = UserSlice::new(UserPtr::new(a2), size_of::<RawMessage>())?;
     let cookie = a3;
     let call_id = CallId::new(a4 as u32);
 

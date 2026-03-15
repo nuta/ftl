@@ -13,3 +13,4 @@ talc = { workspace = true }
 spin = { workspace = true }
 hashbrown = { workspace = true }
 log = { workspace = true }
+bytes = { workspace = true }

@@ -3,204 +3,215 @@
 
 use core::ops::ControlFlow;
 
-use ftl::application::Event;
-use ftl::application::EventLoop;
-use ftl::application::ReplyEvent;
-use ftl::channel::Buffer;
-use ftl::channel::BufferMut;
+use ftl::buffer::Buffer;
+use ftl::buffer::BufferUninit;
 use ftl::channel::Channel;
-use ftl::channel::Message;
-use ftl::collections::HashMap;
-use ftl::error::ErrorCode;
-use ftl::handle::HandleId;
+use ftl::eventloop::Event;
+use ftl::eventloop::EventLoop;
+use ftl::eventloop::Reply;
 use ftl::handle::Handleable;
 use ftl::log::*;
-use ftl::prelude::vec;
-use ftl::rc::Rc;
-
 use crate::connection::Connection;
 
 mod connection;
 
 const RECV_BUFFER_SIZE: usize = 4096;
 
-enum State {
+#[derive(Debug)]
+enum Cookie {
+    ConnectTcpip,
+    OpenListen,
+    OpenConn,
+    Read,
+    Write,
+}
+
+#[derive(Debug)]
+enum Context {
+    Bootstrap,
     Tcpip,
     TcpListener,
     TcpConn(Connection),
 }
 
-struct Main {
-    states: HashMap<HandleId, State>,
-}
-
-impl Main {
-    fn new(eventloop: &mut EventLoop) -> Self {
-        let mut states = HashMap::new();
-
-        let tcpip = Rc::new(Channel::connect("tcpip").unwrap());
-        states.insert(tcpip.handle().id(), State::Tcpip);
-        eventloop.add_channel(tcpip.clone()).unwrap();
-
-        tcpip
-            .send(Message::Open {
-                uri: Buffer::Static(b"tcp-listen:0.0.0.0:80"),
-            })
-            .expect("failed to send open message");
-
-        Self { states }
-    }
-
-    fn close_channel(&mut self, eventloop: &mut EventLoop, handle_id: HandleId) {
-        if self.states.remove(&handle_id).is_some() {
-            if let Err(error) = eventloop.remove(handle_id) {
-                warn!(
-                    "failed to remove {:?} from event loop: {:?}",
-                    handle_id, error
-                );
-            }
-        }
-    }
-
-    fn send_next_or_close(&mut self, eventloop: &mut EventLoop, ch: &Rc<Channel>) {
-        let handle_id = ch.handle().id();
-        match self.states.get_mut(&handle_id) {
-            Some(State::TcpConn(conn)) => {
-                if let Some(message) = conn.poll_send() {
-                    ch.send(message).expect("failed to send write message");
-                } else {
-                    trace!("closing connection on {:?}", handle_id);
-                    self.close_channel(eventloop, handle_id);
-                }
-            }
-            _ => {
-                trace!("unexpected connection reply on {:?}", handle_id);
-            }
-        }
-    }
-
-    fn on_open_reply(&mut self, eventloop: &mut EventLoop, ch: &Rc<Channel>, new_ch: Channel) {
-        match self.states.get_mut(&ch.handle().id()) {
-            Some(State::Tcpip) => {
-                new_ch
-                    .send(Message::Open {
-                        uri: Buffer::Static(b""),
-                    })
-                    .expect("failed to send accept message");
-
-                let listen_ch_id = new_ch.handle().id();
-                eventloop.add_channel(Rc::new(new_ch)).unwrap();
-                self.states.insert(listen_ch_id, State::TcpListener);
-
-                info!("listening on 80");
-            }
-            Some(State::TcpListener) => {
-                let conn_ch_id = new_ch.handle().id();
-
-                ch.send(Message::Open {
-                    uri: Buffer::Static(b""),
-                })
-                .expect("failed to send accept message");
-
-                new_ch
-                    .send(Message::Read {
-                        offset: 0,
-                        data: BufferMut::Vec(vec![0; RECV_BUFFER_SIZE]),
-                    })
-                    .expect("failed to send read message");
-
-                let conn = Connection::new();
-                eventloop.add_channel(Rc::new(new_ch)).unwrap();
-                self.states.insert(conn_ch_id, State::TcpConn(conn));
-            }
-            _ => {
-                trace!("unexpected open reply on {:?}", ch.handle().id());
-            }
-        }
-    }
-
-    fn on_read_reply(
-        &mut self,
-        eventloop: &mut EventLoop,
-        ch: &Rc<Channel>,
-        buf: BufferMut,
-        len: usize,
-    ) {
-        let handle_id = ch.handle().id();
-        let should_read_more = match self.states.get_mut(&handle_id) {
-            Some(State::TcpConn(conn)) => {
-                trace!("received {} bytes from {:?}", len, handle_id);
-
-                let BufferMut::Vec(mut buf) = buf else {
-                    unreachable!()
-                };
-
-                buf.truncate(len);
-                matches!(conn.handle_recv(buf), ControlFlow::Continue(()))
-            }
-            _ => {
-                trace!("unexpected read reply on {:?}", handle_id);
-                return;
-            }
-        };
-
-        if should_read_more {
-            ch.send(Message::Read {
-                offset: 0,
-                data: BufferMut::Vec(vec![0; RECV_BUFFER_SIZE]),
-            })
-            .expect("failed to send read message");
-        } else {
-            self.send_next_or_close(eventloop, ch);
-        }
-    }
-
-    fn on_error_reply(&mut self, eventloop: &mut EventLoop, ch: &Rc<Channel>, error: ErrorCode) {
-        let handle_id = ch.handle().id();
-        warn!("error reply from {:?}: {:?}", handle_id, error);
-
-        if matches!(self.states.get(&handle_id), Some(State::TcpConn(_))) {
-            self.close_channel(eventloop, handle_id);
-        }
-    }
-
-    fn on_peer_closed(&mut self, eventloop: &mut EventLoop, ch: &Rc<Channel>) {
-        let handle_id = ch.handle().id();
-        trace!("peer closed: {:?}", handle_id);
-        self.close_channel(eventloop, handle_id);
-    }
-
-    fn on_reply(&mut self, eventloop: &mut EventLoop, reply: ReplyEvent) {
-        match reply {
-            ReplyEvent::Open { ch, uri: _, new_ch } => {
-                self.on_open_reply(eventloop, &ch, new_ch);
-            }
-            ReplyEvent::Read { ch, buf, len } => {
-                self.on_read_reply(eventloop, &ch, buf, len);
-            }
-            ReplyEvent::Write { ch, buf: _, len: _ } => {
-                self.send_next_or_close(eventloop, &ch);
-            }
-            ReplyEvent::Error { ch, error } => {
-                self.on_error_reply(eventloop, &ch, error);
-            }
-            _ => {
-                warn!("unexpected reply: {:?}", reply);
-            }
-        }
-    }
-}
-
 #[ftl::main]
 fn main() {
     let mut eventloop = EventLoop::new().unwrap();
-    let mut app = Main::new(&mut eventloop);
+
+    // FIXME:
+    use ftl::handle::HandleId;
+    use ftl::handle::OwnedHandle;
+    let bootstrap_ch = Channel::from_handle(OwnedHandle::from_raw(HandleId::from_raw(1)));
+
+    let bootstrap_client = eventloop
+        .add_channel(bootstrap_ch, Context::Bootstrap)
+        .unwrap();
+
+    bootstrap_client
+        .open("connect:tcpip", Cookie::ConnectTcpip)
+        .unwrap();
+    let tcpip_ch = loop {
+        match eventloop.wait() {
+            Event::Reply {
+                ctx: Context::Bootstrap,
+                reply:
+                    Reply::Open {
+                        cookie: Cookie::ConnectTcpip,
+                        new_ch,
+                        ..
+                    },
+            } => {
+                break new_ch;
+            }
+            event => {
+                panic!("unexpected bootstrap event: {:?}", event);
+            }
+        }
+    };
+
+    let tcpip_client = eventloop.add_channel(tcpip_ch, Context::Tcpip).unwrap();
+
+    tcpip_client
+        .open("tcp-listen:0.0.0.0:80", Cookie::OpenListen)
+        .expect("failed to send open message");
 
     loop {
-        let event = eventloop.wait();
-        match event {
-            Event::Reply(reply) => app.on_reply(&mut eventloop, reply),
-            Event::PeerClosed { ch } => app.on_peer_closed(&mut eventloop, &ch),
+        match eventloop.wait() {
+            Event::Reply {
+                ctx: Context::Tcpip,
+                reply:
+                    Reply::Open {
+                        cookie: Cookie::OpenListen,
+                        new_ch,
+                        ..
+                    },
+            } => {
+                trace!("listening on 80");
+                let listener = match eventloop.add_channel(new_ch, Context::TcpListener) {
+                    Ok(client) => client,
+                    Err(err) => {
+                        warn!("failed to add listener to event loop: {:?}", err);
+                        return;
+                    }
+                };
+
+                // Accept the first connection asynchronously.
+                if let Err(error) = listener.open("", Cookie::OpenConn) {
+                    warn!("failed to queue accept: {:?}", error);
+                }
+            }
+            Event::Reply {
+                ctx: Context::TcpListener,
+                reply:
+                    Reply::Open {
+                        client: listener,
+                        cookie: Cookie::OpenConn,
+                        new_ch,
+                        ..
+                    },
+            } => {
+                trace!("accepted a connection");
+                if let Err(error) = listener.open("", Cookie::OpenConn) {
+                    warn!("failed to queue accept: {:?}", error);
+                }
+
+                // Add the connection to the event loop.
+                let conn = Connection::new();
+                let client = match eventloop.add_channel(new_ch, Context::TcpConn(conn)) {
+                    Ok(client) => client,
+                    Err(err) => {
+                        warn!("failed to add connection to event loop: {:?}", err);
+                        continue;
+                    }
+                };
+
+                // Read the first chunk of data asynchronously.
+                let uninit = BufferUninit::with_capacity(RECV_BUFFER_SIZE);
+                if let Err(error) = client.read(0, uninit, Cookie::Read) {
+                    warn!("failed to send read message: {:?}", error);
+                    let id = client.channel().handle().id();
+                    eventloop.remove(id);
+                }
+            }
+            Event::Reply {
+                ctx: Context::TcpConn(conn),
+                reply:
+                    Reply::Read {
+                        cookie: Cookie::Read,
+                        client,
+                        buf,
+                        len,
+                    },
+            } => {
+                trace!("received {} bytes", len);
+
+                let data: Buffer = buf.into();
+                if matches!(conn.handle_recv(&data), ControlFlow::Continue(())) {
+                    let uninit = BufferUninit::with_capacity(RECV_BUFFER_SIZE);
+                    if let Err(error) = client.read(0, uninit, Cookie::Read) {
+                        warn!("failed to send read message: {:?}", error);
+                        let id = client.channel().handle().id();
+                        eventloop.remove(id);
+                    }
+                } else {
+                    if let Some(data) = conn.poll_send() {
+                        if let Err(error) = client.write(0, data, Cookie::Write) {
+                            warn!("failed to send write message: {:?}", error);
+                            let id = client.channel().handle().id();
+                            eventloop.remove(id);
+                        }
+                    } else {
+                        // No more data to send.
+                        let id = client.channel().handle().id();
+                        eventloop.remove(id);
+                    }
+                }
+            }
+            Event::Reply {
+                ctx: Context::TcpConn(conn),
+                reply:
+                    Reply::Write {
+                        cookie: Cookie::Write,
+                        client,
+                        ..
+                    },
+            } => {
+                if let Some(data) = conn.poll_send() {
+                    if let Err(error) = client.write(0, data, Cookie::Write) {
+                        warn!("failed to send write message: {:?}", error);
+                        let id = client.channel().handle().id();
+                        eventloop.remove(id);
+                    }
+                } else {
+                    let id = client.channel().handle().id();
+                    eventloop.remove(id);
+                }
+            }
+            Event::Reply {
+                ctx: Context::TcpConn(_),
+                reply: Reply::Error { client, error, .. },
+            } => {
+                warn!("error reply from {:?}: {:?}", client.channel(), error);
+                let id = client.channel().handle().id();
+                eventloop.remove(id);
+            }
+            Event::Reply {
+                reply: Reply::Error { client, error, .. },
+                ..
+            } => {
+                warn!("error reply from {:?}: {:?}", client.channel(), error);
+            }
+            Event::PeerClosed {
+                ctx: Context::TcpConn(_),
+                ch,
+            } => {
+                trace!("peer closed: {:?}", ch);
+                let id = ch.handle().id();
+                eventloop.remove(id);
+            }
+            Event::PeerClosed { ch, .. } => {
+                trace!("peer closed: {:?}", ch);
+            }
             event => {
                 warn!("unhandled event: {:?}", event);
             }
