@@ -4,7 +4,6 @@ use core::cmp::min;
 use core::mem::MaybeUninit;
 
 use ftl_types::channel::MessageInfo;
-use ftl_types::channel::RawMessage;
 use ftl_types::channel::RequestId;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
@@ -98,28 +97,27 @@ impl Channel {
         isolation: &SharedRef<dyn Isolation>,
         handle_table: &mut HandleTable,
         info: MessageInfo,
-        body_slice: &UserSlice,
-        cookie: usize,
-        request_id: RequestId,
+        rid_or_cookie: usize, // cookie (requests) or request_id (replies)
+        inline: usize,
+        body_or_handle: usize, // body_ptr (requests) or handle (replies)
+        body_len: usize,
     ) -> Result<(), ErrorCode> {
         let mut mutable = self.mutable.lock();
         let peer = mutable.peer.as_ref().ok_or(ErrorCode::PeerClosed)?.clone();
 
-        let raw: RawMessage = crate::isolation::read(isolation, body_slice, 0)?;
-
         let handle = if info.contains_handle() {
-            Some(handle_table.remove(raw.handle)?)
+            Some(handle_table.remove(HandleId::from_raw(body_or_handle))?)
         } else {
             None
         };
 
-        let call = if info.is_request() {
+        let request = if info.is_request() {
             None
         } else {
             Some(
                 mutable
                     .requests
-                    .remove(&request_id.as_u32())
+                    .remove(&(rid_or_cookie as u32))
                     .ok_or(ErrorCode::InvalidMessage)?,
             )
         };
@@ -136,8 +134,8 @@ impl Channel {
             peer_mutable.next_request_id += 1; // FIXME: wrapping around
 
             let body = if info.contains_body() {
-                let ptr = UserPtr::new(raw.body_addr);
-                let slice = UserSlice::new(ptr, raw.body_len)?;
+                let ptr = UserPtr::new(body_or_handle);
+                let slice = UserSlice::new(ptr, body_len)?;
                 Some(MessageBody {
                     isolation: isolation.clone(),
                     slice,
@@ -146,23 +144,27 @@ impl Channel {
                 None
             };
 
-            peer_mutable
-                .requests
-                .insert(id.as_u32(), Request { cookie, body });
+            peer_mutable.requests.insert(
+                id.as_u32(),
+                Request {
+                    cookie: rid_or_cookie,
+                    body,
+                },
+            );
 
             Message::Request {
                 id,
                 info,
                 handle,
-                body_len: raw.body_len,
-                inline: raw.inline,
+                body_len,
+                inline,
             }
         } else {
             Message::Reply {
-                cookie: call.unwrap().cookie, // TODO: refactor
+                cookie: request.unwrap().cookie, // TODO: refactor
                 info,
                 handle,
-                inline: raw.inline,
+                inline,
             }
         };
 
@@ -359,17 +361,18 @@ pub fn sys_channel_create(
 
 pub fn sys_channel_send(
     current: &SharedRef<Thread>,
-    a0: usize,
-    a1: usize,
-    a2: usize,
-    a3: usize,
-    a4: usize,
+    a0: usize, // handle_id
+    a1: usize, // info_and_body_len
+    a2: usize, // rid_or_cookie
+    a3: usize, // inline
+    a4: usize, // body_or_handle
 ) -> Result<SyscallResult, ErrorCode> {
     let handle_id = HandleId::from_raw(a0);
-    let info = MessageInfo::from_raw(a1 as u32);
-    let body = UserSlice::new(UserPtr::new(a2), size_of::<RawMessage>())?;
-    let cookie = a3;
-    let request_id = RequestId::new(a4 as u32);
+    let info = MessageInfo::from_raw(a1 as u8);
+    let body_len = a1 >> 8;
+    let rid_or_cookie = a2;
+    let inline = a3;
+    let body_or_handle = a4;
 
     let process = current.process();
     let mut handle_table = process.handle_table().lock();
@@ -381,9 +384,10 @@ pub fn sys_channel_send(
         process.isolation(),
         &mut handle_table,
         info,
-        &body,
-        cookie,
-        request_id,
+        rid_or_cookie,
+        inline,
+        body_or_handle,
+        body_len,
     )?;
 
     Ok(SyscallResult::Return(0))

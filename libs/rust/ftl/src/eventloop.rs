@@ -7,7 +7,6 @@ use core::mem::MaybeUninit;
 
 use ftl_types::channel::Attr;
 use ftl_types::channel::MessageInfo;
-use ftl_types::channel::RawMessage;
 use ftl_types::channel::RequestId;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
@@ -415,28 +414,30 @@ impl OpenRequest {
     }
 
     pub fn reply(self, ch: Channel) {
-        let mut body = new_message_body();
-        body.handle = ch.handle().id();
-        match self
-            .ch
-            .reply(MessageInfo::OPEN_REPLY, &body, self.request_id)
-        {
+        match self.ch.reply(
+            MessageInfo::OPEN_REPLY,
+            self.request_id,
+            0,
+            Some(ch.handle().id()),
+        ) {
             Ok(()) => {
                 mem::forget(ch);
             }
             Err(error) => {
+                // FIXME: Channel might be already transferred to the peer depending on the
+                // channel implementation.
                 warn!("failed to reply open: {:?}", error);
             }
         }
     }
 
     pub fn reply_error(self, error: ErrorCode) {
-        let mut body = new_message_body();
-        body.inline = error.as_usize();
-        if let Err(error) = self
-            .ch
-            .reply(MessageInfo::ERROR_REPLY, &body, self.request_id)
-        {
+        if let Err(error) = self.ch.reply(
+            MessageInfo::ERROR_REPLY,
+            self.request_id,
+            error.as_usize(),
+            None,
+        ) {
             warn!("failed to reply open error: {:?}", error);
         }
     }
@@ -476,23 +477,21 @@ impl ReadRequest {
     }
 
     pub fn reply(self, len: usize) {
-        let mut body = new_message_body();
-        body.inline = len;
         if let Err(error) = self
             .ch
-            .reply(MessageInfo::READ_REPLY, &body, self.request_id)
+            .reply(MessageInfo::READ_REPLY, self.request_id, len, None)
         {
             warn!("failed to reply read: {:?}", error);
         }
     }
 
     pub fn reply_error(self, error: ErrorCode) {
-        let mut body = new_message_body();
-        body.inline = error.as_usize();
-        if let Err(error) = self
-            .ch
-            .reply(MessageInfo::ERROR_REPLY, &body, self.request_id)
-        {
+        if let Err(error) = self.ch.reply(
+            MessageInfo::ERROR_REPLY,
+            self.request_id,
+            error.as_usize(),
+            None,
+        ) {
             warn!("failed to reply read error: {:?}", error);
         }
     }
@@ -531,23 +530,21 @@ impl WriteRequest {
     }
 
     pub fn reply(self, len: usize) {
-        let mut body = new_message_body();
-        body.inline = len;
         if let Err(error) = self
             .ch
-            .reply(MessageInfo::WRITE_REPLY, &body, self.request_id)
+            .reply(MessageInfo::WRITE_REPLY, self.request_id, len, None)
         {
             warn!("failed to reply write: {:?}", error);
         }
     }
 
     pub fn reply_error(self, error: ErrorCode) {
-        let mut body = new_message_body();
-        body.inline = error.as_usize();
-        if let Err(error) = self
-            .ch
-            .reply(MessageInfo::ERROR_REPLY, &body, self.request_id)
-        {
+        if let Err(error) = self.ch.reply(
+            MessageInfo::ERROR_REPLY,
+            self.request_id,
+            error.as_usize(),
+            None,
+        ) {
             warn!("failed to reply write error: {:?}", error);
         }
     }
@@ -587,23 +584,21 @@ impl GetAttrRequest {
     }
 
     pub fn reply(self, len: usize) {
-        let mut body = new_message_body();
-        body.inline = len;
         if let Err(error) = self
             .ch
-            .reply(MessageInfo::GETATTR_REPLY, &body, self.request_id)
+            .reply(MessageInfo::GETATTR_REPLY, self.request_id, len, None)
         {
             warn!("failed to reply getattr: {:?}", error);
         }
     }
 
     pub fn reply_error(self, error: ErrorCode) {
-        let mut body = new_message_body();
-        body.inline = error.as_usize();
-        if let Err(error) = self
-            .ch
-            .reply(MessageInfo::ERROR_REPLY, &body, self.request_id)
-        {
+        if let Err(error) = self.ch.reply(
+            MessageInfo::ERROR_REPLY,
+            self.request_id,
+            error.as_usize(),
+            None,
+        ) {
             warn!("failed to reply getattr error: {:?}", error);
         }
     }
@@ -643,23 +638,21 @@ impl SetAttrRequest {
     }
 
     pub fn reply(self, len: usize) {
-        let mut body = new_message_body();
-        body.inline = len;
         if let Err(error) = self
             .ch
-            .reply(MessageInfo::SETATTR_REPLY, &body, self.request_id)
+            .reply(MessageInfo::SETATTR_REPLY, self.request_id, len, None)
         {
             warn!("failed to reply setattr: {:?}", error);
         }
     }
 
     pub fn reply_error(self, error: ErrorCode) {
-        let mut body = new_message_body();
-        body.inline = error.as_usize();
-        if let Err(error) = self
-            .ch
-            .reply(MessageInfo::ERROR_REPLY, &body, self.request_id)
-        {
+        if let Err(error) = self.ch.reply(
+            MessageInfo::ERROR_REPLY,
+            self.request_id,
+            error.as_usize(),
+            None,
+        ) {
             warn!("failed to reply setattr error: {:?}", error);
         }
     }
@@ -685,10 +678,6 @@ impl<K: 'static> CookieWrapper<K> {
         let wrapper = unsafe { Box::from_raw(raw as *mut (K, BufferWrapper)) };
         *wrapper
     }
-}
-
-fn new_message_body() -> RawMessage {
-    unsafe { MaybeUninit::<RawMessage>::zeroed().assume_init() }
 }
 
 #[derive(Debug)]
@@ -718,14 +707,16 @@ impl<K: 'static> Client<K> {
         &self.ch
     }
 
-    fn call_with_cookie(
+    fn call(
         &self,
         info: MessageInfo,
-        body: &RawMessage,
+        inline: usize,
+        body_addr: usize,
+        body_len: usize,
         wrapper: CookieWrapper<K>,
     ) -> Result<(), ErrorCode> {
         let raw = wrapper.into_raw();
-        match self.ch.call(info, body, raw) {
+        match self.ch.call(info, raw, inline, body_addr, body_len) {
             Ok(()) => Ok(()),
             Err(error) => {
                 let _ = CookieWrapper::<K>::from_raw(raw);
@@ -736,15 +727,10 @@ impl<K: 'static> Client<K> {
 
     /// Sends an open request.
     pub fn open(&self, path: impl Into<Buffer>, cookie: K) -> Result<(), ErrorCode> {
-        let mut body = new_message_body();
-
         let path = path.into();
         let (addr, len) = path.addr_and_len();
-        body.body_addr = addr;
-        body.body_len = len;
-
         let wrapper = CookieWrapper::new(cookie, BufferWrapper::Buffer(path));
-        self.call_with_cookie(MessageInfo::OPEN, &body, wrapper)
+        self.call(MessageInfo::OPEN, 0, addr, len, wrapper)
     }
 
     /// Sends a read request.
@@ -754,16 +740,10 @@ impl<K: 'static> Client<K> {
         data: impl Into<BufferUninit>,
         cookie: K,
     ) -> Result<(), ErrorCode> {
-        let mut body = new_message_body();
-
         let mut data = data.into();
         let (addr, len) = data.addr_and_len();
-        body.body_addr = addr;
-        body.body_len = len;
-        body.inline = offset;
-
         let wrapper = CookieWrapper::new(cookie, BufferWrapper::BufferUninit(data));
-        self.call_with_cookie(MessageInfo::READ, &body, wrapper)
+        self.call(MessageInfo::READ, offset, addr, len, wrapper)
     }
 
     /// Sends a write request.
@@ -773,16 +753,10 @@ impl<K: 'static> Client<K> {
         data: impl Into<Buffer>,
         cookie: K,
     ) -> Result<(), ErrorCode> {
-        let mut body = new_message_body();
-
         let data = data.into();
         let (addr, len) = data.addr_and_len();
-        body.body_addr = addr;
-        body.body_len = len;
-        body.inline = offset;
-
         let wrapper = CookieWrapper::new(cookie, BufferWrapper::Buffer(data));
-        self.call_with_cookie(MessageInfo::WRITE, &body, wrapper)
+        self.call(MessageInfo::WRITE, offset, addr, len, wrapper)
     }
 
     /// Sends a getattr request.
@@ -792,30 +766,18 @@ impl<K: 'static> Client<K> {
         data: impl Into<BufferUninit>,
         cookie: K,
     ) -> Result<(), ErrorCode> {
-        let mut body = new_message_body();
-
         let mut data = data.into();
         let (addr, len) = data.addr_and_len();
-        body.body_addr = addr;
-        body.body_len = len;
-        body.inline = attr.as_usize();
-
         let wrapper = CookieWrapper::new(cookie, BufferWrapper::BufferUninit(data));
-        self.call_with_cookie(MessageInfo::GETATTR, &body, wrapper)
+        self.call(MessageInfo::GETATTR, attr.as_usize(), addr, len, wrapper)
     }
 
     /// Sends a setattr request.
     pub fn setattr(&self, attr: Attr, data: impl Into<Buffer>, cookie: K) -> Result<(), ErrorCode> {
-        let mut body = new_message_body();
-
         let data = data.into();
         let (addr, len) = data.addr_and_len();
-        body.body_addr = addr;
-        body.body_len = len;
-        body.inline = attr.as_usize();
-
         let wrapper = CookieWrapper::new(cookie, BufferWrapper::Buffer(data));
-        self.call_with_cookie(MessageInfo::SETATTR, &body, wrapper)
+        self.call(MessageInfo::SETATTR, attr.as_usize(), addr, len, wrapper)
     }
 }
 
@@ -868,17 +830,13 @@ pub enum Reply<K: 'static> {
 }
 
 fn reply_error(ch: &Rc<Channel>, request_id: RequestId, error: ErrorCode) {
-    let mut body = new_message_body();
-    body.inline = error.as_usize();
-    if let Err(err) = ch.reply(MessageInfo::ERROR_REPLY, &body, request_id) {
+    if let Err(err) = ch.reply(MessageInfo::ERROR_REPLY, request_id, error.as_usize(), None) {
         warn!("failed to reply error: {:?}", err);
     }
 }
 
 fn reply_value(ch: &Rc<Channel>, info: MessageInfo, request_id: RequestId, value: usize) {
-    let mut body = new_message_body();
-    body.inline = value;
-    if let Err(err) = ch.reply(info, &body, request_id) {
+    if let Err(err) = ch.reply(info, request_id, value, None) {
         warn!("failed to reply {:?}: {:?}", info, err);
     }
 }

@@ -1,8 +1,6 @@
-use crate::handle::HandleId;
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(transparent)]
-pub struct MessageInfo(u32);
+pub struct MessageInfo(u8);
 
 impl MessageInfo {
     pub const ERROR_REPLY: Self = Self::new(1, false, false, false);
@@ -17,25 +15,21 @@ impl MessageInfo {
     pub const SETATTR: Self = Self::new(10, true, false, true);
     pub const SETATTR_REPLY: Self = Self::new(11, false, false, false);
 
-    const fn new(kind: u32, is_call: bool, handle: bool, body: bool) -> Self {
-        debug_assert!(kind <= 0b11111);
-        Self((kind << 3) | ((is_call as u32) << 2) | ((handle as u32) << 1 | (body as u32) << 0))
+    const fn new(kind: u8, is_call: bool, handle: bool, body: bool) -> Self {
+        debug_assert!(kind <= 0b1111_1);
+        Self((kind << 3) | ((is_call as u8) << 2) | ((handle as u8) << 1 | (body as u8) << 0))
     }
 
-    pub const fn as_u32(self) -> u32 {
-        self.0
+    pub const fn as_usize(self) -> usize {
+        self.0 as usize
     }
 
-    pub const fn from_raw(raw: u32) -> Self {
+    pub const fn from_raw(raw: u8) -> Self {
         Self(raw)
     }
 
     pub const fn is_request(self) -> bool {
         (self.0 >> 2) & 0b1 == 1
-    }
-
-    pub const fn kind(self) -> u32 {
-        (self.0 >> 3) & 0b1_1111
     }
 
     pub const fn contains_handle(self) -> bool {
@@ -85,13 +79,4 @@ impl Attr {
     pub fn as_usize(self) -> usize {
         self.0 as usize
     }
-}
-
-#[derive(Clone, Copy)]
-#[repr(C)]
-pub struct RawMessage {
-    pub handle: HandleId,
-    pub body_addr: usize,
-    pub body_len: usize,
-    pub inline: usize,
 }

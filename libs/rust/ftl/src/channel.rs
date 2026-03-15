@@ -7,13 +7,12 @@ use core::mem::MaybeUninit;
 
 pub use ftl_types::channel::Attr;
 use ftl_types::channel::MessageInfo;
-use ftl_types::channel::RawMessage;
 use ftl_types::channel::RequestId;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use ftl_types::syscall::SYS_CHANNEL_BODY_READ;
-use ftl_types::syscall::SYS_CHANNEL_CREATE;
 use ftl_types::syscall::SYS_CHANNEL_BODY_WRITE;
+use ftl_types::syscall::SYS_CHANNEL_CREATE;
 use ftl_types::syscall::SYS_CHANNEL_SEND;
 use log::warn;
 
@@ -52,21 +51,29 @@ impl Channel {
     pub(crate) fn call(
         &self,
         info: MessageInfo,
-        body: &RawMessage,
         cookie: usize,
+        inline: usize,
+        body_addr: usize,
+        body_len: usize,
     ) -> Result<(), ErrorCode> {
-        sys_channel_send(self.handle.id(), info, body, cookie, RequestId::new(0))?;
-        Ok(())
+        sys_channel_send(self.handle.id(), info, cookie, inline, body_addr, body_len)
     }
 
     pub(crate) fn reply(
         &self,
         info: MessageInfo,
-        body: &RawMessage,
         request_id: RequestId,
+        inline: usize,
+        handle: Option<HandleId>,
     ) -> Result<(), ErrorCode> {
-        sys_channel_send(self.handle.id(), info, body, 0, request_id)?;
-        Ok(())
+        sys_channel_send(
+            self.handle.id(),
+            info,
+            request_id.as_u32() as usize,
+            inline,
+            handle.map(|id| id.as_usize()).unwrap_or(0),
+            0,
+        )
     }
 
     pub(crate) fn read_body(
@@ -118,17 +125,18 @@ fn sys_channel_create() -> Result<(OwnedHandle, OwnedHandle), ErrorCode> {
 pub fn sys_channel_send(
     ch: HandleId,
     info: MessageInfo,
-    body: &RawMessage,
-    cookie: usize,
-    request_id: RequestId,
+    rid_or_cookie: usize, // cookie (requests) or request_id (replies)
+    inline: usize,
+    body_or_handle: usize, // body_ptr (requests) or handle (replies)
+    body_len: usize,
 ) -> Result<(), ErrorCode> {
     syscall5(
         SYS_CHANNEL_SEND,
         ch.as_usize(),
-        info.as_u32() as usize,
-        body as *const RawMessage as usize,
-        cookie,
-        request_id.as_u32() as usize,
+        info.as_usize() | (body_len << 8),
+        rid_or_cookie,
+        inline,
+        body_or_handle,
     )?;
     Ok(())
 }
