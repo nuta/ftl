@@ -10,7 +10,7 @@ use crate::memory::PAGE_ALLOCATOR;
 use crate::spinlock::SpinLock;
 
 pub const MIN_PAGE_SIZE: usize = 4096;
-pub(super) const KERNEL_BASE: usize = 0xffff_8000_0000_0000;
+pub const KERNEL_BASE: usize = 0xffff_8000_0000_0000;
 
 const ENTRIES_PER_TABLE: usize = 512;
 const GIGA_PAGE_SIZE: usize = 1024 * 1024 * 1024;

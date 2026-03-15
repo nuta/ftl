@@ -1,8 +1,10 @@
 use core::mem::MaybeUninit;
 
 use ftl_types::error::ErrorCode;
+use ftl_types::vmspace::PageAttrs;
 
 use crate::shared_ref::SharedRef;
+use crate::vmspace::PageIter;
 use crate::vmspace::VmSpace;
 
 /// A pointer in an isolation space.
@@ -24,13 +26,17 @@ impl UserPtr {
             None => None,
         }
     }
+
+    pub const fn as_usize(&self) -> usize {
+        self.0
+    }
 }
 
 /// A slice in an isolation space.
 #[derive(Clone, Copy)]
 pub struct UserSlice {
-    start: UserPtr,
-    end: UserPtr,
+    pub start: UserPtr,
+    pub end: UserPtr,
 }
 
 impl UserSlice {
@@ -155,10 +161,11 @@ impl Isolation for InKernelIsolation {
             return Err(ErrorCode::InvalidArgument);
         }
 
-        self.vmspace.switch();
-        unsafe {
-            let src = slice.start.0 as *const u8;
-            core::ptr::copy_nonoverlapping(src, buf.as_mut_ptr(), slice.len());
+        let mut offset = 0;
+        for page in PageIter::new(&self.vmspace, slice) {
+            let src = page.slice(PageAttrs::NONE)?;
+            buf[offset..offset + src.len()].copy_from_slice(src);
+            offset += src.len();
         }
         Ok(())
     }
@@ -168,10 +175,11 @@ impl Isolation for InKernelIsolation {
             return Err(ErrorCode::InvalidArgument);
         }
 
-        self.vmspace.switch();
-        unsafe {
-            let dst = slice.start.0 as *mut u8;
-            core::ptr::copy_nonoverlapping(buf.as_ptr(), dst, slice.len());
+        let mut offset = 0;
+        for page in PageIter::new(&self.vmspace, slice) {
+            let dst = page.slice(PageAttrs::WRITABLE)?;
+            dst.copy_from_slice(&buf[offset..offset + dst.len()]);
+            offset += dst.len();
         }
         Ok(())
     }

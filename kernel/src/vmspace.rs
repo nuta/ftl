@@ -7,10 +7,12 @@ use ftl_types::vmspace::PageAttrs;
 use ftl_utils::alignment::align_down;
 use ftl_utils::alignment::is_aligned;
 
+use crate::address::PAddr;
 use crate::arch;
 use crate::handle::Handle;
 use crate::handle::HandleRight;
 use crate::handle::Handleable;
+use crate::isolation::UserSlice;
 use crate::shared_ref::SharedRef;
 use crate::spinlock::SpinLock;
 use crate::syscall::SyscallResult;
@@ -85,8 +87,10 @@ impl VmSpace {
         Ok(())
     }
 
-    pub fn handle_page_fault(&self, uaddr: usize, required: PageAttrs) -> Result<(), ErrorCode> {
-        let uaddr = align_down(uaddr, arch::MIN_PAGE_SIZE);
+    fn fill(&self, uaddr: usize, required: PageAttrs) -> Result<(PAddr, PageAttrs), ErrorCode> {
+        if !is_aligned(uaddr, arch::MIN_PAGE_SIZE) {
+            return Err(ErrorCode::InvalidArgument);
+        }
 
         let mutable = self.mutable.lock();
         let mapping = mutable
@@ -100,13 +104,103 @@ impl VmSpace {
         }
 
         let paddr = mapping.vmarea.fill(uaddr - mapping.uaddr)?;
-        self.arch
-            .map(uaddr, paddr, arch::MIN_PAGE_SIZE, mapping.attrs)?;
+        Ok((paddr, mapping.attrs))
+    }
+
+    pub fn handle_page_fault(&self, uaddr: usize, required: PageAttrs) -> Result<(), ErrorCode> {
+        let uaddr = align_down(uaddr, arch::MIN_PAGE_SIZE);
+        let (paddr, attrs) = self.fill(uaddr, required)?;
+        self.arch.map(uaddr, paddr, arch::MIN_PAGE_SIZE, attrs)?;
         Ok(())
     }
 
     pub fn switch(&self) {
         self.arch.switch();
+    }
+}
+
+pub enum PageChunk<'a> {
+    Kernel {
+        uaddr: usize,
+        len: usize,
+    },
+    User {
+        vmspace: &'a VmSpace,
+        uaddr: usize,
+        /// The offset within the page.
+        offset: usize,
+        len: usize,
+    },
+}
+
+impl<'a> PageChunk<'a> {
+    pub fn slice(&self, required: PageAttrs) -> Result<&mut [u8], ErrorCode> {
+        let (ptr, len) = match self {
+            PageChunk::Kernel { uaddr, len } => (*uaddr, *len),
+            PageChunk::User {
+                vmspace,
+                uaddr,
+                offset,
+                len,
+            } => {
+                let (paddr, _) = vmspace.fill(*uaddr, required)?;
+                let vaddr = arch::paddr2vaddr(paddr);
+                (vaddr.as_usize() + *offset, *len)
+            }
+        };
+
+        Ok(unsafe { core::slice::from_raw_parts_mut(ptr as *mut u8, len) })
+    }
+}
+
+pub struct PageIter<'a> {
+    vmspace: &'a VmSpace,
+    uaddr: usize,
+    uaddr_end: usize,
+    kernel: bool,
+}
+
+impl<'a> PageIter<'a> {
+    pub fn new(vmspace: &'a VmSpace, slice: &UserSlice) -> Self {
+        let start = slice.start.as_usize();
+        let end = slice.end.as_usize();
+        Self {
+            vmspace,
+            uaddr: start,
+            uaddr_end: end,
+            kernel: start >= arch::KERNEL_BASE,
+        }
+    }
+}
+
+impl<'a> Iterator for PageIter<'a> {
+    type Item = PageChunk<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.uaddr >= self.uaddr_end {
+            return None;
+        }
+
+        if self.kernel {
+            let chunk = PageChunk::Kernel {
+                uaddr: self.uaddr,
+                len: self.uaddr_end - self.uaddr,
+            };
+            self.uaddr = self.uaddr_end;
+            return Some(chunk);
+        }
+
+        let page_offset = self.uaddr % arch::MIN_PAGE_SIZE;
+        let page_uaddr = self.uaddr - page_offset;
+        let chunk_len = (arch::MIN_PAGE_SIZE - page_offset).min(self.uaddr_end - self.uaddr);
+        let chunk = PageChunk::User {
+            vmspace: self.vmspace,
+            uaddr: page_uaddr,
+            offset: page_offset,
+            len: chunk_len,
+        };
+        self.uaddr += chunk_len;
+        Some(chunk)
     }
 }
 
