@@ -204,7 +204,7 @@ impl<C, K: 'static> EventLoop<C, K> {
                             request: Request::Open(OpenRequest {
                                 ch: ch.clone(),
                                 request_id: body.request_id,
-                                path_len: body.ool_len,
+                                path_len: body.body_len,
                             }),
                         }
                     }
@@ -215,7 +215,7 @@ impl<C, K: 'static> EventLoop<C, K> {
                                 ch: ch.clone(),
                                 request_id: body.request_id,
                                 offset: body.inline,
-                                body_len: body.ool_len,
+                                body_len: body.body_len,
                             }),
                         }
                     }
@@ -226,7 +226,7 @@ impl<C, K: 'static> EventLoop<C, K> {
                                 ch: ch.clone(),
                                 request_id: body.request_id,
                                 offset: body.inline,
-                                body_len: body.ool_len,
+                                body_len: body.body_len,
                             }),
                         }
                     }
@@ -237,7 +237,7 @@ impl<C, K: 'static> EventLoop<C, K> {
                                 ch: ch.clone(),
                                 request_id: body.request_id,
                                 attr: Attr::from_usize(body.inline),
-                                body_len: body.ool_len,
+                                body_len: body.body_len,
                             }),
                         }
                     }
@@ -248,7 +248,7 @@ impl<C, K: 'static> EventLoop<C, K> {
                                 ch: ch.clone(),
                                 request_id: body.request_id,
                                 attr: Attr::from_usize(body.inline),
-                                body_len: body.ool_len,
+                                body_len: body.body_len,
                             }),
                         }
                     }
@@ -411,7 +411,7 @@ impl OpenRequest {
     }
 
     pub fn path(&self, buf: &mut [u8]) -> Result<usize, ErrorCode> {
-        self.ch.ool_read(self.request_id, 0, buf)
+        self.ch.read_body(self.request_id, 0, buf)
     }
 
     pub fn reply(self, ch: Channel) {
@@ -472,7 +472,7 @@ impl ReadRequest {
     }
 
     pub fn write_at(&self, buf: &[u8], offset: usize) -> Result<usize, ErrorCode> {
-        self.ch.ool_write(self.request_id, offset, buf)
+        self.ch.write_body(self.request_id, offset, buf)
     }
 
     pub fn reply(self, len: usize) {
@@ -527,7 +527,7 @@ impl WriteRequest {
     }
 
     pub fn read_at(&self, buf: &mut [u8], offset: usize) -> Result<usize, ErrorCode> {
-        self.ch.ool_read(self.request_id, offset, buf)
+        self.ch.read_body(self.request_id, offset, buf)
     }
 
     pub fn reply(self, len: usize) {
@@ -583,7 +583,7 @@ impl GetAttrRequest {
     }
 
     pub fn write_at(&self, buf: &[u8], offset: usize) -> Result<usize, ErrorCode> {
-        self.ch.ool_write(self.request_id, offset, buf)
+        self.ch.write_body(self.request_id, offset, buf)
     }
 
     pub fn reply(self, len: usize) {
@@ -639,7 +639,7 @@ impl SetAttrRequest {
     }
 
     pub fn read_at(&self, buf: &mut [u8], offset: usize) -> Result<usize, ErrorCode> {
-        self.ch.ool_read(self.request_id, offset, buf)
+        self.ch.read_body(self.request_id, offset, buf)
     }
 
     pub fn reply(self, len: usize) {
@@ -740,8 +740,8 @@ impl<K: 'static> Client<K> {
 
         let path = path.into();
         let (addr, len) = path.addr_and_len();
-        body.ool_addr = addr;
-        body.ool_len = len;
+        body.body_addr = addr;
+        body.body_len = len;
 
         let wrapper = CookieWrapper::new(cookie, BufferWrapper::Buffer(path));
         self.call_with_cookie(MessageInfo::OPEN, &body, wrapper)
@@ -758,8 +758,8 @@ impl<K: 'static> Client<K> {
 
         let mut data = data.into();
         let (addr, len) = data.addr_and_len();
-        body.ool_addr = addr;
-        body.ool_len = len;
+        body.body_addr = addr;
+        body.body_len = len;
         body.inline = offset;
 
         let wrapper = CookieWrapper::new(cookie, BufferWrapper::BufferUninit(data));
@@ -777,8 +777,8 @@ impl<K: 'static> Client<K> {
 
         let data = data.into();
         let (addr, len) = data.addr_and_len();
-        body.ool_addr = addr;
-        body.ool_len = len;
+        body.body_addr = addr;
+        body.body_len = len;
         body.inline = offset;
 
         let wrapper = CookieWrapper::new(cookie, BufferWrapper::Buffer(data));
@@ -796,8 +796,8 @@ impl<K: 'static> Client<K> {
 
         let mut data = data.into();
         let (addr, len) = data.addr_and_len();
-        body.ool_addr = addr;
-        body.ool_len = len;
+        body.body_addr = addr;
+        body.body_len = len;
         body.inline = attr.as_usize();
 
         let wrapper = CookieWrapper::new(cookie, BufferWrapper::BufferUninit(data));
@@ -810,8 +810,8 @@ impl<K: 'static> Client<K> {
 
         let data = data.into();
         let (addr, len) = data.addr_and_len();
-        body.ool_addr = addr;
-        body.ool_len = len;
+        body.body_addr = addr;
+        body.body_len = len;
         body.inline = attr.as_usize();
 
         let wrapper = CookieWrapper::new(cookie, BufferWrapper::Buffer(data));

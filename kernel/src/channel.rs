@@ -27,7 +27,7 @@ use crate::spinlock::SpinLock;
 use crate::syscall::SyscallResult;
 use crate::thread::Thread;
 
-struct Ool {
+struct MessageBody {
     isolation: SharedRef<dyn Isolation>,
     slice: UserSlice,
 }
@@ -37,7 +37,7 @@ enum Message {
         id: RequestId,
         info: MessageInfo,
         handle: Option<AnyHandle>,
-        ool_len: usize,
+        body_len: usize,
         inline: usize,
     },
     Reply {
@@ -48,16 +48,16 @@ enum Message {
     },
 }
 
-struct Call {
+struct Request {
     cookie: usize,
-    ool: Option<Ool>,
+    body: Option<MessageBody>,
 }
 
 struct Mutable {
     peer: Option<SharedRef<Channel>>,
     queue: VecDeque<Message>,
     emitter: Option<EventEmitter>,
-    requests: BTreeMap<u32 /* RequestId */, Call>,
+    requests: BTreeMap<u32 /* RequestId */, Request>,
     next_request_id: u32,
     peer_closed_notified: bool, // TODO: State: Connected(peer_ch), PeerClosed, Draining /* notified */
 }
@@ -105,10 +105,10 @@ impl Channel {
         let mut mutable = self.mutable.lock();
         let peer = mutable.peer.as_ref().ok_or(ErrorCode::PeerClosed)?.clone();
 
-        let body: RawMessage = crate::isolation::read(isolation, body_slice, 0)?;
+        let raw: RawMessage = crate::isolation::read(isolation, body_slice, 0)?;
 
         let handle = if info.contains_handle() {
-            Some(handle_table.remove(body.handle)?)
+            Some(handle_table.remove(raw.handle)?)
         } else {
             None
         };
@@ -135,10 +135,10 @@ impl Channel {
             assert!(!peer_mutable.requests.contains_key(&id.as_u32())); // FIXME: Retry with a different ID
             peer_mutable.next_request_id += 1; // FIXME: wrapping around
 
-            let ool = if info.contains_ool() {
-                let ptr = UserPtr::new(body.ool_addr);
-                let slice = UserSlice::new(ptr, body.ool_len)?;
-                Some(Ool {
+            let body = if info.contains_body() {
+                let ptr = UserPtr::new(raw.body_addr);
+                let slice = UserSlice::new(ptr, raw.body_len)?;
+                Some(MessageBody {
                     isolation: isolation.clone(),
                     slice,
                 })
@@ -148,21 +148,21 @@ impl Channel {
 
             peer_mutable
                 .requests
-                .insert(id.as_u32(), Call { cookie, ool });
+                .insert(id.as_u32(), Request { cookie, body });
 
             Message::Request {
                 id,
                 info,
                 handle,
-                ool_len: body.ool_len,
-                inline: body.inline,
+                body_len: raw.body_len,
+                inline: raw.inline,
             }
         } else {
             Message::Reply {
                 cookie: call.unwrap().cookie, // TODO: refactor
                 info,
                 handle,
-                inline: body.inline,
+                inline: raw.inline,
             }
         };
 
@@ -174,7 +174,7 @@ impl Channel {
         Ok(())
     }
 
-    pub fn read_ool(
+    pub fn read_body(
         &self,
         dst_isolation: &SharedRef<dyn Isolation>,
         request_id: RequestId,
@@ -182,14 +182,14 @@ impl Channel {
         dst_slice: &UserSlice,
     ) -> Result<usize, ErrorCode> {
         let mutable = self.mutable.lock();
-        let call = mutable
+        let req = mutable
             .requests
             .get(&request_id.as_u32())
             .ok_or(ErrorCode::InvalidArgument)?;
 
-        let ool = call.ool.as_ref().ok_or(ErrorCode::InvalidArgument)?;
-        let src_isolation = &ool.isolation;
-        let src_slice = &ool.slice;
+        let body = req.body.as_ref().ok_or(ErrorCode::InvalidArgument)?;
+        let src_isolation = &body.isolation;
+        let src_slice = &body.slice;
 
         let requested_len = min(dst_slice.len(), src_slice.len().saturating_sub(offset));
         let mut off = 0;
@@ -226,9 +226,9 @@ impl Channel {
             .get(&request_id.as_u32())
             .ok_or(ErrorCode::InvalidArgument)?;
 
-        let ool = call.ool.as_ref().ok_or(ErrorCode::InvalidArgument)?;
-        let dst_isolation = &ool.isolation;
-        let dst_slice = &ool.slice;
+        let body = call.body.as_ref().ok_or(ErrorCode::InvalidArgument)?;
+        let dst_isolation = &body.isolation;
+        let dst_slice = &body.slice;
 
         let requested_len = min(src_slice.len(), dst_slice.len().saturating_sub(offset));
         let mut off = 0;
@@ -305,13 +305,13 @@ impl Handleable for Channel {
                 id,
                 info,
                 handle,
-                ool_len,
+                body_len,
                 inline,
             } => {
                 event.info = info;
                 event.inline = inline;
                 event.request_id = id;
-                event.ool_len = ool_len;
+                event.body_len = body_len;
                 handle
             }
             Message::Reply {
@@ -389,7 +389,7 @@ pub fn sys_channel_send(
     Ok(SyscallResult::Return(0))
 }
 
-pub fn sys_channel_ool_read(
+pub fn sys_channel_body_read(
     current: &SharedRef<Thread>,
     a0: usize,
     a1: usize,
@@ -408,11 +408,11 @@ pub fn sys_channel_ool_read(
         .get::<Channel>(handle_id)?
         .authorize(HandleRight::READ)?;
 
-    let read_len = ch.read_ool(process.isolation(), request_id, offset, &buf)?;
+    let read_len = ch.read_body(process.isolation(), request_id, offset, &buf)?;
     Ok(SyscallResult::Return(read_len))
 }
 
-pub fn sys_channel_ool_write(
+pub fn sys_channel_body_write(
     current: &SharedRef<Thread>,
     a0: usize,
     a1: usize,

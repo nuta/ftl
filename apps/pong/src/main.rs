@@ -49,7 +49,7 @@ fn main() {
                 match request.read_at(&mut buf, request.offset()) {
                     Ok(len) => {
                         trace!(
-                            "OOL read ({len} bytes): {:?}",
+                            "body read ({len} bytes): {:?}",
                             core::str::from_utf8(&buf[..len])
                         );
                         request.reply(len);

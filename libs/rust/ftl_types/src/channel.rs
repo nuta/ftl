@@ -17,9 +17,9 @@ impl MessageInfo {
     pub const SETATTR: Self = Self::new(10, true, false, true);
     pub const SETATTR_REPLY: Self = Self::new(11, false, false, false);
 
-    const fn new(kind: u32, is_call: bool, handle: bool, ool: bool) -> Self {
+    const fn new(kind: u32, is_call: bool, handle: bool, body: bool) -> Self {
         debug_assert!(kind <= 0b11111);
-        Self((kind << 3) | ((is_call as u32) << 2) | ((handle as u32) << 1 | (ool as u32) << 0))
+        Self((kind << 3) | ((is_call as u32) << 2) | ((handle as u32) << 1 | (body as u32) << 0))
     }
 
     pub const fn as_u32(self) -> u32 {
@@ -42,7 +42,7 @@ impl MessageInfo {
         ((self.0 >> 1) & 1) != 0
     }
 
-    pub const fn contains_ool(self) -> bool {
+    pub const fn contains_body(self) -> bool {
         ((self.0 >> 0) & 1) != 0
     }
 }
@@ -58,13 +58,6 @@ impl RequestId {
     pub const fn as_u32(self) -> u32 {
         self.0
     }
-}
-
-#[derive(Clone, Copy)]
-#[repr(C)]
-pub struct OutOfLine {
-    pub addr: usize,
-    pub len: usize,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -98,7 +91,7 @@ impl Attr {
 #[repr(C)]
 pub struct RawMessage {
     pub handle: HandleId,
-    pub ool_addr: usize,
-    pub ool_len: usize,
+    pub body_addr: usize,
+    pub body_len: usize,
     pub inline: usize,
 }

@@ -11,9 +11,9 @@ use ftl_types::channel::RawMessage;
 use ftl_types::channel::RequestId;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
+use ftl_types::syscall::SYS_CHANNEL_BODY_READ;
 use ftl_types::syscall::SYS_CHANNEL_CREATE;
-use ftl_types::syscall::SYS_CHANNEL_OOL_READ;
-use ftl_types::syscall::SYS_CHANNEL_OOL_WRITE;
+use ftl_types::syscall::SYS_CHANNEL_BODY_WRITE;
 use ftl_types::syscall::SYS_CHANNEL_SEND;
 use log::warn;
 
@@ -69,22 +69,22 @@ impl Channel {
         Ok(())
     }
 
-    pub(crate) fn ool_read(
+    pub(crate) fn read_body(
         &self,
         request_id: RequestId,
         offset: usize,
         buf: &mut [u8],
     ) -> Result<usize, ErrorCode> {
-        sys_channel_ool_read(self.handle.id(), request_id, offset, buf)
+        sys_channel_body_read(self.handle.id(), request_id, offset, buf)
     }
 
-    pub(crate) fn ool_write(
+    pub(crate) fn write_body(
         &self,
         request_id: RequestId,
         offset: usize,
         buf: &[u8],
     ) -> Result<usize, ErrorCode> {
-        sys_channel_ool_write(self.handle.id(), request_id, offset, buf)
+        sys_channel_body_write(self.handle.id(), request_id, offset, buf)
     }
 }
 
@@ -133,14 +133,14 @@ pub fn sys_channel_send(
     Ok(())
 }
 
-pub fn sys_channel_ool_read(
+pub fn sys_channel_body_read(
     ch: HandleId,
     request_id: RequestId,
     offset: usize,
     buf: &mut [u8],
 ) -> Result<usize, ErrorCode> {
     syscall5(
-        SYS_CHANNEL_OOL_READ,
+        SYS_CHANNEL_BODY_READ,
         ch.as_usize(),
         request_id.as_u32() as usize,
         offset,
@@ -149,14 +149,14 @@ pub fn sys_channel_ool_read(
     )
 }
 
-pub fn sys_channel_ool_write(
+pub fn sys_channel_body_write(
     ch: HandleId,
     request_id: RequestId,
     offset: usize,
     buf: &[u8],
 ) -> Result<usize, ErrorCode> {
     syscall5(
-        SYS_CHANNEL_OOL_WRITE,
+        SYS_CHANNEL_BODY_WRITE,
         ch.as_usize(),
         request_id.as_u32() as usize,
         offset,

@@ -44,7 +44,7 @@ pub struct MessageEvent {
     pub cookie: usize,
     pub handle: HandleId,
     pub request_id: RequestId,
-    pub ool_len: usize,
+    pub body_len: usize,
     pub inline: usize,
 }
 
