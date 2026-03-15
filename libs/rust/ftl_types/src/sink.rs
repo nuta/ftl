@@ -1,5 +1,5 @@
-use crate::channel::CallId;
 use crate::channel::MessageInfo;
+use crate::channel::RequestId;
 use crate::handle::HandleId;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -43,7 +43,7 @@ pub struct MessageEvent {
     pub info: MessageInfo,
     pub cookie: usize,
     pub handle: HandleId,
-    pub call_id: CallId,
+    pub request_id: RequestId,
     pub ool_len: usize,
     pub inline: usize,
 }

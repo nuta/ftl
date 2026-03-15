@@ -6,9 +6,9 @@ use core::mem;
 use core::mem::MaybeUninit;
 
 use ftl_types::channel::Attr;
-use ftl_types::channel::CallId;
 use ftl_types::channel::MessageInfo;
 use ftl_types::channel::RawMessage;
+use ftl_types::channel::RequestId;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use ftl_types::sink::EventType;
@@ -203,7 +203,7 @@ impl<C, K: 'static> EventLoop<C, K> {
                             ctx,
                             request: Request::Open(OpenRequest {
                                 ch: ch.clone(),
-                                call_id: body.call_id,
+                                request_id: body.request_id,
                                 path_len: body.ool_len,
                             }),
                         }
@@ -213,7 +213,7 @@ impl<C, K: 'static> EventLoop<C, K> {
                             ctx,
                             request: Request::Read(ReadRequest {
                                 ch: ch.clone(),
-                                call_id: body.call_id,
+                                request_id: body.request_id,
                                 offset: body.inline,
                                 body_len: body.ool_len,
                             }),
@@ -224,7 +224,7 @@ impl<C, K: 'static> EventLoop<C, K> {
                             ctx,
                             request: Request::Write(WriteRequest {
                                 ch: ch.clone(),
-                                call_id: body.call_id,
+                                request_id: body.request_id,
                                 offset: body.inline,
                                 body_len: body.ool_len,
                             }),
@@ -235,7 +235,7 @@ impl<C, K: 'static> EventLoop<C, K> {
                             ctx,
                             request: Request::GetAttr(GetAttrRequest {
                                 ch: ch.clone(),
-                                call_id: body.call_id,
+                                request_id: body.request_id,
                                 attr: Attr::from_usize(body.inline),
                                 body_len: body.ool_len,
                             }),
@@ -246,7 +246,7 @@ impl<C, K: 'static> EventLoop<C, K> {
                             ctx,
                             request: Request::SetAttr(SetAttrRequest {
                                 ch: ch.clone(),
-                                call_id: body.call_id,
+                                request_id: body.request_id,
                                 attr: Attr::from_usize(body.inline),
                                 body_len: body.ool_len,
                             }),
@@ -393,7 +393,7 @@ impl<C, K: 'static> EventLoop<C, K> {
 #[derive(Debug)]
 pub struct OpenRequest {
     ch: Rc<Channel>,
-    call_id: CallId,
+    request_id: RequestId,
     path_len: usize,
 }
 
@@ -411,13 +411,16 @@ impl OpenRequest {
     }
 
     pub fn path(&self, buf: &mut [u8]) -> Result<usize, ErrorCode> {
-        self.ch.ool_read(self.call_id, 0, 0, buf)
+        self.ch.ool_read(self.request_id, 0, 0, buf)
     }
 
     pub fn reply(self, ch: Channel) {
         let mut body = new_message_body();
         body.handle = ch.handle().id();
-        match self.ch.reply(MessageInfo::OPEN_REPLY, &body, self.call_id) {
+        match self
+            .ch
+            .reply(MessageInfo::OPEN_REPLY, &body, self.request_id)
+        {
             Ok(()) => {
                 mem::forget(ch);
             }
@@ -430,7 +433,10 @@ impl OpenRequest {
     pub fn reply_error(self, error: ErrorCode) {
         let mut body = new_message_body();
         body.inline = error.as_usize();
-        if let Err(error) = self.ch.reply(MessageInfo::ERROR_REPLY, &body, self.call_id) {
+        if let Err(error) = self
+            .ch
+            .reply(MessageInfo::ERROR_REPLY, &body, self.request_id)
+        {
             warn!("failed to reply open error: {:?}", error);
         }
     }
@@ -439,7 +445,7 @@ impl OpenRequest {
 #[derive(Debug)]
 pub struct ReadRequest {
     ch: Rc<Channel>,
-    call_id: CallId,
+    request_id: RequestId,
     offset: usize,
     body_len: usize,
 }
@@ -466,13 +472,16 @@ impl ReadRequest {
     }
 
     pub fn write_at(&self, buf: &[u8], offset: usize) -> Result<usize, ErrorCode> {
-        self.ch.ool_write(self.call_id, 0, offset, buf)
+        self.ch.ool_write(self.request_id, 0, offset, buf)
     }
 
     pub fn reply(self, len: usize) {
         let mut body = new_message_body();
         body.inline = len;
-        if let Err(error) = self.ch.reply(MessageInfo::READ_REPLY, &body, self.call_id) {
+        if let Err(error) = self
+            .ch
+            .reply(MessageInfo::READ_REPLY, &body, self.request_id)
+        {
             warn!("failed to reply read: {:?}", error);
         }
     }
@@ -480,7 +489,10 @@ impl ReadRequest {
     pub fn reply_error(self, error: ErrorCode) {
         let mut body = new_message_body();
         body.inline = error.as_usize();
-        if let Err(error) = self.ch.reply(MessageInfo::ERROR_REPLY, &body, self.call_id) {
+        if let Err(error) = self
+            .ch
+            .reply(MessageInfo::ERROR_REPLY, &body, self.request_id)
+        {
             warn!("failed to reply read error: {:?}", error);
         }
     }
@@ -489,7 +501,7 @@ impl ReadRequest {
 #[derive(Debug)]
 pub struct WriteRequest {
     ch: Rc<Channel>,
-    call_id: CallId,
+    request_id: RequestId,
     offset: usize,
     body_len: usize,
 }
@@ -515,13 +527,16 @@ impl WriteRequest {
     }
 
     pub fn read_at(&self, buf: &mut [u8], offset: usize) -> Result<usize, ErrorCode> {
-        self.ch.ool_read(self.call_id, 0, offset, buf)
+        self.ch.ool_read(self.request_id, 0, offset, buf)
     }
 
     pub fn reply(self, len: usize) {
         let mut body = new_message_body();
         body.inline = len;
-        if let Err(error) = self.ch.reply(MessageInfo::WRITE_REPLY, &body, self.call_id) {
+        if let Err(error) = self
+            .ch
+            .reply(MessageInfo::WRITE_REPLY, &body, self.request_id)
+        {
             warn!("failed to reply write: {:?}", error);
         }
     }
@@ -529,7 +544,10 @@ impl WriteRequest {
     pub fn reply_error(self, error: ErrorCode) {
         let mut body = new_message_body();
         body.inline = error.as_usize();
-        if let Err(error) = self.ch.reply(MessageInfo::ERROR_REPLY, &body, self.call_id) {
+        if let Err(error) = self
+            .ch
+            .reply(MessageInfo::ERROR_REPLY, &body, self.request_id)
+        {
             warn!("failed to reply write error: {:?}", error);
         }
     }
@@ -538,7 +556,7 @@ impl WriteRequest {
 #[derive(Debug)]
 pub struct GetAttrRequest {
     ch: Rc<Channel>,
-    call_id: CallId,
+    request_id: RequestId,
     attr: Attr,
     body_len: usize,
 }
@@ -565,7 +583,7 @@ impl GetAttrRequest {
     }
 
     pub fn write_at(&self, buf: &[u8], offset: usize) -> Result<usize, ErrorCode> {
-        self.ch.ool_write(self.call_id, 0, offset, buf)
+        self.ch.ool_write(self.request_id, 0, offset, buf)
     }
 
     pub fn reply(self, len: usize) {
@@ -573,7 +591,7 @@ impl GetAttrRequest {
         body.inline = len;
         if let Err(error) = self
             .ch
-            .reply(MessageInfo::GETATTR_REPLY, &body, self.call_id)
+            .reply(MessageInfo::GETATTR_REPLY, &body, self.request_id)
         {
             warn!("failed to reply getattr: {:?}", error);
         }
@@ -582,7 +600,10 @@ impl GetAttrRequest {
     pub fn reply_error(self, error: ErrorCode) {
         let mut body = new_message_body();
         body.inline = error.as_usize();
-        if let Err(error) = self.ch.reply(MessageInfo::ERROR_REPLY, &body, self.call_id) {
+        if let Err(error) = self
+            .ch
+            .reply(MessageInfo::ERROR_REPLY, &body, self.request_id)
+        {
             warn!("failed to reply getattr error: {:?}", error);
         }
     }
@@ -591,7 +612,7 @@ impl GetAttrRequest {
 #[derive(Debug)]
 pub struct SetAttrRequest {
     ch: Rc<Channel>,
-    call_id: CallId,
+    request_id: RequestId,
     attr: Attr,
     body_len: usize,
 }
@@ -618,7 +639,7 @@ impl SetAttrRequest {
     }
 
     pub fn read_at(&self, buf: &mut [u8], offset: usize) -> Result<usize, ErrorCode> {
-        self.ch.ool_read(self.call_id, 0, offset, buf)
+        self.ch.ool_read(self.request_id, 0, offset, buf)
     }
 
     pub fn reply(self, len: usize) {
@@ -626,7 +647,7 @@ impl SetAttrRequest {
         body.inline = len;
         if let Err(error) = self
             .ch
-            .reply(MessageInfo::SETATTR_REPLY, &body, self.call_id)
+            .reply(MessageInfo::SETATTR_REPLY, &body, self.request_id)
         {
             warn!("failed to reply setattr: {:?}", error);
         }
@@ -635,7 +656,10 @@ impl SetAttrRequest {
     pub fn reply_error(self, error: ErrorCode) {
         let mut body = new_message_body();
         body.inline = error.as_usize();
-        if let Err(error) = self.ch.reply(MessageInfo::ERROR_REPLY, &body, self.call_id) {
+        if let Err(error) = self
+            .ch
+            .reply(MessageInfo::ERROR_REPLY, &body, self.request_id)
+        {
             warn!("failed to reply setattr error: {:?}", error);
         }
     }
@@ -843,18 +867,18 @@ pub enum Reply<K: 'static> {
     },
 }
 
-fn reply_error(ch: &Rc<Channel>, call_id: CallId, error: ErrorCode) {
+fn reply_error(ch: &Rc<Channel>, request_id: RequestId, error: ErrorCode) {
     let mut body = new_message_body();
     body.inline = error.as_usize();
-    if let Err(err) = ch.reply(MessageInfo::ERROR_REPLY, &body, call_id) {
+    if let Err(err) = ch.reply(MessageInfo::ERROR_REPLY, &body, request_id) {
         warn!("failed to reply error: {:?}", err);
     }
 }
 
-fn reply_value(ch: &Rc<Channel>, info: MessageInfo, call_id: CallId, value: usize) {
+fn reply_value(ch: &Rc<Channel>, info: MessageInfo, request_id: RequestId, value: usize) {
     let mut body = new_message_body();
     body.inline = value;
-    if let Err(err) = ch.reply(info, &body, call_id) {
+    if let Err(err) = ch.reply(info, &body, request_id) {
         warn!("failed to reply {:?}: {:?}", info, err);
     }
 }

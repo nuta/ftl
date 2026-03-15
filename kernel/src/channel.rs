@@ -3,9 +3,9 @@ use alloc::collections::vec_deque::VecDeque;
 use core::cmp::min;
 use core::mem::MaybeUninit;
 
-use ftl_types::channel::CallId;
-use ftl_types::channel::RawMessage;
 use ftl_types::channel::MessageInfo;
+use ftl_types::channel::RawMessage;
+use ftl_types::channel::RequestId;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use ftl_types::sink::EventBody;
@@ -34,7 +34,7 @@ struct Ool {
 
 enum Message {
     Call {
-        call_id: CallId,
+        request_id: RequestId,
         info: MessageInfo,
         handle: Option<AnyHandle>,
         ool_len: usize,
@@ -58,7 +58,7 @@ struct Mutable {
     queue: VecDeque<Message>,
     emitter: Option<EventEmitter>,
     calls: BTreeMap<u32 /* call id */, Call>,
-    next_call_id: u32,
+    next_request_id: u32,
     peer_closed_notified: bool, // TODO: State: Connected(peer_ch), PeerClosed, Draining /* notified */
 }
 
@@ -74,7 +74,7 @@ impl Channel {
                 queue: VecDeque::new(),
                 emitter: None,
                 calls: BTreeMap::new(),
-                next_call_id: 1,
+                next_request_id: 1,
                 peer_closed_notified: false,
             }),
         })?;
@@ -84,7 +84,7 @@ impl Channel {
                 queue: VecDeque::new(),
                 emitter: None,
                 calls: BTreeMap::new(),
-                next_call_id: 1,
+                next_request_id: 1,
                 peer_closed_notified: false,
             }),
         })?;
@@ -100,7 +100,7 @@ impl Channel {
         info: MessageInfo,
         body_slice: &UserSlice,
         cookie: usize,
-        call_id: CallId,
+        request_id: RequestId,
     ) -> Result<(), ErrorCode> {
         let mut mutable = self.mutable.lock();
         let peer = mutable.peer.as_ref().ok_or(ErrorCode::PeerClosed)?.clone();
@@ -119,7 +119,7 @@ impl Channel {
             Some(
                 mutable
                     .calls
-                    .remove(&call_id.as_u32())
+                    .remove(&request_id.as_u32())
                     .ok_or(ErrorCode::InvalidMessage)?,
             )
         };
@@ -131,9 +131,9 @@ impl Channel {
         let mut peer_mutable = peer.mutable.lock();
 
         let message = if info.is_call() {
-            let call_id: CallId = CallId::new(peer_mutable.next_call_id);
-            assert!(!peer_mutable.calls.contains_key(&call_id.as_u32())); // FIXME: Retry with a different ID
-            peer_mutable.next_call_id += 1; // FIXME: wrapping around
+            let request_id: RequestId = RequestId::new(peer_mutable.next_request_id);
+            assert!(!peer_mutable.calls.contains_key(&request_id.as_u32())); // FIXME: Retry with a different ID
+            peer_mutable.next_request_id += 1; // FIXME: wrapping around
 
             let ool = if info.contains_ool() {
                 let ptr = UserPtr::new(body.ool_addr);
@@ -148,10 +148,10 @@ impl Channel {
 
             peer_mutable
                 .calls
-                .insert(call_id.as_u32(), Call { cookie, ool });
+                .insert(request_id.as_u32(), Call { cookie, ool });
 
             Message::Call {
-                call_id,
+                request_id,
                 info,
                 handle,
                 ool_len: body.ool_len,
@@ -177,7 +177,7 @@ impl Channel {
     pub fn read_ool(
         &self,
         dst_isolation: &SharedRef<dyn Isolation>,
-        call_id: CallId,
+        request_id: RequestId,
         index: usize,
         offset: usize,
         dst_slice: &UserSlice,
@@ -189,7 +189,7 @@ impl Channel {
         let mutable = self.mutable.lock();
         let call = mutable
             .calls
-            .get(&call_id.as_u32())
+            .get(&request_id.as_u32())
             .ok_or(ErrorCode::InvalidArgument)?;
 
         let ool = call.ool.as_ref().ok_or(ErrorCode::InvalidArgument)?;
@@ -221,7 +221,7 @@ impl Channel {
     pub fn write_ool(
         &self,
         src_isolation: &SharedRef<dyn Isolation>,
-        call_id: CallId,
+        request_id: RequestId,
         index: usize,
         offset: usize,
         src_slice: &UserSlice,
@@ -233,7 +233,7 @@ impl Channel {
         let mutable = self.mutable.lock();
         let call = mutable
             .calls
-            .get(&call_id.as_u32())
+            .get(&request_id.as_u32())
             .ok_or(ErrorCode::InvalidArgument)?;
 
         let ool = call.ool.as_ref().ok_or(ErrorCode::InvalidArgument)?;
@@ -312,7 +312,7 @@ impl Handleable for Channel {
 
         let handle = match message {
             Message::Call {
-                call_id,
+                request_id,
                 info,
                 handle,
                 ool_len,
@@ -320,7 +320,7 @@ impl Handleable for Channel {
             } => {
                 event.info = info;
                 event.inline = inline;
-                event.call_id = call_id;
+                event.request_id = request_id;
                 event.ool_len = ool_len;
                 handle
             }
@@ -379,7 +379,7 @@ pub fn sys_channel_send(
     let info = MessageInfo::from_raw(a1 as u32);
     let body = UserSlice::new(UserPtr::new(a2), size_of::<RawMessage>())?;
     let cookie = a3;
-    let call_id = CallId::new(a4 as u32);
+    let request_id = RequestId::new(a4 as u32);
 
     let process = current.process();
     let mut handle_table = process.handle_table().lock();
@@ -393,7 +393,7 @@ pub fn sys_channel_send(
         info,
         &body,
         cookie,
-        call_id,
+        request_id,
     )?;
 
     Ok(SyscallResult::Return(0))
@@ -408,7 +408,7 @@ pub fn sys_channel_ool_read(
     a4: usize,
 ) -> Result<SyscallResult, ErrorCode> {
     let handle_id = HandleId::from_raw(a0);
-    let call_id = CallId::new((a1 >> 4) as u32);
+    let request_id = RequestId::new((a1 >> 4) as u32);
     let index = a1 & 0b1111;
     let offset = a2;
     let buf = UserSlice::new(UserPtr::new(a3), a4)?;
@@ -419,7 +419,7 @@ pub fn sys_channel_ool_read(
         .get::<Channel>(handle_id)?
         .authorize(HandleRight::READ)?;
 
-    let read_len = ch.read_ool(process.isolation(), call_id, index, offset, &buf)?;
+    let read_len = ch.read_ool(process.isolation(), request_id, index, offset, &buf)?;
     Ok(SyscallResult::Return(read_len))
 }
 
@@ -432,7 +432,7 @@ pub fn sys_channel_ool_write(
     a4: usize,
 ) -> Result<SyscallResult, ErrorCode> {
     let handle_id = HandleId::from_raw(a0);
-    let call_id = CallId::new((a1 >> 4) as u32);
+    let request_id = RequestId::new((a1 >> 4) as u32);
     let index = a1 & 0b1111;
     let offset = a2;
     let buf = UserSlice::new(UserPtr::new(a3), a4)?;
@@ -443,6 +443,6 @@ pub fn sys_channel_ool_write(
         .get::<Channel>(handle_id)?
         .authorize(HandleRight::WRITE)?;
 
-    let written_len = ch.write_ool(process.isolation(), call_id, index, offset, &buf)?;
+    let written_len = ch.write_ool(process.isolation(), request_id, index, offset, &buf)?;
     Ok(SyscallResult::Return(written_len))
 }

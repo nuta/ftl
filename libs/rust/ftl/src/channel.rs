@@ -6,9 +6,9 @@ use core::mem;
 use core::mem::MaybeUninit;
 
 pub use ftl_types::channel::Attr;
-use ftl_types::channel::CallId;
 use ftl_types::channel::MessageInfo;
 use ftl_types::channel::RawMessage;
+use ftl_types::channel::RequestId;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use ftl_types::syscall::SYS_CHANNEL_CREATE;
@@ -55,7 +55,7 @@ impl Channel {
         body: &RawMessage,
         cookie: usize,
     ) -> Result<(), ErrorCode> {
-        sys_channel_send(self.handle.id(), info, body, cookie, CallId::new(0))?;
+        sys_channel_send(self.handle.id(), info, body, cookie, RequestId::new(0))?;
         Ok(())
     }
 
@@ -63,30 +63,30 @@ impl Channel {
         &self,
         info: MessageInfo,
         body: &RawMessage,
-        call_id: CallId,
+        request_id: RequestId,
     ) -> Result<(), ErrorCode> {
-        sys_channel_send(self.handle.id(), info, body, 0, call_id)?;
+        sys_channel_send(self.handle.id(), info, body, 0, request_id)?;
         Ok(())
     }
 
     pub(crate) fn ool_read(
         &self,
-        call_id: CallId,
+        request_id: RequestId,
         index: usize,
         offset: usize,
         buf: &mut [u8],
     ) -> Result<usize, ErrorCode> {
-        sys_channel_ool_read(self.handle.id(), call_id, index, offset, buf)
+        sys_channel_ool_read(self.handle.id(), request_id, index, offset, buf)
     }
 
     pub(crate) fn ool_write(
         &self,
-        call_id: CallId,
+        request_id: RequestId,
         index: usize,
         offset: usize,
         buf: &[u8],
     ) -> Result<usize, ErrorCode> {
-        sys_channel_ool_write(self.handle.id(), call_id, index, offset, buf)
+        sys_channel_ool_write(self.handle.id(), request_id, index, offset, buf)
     }
 }
 
@@ -122,7 +122,7 @@ pub fn sys_channel_send(
     info: MessageInfo,
     body: &RawMessage,
     cookie: usize,
-    call_id: CallId,
+    request_id: RequestId,
 ) -> Result<(), ErrorCode> {
     syscall5(
         SYS_CHANNEL_SEND,
@@ -130,26 +130,26 @@ pub fn sys_channel_send(
         info.as_u32() as usize,
         body as *const RawMessage as usize,
         cookie,
-        call_id.as_u32() as usize,
+        request_id.as_u32() as usize,
     )?;
     Ok(())
 }
 
 pub fn sys_channel_ool_read(
     ch: HandleId,
-    call_id: CallId,
+    request_id: RequestId,
     index: usize,
     offset: usize,
     buf: &mut [u8],
 ) -> Result<usize, ErrorCode> {
     // FIXME: Define call ID & ool index ranges.
     debug_assert!(index < 16);
-    debug_assert!(call_id.as_u32() < 0xfff_ffff);
+    debug_assert!(request_id.as_u32() < 0xfff_ffff);
 
     syscall5(
         SYS_CHANNEL_OOL_READ,
         ch.as_usize(),
-        (call_id.as_u32() as usize) << 4 | index,
+        (request_id.as_u32() as usize) << 4 | index,
         offset,
         buf.as_ptr() as usize,
         buf.len(),
@@ -158,19 +158,19 @@ pub fn sys_channel_ool_read(
 
 pub fn sys_channel_ool_write(
     ch: HandleId,
-    call_id: CallId,
+    request_id: RequestId,
     index: usize,
     offset: usize,
     buf: &[u8],
 ) -> Result<usize, ErrorCode> {
     // FIXME: Define call ID & ool index ranges.
     debug_assert!(index < 16);
-    debug_assert!(call_id.as_u32() < 0xfff_ffff);
+    debug_assert!(request_id.as_u32() < 0xfff_ffff);
 
     syscall5(
         SYS_CHANNEL_OOL_WRITE,
         ch.as_usize(),
-        (call_id.as_u32() as usize) << 4 | index,
+        (request_id.as_u32() as usize) << 4 | index,
         offset,
         buf.as_ptr() as usize,
         buf.len(),

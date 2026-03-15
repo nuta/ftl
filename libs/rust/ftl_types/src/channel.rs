@@ -48,9 +48,9 @@ impl MessageInfo {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct CallId(u32);
+pub struct RequestId(u32);
 
-impl CallId {
+impl RequestId {
     pub const fn new(id: u32) -> Self {
         Self(id)
     }
