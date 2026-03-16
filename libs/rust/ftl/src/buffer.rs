@@ -68,6 +68,10 @@ impl BufferUninit {
         Self(bytes::BytesMut::with_capacity(capacity))
     }
 
+    pub fn capacity(&self) -> usize {
+        self.0.capacity()
+    }
+
     pub unsafe fn assume_init(self, len: usize) -> BufferMut {
         assert!(len <= self.0.capacity());
         let mut inner = self.0;

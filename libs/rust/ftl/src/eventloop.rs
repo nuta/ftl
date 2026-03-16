@@ -58,6 +58,10 @@ pub enum Event<'a, C, K: 'static> {
         thread: &'a Rc<Thread>,
         regs: SandboxedSyscallEvent,
     },
+    DeserializeError {
+        ctx: &'a mut C,
+        error: ErrorCode,
+    },
     SinkError(ErrorCode),
 }
 
@@ -275,15 +279,22 @@ impl<C, K: 'static> EventLoop<C, K> {
                         };
 
                         let len = body.inline;
-                        let buf = unsafe { buf.assume_init(len) };
-                        Event::Reply {
-                            ctx,
-                            reply: Reply::Read {
-                                client: Client::new(ch.clone()),
-                                cookie,
-                                buf,
-                                len,
-                            },
+                        if len > buf.capacity() {
+                            Event::DeserializeError {
+                                ctx,
+                                error: ErrorCode::OutOfBounds,
+                            }
+                        } else {
+                            let buf = unsafe { buf.assume_init(len) };
+                            Event::Reply {
+                                ctx,
+                                reply: Reply::Read {
+                                    client: Client::new(ch.clone()),
+                                    cookie,
+                                    buf,
+                                    len,
+                                },
+                            }
                         }
                     }
                     MessageInfo::WRITE_REPLY => {
@@ -309,15 +320,22 @@ impl<C, K: 'static> EventLoop<C, K> {
                         };
 
                         let len = body.inline;
-                        let buf = unsafe { buf.assume_init(len) };
-                        Event::Reply {
-                            ctx,
-                            reply: Reply::GetAttr {
-                                client: Client::new(ch.clone()),
-                                cookie,
-                                buf,
-                                len,
-                            },
+                        if len > buf.capacity() {
+                            Event::DeserializeError {
+                                ctx,
+                                error: ErrorCode::OutOfBounds,
+                            }
+                        } else {
+                            let buf = unsafe { buf.assume_init(len) };
+                            Event::Reply {
+                                ctx,
+                                reply: Reply::GetAttr {
+                                    client: Client::new(ch.clone()),
+                                    cookie,
+                                    buf,
+                                    len,
+                                },
+                            }
                         }
                     }
                     MessageInfo::SETATTR_REPLY => {
