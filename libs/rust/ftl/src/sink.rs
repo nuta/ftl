@@ -30,11 +30,6 @@ impl Sink {
         Ok(())
     }
 
-    pub fn add_raw(&self, id: HandleId) -> Result<(), ErrorCode> {
-        sys_sink_add(self.handle.id(), id)?;
-        Ok(())
-    }
-
     pub fn remove(&self, id: HandleId) -> Result<(), ErrorCode> {
         sys_sink_remove(self.handle.id(), id)?;
         Ok(())
