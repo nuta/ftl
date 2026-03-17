@@ -5,15 +5,13 @@ use ftl::channel::Channel;
 use ftl::eventloop::Event;
 use ftl::eventloop::EventLoop;
 use ftl::eventloop::Reply;
-use ftl::log::*;
-use ftl::prelude::format;
-use ftl::rc::Rc;
+use ftl::prelude::*;
 
 #[ftl::main]
 fn main() {
     let mut eventloop = EventLoop::new().unwrap();
 
-    let ch = Rc::new(Channel::connect("pong").unwrap());
+    let ch = Channel::connect("pong").unwrap();
     let client = eventloop.add_channel(ch, 0).unwrap();
 
     client.write(0, b"Hello, world!".as_slice(), ()).unwrap();
