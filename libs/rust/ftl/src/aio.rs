@@ -163,7 +163,7 @@ enum Error {
 }
 
 struct Executor {
-    tasks: HashMap<TaskId, Task>,
+    tasks: spin::Mutex<HashMap<TaskId, Task>>,
     run_queue: Arc<RunQueue>,
     inflights: Arc<spin::Mutex<InflightMap>>,
     sink: Sink,
@@ -173,35 +173,40 @@ impl Executor {
     pub fn new() -> Result<Self, Error> {
         let sink = Sink::new().map_err(Error::Sink)?;
         Ok(Self {
-            tasks: HashMap::new(),
+            tasks: spin::Mutex::new(HashMap::new()),
             run_queue: Arc::new(RunQueue::new()),
             inflights: Arc::new(spin::Mutex::new(InflightMap::new())),
             sink,
         })
     }
 
-    pub fn spawn(&mut self, future: impl Future<Output = ()> + Send + Sync + 'static) {
-        let task_id = TaskId(self.tasks.len() as u32);
+    pub fn spawn(&self, future: impl Future<Output = ()> + Send + Sync + 'static) {
+        let mut tasks = self.tasks.lock();
+        let task_id = TaskId(tasks.len() as u32);
         let waker = TaskWaker::new(task_id, self.run_queue.clone());
         let task = Task {
             future: Box::pin(future),
             waker: Waker::from(Arc::new(waker)),
         };
-        self.tasks.insert(task_id, task);
+        tasks.insert(task_id, task);
         self.run_queue.push(task_id);
     }
 
     fn run_runnable_tasks(&mut self) {
         while let Some(task_id) = self.run_queue.pop() {
-            let task = self.tasks.get_mut(&task_id).unwrap();
+            let mut task = {
+                let mut tasks = self.tasks.lock();
+                tasks.remove(&task_id).unwrap()
+            };
+
             match task.poll() {
                 Poll::Ready(()) => {
                     // Task completed.
-                    self.tasks.remove(&task_id);
                 }
                 Poll::Pending => {
-                    // Task has reached an await point. It will register itself
-                    // later with the waker so we don't need to do anything here.
+                    // Task has reached an await point. Re-insert it back into
+                    // the map.
+                    self.tasks.lock().insert(task_id, task);
                 }
             }
         }
