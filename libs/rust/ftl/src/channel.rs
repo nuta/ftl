@@ -36,6 +36,48 @@ impl Channel {
     pub const fn from_handle(handle: OwnedHandle) -> Self {
         Self { handle }
     }
+
+    pub fn send_with_body(
+        &self,
+        info: MessageInfo,
+        arg: usize,
+        body: &[u8],
+    ) -> Result<(), ErrorCode> {
+        debug_assert!(info.has_body() && !info.has_handle());
+
+        sys_channel_send(self.handle.id(), info, arg, Some(body), None)?;
+        Ok(())
+    }
+
+    pub fn send_with_handle(
+        &self,
+        info: MessageInfo,
+        arg: usize,
+        handle: OwnedHandle,
+    ) -> Result<(), ErrorCode> {
+        debug_assert!(!info.has_body() && info.has_handle());
+
+        sys_channel_send(self.handle.id(), info, arg, None, Some(handle.id()))?;
+        Ok(())
+    }
+
+    pub fn recv_with_body(
+        &self,
+        info: MessageInfo,
+        body: Option<&mut [u8]>,
+    ) -> Result<(), ErrorCode> {
+        debug_assert!(info.has_body() && !info.has_handle());
+
+        let handle_id = sys_channel_recv(self.handle.id(), info, body)?;
+        Ok(())
+    }
+
+    pub fn recv_with_handle(&self, info: MessageInfo) -> Result<OwnedHandle, ErrorCode> {
+        debug_assert!(!info.has_body() && info.has_handle());
+
+        let handle_id = sys_channel_recv(self.handle.id(), info, None)?;
+        Ok(OwnedHandle::from_raw(handle_id))
+    }
 }
 
 impl fmt::Debug for Channel {
