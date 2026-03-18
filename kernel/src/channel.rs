@@ -6,7 +6,6 @@ use core::cmp::min;
 use core::mem::MaybeUninit;
 
 use ftl_types::channel::MessageInfo;
-use ftl_types::channel::RequestId;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use ftl_types::sink::EventBody;
@@ -78,7 +77,7 @@ impl Channel {
         handle_table: &mut HandleTable,
         info: MessageInfo,
         arg: usize,
-        body_ptr: UserPtr,
+        body_slice: UserSlice,
         handle: HandleId,
     ) -> Result<(), ErrorCode> {
         let mut mutable = self.mutable.lock();
@@ -98,8 +97,7 @@ impl Channel {
 
         let body = if info.has_body() {
             let mut body = Vec::with_capacity(info.body_len());
-            let slice = UserSlice::new(body_ptr, info.body_len())?;
-            isolation.read_bytes(&slice, &mut body)?;
+            isolation.read_bytes(&body_slice, &mut body)?;
             Some(body)
         } else {
             None
@@ -232,35 +230,32 @@ pub fn sys_channel_create(
 
 pub fn sys_channel_send(
     current: &SharedRef<Thread>,
-    a0: usize, // handle_id
-    a1: usize, // info_and_body_len
-    a2: usize, // rid_or_cookie
-    a3: usize, // inline
-    a4: usize, // body_or_handle
+    a0: usize,
+    a1: usize,
+    a2: usize,
+    a3: usize,
+    a4: usize,
 ) -> Result<SyscallResult, ErrorCode> {
-    let handle_id = HandleId::from_raw(a0);
-    let info = MessageInfo::from_raw(a1 as u32);
-    let body_len = a1 >> 8;
-    let rid_or_cookie = a2;
-    let inline = a3;
-    let body_or_handle = a4;
+    let ch_id = HandleId::from_raw(a0);
+    let info = MessageInfo::from_raw(a1);
+    let arg = a2;
+    let body_ptr = UserPtr::new(a3);
+    let handle_id = HandleId::from_raw(a4);
 
-    todo!()
-    // let process = current.process();
-    // let mut handle_table = process.handle_table().lock();
-    // let ch = handle_table
-    //     .get::<Channel>(handle_id)?
-    //     .authorize(HandleRight::WRITE)?;
+    let slice = UserSlice::new(body_ptr, info.body_len())?;
+    let process = current.process();
+    let mut handle_table = process.handle_table().lock();
+    let ch = handle_table
+        .get::<Channel>(handle_id)?
+        .authorize(HandleRight::WRITE)?;
 
-    // ch.send(
-    //     process.isolation(),
-    //     &mut handle_table,
-    //     info,
-    //     rid_or_cookie,
-    //     inline,
-    //     body_or_handle,
-    //     body_len,
-    // )?;
-
-    // Ok(SyscallResult::Return(0))
+    ch.send(
+        process.isolation(),
+        &mut handle_table,
+        info,
+        arg,
+        slice,
+        handle_id,
+    )?;
+    Ok(SyscallResult::Return(0))
 }

@@ -43,12 +43,12 @@ impl MessageInfo {
         Self(raw)
     }
 
-    pub const fn as_usize(self) -> usize {
+    pub const fn as_raw(self) -> usize {
         self.0 as usize
     }
 
-    pub const fn from_raw(raw: u32) -> Self {
-        Self(raw)
+    pub const fn from_raw(raw: usize) -> Self {
+        Self(raw as u32)
     }
 
     pub const fn kind(self) -> MessageKind {

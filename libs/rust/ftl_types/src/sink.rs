@@ -1,5 +1,4 @@
 use crate::channel::MessageInfo;
-use crate::channel::RequestId;
 use crate::handle::HandleId;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
