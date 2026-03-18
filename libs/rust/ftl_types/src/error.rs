@@ -25,6 +25,7 @@ pub enum ErrorCode {
     InternalError = 17,
     OutOfResources = 18,
     BadAccess = 19,
+    TooManyCalls = 20,
 }
 
 impl ErrorCode {
