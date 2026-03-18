@@ -112,3 +112,16 @@ impl Attr {
         self.0 as usize
     }
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct OpenOptions(u32);
+
+impl OpenOptions {
+    pub const fn new(flags: u32) -> Self {
+        Self(flags)
+    }
+
+    pub fn as_usize(self) -> usize {
+        self.0 as usize
+    }
+}

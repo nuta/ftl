@@ -7,6 +7,8 @@ use core::mem::MaybeUninit;
 
 pub use ftl_types::channel::Attr;
 use ftl_types::channel::MessageInfo;
+use ftl_types::channel::MessageKind;
+pub use ftl_types::channel::OpenOptions;
 use ftl_types::channel::RequestId;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
@@ -37,19 +39,49 @@ impl Channel {
         Self { handle }
     }
 
-    pub fn send_with_body(
+    pub fn send_open(
         &self,
-        info: MessageInfo,
-        arg: usize,
-        body: &[u8],
+        rid: RequestId,
+        path: &[u8],
+        options: OpenOptions,
     ) -> Result<(), ErrorCode> {
-        debug_assert!(info.has_body() && !info.has_handle());
+        let info = MessageInfo::new(MessageKind::OPEN, rid, path.len());
+        self.send_with_body(info, options.as_usize(), path)
+    }
 
+    pub fn send_read(&self, rid: RequestId, offset: usize, len: usize) -> Result<(), ErrorCode> {
+        let info = MessageInfo::new(MessageKind::READ, rid, 0);
+        self.send(info, offset)
+    }
+
+    pub fn send_write(&self, rid: RequestId, buf: &[u8], offset: usize) -> Result<(), ErrorCode> {
+        let info = MessageInfo::new(MessageKind::WRITE, rid, buf.len());
+        self.send_with_body(info, offset, buf)
+    }
+
+    pub fn reply_read(&self, rid: RequestId, buf: &[u8]) -> Result<(), ErrorCode> {
+        let info = MessageInfo::new(MessageKind::READ_REPLY, rid, buf.len());
+        self.send_with_body(info, 0, buf)
+    }
+
+    pub fn reply_write(&self, rid: RequestId, written_len: usize) -> Result<(), ErrorCode> {
+        let info = MessageInfo::new(MessageKind::WRITE_REPLY, rid, 0);
+        self.send(info, written_len)
+    }
+
+    fn send(&self, info: MessageInfo, arg: usize) -> Result<(), ErrorCode> {
+        debug_assert!(!info.has_body() && !info.has_handle());
+        sys_channel_send(self.handle.id(), info, arg, None, None)?;
+        Ok(())
+    }
+
+    fn send_with_body(&self, info: MessageInfo, arg: usize, body: &[u8]) -> Result<(), ErrorCode> {
+        debug_assert!(info.has_body() && !info.has_handle());
         sys_channel_send(self.handle.id(), info, arg, Some(body), None)?;
         Ok(())
     }
 
-    pub fn send_with_handle(
+    fn send_with_handle(
         &self,
         info: MessageInfo,
         arg: usize,
@@ -61,18 +93,14 @@ impl Channel {
         Ok(())
     }
 
-    pub fn recv_with_body(
-        &self,
-        info: MessageInfo,
-        body: Option<&mut [u8]>,
-    ) -> Result<(), ErrorCode> {
+    fn recv_with_body(&self, info: MessageInfo, body: Option<&mut [u8]>) -> Result<(), ErrorCode> {
         debug_assert!(info.has_body() && !info.has_handle());
 
         let handle_id = sys_channel_recv(self.handle.id(), info, body)?;
         Ok(())
     }
 
-    pub fn recv_with_handle(&self, info: MessageInfo) -> Result<OwnedHandle, ErrorCode> {
+    fn recv_with_handle(&self, info: MessageInfo) -> Result<OwnedHandle, ErrorCode> {
         debug_assert!(!info.has_body() && info.has_handle());
 
         let handle_id = sys_channel_recv(self.handle.id(), info, None)?;
