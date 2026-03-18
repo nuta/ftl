@@ -57,6 +57,7 @@ impl From<usize> for ErrorCode {
             17 => Self::InternalError,
             18 => Self::OutOfResources,
             19 => Self::BadAccess,
+            20 => Self::TooManyCalls,
             _ => Self::Unknown,
         }
     }
