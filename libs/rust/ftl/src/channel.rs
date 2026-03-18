@@ -4,6 +4,8 @@ use alloc::string::String;
 use core::fmt;
 use core::mem;
 use core::mem::MaybeUninit;
+use core::ptr::null;
+use core::ptr::null_mut;
 
 pub use ftl_types::channel::Attr;
 use ftl_types::channel::MessageInfo;
@@ -41,13 +43,14 @@ impl Channel {
 
     fn send(&self, info: MessageInfo, arg: usize) -> Result<(), ErrorCode> {
         debug_assert!(!info.has_body() && !info.has_handle());
-        sys_channel_send(self.handle.id(), info, arg, None, None)?;
+        sys_channel_send(self.handle.id(), info, arg, null(), HandleId::ZERO)?;
         Ok(())
     }
 
     fn send_with_body(&self, info: MessageInfo, arg: usize, body: &[u8]) -> Result<(), ErrorCode> {
         debug_assert!(info.has_body() && !info.has_handle());
-        sys_channel_send(self.handle.id(), info, arg, Some(body), None)?;
+        debug_assert_eq!(body.len(), info.body_len());
+        sys_channel_send(self.handle.id(), info, arg, body.as_ptr(), HandleId::ZERO)?;
         Ok(())
     }
 
@@ -58,25 +61,26 @@ impl Channel {
         handle: OwnedHandle,
     ) -> Result<(), ErrorCode> {
         debug_assert!(!info.has_body() && info.has_handle());
-        sys_channel_send(self.handle.id(), info, arg, None, Some(handle.id()))?;
+        sys_channel_send(self.handle.id(), info, arg, null(), handle.id())?;
         Ok(())
     }
 
     fn recv(&self, info: MessageInfo) -> Result<(), ErrorCode> {
         debug_assert!(!info.has_body() && !info.has_handle());
-        sys_channel_recv(self.handle.id(), info, None)?;
+        sys_channel_recv(self.handle.id(), info, null_mut())?;
         Ok(())
     }
 
     fn recv_with_body(&self, info: MessageInfo, body: &mut [u8]) -> Result<(), ErrorCode> {
         debug_assert!(info.has_body() && !info.has_handle());
-        sys_channel_recv(self.handle.id(), info, Some(body))?;
+        debug_assert_eq!(body.len(), info.body_len());
+        sys_channel_recv(self.handle.id(), info, body.as_mut_ptr())?;
         Ok(())
     }
 
     fn recv_with_handle(&self, info: MessageInfo) -> Result<OwnedHandle, ErrorCode> {
         debug_assert!(!info.has_body() && info.has_handle());
-        let handle_id = sys_channel_recv(self.handle.id(), info, None)?;
+        let handle_id = sys_channel_recv(self.handle.id(), info, null_mut())?;
         Ok(OwnedHandle::from_raw(handle_id))
     }
 }
@@ -112,24 +116,16 @@ pub fn sys_channel_send(
     ch: HandleId,
     info: MessageInfo,
     arg: usize,
-    body: Option<&[u8]>,
-    handle: Option<HandleId>,
+    body: *const u8,
+    handle: HandleId,
 ) -> Result<(), ErrorCode> {
-    let body_ptr = body
-        .map(|body| {
-            debug_assert_eq!(body.len(), info.body_len());
-            body.as_ptr() as usize
-        })
-        .unwrap_or(0);
-
-    let handle_id = handle.map(|handle| handle.as_usize()).unwrap_or(0);
     syscall5(
         SYS_CHANNEL_SEND,
         ch.as_usize(),
         info.as_raw(),
         arg,
-        body_ptr,
-        handle_id,
+        body as usize,
+        handle.as_usize(),
     )?;
     Ok(())
 }
@@ -137,15 +133,13 @@ pub fn sys_channel_send(
 pub fn sys_channel_recv(
     ch: HandleId,
     info: MessageInfo,
-    body: Option<&mut [u8]>,
+    body: *mut u8,
 ) -> Result<HandleId, ErrorCode> {
-    let body_ptr = body
-        .map(|body| {
-            debug_assert_eq!(body.len(), info.body_len());
-            body.as_mut_ptr() as usize
-        })
-        .unwrap_or(0);
-
-    let ret = syscall3(SYS_CHANNEL_RECV, ch.as_usize(), info.as_raw(), body_ptr)?;
+    let ret = syscall3(
+        SYS_CHANNEL_RECV,
+        ch.as_usize(),
+        info.as_raw(),
+        body as usize,
+    )?;
     Ok(HandleId::from_raw(ret))
 }
