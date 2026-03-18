@@ -72,7 +72,13 @@ pub fn sys_channel_send(
     body: Option<&[u8]>,
     handle: Option<HandleId>,
 ) -> Result<(), ErrorCode> {
-    let body_ptr = body.map(|body| body.as_ptr() as usize).unwrap_or(0);
+    let body_ptr = body
+        .map(|body| {
+            debug_assert_eq!(body.len(), info.body_len());
+            body.as_ptr() as usize
+        })
+        .unwrap_or(0);
+
     let handle_id = handle.map(|handle| handle.as_usize()).unwrap_or(0);
     syscall5(
         SYS_CHANNEL_SEND,
