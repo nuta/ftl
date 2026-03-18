@@ -39,61 +39,6 @@ impl Channel {
         Self { handle }
     }
 
-    pub fn send_open(
-        &self,
-        rid: RequestId,
-        path: &[u8],
-        options: OpenOptions,
-    ) -> Result<(), ErrorCode> {
-        let info = MessageInfo::new(MessageKind::OPEN, rid, path.len());
-        self.send_with_body(info, options.as_usize(), path)
-    }
-
-    pub fn reply_open(&self, rid: RequestId, handle: OwnedHandle) -> Result<(), ErrorCode> {
-        let info = MessageInfo::new(MessageKind::OPEN_REPLY, rid, 0);
-        self.send_with_handle(info, 0, handle)
-    }
-
-    pub fn send_read(&self, rid: RequestId, offset: usize, len: usize) -> Result<(), ErrorCode> {
-        let info = MessageInfo::new(MessageKind::READ, rid, 0);
-        self.send(info, offset)
-    }
-
-    pub fn reply_read(&self, rid: RequestId, buf: &[u8]) -> Result<(), ErrorCode> {
-        let info = MessageInfo::new(MessageKind::READ_REPLY, rid, buf.len());
-        self.send_with_body(info, 0, buf)
-    }
-
-    pub fn send_write(&self, rid: RequestId, buf: &[u8], offset: usize) -> Result<(), ErrorCode> {
-        let info = MessageInfo::new(MessageKind::WRITE, rid, buf.len());
-        self.send_with_body(info, offset, buf)
-    }
-
-    pub fn reply_write(&self, rid: RequestId, written_len: usize) -> Result<(), ErrorCode> {
-        let info = MessageInfo::new(MessageKind::WRITE_REPLY, rid, 0);
-        self.send(info, written_len)
-    }
-
-    pub fn send_getattr(&self, rid: RequestId, attr: Attr) -> Result<(), ErrorCode> {
-        let info = MessageInfo::new(MessageKind::GETATTR, rid, 0);
-        self.send(info, attr.as_usize())
-    }
-
-    pub fn reply_getattr(&self, rid: RequestId, buf: &[u8]) -> Result<(), ErrorCode> {
-        let info = MessageInfo::new(MessageKind::GETATTR_REPLY, rid, buf.len());
-        self.send_with_body(info, 0, buf)
-    }
-
-    pub fn send_setattr(&self, rid: RequestId, attr: Attr, value: &[u8]) -> Result<(), ErrorCode> {
-        let info = MessageInfo::new(MessageKind::SETATTR, rid, value.len());
-        self.send_with_body(info, attr.as_usize(), value)
-    }
-
-    pub fn reply_setattr(&self, rid: RequestId) -> Result<(), ErrorCode> {
-        let info = MessageInfo::new(MessageKind::SETATTR_REPLY, rid, 0);
-        self.send(info, 0)
-    }
-
     fn send(&self, info: MessageInfo, arg: usize) -> Result<(), ErrorCode> {
         debug_assert!(!info.has_body() && !info.has_handle());
         sys_channel_send(self.handle.id(), info, arg, None, None)?;
