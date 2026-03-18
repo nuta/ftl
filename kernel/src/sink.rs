@@ -2,9 +2,8 @@ use alloc::collections::btree_set::BTreeSet;
 use alloc::collections::vec_deque::VecDeque;
 
 use ftl_types::error::ErrorCode;
+use ftl_types::sink::Event;
 use ftl_types::handle::HandleId;
-use ftl_types::sink::EventBody;
-use ftl_types::sink::EventHeader;
 
 use crate::handle::Handle;
 use crate::handle::HandleRight;
@@ -112,16 +111,14 @@ impl Sink {
             // TODO: This authorize is not necessary because we already checked
             //       when adding the object to the sink.
             let handle = object.authorize(HandleRight::READ)?;
-            let Some((ty, event)) = handle.read_event(handle_table)? else {
+            let Some(event) = handle.read_event(handle_id, handle_table)? else {
                 // The object has no events to report. Remove it from the ready set.
                 mutable.ready_queue.pop_front();
                 mutable.ready_set.remove(&handle_id.as_usize());
                 continue;
             };
 
-            let header = EventHeader { ty, id: handle_id };
-            crate::isolation::write(isolation, buf, 0, header)?;
-            crate::isolation::write(isolation, buf, size_of::<EventHeader>(), event)?;
+            crate::isolation::write(isolation, buf, 0, event)?;
 
             return Ok(true);
         }
@@ -192,10 +189,7 @@ pub fn sys_sink_wait(
     a1: usize,
 ) -> Result<SyscallResult, ErrorCode> {
     let sink_id = HandleId::from_raw(a0);
-    let buf = UserSlice::new(
-        UserPtr::new(a1),
-        size_of::<EventHeader>() + size_of::<EventBody>(),
-    )?;
+    let buf = UserSlice::new(UserPtr::new(a1), size_of::<Event>())?;
 
     let process = current.process();
     let mut handle_table = process.handle_table().lock();

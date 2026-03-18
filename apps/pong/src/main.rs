@@ -2,66 +2,134 @@
 #![no_main]
 
 use ftl::channel::Channel;
-use ftl::eventloop::Event;
-use ftl::eventloop::EventLoop;
-use ftl::eventloop::Request;
-use ftl::log::*;
+use ftl::channel::MessageId;
+use ftl::channel::MessageInfo;
+use ftl::channel::MessageKind;
+use ftl::channel::OpenOptions;
+use ftl::collections::HashMap;
+use ftl::handle::Handleable;
+use ftl::prelude::*;
+use ftl::sink::Event;
+use ftl::sink::Sink;
 
-#[derive(Debug)]
 enum Context {
-    Listener,
-    Client,
+    Server,
+    Client { ch: Channel },
 }
 
 #[ftl::main]
 fn main() {
-    let mut eventloop: EventLoop<Context, ()> = EventLoop::new().unwrap();
-    let ch = Channel::register("pong").unwrap();
-    eventloop.add_channel(ch, Context::Listener).unwrap();
+    info!("starting pong");
+    let sink = Sink::new().unwrap();
 
+    use ftl::handle::HandleId;
+    use ftl::handle::OwnedHandle;
+    let supervisor_ch = Channel::from_handle(OwnedHandle::from_raw(HandleId::from_raw(1)));
+    sink.add(&supervisor_ch).unwrap();
+
+    // Ask the supervisor process to register this service.
+    let listen_mid = MessageId::new(1);
+    let path = b"service/pong";
+    let info = MessageInfo::new(MessageKind::OPEN, listen_mid, path.len());
+    let options = OpenOptions::LISTEN;
+    supervisor_ch
+        .send_with_body(info, options.as_usize(), path)
+        .unwrap();
+
+    // Wait for the supervisor process to register this service.
+    let server_ch = loop {
+        let (id, event) = sink.wait().unwrap();
+        match event {
+            Event::Message { info, arg: _ } if id == supervisor_ch.handle().id() => {
+                match info.kind() {
+                    MessageKind::OPEN_REPLY => {
+                        let handle = supervisor_ch.recv_with_handle(info).unwrap();
+                        break Channel::from_handle(handle);
+                    }
+                    _ => {
+                        warn!("unhandled message: {:?}", info.kind());
+                    }
+                }
+            }
+            _ => {
+                warn!("unhandled event: {:?}", event);
+            }
+        }
+    };
+
+    // Wait for clients to connect.
+    sink.add(&server_ch).unwrap();
+    let mut contexts = HashMap::new();
+    contexts.insert(server_ch.handle().id(), Context::Server);
     loop {
-        match eventloop.wait() {
-            Event::Request {
-                ctx: Context::Listener,
-                request: Request::Open(request),
-            } => {
-                let (our_ch, their_ch) = match Channel::new() {
-                    Ok(pair) => pair,
-                    Err(error) => {
-                        request.reply_error(error);
-                        continue;
-                    }
-                };
+        let (id, event) = sink.wait().unwrap();
+        let context = contexts.get(&id).unwrap();
+        match (context, event) {
+            (Context::Server, Event::Message { info, arg: _ }) => {
+                match info.kind() {
+                    MessageKind::OPEN => {
+                        if info.body_len() > 1024 {
+                            let reply_info =
+                                MessageInfo::new(MessageKind::ERROR_REPLY, info.mid(), 0);
+                            server_ch.send(reply_info, 0).unwrap();
+                            continue;
+                        }
 
-                if let Err(error) = eventloop.add_channel(our_ch, Context::Client) {
-                    request.reply_error(error.into());
-                    continue;
-                }
+                        // Receive the message.
+                        let mut buf = vec![0; info.body_len()];
+                        if let Err(error) = server_ch.recv_with_body(info, &mut buf) {
+                            warn!("failed to recv with body: {:?}", error);
+                            continue;
+                        }
 
-                request.reply(their_ch);
-            }
-            Event::Request {
-                ctx: Context::Client,
-                request: Request::Write(request),
-                ..
-            } => {
-                let mut buf = [0; 512];
-                match request.read_at(&mut buf, request.offset()) {
-                    Ok(len) => {
-                        trace!(
-                            "body read ({len} bytes): {:?}",
-                            core::str::from_utf8(&buf[..len])
-                        );
-                        request.reply(len);
+                        let (our_ch, their_ch) = Channel::new().unwrap();
+                        sink.add(&our_ch).unwrap();
+                        contexts.insert(our_ch.handle().id(), Context::Client { ch: our_ch });
+
+                        // Reply to the client.
+                        let reply_info = MessageInfo::new(MessageKind::OPEN_REPLY, info.mid(), 0);
+                        server_ch
+                            .send_with_handle(reply_info, 0, their_ch.into_handle())
+                            .unwrap();
+
+                        info!("accepted a client");
                     }
-                    Err(error) => {
-                        warn!("failed to read write payload: {:?}", error);
-                        request.reply_error(error);
+                    _ => {
+                        warn!("unhandled message: {:?}", info.kind());
                     }
                 }
             }
-            ev => {
-                warn!("unhandled event: {:?}", ev);
+            (Context::Client { ch }, Event::Message { info, arg: _ }) => {
+                match info.kind() {
+                    MessageKind::WRITE => {
+                        if info.body_len() > 1024 {
+                            let reply_info =
+                                MessageInfo::new(MessageKind::ERROR_REPLY, info.mid(), 0);
+                            ch.send(reply_info, 0).unwrap();
+                            continue;
+                        }
+
+                        let mut buf = vec![0; info.body_len()];
+                        if let Err(error) = ch.recv_with_body(info, &mut buf) {
+                            warn!("failed to recv with body: {:?}", error);
+                            continue;
+                        }
+
+                        info!("received write message: {:?}", core::str::from_utf8(&buf));
+                        let reply_info = MessageInfo::new(MessageKind::WRITE_REPLY, info.mid(), 0);
+                        ch.send(reply_info, buf.len()).unwrap();
+                    }
+                    _ => {
+                        warn!("unhandled message: {:?}", info.kind());
+                    }
+                }
+            }
+            (_, Event::PeerClosed) => {
+                sink.remove(id).unwrap();
+                contexts.remove(&id);
+            }
+            (_context, event) => {
+                warn!("unhandled event: {:?}", event);
             }
         }
     }

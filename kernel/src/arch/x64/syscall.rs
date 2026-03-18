@@ -1,7 +1,7 @@
 use core::arch::naked_asm;
 use core::mem::offset_of;
 
-use ftl_types::sink::SandboxedSyscallEvent;
+use ftl_types::sink::SyscallRegs;
 
 use crate::arch::Thread;
 use crate::cpuvar::CpuVar;
@@ -134,7 +134,7 @@ extern "C" fn handle_user_syscall() -> ! {
     let thread = cpuvar.current_thread.thread();
 
     let regs = unsafe {
-        SandboxedSyscallEvent {
+        SyscallRegs {
             rax: (*arch_thread).rax as u64,
             rdi: (*arch_thread).rdi as u64,
             rsi: (*arch_thread).rsi as u64,

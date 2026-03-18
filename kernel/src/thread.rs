@@ -4,9 +4,11 @@ use core::mem::offset_of;
 
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
-use ftl_types::sink::EventBody;
+use ftl_types::sink::Event;
+use ftl_types::sink::EventHeader;
 use ftl_types::sink::EventType;
 use ftl_types::sink::SandboxedSyscallEvent;
+use ftl_types::sink::SyscallRegs;
 use ftl_types::syscall::ERROR_RETVAL_BASE;
 use ftl_utils::static_assert;
 
@@ -64,7 +66,7 @@ enum State {
 struct Mutable {
     state: State,
     emitter: Option<EventEmitter>,
-    syscall_events: VecDeque<SandboxedSyscallEvent>,
+    events: VecDeque<SyscallRegs>,
 }
 
 #[repr(C)]
@@ -93,7 +95,7 @@ impl Thread {
             mutable: SpinLock::new(Mutable {
                 state: State::Created,
                 emitter: None,
-                syscall_events: VecDeque::new(),
+                events: VecDeque::new(),
             }),
         })
     }
@@ -105,7 +107,7 @@ impl Thread {
             mutable: SpinLock::new(Mutable {
                 state: State::Idle,
                 emitter: None,
-                syscall_events: VecDeque::new(),
+                events: VecDeque::new(),
             }),
         })
     }
@@ -119,10 +121,10 @@ impl Thread {
         mutable.state = State::Blocked(promise);
     }
 
-    pub fn block_on_sandboxed_syscall(&self, event: SandboxedSyscallEvent) {
+    pub fn block_on_sandboxed_syscall(&self, regs: SyscallRegs) {
         let mut mutable = self.mutable.lock();
         mutable.state = State::Blocked(Promise::SandboxedSyscall);
-        mutable.syscall_events.push_back(event);
+        mutable.events.push_back(regs);
         if let Some(emitter) = &mutable.emitter {
             emitter.notify();
         }
@@ -222,19 +224,23 @@ impl Handleable for Thread {
 
     fn read_event(
         &self,
+        handle_id: HandleId,
         _handle_table: &mut HandleTable,
-    ) -> Result<Option<(EventType, EventBody)>, ErrorCode> {
+    ) -> Result<Option<Event>, ErrorCode> {
         let mut mutable = self.mutable.lock();
-        let Some(event) = mutable.syscall_events.pop_front() else {
+        let Some(regs) = mutable.events.pop_front() else {
             return Ok(None);
         };
 
-        Ok(Some((
-            EventType::SANDBOXED_SYSCALL,
-            EventBody {
-                sandboxed_syscall: event,
+        Ok(Some(Event {
+            sandboxed_syscall: SandboxedSyscallEvent {
+                header: EventHeader {
+                    ty: EventType::SANDBOXED_SYSCALL,
+                    id: handle_id,
+                },
+                regs,
             },
-        )))
+        }))
     }
 }
 

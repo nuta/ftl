@@ -4,7 +4,8 @@ use core::time::Duration;
 
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
-use ftl_types::sink::EventBody;
+use ftl_types::sink::Event;
+use ftl_types::sink::EventHeader;
 use ftl_types::sink::EventType;
 use ftl_types::sink::TimerEvent;
 use ftl_types::time::Monotonic;
@@ -82,18 +83,23 @@ impl Handleable for Timer {
 
     fn read_event(
         &self,
+        handle_id: HandleId,
         _handle_table: &mut HandleTable,
-    ) -> Result<Option<(EventType, EventBody)>, ErrorCode> {
+    ) -> Result<Option<Event>, ErrorCode> {
         let mut mutable = self.mutable.lock();
         if !matches!(mutable.state, State::Expired) {
             return Ok(None);
         }
 
         mutable.state = State::NotSet;
-        let body = EventBody {
-            timer: TimerEvent {},
-        };
-        Ok(Some((EventType::TIMER, body)))
+        Ok(Some(Event {
+            timer: TimerEvent {
+                header: EventHeader {
+                    ty: EventType::TIMER,
+                    id: handle_id,
+                },
+            },
+        }))
     }
 
     fn close(&self) {

@@ -4,24 +4,25 @@ use alloc::string::String;
 use core::fmt;
 use core::mem;
 use core::mem::MaybeUninit;
+use core::ptr::null;
+use core::ptr::null_mut;
 
 pub use ftl_types::channel::Attr;
-use ftl_types::channel::MessageInfo;
-use ftl_types::channel::RequestId;
+pub use ftl_types::channel::MessageId;
+pub use ftl_types::channel::MessageInfo;
+pub use ftl_types::channel::MessageKind;
+pub use ftl_types::channel::OpenOptions;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
-use ftl_types::syscall::SYS_CHANNEL_BODY_READ;
-use ftl_types::syscall::SYS_CHANNEL_BODY_WRITE;
 use ftl_types::syscall::SYS_CHANNEL_CREATE;
+use ftl_types::syscall::SYS_CHANNEL_RECV;
 use ftl_types::syscall::SYS_CHANNEL_SEND;
 use log::warn;
 
-use crate::eventloop::Event;
-use crate::eventloop::EventLoop;
-use crate::eventloop::Reply;
 use crate::handle::Handleable;
 use crate::handle::OwnedHandle;
 use crate::syscall::syscall1;
+use crate::syscall::syscall3;
 use crate::syscall::syscall5;
 
 pub struct Channel {
@@ -40,58 +41,54 @@ impl Channel {
         Self { handle }
     }
 
-    pub fn connect(name: &str) -> Result<Self, ErrorCode> {
-        open_via_bootstrap(format!("connect:{}", name))
+    pub fn send(&self, info: MessageInfo, arg: usize) -> Result<(), ErrorCode> {
+        debug_assert!(!info.has_body() && !info.has_handle());
+        sys_channel_send(self.handle.id(), info, arg, null(), HandleId::ZERO)?;
+        Ok(())
     }
 
-    pub fn register(name: &str) -> Result<Self, ErrorCode> {
-        open_via_bootstrap(format!("register:{}", name))
-    }
-
-    pub(crate) fn call(
+    pub fn send_with_body(
         &self,
         info: MessageInfo,
-        cookie: usize,
-        inline: usize,
-        body_addr: usize,
-        body_len: usize,
+        arg: usize,
+        body: &[u8],
     ) -> Result<(), ErrorCode> {
-        sys_channel_send(self.handle.id(), info, cookie, inline, body_addr, body_len)
+        debug_assert!(info.has_body() && !info.has_handle());
+        assert_eq!(body.len(), info.body_len());
+        sys_channel_send(self.handle.id(), info, arg, body.as_ptr(), HandleId::ZERO)?;
+        Ok(())
     }
 
-    pub(crate) fn reply(
+    pub fn send_with_handle(
         &self,
         info: MessageInfo,
-        request_id: RequestId,
-        inline: usize,
-        handle: Option<HandleId>,
+        arg: usize,
+        handle: OwnedHandle,
     ) -> Result<(), ErrorCode> {
-        sys_channel_send(
-            self.handle.id(),
-            info,
-            request_id.as_u32() as usize,
-            inline,
-            handle.map(|id| id.as_usize()).unwrap_or(0),
-            0,
-        )
+        debug_assert!(!info.has_body() && info.has_handle());
+        let handle_id = handle.id();
+        mem::forget(handle);
+        sys_channel_send(self.handle.id(), info, arg, null(), handle_id)?;
+        Ok(())
     }
 
-    pub(crate) fn read_body(
-        &self,
-        request_id: RequestId,
-        offset: usize,
-        buf: &mut [u8],
-    ) -> Result<usize, ErrorCode> {
-        sys_channel_body_read(self.handle.id(), request_id, offset, buf)
+    pub fn recv(&self, info: MessageInfo) -> Result<(), ErrorCode> {
+        debug_assert!(!info.has_body() && !info.has_handle());
+        sys_channel_recv(self.handle.id(), info, null_mut())?;
+        Ok(())
     }
 
-    pub(crate) fn write_body(
-        &self,
-        request_id: RequestId,
-        offset: usize,
-        buf: &[u8],
-    ) -> Result<usize, ErrorCode> {
-        sys_channel_body_write(self.handle.id(), request_id, offset, buf)
+    pub fn recv_with_body(&self, info: MessageInfo, body: &mut [u8]) -> Result<(), ErrorCode> {
+        debug_assert!(info.has_body() && !info.has_handle());
+        assert_eq!(body.len(), info.body_len());
+        sys_channel_recv(self.handle.id(), info, body.as_mut_ptr())?;
+        Ok(())
+    }
+
+    pub fn recv_with_handle(&self, info: MessageInfo) -> Result<OwnedHandle, ErrorCode> {
+        debug_assert!(!info.has_body() && info.has_handle());
+        let handle_id = sys_channel_recv(self.handle.id(), info, null_mut())?;
+        Ok(OwnedHandle::from_raw(handle_id))
     }
 }
 
@@ -125,87 +122,31 @@ fn sys_channel_create() -> Result<(OwnedHandle, OwnedHandle), ErrorCode> {
 pub fn sys_channel_send(
     ch: HandleId,
     info: MessageInfo,
-    rid_or_cookie: usize, // cookie (requests) or request_id (replies)
-    inline: usize,
-    body_or_handle: usize, // body_ptr (requests) or handle (replies)
-    body_len: usize,
+    arg: usize,
+    body: *const u8,
+    handle: HandleId,
 ) -> Result<(), ErrorCode> {
     syscall5(
         SYS_CHANNEL_SEND,
         ch.as_usize(),
-        info.as_usize() | (body_len << 8),
-        rid_or_cookie,
-        inline,
-        body_or_handle,
+        info.as_raw(),
+        arg,
+        body as usize,
+        handle.as_usize(),
     )?;
     Ok(())
 }
 
-pub fn sys_channel_body_read(
+pub fn sys_channel_recv(
     ch: HandleId,
-    request_id: RequestId,
-    offset: usize,
-    buf: &mut [u8],
-) -> Result<usize, ErrorCode> {
-    syscall5(
-        SYS_CHANNEL_BODY_READ,
+    info: MessageInfo,
+    body: *mut u8,
+) -> Result<HandleId, ErrorCode> {
+    let ret = syscall3(
+        SYS_CHANNEL_RECV,
         ch.as_usize(),
-        request_id.as_u32() as usize,
-        offset,
-        buf.as_ptr() as usize,
-        buf.len(),
-    )
-}
-
-pub fn sys_channel_body_write(
-    ch: HandleId,
-    request_id: RequestId,
-    offset: usize,
-    buf: &[u8],
-) -> Result<usize, ErrorCode> {
-    syscall5(
-        SYS_CHANNEL_BODY_WRITE,
-        ch.as_usize(),
-        request_id.as_u32() as usize,
-        offset,
-        buf.as_ptr() as usize,
-        buf.len(),
-    )
-}
-
-fn open_via_bootstrap(uri: String) -> Result<Channel, ErrorCode> {
-    let bootstrap_ch: Rc<Channel> = Rc::new(Channel::from_handle(OwnedHandle::from_raw(
-        HandleId::from_raw(1),
-    )));
-
-    let mut eventloop = EventLoop::new().unwrap();
-    let client = eventloop.add_channel(bootstrap_ch.clone(), ()).unwrap();
-    client.open(uri, ()).unwrap();
-
-    // FIXME:
-    mem::forget(bootstrap_ch);
-
-    loop {
-        match eventloop.wait() {
-            Event::Reply {
-                reply: Reply::Open { new_ch, .. },
-                ..
-            } => {
-                return Ok(new_ch);
-            }
-            Event::Reply {
-                reply: Reply::Error { error, .. },
-                ..
-            } => {
-                warn!("service discovery failed: {:?}", error);
-                return Err(error);
-            }
-            Event::SinkError(error) => {
-                return Err(error);
-            }
-            event => {
-                panic!("unexpected bootstrap event: {:?}", event);
-            }
-        }
-    }
+        info.as_raw(),
+        body as usize,
+    )?;
+    Ok(HandleId::from_raw(ret))
 }

@@ -3,6 +3,9 @@
 pub struct HandleId(usize);
 
 impl HandleId {
+    /// An invalid ID.
+    pub const ZERO: Self = Self::from_raw(0);
+
     pub const fn from_raw(id: usize) -> Self {
         Self(id)
     }

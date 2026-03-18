@@ -1,10 +1,12 @@
 #![no_std]
+#![allow(unused)]
 
 extern crate alloc;
 
 pub use alloc::borrow;
 pub use alloc::boxed;
 pub use alloc::rc;
+pub use alloc::string;
 
 pub use ftl_macros::main;
 
@@ -20,7 +22,6 @@ pub mod buffer;
 pub mod collections;
 pub mod driver;
 pub mod error;
-pub mod eventloop;
 pub mod handle;
 pub mod log;
 pub mod message;

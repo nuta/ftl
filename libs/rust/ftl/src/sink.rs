@@ -1,9 +1,11 @@
 use core::fmt;
 use core::mem::MaybeUninit;
 
+use ftl_types::channel::MessageInfo;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
-pub use ftl_types::sink::Event;
+use ftl_types::sink::Event as RawEvent;
+use ftl_types::sink::EventType;
 pub use ftl_types::sink::SandboxedSyscallEvent;
 use ftl_types::syscall::SYS_SINK_ADD;
 use ftl_types::syscall::SYS_SINK_CREATE;
@@ -14,6 +16,12 @@ use crate::handle::Handleable;
 use crate::handle::OwnedHandle;
 use crate::syscall::syscall0;
 use crate::syscall::syscall2;
+
+#[derive(Debug)]
+pub enum Event {
+    Message { info: MessageInfo, arg: usize },
+    PeerClosed,
+}
 
 pub struct Sink {
     handle: OwnedHandle,
@@ -35,10 +43,26 @@ impl Sink {
         Ok(())
     }
 
-    pub fn wait<'a>(&self, buf: &'a mut MaybeUninit<Event>) -> Result<&'a Event, ErrorCode> {
-        sys_sink_wait(self.handle.id(), buf)?;
+    pub fn wait(&self) -> Result<(HandleId, Event), ErrorCode> {
+        let mut buf = MaybeUninit::<RawEvent>::uninit();
+
+        sys_sink_wait(self.handle.id(), &mut buf)?;
+
         // SAFETY: The buffer is initialized by the kernel.
-        Ok(unsafe { buf.assume_init_ref() })
+        let raw = unsafe { buf.assume_init_ref() };
+        let header = raw.header();
+        let event = match header.ty {
+            EventType::MESSAGE => {
+                Event::Message {
+                    info: unsafe { raw.message.info },
+                    arg: unsafe { raw.message.arg },
+                }
+            }
+            EventType::PEER_CLOSED => Event::PeerClosed,
+            type_ => panic!("unimplemented event type: {:?}", type_),
+        };
+
+        Ok((header.id, event))
     }
 }
 
@@ -75,7 +99,7 @@ fn sys_sink_remove(sink: HandleId, id: HandleId) -> Result<(), ErrorCode> {
     Ok(())
 }
 
-fn sys_sink_wait(sink: HandleId, buf: &mut MaybeUninit<Event>) -> Result<(), ErrorCode> {
+fn sys_sink_wait(sink: HandleId, buf: &mut MaybeUninit<RawEvent>) -> Result<(), ErrorCode> {
     syscall2(SYS_SINK_WAIT, sink.as_usize(), buf.as_mut_ptr() as usize)?;
     Ok(())
 }
