@@ -58,21 +58,24 @@ impl Channel {
         handle: OwnedHandle,
     ) -> Result<(), ErrorCode> {
         debug_assert!(!info.has_body() && info.has_handle());
-
         sys_channel_send(self.handle.id(), info, arg, None, Some(handle.id()))?;
+        Ok(())
+    }
+
+    fn recv(&self, info: MessageInfo) -> Result<(), ErrorCode> {
+        debug_assert!(!info.has_body() && !info.has_handle());
+        sys_channel_recv(self.handle.id(), info, None)?;
         Ok(())
     }
 
     fn recv_with_body(&self, info: MessageInfo, body: Option<&mut [u8]>) -> Result<(), ErrorCode> {
         debug_assert!(info.has_body() && !info.has_handle());
-
-        let handle_id = sys_channel_recv(self.handle.id(), info, body)?;
+        sys_channel_recv(self.handle.id(), info, body)?;
         Ok(())
     }
 
     fn recv_with_handle(&self, info: MessageInfo) -> Result<OwnedHandle, ErrorCode> {
         debug_assert!(!info.has_body() && info.has_handle());
-
         let handle_id = sys_channel_recv(self.handle.id(), info, None)?;
         Ok(OwnedHandle::from_raw(handle_id))
     }
