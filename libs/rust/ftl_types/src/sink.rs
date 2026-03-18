@@ -41,11 +41,6 @@ pub union EventBody {
 #[repr(C)]
 pub struct MessageEvent {
     pub info: MessageInfo,
-    pub cookie: usize,
-    pub handle: HandleId,
-    pub request_id: RequestId,
-    pub body_len: usize,
-    pub inline: usize,
 }
 
 #[derive(Clone, Copy)]

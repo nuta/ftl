@@ -3,7 +3,6 @@ use core::slice;
 
 use ftl::arch;
 use ftl::channel::Channel;
-use ftl::eventloop::EventLoop;
 use ftl::prelude::trace;
 use ftl::process::PROCESS_NAME_MAX_LEN;
 use ftl::process::Process;
@@ -109,12 +108,4 @@ pub fn load_app(file: &initfs::File) -> Channel {
         .expect("failed to create initial thread");
     thread.start().expect("failed to start thread");
     our_ch
-}
-
-pub fn create_initfs_apps<K>(eventloop: &mut EventLoop<(), K>, initfs: &InitFs) {
-    for file in initfs.iter() {
-        trace!("loading app: {}", file.name);
-        let ch = load_app(&file);
-        eventloop.add_channel(ch, ()).unwrap();
-    }
 }

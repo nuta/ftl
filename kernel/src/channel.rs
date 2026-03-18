@@ -1,5 +1,7 @@
+#![allow(unused)]
 use alloc::collections::btree_map::BTreeMap;
 use alloc::collections::vec_deque::VecDeque;
+use alloc::vec::Vec;
 use core::cmp::min;
 use core::mem::MaybeUninit;
 
@@ -26,38 +28,17 @@ use crate::spinlock::SpinLock;
 use crate::syscall::SyscallResult;
 use crate::thread::Thread;
 
-struct MessageBody {
-    isolation: SharedRef<dyn Isolation>,
-    slice: UserSlice,
-}
-
-enum Message {
-    Request {
-        id: RequestId,
-        info: MessageInfo,
-        handle: Option<AnyHandle>,
-        body_len: usize,
-        inline: usize,
-    },
-    Reply {
-        cookie: usize,
-        info: MessageInfo,
-        handle: Option<AnyHandle>,
-        inline: usize,
-    },
-}
-
-struct Request {
-    cookie: usize,
-    body: Option<MessageBody>,
+struct Message {
+    info: MessageInfo,
+    arg: usize,
+    body: Option<Vec<u8>>,
+    handle: Option<AnyHandle>,
 }
 
 struct Mutable {
     peer: Option<SharedRef<Channel>>,
     queue: VecDeque<Message>,
     emitter: Option<EventEmitter>,
-    requests: BTreeMap<u32 /* RequestId */, Request>,
-    next_request_id: u32,
     peer_closed_notified: bool, // TODO: State: Connected(peer_ch), PeerClosed, Draining /* notified */
 }
 
@@ -72,8 +53,6 @@ impl Channel {
                 peer: None,
                 queue: VecDeque::new(),
                 emitter: None,
-                requests: BTreeMap::new(),
-                next_request_id: 1,
                 peer_closed_notified: false,
             }),
         })?;
@@ -82,8 +61,6 @@ impl Channel {
                 peer: Some(ch0.clone()),
                 queue: VecDeque::new(),
                 emitter: None,
-                requests: BTreeMap::new(),
-                next_request_id: 1,
                 peer_closed_notified: false,
             }),
         })?;
@@ -97,29 +74,17 @@ impl Channel {
         isolation: &SharedRef<dyn Isolation>,
         handle_table: &mut HandleTable,
         info: MessageInfo,
-        rid_or_cookie: usize, // cookie (requests) or request_id (replies)
-        inline: usize,
-        body_or_handle: usize, // body_ptr (requests) or handle (replies)
-        body_len: usize,
+        arg: usize,
+        body_ptr: UserPtr,
+        handle: HandleId,
     ) -> Result<(), ErrorCode> {
         let mut mutable = self.mutable.lock();
         let peer = mutable.peer.as_ref().ok_or(ErrorCode::PeerClosed)?.clone();
 
-        let handle = if info.contains_handle() {
-            Some(handle_table.remove(HandleId::from_raw(body_or_handle))?)
+        let handle = if info.has_handle() {
+            Some(handle_table.remove(handle)?)
         } else {
             None
-        };
-
-        let request = if info.is_request() {
-            None
-        } else {
-            Some(
-                mutable
-                    .requests
-                    .remove(&(rid_or_cookie as u32))
-                    .ok_or(ErrorCode::InvalidMessage)?,
-            )
         };
 
         // Drop the lock before acquiring the peer's lock. Otherwise, we may
@@ -128,130 +93,27 @@ impl Channel {
 
         let mut peer_mutable = peer.mutable.lock();
 
-        let message = if info.is_request() {
-            let id = RequestId::new(peer_mutable.next_request_id);
-            assert!(!peer_mutable.requests.contains_key(&id.as_u32())); // FIXME: Retry with a different ID
-            peer_mutable.next_request_id += 1; // FIXME: wrapping around
-
-            let body = if info.contains_body() {
-                let ptr = UserPtr::new(body_or_handle);
-                let slice = UserSlice::new(ptr, body_len)?;
-                Some(MessageBody {
-                    isolation: isolation.clone(),
-                    slice,
-                })
-            } else {
-                None
-            };
-
-            peer_mutable.requests.insert(
-                id.as_u32(),
-                Request {
-                    cookie: rid_or_cookie,
-                    body,
-                },
-            );
-
-            Message::Request {
-                id,
-                info,
-                handle,
-                body_len,
-                inline,
-            }
+        let body = if info.has_body() {
+            let mut body = Vec::with_capacity(info.body_len());
+            let slice = UserSlice::new(body_ptr, info.body_len())?;
+            isolation.read_bytes(&slice, &mut body)?;
+            Some(body)
         } else {
-            Message::Reply {
-                cookie: request.unwrap().cookie, // TODO: refactor
-                info,
-                handle,
-                inline,
-            }
+            None
         };
 
-        peer_mutable.queue.push_back(message);
+        peer_mutable.queue.push_back(Message {
+            info,
+            arg,
+            body,
+            handle,
+        });
+
         if let Some(ref emitter) = peer_mutable.emitter {
             emitter.notify();
         }
 
         Ok(())
-    }
-
-    pub fn read_body(
-        &self,
-        dst_isolation: &SharedRef<dyn Isolation>,
-        request_id: RequestId,
-        offset: usize,
-        dst_slice: &UserSlice,
-    ) -> Result<usize, ErrorCode> {
-        let mutable = self.mutable.lock();
-        let req = mutable
-            .requests
-            .get(&request_id.as_u32())
-            .ok_or(ErrorCode::InvalidArgument)?;
-
-        let body = req.body.as_ref().ok_or(ErrorCode::InvalidArgument)?;
-        let src_isolation = &body.isolation;
-        let src_slice = &body.slice;
-
-        let requested_len = min(dst_slice.len(), src_slice.len().saturating_sub(offset));
-        let mut off = 0;
-        while off < requested_len {
-            // TODO: Do not zero the memory.
-            let mut tmp = [0; 512];
-
-            // Copy from the sender process' memory into the kernel's memory.
-            let copy_len = min(requested_len - off, tmp.len());
-            src_isolation.read_bytes(
-                &src_slice.subslice(offset + off, copy_len)?,
-                &mut tmp[..copy_len],
-            )?;
-
-            // Copy into the receiver (current) process' memory.
-            dst_isolation.write_bytes(&dst_slice.subslice(off, copy_len)?, &tmp[..copy_len])?;
-
-            off += copy_len;
-        }
-
-        Ok(off)
-    }
-
-    pub fn write_ool(
-        &self,
-        src_isolation: &SharedRef<dyn Isolation>,
-        request_id: RequestId,
-        offset: usize,
-        src_slice: &UserSlice,
-    ) -> Result<usize, ErrorCode> {
-        let mutable = self.mutable.lock();
-        let call = mutable
-            .requests
-            .get(&request_id.as_u32())
-            .ok_or(ErrorCode::InvalidArgument)?;
-
-        let body = call.body.as_ref().ok_or(ErrorCode::InvalidArgument)?;
-        let dst_isolation = &body.isolation;
-        let dst_slice = &body.slice;
-
-        let requested_len = min(src_slice.len(), dst_slice.len().saturating_sub(offset));
-        let mut off = 0;
-        while off < requested_len {
-            // TODO: Do not zero the memory.
-            let mut tmp = [0; 512];
-
-            // Copy from the receiver (current) process' memory into the kernel's memory.
-            let copy_len = min(requested_len - off, tmp.len());
-            src_isolation.read_bytes(&src_slice.subslice(off, copy_len)?, &mut tmp[..copy_len])?;
-
-            // Copy into the sender process' memory.
-            dst_isolation.write_bytes(
-                &dst_slice.subslice(offset + off, copy_len)?,
-                &tmp[..copy_len],
-            )?;
-
-            off += copy_len;
-        }
-
-        Ok(off)
     }
 }
 
@@ -286,55 +148,25 @@ impl Handleable for Channel {
         handle_table: &mut HandleTable,
     ) -> Result<Option<(EventType, EventBody)>, ErrorCode> {
         let mut mutable = self.mutable.lock();
-        let Some(message) = mutable.queue.pop_front() else {
-            if mutable.peer.is_none() && !mutable.peer_closed_notified {
-                mutable.peer_closed_notified = true;
-                return Ok(Some((
-                    EventType::PEER_CLOSED,
-                    EventBody {
-                        peer_closed: PeerClosedEvent {},
-                    },
-                )));
-            }
 
-            return Ok(None);
+        // FIXME: This always returns the first message in the queue.
+        if let Some(message) = mutable.queue.front() {
+            let mut event = unsafe { MaybeUninit::<MessageEvent>::zeroed().assume_init() };
+            event.info = message.info;
+            return Ok(Some((EventType::MESSAGE, EventBody { message: event })));
         };
 
-        let mut event = unsafe { MaybeUninit::<MessageEvent>::zeroed().assume_init() };
-
-        let handle = match message {
-            Message::Request {
-                id,
-                info,
-                handle,
-                body_len,
-                inline,
-            } => {
-                event.info = info;
-                event.inline = inline;
-                event.request_id = id;
-                event.body_len = body_len;
-                handle
-            }
-            Message::Reply {
-                cookie,
-                info,
-                handle,
-                inline,
-            } => {
-                event.info = info;
-                event.inline = inline;
-                event.cookie = cookie;
-                handle
-            }
-        };
-
-        if let Some(handle) = handle {
-            let id = handle_table.insert(handle)?; // TODO: What if this fails?
-            event.handle = id;
+        if mutable.peer.is_none() && !mutable.peer_closed_notified {
+            mutable.peer_closed_notified = true;
+            return Ok(Some((
+                EventType::PEER_CLOSED,
+                EventBody {
+                    peer_closed: PeerClosedEvent {},
+                },
+            )));
         }
 
-        Ok(Some((EventType::MESSAGE, EventBody { message: event })))
+        return Ok(None);
     }
 }
 
@@ -368,73 +200,28 @@ pub fn sys_channel_send(
     a4: usize, // body_or_handle
 ) -> Result<SyscallResult, ErrorCode> {
     let handle_id = HandleId::from_raw(a0);
-    let info = MessageInfo::from_raw(a1 as u8);
+    let info = MessageInfo::from_raw(a1 as u32);
     let body_len = a1 >> 8;
     let rid_or_cookie = a2;
     let inline = a3;
     let body_or_handle = a4;
 
-    let process = current.process();
-    let mut handle_table = process.handle_table().lock();
-    let ch = handle_table
-        .get::<Channel>(handle_id)?
-        .authorize(HandleRight::WRITE)?;
+    todo!()
+    // let process = current.process();
+    // let mut handle_table = process.handle_table().lock();
+    // let ch = handle_table
+    //     .get::<Channel>(handle_id)?
+    //     .authorize(HandleRight::WRITE)?;
 
-    ch.send(
-        process.isolation(),
-        &mut handle_table,
-        info,
-        rid_or_cookie,
-        inline,
-        body_or_handle,
-        body_len,
-    )?;
+    // ch.send(
+    //     process.isolation(),
+    //     &mut handle_table,
+    //     info,
+    //     rid_or_cookie,
+    //     inline,
+    //     body_or_handle,
+    //     body_len,
+    // )?;
 
-    Ok(SyscallResult::Return(0))
-}
-
-pub fn sys_channel_body_read(
-    current: &SharedRef<Thread>,
-    a0: usize,
-    a1: usize,
-    a2: usize,
-    a3: usize,
-    a4: usize,
-) -> Result<SyscallResult, ErrorCode> {
-    let handle_id = HandleId::from_raw(a0);
-    let request_id = RequestId::new(a1 as u32);
-    let offset = a2;
-    let buf = UserSlice::new(UserPtr::new(a3), a4)?;
-
-    let process = current.process();
-    let handle_table = process.handle_table().lock();
-    let ch = handle_table
-        .get::<Channel>(handle_id)?
-        .authorize(HandleRight::READ)?;
-
-    let read_len = ch.read_body(process.isolation(), request_id, offset, &buf)?;
-    Ok(SyscallResult::Return(read_len))
-}
-
-pub fn sys_channel_body_write(
-    current: &SharedRef<Thread>,
-    a0: usize,
-    a1: usize,
-    a2: usize,
-    a3: usize,
-    a4: usize,
-) -> Result<SyscallResult, ErrorCode> {
-    let handle_id = HandleId::from_raw(a0);
-    let request_id = RequestId::new(a1 as u32);
-    let offset = a2;
-    let buf = UserSlice::new(UserPtr::new(a3), a4)?;
-
-    let process = current.process();
-    let handle_table = process.handle_table().lock();
-    let ch = handle_table
-        .get::<Channel>(handle_id)?
-        .authorize(HandleRight::WRITE)?;
-
-    let written_len = ch.write_ool(process.isolation(), request_id, offset, &buf)?;
-    Ok(SyscallResult::Return(written_len))
+    // Ok(SyscallResult::Return(0))
 }

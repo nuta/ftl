@@ -1,55 +1,87 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(transparent)]
-pub struct MessageInfo(u8);
+pub struct MessageKind(u32);
+
+impl MessageKind {
+    pub const ERROR_REPLY: Self = Self::new(1);
+    pub const OPEN: Self = Self::new(2).with_body();
+    pub const OPEN_REPLY: Self = Self::new(3).with_handle();
+    pub const READ: Self = Self::new(4).with_body();
+    pub const READ_REPLY: Self = Self::new(5).with_handle();
+    pub const WRITE: Self = Self::new(6).with_body();
+    pub const WRITE_REPLY: Self = Self::new(7).with_handle();
+    pub const GETATTR: Self = Self::new(8).with_body();
+    pub const GETATTR_REPLY: Self = Self::new(9).with_handle();
+    pub const SETATTR: Self = Self::new(10).with_body();
+    pub const SETATTR_REPLY: Self = Self::new(11).with_handle();
+
+    const fn new(kind: u8) -> Self {
+        debug_assert!(kind <= 0b1111);
+        Self((kind as u32) << 28)
+    }
+
+    const fn with_body(self) -> Self {
+        Self(self.0 | 1 << 26)
+    }
+
+    const fn with_handle(self) -> Self {
+        Self(self.0 | 1 << 27)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(transparent)]
+pub struct MessageInfo(u32);
 
 impl MessageInfo {
-    pub const ERROR_REPLY: Self = Self::new(1, false, false, false);
-    pub const OPEN: Self = Self::new(2, true, false, true);
-    pub const OPEN_REPLY: Self = Self::new(3, false, true, false);
-    pub const READ: Self = Self::new(4, true, false, true);
-    pub const READ_REPLY: Self = Self::new(5, false, false, false);
-    pub const WRITE: Self = Self::new(6, true, false, true);
-    pub const WRITE_REPLY: Self = Self::new(7, false, false, false);
-    pub const GETATTR: Self = Self::new(8, true, false, true);
-    pub const GETATTR_REPLY: Self = Self::new(9, false, false, false);
-    pub const SETATTR: Self = Self::new(10, true, false, true);
-    pub const SETATTR_REPLY: Self = Self::new(11, false, false, false);
-
-    const fn new(kind: u8, is_call: bool, handle: bool, body: bool) -> Self {
-        debug_assert!(kind <= 0b1111_1);
-        Self((kind << 3) | ((is_call as u8) << 2) | ((handle as u8) << 1 | (body as u8) << 0))
+    pub const fn new(kind: MessageKind, rid: RequestId, body_len: usize) -> Self {
+        assert!(body_len <= 0x3fff); // 14 bits
+        let mut raw = 0;
+        raw |= kind.0 as u32;
+        raw |= (rid.0 as u32) << 14;
+        raw |= body_len as u32;
+        Self(raw)
     }
 
     pub const fn as_usize(self) -> usize {
         self.0 as usize
     }
 
-    pub const fn from_raw(raw: u8) -> Self {
+    pub const fn from_raw(raw: u32) -> Self {
         Self(raw)
     }
 
-    pub const fn is_request(self) -> bool {
-        (self.0 >> 2) & 0b1 == 1
+    pub const fn kind(self) -> MessageKind {
+        MessageKind(self.0 & 0xfc000000)
     }
 
-    pub const fn contains_handle(self) -> bool {
-        ((self.0 >> 1) & 1) != 0
+    pub const fn rid(self) -> RequestId {
+        RequestId(((self.0 >> 14) & 0xfff) as u16)
     }
 
-    pub const fn contains_body(self) -> bool {
-        ((self.0 >> 0) & 1) != 0
+    pub const fn has_body(self) -> bool {
+        self.0 & (1 << 26) != 0
+    }
+
+    pub const fn has_handle(self) -> bool {
+        self.0 & (1 << 27) != 0
+    }
+
+    pub const fn body_len(self) -> usize {
+        (self.0 & 0x3fff) as usize
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct RequestId(u32);
+pub struct RequestId(u16);
 
 impl RequestId {
-    pub const fn new(id: u32) -> Self {
+    pub const fn new(id: u16) -> Self {
+        assert!(id <= 0xfff); // 12 bits
         Self(id)
     }
 
-    pub const fn as_u32(self) -> u32 {
+    pub const fn as_u16(self) -> u16 {
         self.0
     }
 }
