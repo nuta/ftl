@@ -231,8 +231,9 @@ struct Channel2(crate::channel::Channel);
 
 impl Channel2 {
     async fn open(&self, path: &[u8], options: OpenOptions) -> Result<Channel2, ErrorCode> {
-        let fut = CallFuture::call_with_body(&self.0, MessageKind::OPEN, options.as_usize(), path)?;
-        let (info, arg) = fut.await?;
+        let (info, arg) =
+            CallFuture::call_with_body(&self.0, MessageKind::OPEN, options.as_usize(), path)?
+                .await?;
         let handle = self.0.recv_with_handle(info)?;
         Ok(Channel2(Channel::from_handle(handle)))
     }
@@ -246,13 +247,13 @@ struct CallFuture {
 impl CallFuture {
     fn call_with_body(
         ch: &Channel,
-        info: MessageKind,
+        kind: MessageKind,
         arg: usize,
         body: &[u8],
     ) -> Result<Self, ErrorCode> {
         let ch_id = ch.handle().id();
         let mid = GLOBAL_EXECUTOR.inflights.lock().alloc_mid(ch_id)?;
-        let info = MessageInfo::new(info, mid, body.len());
+        let info = MessageInfo::new(kind, mid, body.len());
         ch.send_with_body(info, arg, body)?;
         Ok(Self { ch_id, mid })
     }
