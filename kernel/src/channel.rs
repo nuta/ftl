@@ -3,12 +3,12 @@ use alloc::collections::btree_map::BTreeMap;
 use alloc::collections::vec_deque::VecDeque;
 use alloc::vec::Vec;
 use core::cmp::min;
-use core::mem::MaybeUninit;
 
 use ftl_types::channel::MessageInfo;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
-use ftl_types::sink::EventBody;
+use ftl_types::sink::Event;
+use ftl_types::sink::EventHeader;
 use ftl_types::sink::EventType;
 use ftl_types::sink::MessageEvent;
 use ftl_types::sink::PeerClosedEvent;
@@ -182,25 +182,34 @@ impl Handleable for Channel {
 
     fn read_event(
         &self,
-        handle_table: &mut HandleTable,
-    ) -> Result<Option<(EventType, EventBody)>, ErrorCode> {
+        handle_id: HandleId,
+        _handle_table: &mut HandleTable,
+    ) -> Result<Option<Event>, ErrorCode> {
         let mut mutable = self.mutable.lock();
 
         if let Some(message) = mutable.rx_pending.pop_front() {
-            let mut event = unsafe { MaybeUninit::<MessageEvent>::zeroed().assume_init() };
-            event.info = message.info;
             mutable.rx_notified.push(message);
-            return Ok(Some((EventType::MESSAGE, EventBody { message: event })));
+            return Ok(Some(Event {
+                message: MessageEvent {
+                    header: EventHeader {
+                        ty: EventType::MESSAGE,
+                        id: handle_id,
+                    },
+                    info: mutable.rx_notified.last().unwrap().info,
+                },
+            }));
         };
 
         if mutable.peer.is_none() && !mutable.peer_closed_notified {
             mutable.peer_closed_notified = true;
-            return Ok(Some((
-                EventType::PEER_CLOSED,
-                EventBody {
-                    peer_closed: PeerClosedEvent {},
+            return Ok(Some(Event {
+                peer_closed: PeerClosedEvent {
+                    header: EventHeader {
+                        ty: EventType::PEER_CLOSED,
+                        id: handle_id,
+                    },
                 },
-            )));
+            }));
         }
 
         return Ok(None);

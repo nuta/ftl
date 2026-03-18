@@ -2,8 +2,7 @@ use core::any::Any;
 
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
-use ftl_types::sink::EventBody;
-use ftl_types::sink::EventType;
+use ftl_types::sink::Event;
 
 use crate::process::HandleTable;
 use crate::shared_ref::SharedRef;
@@ -94,8 +93,9 @@ pub trait Handleable: Any + Send + Sync {
 
     fn read_event(
         &self,
+        _handle_id: HandleId,
         _handle_table: &mut HandleTable,
-    ) -> Result<Option<(EventType, EventBody)>, ErrorCode> {
+    ) -> Result<Option<Event>, ErrorCode> {
         Err(ErrorCode::Unsupported)
     }
 }

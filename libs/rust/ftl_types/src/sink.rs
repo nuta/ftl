@@ -1,7 +1,10 @@
+use core::fmt;
+
 use crate::channel::MessageInfo;
 use crate::handle::HandleId;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(transparent)]
 pub struct EventType(u32);
 
 impl EventType {
@@ -14,21 +17,8 @@ impl EventType {
 
 #[derive(Clone, Copy)]
 #[repr(C)]
-pub struct Event {
-    pub header: EventHeader,
-    pub body: EventBody,
-}
-
-#[derive(Clone, Copy)]
-#[repr(C)]
-pub struct EventHeader {
-    pub ty: EventType,
-    pub id: HandleId,
-}
-
-#[derive(Clone, Copy)]
-#[repr(C)]
-pub union EventBody {
+pub union Event {
+    pub common: EventHeader,
     pub message: MessageEvent,
     pub irq: IrqEvent,
     pub peer_closed: PeerClosedEvent,
@@ -36,29 +26,68 @@ pub union EventBody {
     pub sandboxed_syscall: SandboxedSyscallEvent,
 }
 
-#[derive(Clone, Copy)]
+impl Event {
+    pub fn header(&self) -> EventHeader {
+        unsafe { self.common }
+    }
+}
+
+impl fmt::Debug for Event {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.header().ty {
+            EventType::MESSAGE => f.debug_struct("MessageEvent").finish(),
+            EventType::IRQ => f.debug_struct("IrqEvent").finish(),
+            EventType::PEER_CLOSED => f.debug_struct("PeerClosedEvent").finish(),
+            EventType::TIMER => f.debug_struct("TimerEvent").finish(),
+            EventType::SANDBOXED_SYSCALL => f.debug_struct("SandboxedSyscallEvent").finish(),
+            _ => f.debug_struct("UnknownEvent").finish(),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+#[repr(C)]
+pub struct EventHeader {
+    pub ty: EventType,
+    pub id: HandleId,
+}
+
+#[derive(Clone, Copy, Debug)]
 #[repr(C)]
 pub struct MessageEvent {
+    pub header: EventHeader,
     pub info: MessageInfo,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 #[repr(C)]
-pub struct TimerEvent {}
+pub struct TimerEvent {
+    pub header: EventHeader,
+}
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 #[repr(C)]
 pub struct IrqEvent {
+    pub header: EventHeader,
     pub irq: u8,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 #[repr(C)]
-pub struct PeerClosedEvent {}
+pub struct PeerClosedEvent {
+    pub header: EventHeader,
+}
 
 #[derive(Clone, Copy, Debug)]
 #[repr(C)]
 pub struct SandboxedSyscallEvent {
+    pub header: EventHeader,
+    pub regs: SyscallRegs,
+}
+
+#[derive(Clone, Copy, Debug)]
+#[repr(C)]
+pub struct SyscallRegs {
     pub rax: u64,
     pub rdi: u64,
     pub rsi: u64,
