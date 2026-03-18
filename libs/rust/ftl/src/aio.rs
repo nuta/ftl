@@ -227,17 +227,14 @@ impl Executor {
 
 static GLOBAL_EXECUTOR: spin::Lazy<Executor> = spin::Lazy::new(|| Executor::new().unwrap());
 
-struct Channel2 {
-    ch: crate::channel::Channel,
-}
+struct Channel2(crate::channel::Channel);
 
 impl Channel2 {
-    async fn open(&self, path: &[u8], options: OpenOptions) -> Result<OwnedHandle, ErrorCode> {
-        let fut =
-            CallFuture::call_with_body(&self.ch, MessageKind::OPEN, options.as_usize(), path)?;
+    async fn open(&self, path: &[u8], options: OpenOptions) -> Result<Channel2, ErrorCode> {
+        let fut = CallFuture::call_with_body(&self.0, MessageKind::OPEN, options.as_usize(), path)?;
         let (info, arg) = fut.await?;
-        let handle = self.ch.recv_with_handle(info)?;
-        Ok(handle)
+        let handle = self.0.recv_with_handle(info)?;
+        Ok(Channel2(Channel::from_handle(handle)))
     }
 }
 

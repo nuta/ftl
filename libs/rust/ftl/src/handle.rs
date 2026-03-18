@@ -40,7 +40,6 @@ impl fmt::Debug for OwnedHandle {
 
 pub trait Handleable {
     fn handle(&self) -> &OwnedHandle;
-
     fn into_handle(self) -> OwnedHandle
     where
         Self: Sized;
