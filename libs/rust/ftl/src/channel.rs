@@ -68,9 +68,9 @@ impl Channel {
         Ok(())
     }
 
-    fn recv_with_body(&self, info: MessageInfo, body: Option<&mut [u8]>) -> Result<(), ErrorCode> {
+    fn recv_with_body(&self, info: MessageInfo, body: &mut [u8]) -> Result<(), ErrorCode> {
         debug_assert!(info.has_body() && !info.has_handle());
-        sys_channel_recv(self.handle.id(), info, body)?;
+        sys_channel_recv(self.handle.id(), info, Some(body))?;
         Ok(())
     }
 
