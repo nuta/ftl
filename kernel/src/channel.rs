@@ -37,7 +37,8 @@ struct Message {
 
 struct Mutable {
     peer: Option<SharedRef<Channel>>,
-    queue: VecDeque<Message>,
+    rx_pending: VecDeque<Message>,
+    rx_notified: Vec<Message>,
     emitter: Option<EventEmitter>,
     peer_closed_notified: bool, // TODO: State: Connected(peer_ch), PeerClosed, Draining /* notified */
 }
@@ -51,7 +52,8 @@ impl Channel {
         let ch0 = SharedRef::new(Self {
             mutable: SpinLock::new(Mutable {
                 peer: None,
-                queue: VecDeque::new(),
+                rx_pending: VecDeque::new(),
+                rx_notified: Vec::new(),
                 emitter: None,
                 peer_closed_notified: false,
             }),
@@ -59,7 +61,8 @@ impl Channel {
         let ch1 = SharedRef::new(Self {
             mutable: SpinLock::new(Mutable {
                 peer: Some(ch0.clone()),
-                queue: VecDeque::new(),
+                rx_pending: VecDeque::new(),
+                rx_notified: Vec::new(),
                 emitter: None,
                 peer_closed_notified: false,
             }),
@@ -102,7 +105,7 @@ impl Channel {
             None
         };
 
-        peer_mutable.queue.push_back(Message {
+        peer_mutable.rx_pending.push_back(Message {
             info,
             arg,
             body,
@@ -114,6 +117,42 @@ impl Channel {
         }
 
         Ok(())
+    }
+
+    fn recv(
+        &self,
+        isolation: &SharedRef<dyn Isolation>,
+        handle_table: &mut HandleTable,
+        info: MessageInfo,
+        body_slice: UserSlice,
+    ) -> Result<HandleId, ErrorCode> {
+        let mut mutable: crate::spinlock::SpinLockGuard<'_, Mutable> = self.mutable.lock();
+
+        // Find the message in the notified queue, and remove it from the vec.
+        let Some(message) = mutable
+            .rx_notified
+            .iter()
+            .position(|message| message.info == info)
+            .map(|pos| mutable.rx_notified.remove(pos))
+        else {
+            return Err(ErrorCode::NotFound);
+        };
+
+        let handle_id = if let Some(handle) = message.handle {
+            debug_assert!(info.has_handle());
+            // TODO: What if the handle table is full? Should we roll back?
+            handle_table.insert(handle)?
+        } else {
+            HandleId::from_raw(0)
+        };
+
+        // Copy the body to the isolation.
+        if let Some(body) = message.body {
+            debug_assert!(info.has_body());
+            isolation.write_bytes(&body_slice, &body)?;
+        }
+
+        Ok(handle_id)
     }
 }
 
@@ -149,10 +188,10 @@ impl Handleable for Channel {
     ) -> Result<Option<(EventType, EventBody)>, ErrorCode> {
         let mut mutable = self.mutable.lock();
 
-        // FIXME: This always returns the first message in the queue.
-        if let Some(message) = mutable.queue.front() {
+        if let Some(message) = mutable.rx_pending.pop_front() {
             let mut event = unsafe { MaybeUninit::<MessageEvent>::zeroed().assume_init() };
             event.info = message.info;
+            mutable.rx_notified.push(message);
             return Ok(Some((EventType::MESSAGE, EventBody { message: event })));
         };
 
