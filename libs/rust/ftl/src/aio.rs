@@ -84,7 +84,7 @@ enum Inflight {
 }
 
 struct InflightMap {
-    entries: HashMap<MessageId, Inflight>,
+    entries: HashMap<(HandleId, MessageId), Inflight>,
     next_mid: u16,
 }
 
@@ -96,13 +96,15 @@ impl InflightMap {
         }
     }
 
-    pub fn alloc_mid(&mut self) -> Result<MessageId, ErrorCode> {
+    pub fn alloc_mid(&mut self, handle_id: HandleId) -> Result<MessageId, ErrorCode> {
         let first_mid = self.next_mid;
         loop {
             let mid = MessageId::new(self.next_mid);
             self.next_mid = (self.next_mid + 1) & 0xfff;
-            if !self.entries.contains_key(&mid) {
-                self.entries.insert(mid, Inflight::Reserved);
+
+            let key = (handle_id, mid);
+            if !self.entries.contains_key(&key) {
+                self.entries.insert(key, Inflight::Reserved);
                 return Ok(mid);
             }
 
@@ -112,29 +114,42 @@ impl InflightMap {
         }
     }
 
-    fn set_waker(&mut self, mid: MessageId, waker: Waker) {
+    fn set_waker(&mut self, handle_id: HandleId, mid: MessageId, waker: Waker) {
+        let key = (handle_id, mid);
         debug_assert!(matches!(
-            self.entries.get(&mid),
+            self.entries.get(&key),
             Some(Inflight::Reserved | Inflight::WaitingForReply(_))
         ));
 
-        let old = self.entries.insert(mid, Inflight::WaitingForReply(waker));
+        self.entries.insert(key, Inflight::WaitingForReply(waker));
     }
 
-    pub fn complete_call(&mut self, mid: MessageId, info: MessageInfo, arg: usize) {
+    pub fn complete_call(
+        &mut self,
+        handle_id: HandleId,
+        mid: MessageId,
+        info: MessageInfo,
+        arg: usize,
+    ) {
+        let key = (handle_id, mid);
         debug_assert!(matches!(
-            self.entries.get(&mid),
+            self.entries.get(&key),
             Some(Inflight::WaitingForReply(_))
         ));
 
-        self.entries.insert(mid, Inflight::Received { info, arg });
+        self.entries.insert(key, Inflight::Received { info, arg });
     }
 
-    pub fn remove_if_completed(&mut self, mid: MessageId) -> Option<(MessageInfo, usize)> {
-        match self.entries.get(&mid) {
+    pub fn remove_if_completed(
+        &mut self,
+        handle_id: HandleId,
+        mid: MessageId,
+    ) -> Option<(MessageInfo, usize)> {
+        let key = (handle_id, mid);
+        match self.entries.get(&key) {
             Some(Inflight::Received { info, arg }) => {
                 let pair = (*info, *arg);
-                self.entries.remove(&mid);
+                self.entries.remove(&key);
                 Some(pair)
             }
             _ => None,
@@ -198,7 +213,9 @@ impl Executor {
             let (id, event) = self.sink.wait().unwrap();
             match event {
                 Event::Message { info, arg } => {
-                    self.inflights.lock().complete_call(info.mid(), info, arg);
+                    self.inflights
+                        .lock()
+                        .complete_call(id, info.mid(), info, arg);
                 }
                 Event::PeerClosed => {
                     todo!()
@@ -225,6 +242,7 @@ impl Channel2 {
 }
 
 struct CallFuture {
+    ch_id: HandleId,
     mid: MessageId,
 }
 
@@ -235,10 +253,11 @@ impl CallFuture {
         arg: usize,
         body: &[u8],
     ) -> Result<Self, ErrorCode> {
-        let mid = GLOBAL_EXECUTOR.inflights.lock().alloc_mid()?;
+        let ch_id = ch.handle().id();
+        let mid = GLOBAL_EXECUTOR.inflights.lock().alloc_mid(ch_id)?;
         let info = MessageInfo::new(info, mid, body.len());
         ch.send_with_body(info, arg, body)?;
-        Ok(Self { mid })
+        Ok(Self { ch_id, mid })
     }
 }
 
@@ -247,10 +266,10 @@ impl Future for CallFuture {
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let mut inflights = GLOBAL_EXECUTOR.inflights.lock();
-        match inflights.remove_if_completed(self.mid) {
+        match inflights.remove_if_completed(self.ch_id, self.mid) {
             Some((info, arg)) => Poll::Ready(Ok((info, arg))),
             None => {
-                inflights.set_waker(self.mid, cx.waker().clone());
+                inflights.set_waker(self.ch_id, self.mid, cx.waker().clone());
                 Poll::Pending
             }
         }
