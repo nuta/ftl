@@ -58,19 +58,15 @@ impl TaskWaker {
     fn new(task_id: TaskId, run_queue: Arc<RunQueue>) -> Self {
         Self { task_id, run_queue }
     }
-
-    fn do_wake(&self) {
-        self.run_queue.push(self.task_id);
-    }
 }
 
 impl Wake for TaskWaker {
     fn wake(self: Arc<Self>) {
-        self.do_wake();
+        self.run_queue.push(self.task_id);
     }
 
     fn wake_by_ref(self: &Arc<Self>) {
-        self.do_wake();
+        self.run_queue.push(self.task_id);
     }
 }
 
