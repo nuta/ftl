@@ -11,12 +11,14 @@ use ftl_types::channel::RequestId;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use ftl_types::syscall::SYS_CHANNEL_CREATE;
+use ftl_types::syscall::SYS_CHANNEL_RECV;
 use ftl_types::syscall::SYS_CHANNEL_SEND;
 use log::warn;
 
 use crate::handle::Handleable;
 use crate::handle::OwnedHandle;
 use crate::syscall::syscall1;
+use crate::syscall::syscall3;
 use crate::syscall::syscall5;
 
 pub struct Channel {
@@ -66,19 +68,35 @@ fn sys_channel_create() -> Result<(OwnedHandle, OwnedHandle), ErrorCode> {
 pub fn sys_channel_send(
     ch: HandleId,
     info: MessageInfo,
-    rid_or_cookie: usize, // cookie (requests) or request_id (replies)
-    inline: usize,
-    body_or_handle: usize, // body_ptr (requests) or handle (replies)
-    body_len: usize,
+    arg: usize,
+    body: Option<&[u8]>,
+    handle: Option<HandleId>,
 ) -> Result<(), ErrorCode> {
-    todo!()
-    // syscall5(
-    //     SYS_CHANNEL_SEND,
-    //     ch.as_usize(),
-    //     info.as_usize() | (body_len << 8),
-    //     rid_or_cookie,
-    //     inline,
-    //     body_or_handle,
-    // )?;
-    // Ok(())
+    let body_ptr = body.map(|body| body.as_ptr() as usize).unwrap_or(0);
+    let handle_id = handle.map(|handle| handle.as_usize()).unwrap_or(0);
+    syscall5(
+        SYS_CHANNEL_SEND,
+        ch.as_usize(),
+        info.as_raw(),
+        arg,
+        body_ptr,
+        handle_id,
+    )?;
+    Ok(())
+}
+
+pub fn sys_channel_recv(
+    ch: HandleId,
+    info: MessageInfo,
+    body: Option<&mut [u8]>,
+) -> Result<HandleId, ErrorCode> {
+    let body_ptr = body
+        .map(|body| {
+            debug_assert_eq!(body.len(), info.body_len());
+            body.as_mut_ptr() as usize
+        })
+        .unwrap_or(0);
+
+    let ret = syscall3(SYS_CHANNEL_RECV, ch.as_usize(), info.as_raw(), body_ptr)?;
+    Ok(HandleId::from_raw(ret))
 }

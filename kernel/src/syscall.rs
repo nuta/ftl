@@ -64,6 +64,7 @@ fn do_syscall(
         SYS_HANDLE_CLOSE => crate::handle::sys_handle_close(thread, a0),
         SYS_CHANNEL_CREATE => crate::channel::sys_channel_create(thread, a0),
         SYS_CHANNEL_SEND => crate::channel::sys_channel_send(thread, a0, a1, a2, a3, a4),
+        SYS_CHANNEL_RECV => crate::channel::sys_channel_recv(thread, a0, a1, a2),
         SYS_SINK_CREATE => crate::sink::sys_sink_create(thread),
         SYS_SINK_ADD => crate::sink::sys_sink_add(thread, a0, a1),
         SYS_SINK_REMOVE => crate::sink::sys_sink_remove(thread, a0, a1),

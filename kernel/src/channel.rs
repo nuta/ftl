@@ -241,8 +241,8 @@ pub fn sys_channel_send(
     let arg = a2;
     let body_ptr = UserPtr::new(a3);
     let handle_id = HandleId::from_raw(a4);
-
     let slice = UserSlice::new(body_ptr, info.body_len())?;
+
     let process = current.process();
     let mut handle_table = process.handle_table().lock();
     let ch = handle_table
@@ -258,4 +258,25 @@ pub fn sys_channel_send(
         handle_id,
     )?;
     Ok(SyscallResult::Return(0))
+}
+
+pub fn sys_channel_recv(
+    current: &SharedRef<Thread>,
+    a0: usize,
+    a1: usize,
+    a2: usize,
+) -> Result<SyscallResult, ErrorCode> {
+    let ch_id = HandleId::from_raw(a0);
+    let info = MessageInfo::from_raw(a1);
+    let body_ptr = UserPtr::new(a2);
+    let slice = UserSlice::new(body_ptr, info.body_len())?;
+
+    let process = current.process();
+    let mut handle_table = process.handle_table().lock();
+    let ch = handle_table
+        .get::<Channel>(ch_id)?
+        .authorize(HandleRight::READ)?;
+
+    let handle_id = ch.recv(process.isolation(), &mut handle_table, info, slice)?;
+    Ok(SyscallResult::Return(handle_id.as_usize()))
 }
