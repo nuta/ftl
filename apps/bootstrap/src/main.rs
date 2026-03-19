@@ -46,13 +46,6 @@ enum Service {
     },
 }
 
-fn reply_error(ch: &Channel, mid: MessageId, error: ErrorCode) {
-    let reply_info = MessageInfo::new(MessageKind::ERROR_REPLY, mid, 0);
-    if let Err(err) = ch.send(reply_info, error.as_usize()) {
-        warn!("failed to send error reply: {:?}", err);
-    }
-}
-
 fn forward_connect(
     service_name: &str,
     server_ch: &Rc<Channel>,
@@ -61,11 +54,11 @@ fn forward_connect(
 ) -> Result<(), (PendingOpen, ErrorCode)> {
     let mid = MessageId::new(1);
     let path = format!("service/{service_name}");
-    let info = MessageInfo::new(MessageKind::OPEN, mid, path.len());
     pending_opens.insert(mid, waiter);
 
+    let options = OpenOptions::OPEN;
     if let Err(error) =
-        server_ch.send_with_body(info, OpenOptions::OPEN.as_usize(), path.as_bytes())
+        server_ch.send_body(MessageKind::OPEN, mid, path.as_bytes(), options.as_usize())
     {
         let waiter = pending_opens.remove(&mid).unwrap();
         return Err((waiter, error));
@@ -99,11 +92,11 @@ fn main() {
         let (id, event) = sink.wait().unwrap();
         let context = contexts.get(&id).unwrap();
         match (context, event) {
-            (Context::Client { ch }, Event::Message { info, arg }) => {
+            (Context::Client { ch }, Event::Message { info, arg1, arg2 }) => {
                 match info.kind() {
                     MessageKind::OPEN => {
                         let mut buf = vec![0; info.body_len()];
-                        if let Err(error) = ch.recv_with_body(info, &mut buf) {
+                        if let Err(error) = ch.recv_body(info, &mut buf) {
                             warn!("failed to recv with body: {:?}", error);
                             continue;
                         }
@@ -112,18 +105,18 @@ fn main() {
                             Ok(path) => path,
                             Err(error) => {
                                 warn!("failed to convert path to string: {:?}", error);
-                                reply_error(ch, info.mid(), ErrorCode::InvalidArgument);
+                                ch.reply_error(info.mid(), ErrorCode::InvalidArgument);
                                 continue;
                             }
                         };
 
                         let Some(service_name) = path.strip_prefix("service/") else {
                             warn!("invalid path: {:?}", path);
-                            reply_error(ch, info.mid(), ErrorCode::InvalidArgument);
+                            ch.reply_error(info.mid(), ErrorCode::InvalidArgument);
                             continue;
                         };
 
-                        let options = OpenOptions::from_usize(arg);
+                        let options = OpenOptions::from_usize(arg1);
                         if options == OpenOptions::OPEN {
                             let waiter = PendingOpen {
                                 client_ch: ch.clone(),
@@ -142,7 +135,7 @@ fn main() {
                                         waiter,
                                     ) {
                                         warn!("failed to forward connect request: {:?}", error);
-                                        reply_error(&waiter.client_ch, waiter.client_mid, error);
+                                        waiter.client_ch.reply_error(waiter.client_mid, error);
                                     }
                                 }
                                 Some(Service::Waiting { waiters }) => {
@@ -162,7 +155,7 @@ fn main() {
                                 services.get(service_name),
                                 Some(Service::Registered { .. })
                             ) {
-                                reply_error(ch, info.mid(), ErrorCode::AlreadyExists);
+                                ch.reply_error(info.mid(), ErrorCode::AlreadyExists);
                                 continue;
                             }
 
@@ -175,16 +168,16 @@ fn main() {
                             let (our_ch, their_ch) = match Channel::new() {
                                 Ok(pair) => pair,
                                 Err(error) => {
-                                    reply_error(ch, info.mid(), error);
+                                    ch.reply_error(info.mid(), error);
                                     continue;
                                 }
                             };
 
-                            let reply_info =
-                                MessageInfo::new(MessageKind::OPEN_REPLY, info.mid(), 0);
-                            if let Err(error) =
-                                ch.send_with_handle(reply_info, 0, their_ch.into_handle())
-                            {
+                            if let Err(error) = ch.send_handle(
+                                MessageKind::OPEN_REPLY,
+                                info.mid(),
+                                their_ch.into_handle(),
+                            ) {
                                 warn!("failed to reply to service registration: {:?}", error);
                                 continue;
                             }
@@ -217,12 +210,12 @@ fn main() {
                                     forward_connect(service_name, server_ch, pending_opens, waiter)
                                 {
                                     warn!("failed to forward queued connect request: {:?}", error);
-                                    reply_error(&waiter.client_ch, waiter.client_mid, error);
+                                    waiter.client_ch.reply_error(waiter.client_mid, error);
                                 }
                             }
                         } else {
                             warn!("invalid options: {:?}", options);
-                            reply_error(ch, info.mid(), ErrorCode::InvalidArgument);
+                            ch.reply_error(info.mid(), ErrorCode::InvalidArgument);
                         }
                     }
                     _ => {
@@ -230,7 +223,7 @@ fn main() {
                     }
                 }
             }
-            (Context::Service { name }, Event::Message { info, arg }) => {
+            (Context::Service { name }, Event::Message { info, arg1, arg2 }) => {
                 let Some(Service::Registered {
                     server_ch,
                     pending_opens,
@@ -243,7 +236,7 @@ fn main() {
 
                 match info.kind() {
                     MessageKind::OPEN_REPLY => {
-                        let handle = match server_ch.recv_with_handle(info) {
+                        let handle = match server_ch.recv_handle(info) {
                             Ok(handle) => handle,
                             Err(error) => {
                                 warn!("failed to receive open reply: {:?}", error);
@@ -256,15 +249,16 @@ fn main() {
                             continue;
                         };
 
-                        let reply_info =
-                            MessageInfo::new(MessageKind::OPEN_REPLY, waiter.client_mid, 0);
-                        if let Err(error) = waiter.client_ch.send_with_handle(reply_info, 0, handle)
-                        {
+                        if let Err(error) = waiter.client_ch.send_handle(
+                            MessageKind::OPEN_REPLY,
+                            waiter.client_mid,
+                            handle,
+                        ) {
                             warn!("failed to send open reply to client: {:?}", error);
                         }
                     }
                     MessageKind::ERROR_REPLY => {
-                        if let Err(error) = server_ch.recv(info) {
+                        if let Err(error) = server_ch.recv_args(info) {
                             warn!("failed to receive error reply: {:?}", error);
                             continue;
                         }
@@ -274,8 +268,8 @@ fn main() {
                             continue;
                         };
 
-                        let error = ErrorCode::from(arg);
-                        reply_error(&waiter.client_ch, waiter.client_mid, error);
+                        let error = ErrorCode::from(arg1);
+                        waiter.client_ch.reply_error(waiter.client_mid, error);
                     }
                     _ => {
                         warn!("unhandled service message: {:?}", info.kind());

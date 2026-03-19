@@ -25,6 +25,7 @@ pub enum ErrorCode {
     InternalError = 17,
     OutOfResources = 18,
     BadAccess = 19,
+    TooManyCalls = 20,
 }
 
 impl ErrorCode {
@@ -56,6 +57,7 @@ impl From<usize> for ErrorCode {
             17 => Self::InternalError,
             18 => Self::OutOfResources,
             19 => Self::BadAccess,
+            20 => Self::TooManyCalls,
             _ => Self::Unknown,
         }
     }

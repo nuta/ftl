@@ -3,7 +3,6 @@
 
 use ftl::channel::Channel;
 use ftl::channel::MessageId;
-use ftl::channel::MessageInfo;
 use ftl::channel::MessageKind;
 use ftl::channel::OpenOptions;
 use ftl::handle::Handleable;
@@ -24,20 +23,19 @@ fn main() {
     // Ask the supervisor process to connect to the pong service.
     let mid = MessageId::new(1);
     let path = b"service/pong";
-    let info = MessageInfo::new(MessageKind::OPEN, mid, path.len());
     let options = OpenOptions::OPEN;
     supervisor_ch
-        .send_with_body(info, options.as_usize(), path)
+        .send_body(MessageKind::OPEN, mid, path, options.as_usize())
         .unwrap();
 
     // Wait for the pong channel.
     let pong_ch = loop {
         let (id, event) = sink.wait().unwrap();
         match event {
-            Event::Message { info, arg } if id == supervisor_ch.handle().id() => {
+            Event::Message { info, arg1, arg2 } if id == supervisor_ch.handle().id() => {
                 match info.kind() {
                     MessageKind::OPEN_REPLY => {
-                        let handle = supervisor_ch.recv_with_handle(info).unwrap();
+                        let handle = supervisor_ch.recv_handle(info).unwrap();
                         break Channel::from_handle(handle);
                     }
                     kind => {
@@ -57,18 +55,17 @@ fn main() {
     // Send the first message to the pong service.
     let mid = MessageId::new(1);
     let body = b"Hello, world!";
-    let info = MessageInfo::new(MessageKind::WRITE, mid, body.len());
-    pong_ch.send_with_body(info, 0, body).unwrap();
+    pong_ch.send_body(MessageKind::WRITE, mid, body, 0).unwrap();
 
     let mut num_received = 0;
     loop {
         let (id, event) = sink.wait().unwrap();
         match event {
-            Event::Message { info, arg } if id == pong_ch.handle().id() => {
+            Event::Message { info, arg1, arg2 } if id == pong_ch.handle().id() => {
                 match info.kind() {
                     MessageKind::WRITE_REPLY => {
-                        pong_ch.recv(info).unwrap();
-                        info!("received write reply: written_len={arg}");
+                        pong_ch.recv_args(info).unwrap();
+                        info!("received write reply: written_len={arg1}");
 
                         num_received += 1;
                         if num_received >= 10 {
@@ -81,8 +78,7 @@ fn main() {
                         let mid = MessageId::new(1);
 
                         // Send more messages!
-                        let info = MessageInfo::new(MessageKind::WRITE, mid, body.len());
-                        pong_ch.send_with_body(info, 0, body).unwrap();
+                        pong_ch.send_body(MessageKind::WRITE, mid, body, 0).unwrap();
                     }
                     kind => {
                         warn!("unhandled message: {:?}", kind);

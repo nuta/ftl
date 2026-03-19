@@ -41,54 +41,75 @@ impl Channel {
         Self { handle }
     }
 
-    pub fn send(&self, info: MessageInfo, arg: usize) -> Result<(), ErrorCode> {
-        debug_assert!(!info.has_body() && !info.has_handle());
-        sys_channel_send(self.handle.id(), info, arg, null(), HandleId::ZERO)?;
-        Ok(())
-    }
-
-    pub fn send_with_body(
+    pub fn send_args(
         &self,
-        info: MessageInfo,
-        arg: usize,
-        body: &[u8],
+        kind: MessageKind,
+        mid: MessageId,
+        arg1: usize,
+        arg2: usize,
     ) -> Result<(), ErrorCode> {
-        debug_assert!(info.has_body() && !info.has_handle());
-        assert_eq!(body.len(), info.body_len());
-        sys_channel_send(self.handle.id(), info, arg, body.as_ptr(), HandleId::ZERO)?;
+        let info = MessageInfo::new(kind, mid, 0);
+        debug_assert!(!info.has_body() && !info.has_handle());
+
+        sys_channel_send(self.handle.id(), info, arg1, null(), arg2)?;
         Ok(())
     }
 
-    pub fn send_with_handle(
+    pub fn send_body(
         &self,
-        info: MessageInfo,
-        arg: usize,
+        kind: MessageKind,
+        mid: MessageId,
+        body: &[u8],
+        arg1: usize,
+    ) -> Result<(), ErrorCode> {
+        let info = MessageInfo::new(kind, mid, body.len());
+        debug_assert!(info.has_body() && !info.has_handle());
+
+        sys_channel_send(self.handle.id(), info, arg1, body.as_ptr(), 0)?;
+        Ok(())
+    }
+
+    pub fn send_handle(
+        &self,
+        kind: MessageKind,
+        mid: MessageId,
         handle: OwnedHandle,
     ) -> Result<(), ErrorCode> {
+        let info = MessageInfo::new(kind, mid, 0);
         debug_assert!(!info.has_body() && info.has_handle());
+
         let handle_id = handle.id();
         mem::forget(handle);
-        sys_channel_send(self.handle.id(), info, arg, null(), handle_id)?;
+        sys_channel_send(self.handle.id(), info, 0, null(), handle_id.as_usize())?;
         Ok(())
     }
 
-    pub fn recv(&self, info: MessageInfo) -> Result<(), ErrorCode> {
+    pub fn recv_args(&self, info: MessageInfo) -> Result<(), ErrorCode> {
         debug_assert!(!info.has_body() && !info.has_handle());
+
         sys_channel_recv(self.handle.id(), info, null_mut())?;
         Ok(())
     }
 
-    pub fn recv_with_body(&self, info: MessageInfo, body: &mut [u8]) -> Result<(), ErrorCode> {
+    pub fn recv_body(&self, info: MessageInfo, body: &mut [u8]) -> Result<(), ErrorCode> {
         debug_assert!(info.has_body() && !info.has_handle());
         assert_eq!(body.len(), info.body_len());
+
         sys_channel_recv(self.handle.id(), info, body.as_mut_ptr())?;
         Ok(())
     }
 
-    pub fn recv_with_handle(&self, info: MessageInfo) -> Result<OwnedHandle, ErrorCode> {
+    pub fn recv_handle(&self, info: MessageInfo) -> Result<OwnedHandle, ErrorCode> {
         debug_assert!(!info.has_body() && info.has_handle());
+
         let handle_id = sys_channel_recv(self.handle.id(), info, null_mut())?;
         Ok(OwnedHandle::from_raw(handle_id))
+    }
+
+    pub fn reply_error(&self, mid: MessageId, error: ErrorCode) {
+        if let Err(send_err) = self.send_args(MessageKind::ERROR_REPLY, mid, error.as_usize(), 0) {
+            warn!("failed to reply error {:?} to : {:?}", error, send_err);
+        }
     }
 }
 
@@ -122,17 +143,17 @@ fn sys_channel_create() -> Result<(OwnedHandle, OwnedHandle), ErrorCode> {
 pub fn sys_channel_send(
     ch: HandleId,
     info: MessageInfo,
-    arg: usize,
+    arg1: usize,
     body: *const u8,
-    handle: HandleId,
+    handle_or_arg2: usize,
 ) -> Result<(), ErrorCode> {
     syscall5(
         SYS_CHANNEL_SEND,
         ch.as_usize(),
         info.as_raw(),
-        arg,
+        arg1,
         body as usize,
-        handle.as_usize(),
+        handle_or_arg2,
     )?;
     Ok(())
 }
