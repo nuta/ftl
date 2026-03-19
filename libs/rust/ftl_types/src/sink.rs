@@ -57,7 +57,8 @@ pub struct EventHeader {
 pub struct MessageEvent {
     pub header: EventHeader,
     pub info: MessageInfo,
-    pub arg: usize,
+    pub arg1: usize,
+    pub arg2: usize,
 }
 
 #[derive(Clone, Copy, Debug)]

@@ -19,7 +19,11 @@ use crate::syscall::syscall2;
 
 #[derive(Debug)]
 pub enum Event {
-    Message { info: MessageInfo, arg: usize },
+    Message {
+        info: MessageInfo,
+        arg1: usize,
+        arg2: usize,
+    },
     PeerClosed,
 }
 
@@ -55,7 +59,8 @@ impl Sink {
             EventType::MESSAGE => {
                 Event::Message {
                     info: unsafe { raw.message.info },
-                    arg: unsafe { raw.message.arg },
+                    arg1: unsafe { raw.message.arg1 },
+                    arg2: unsafe { raw.message.arg2 },
                 }
             }
             EventType::PEER_CLOSED => Event::PeerClosed,

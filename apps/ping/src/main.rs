@@ -34,7 +34,7 @@ fn main() {
     let pong_ch = loop {
         let (id, event) = sink.wait().unwrap();
         match event {
-            Event::Message { info, arg } if id == supervisor_ch.handle().id() => {
+            Event::Message { info, arg1, arg2 } if id == supervisor_ch.handle().id() => {
                 match info.kind() {
                     MessageKind::OPEN_REPLY => {
                         let handle = supervisor_ch.recv_with_handle(info).unwrap();
@@ -64,11 +64,11 @@ fn main() {
     loop {
         let (id, event) = sink.wait().unwrap();
         match event {
-            Event::Message { info, arg } if id == pong_ch.handle().id() => {
+            Event::Message { info, arg1, arg2 } if id == pong_ch.handle().id() => {
                 match info.kind() {
                     MessageKind::WRITE_REPLY => {
                         pong_ch.recv(info).unwrap();
-                        info!("received write reply: written_len={arg}");
+                        info!("received write reply: written_len={arg1}");
 
                         num_received += 1;
                         if num_received >= 10 {

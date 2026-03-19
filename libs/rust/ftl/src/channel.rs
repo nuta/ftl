@@ -41,9 +41,9 @@ impl Channel {
         Self { handle }
     }
 
-    pub fn send(&self, info: MessageInfo, arg: usize) -> Result<(), ErrorCode> {
+    pub fn send(&self, info: MessageInfo, arg1: usize, arg2: usize) -> Result<(), ErrorCode> {
         debug_assert!(!info.has_body() && !info.has_handle());
-        sys_channel_send(self.handle.id(), info, arg, null(), HandleId::ZERO)?;
+        sys_channel_send(self.handle.id(), info, arg1, null(), arg2)?;
         Ok(())
     }
 
@@ -55,7 +55,7 @@ impl Channel {
     ) -> Result<(), ErrorCode> {
         debug_assert!(info.has_body() && !info.has_handle());
         assert_eq!(body.len(), info.body_len());
-        sys_channel_send(self.handle.id(), info, arg, body.as_ptr(), HandleId::ZERO)?;
+        sys_channel_send(self.handle.id(), info, arg, body.as_ptr(), 0)?;
         Ok(())
     }
 
@@ -68,7 +68,7 @@ impl Channel {
         debug_assert!(!info.has_body() && info.has_handle());
         let handle_id = handle.id();
         mem::forget(handle);
-        sys_channel_send(self.handle.id(), info, arg, null(), handle_id)?;
+        sys_channel_send(self.handle.id(), info, arg, null(), handle_id.as_usize())?;
         Ok(())
     }
 
@@ -122,17 +122,17 @@ fn sys_channel_create() -> Result<(OwnedHandle, OwnedHandle), ErrorCode> {
 pub fn sys_channel_send(
     ch: HandleId,
     info: MessageInfo,
-    arg: usize,
+    arg1: usize,
     body: *const u8,
-    handle: HandleId,
+    handle_or_arg2: usize,
 ) -> Result<(), ErrorCode> {
     syscall5(
         SYS_CHANNEL_SEND,
         ch.as_usize(),
         info.as_raw(),
-        arg,           // X
-        body as usize, // X
-        handle.as_usize(),
+        arg1,
+        body as usize,
+        handle_or_arg2,
     )?;
     Ok(())
 }

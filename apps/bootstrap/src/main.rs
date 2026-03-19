@@ -48,7 +48,7 @@ enum Service {
 
 fn reply_error(ch: &Channel, mid: MessageId, error: ErrorCode) {
     let reply_info = MessageInfo::new(MessageKind::ERROR_REPLY, mid, 0);
-    if let Err(err) = ch.send(reply_info, error.as_usize()) {
+    if let Err(err) = ch.send(reply_info, error.as_usize(), 0) {
         warn!("failed to send error reply: {:?}", err);
     }
 }
@@ -99,7 +99,7 @@ fn main() {
         let (id, event) = sink.wait().unwrap();
         let context = contexts.get(&id).unwrap();
         match (context, event) {
-            (Context::Client { ch }, Event::Message { info, arg }) => {
+            (Context::Client { ch }, Event::Message { info, arg1, arg2 }) => {
                 match info.kind() {
                     MessageKind::OPEN => {
                         let mut buf = vec![0; info.body_len()];
@@ -123,7 +123,7 @@ fn main() {
                             continue;
                         };
 
-                        let options = OpenOptions::from_usize(arg);
+                        let options = OpenOptions::from_usize(arg1);
                         if options == OpenOptions::OPEN {
                             let waiter = PendingOpen {
                                 client_ch: ch.clone(),
@@ -230,7 +230,7 @@ fn main() {
                     }
                 }
             }
-            (Context::Service { name }, Event::Message { info, arg }) => {
+            (Context::Service { name }, Event::Message { info, arg1, arg2 }) => {
                 let Some(Service::Registered {
                     server_ch,
                     pending_opens,
@@ -274,7 +274,7 @@ fn main() {
                             continue;
                         };
 
-                        let error = ErrorCode::from(arg);
+                        let error = ErrorCode::from(arg1);
                         reply_error(&waiter.client_ch, waiter.client_mid, error);
                     }
                     _ => {

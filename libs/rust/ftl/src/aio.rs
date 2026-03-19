@@ -80,7 +80,11 @@ impl Wake for TaskWaker {
 enum Inflight {
     Reserved,
     WaitingForReply(Waker),
-    Received { info: MessageInfo, arg: usize },
+    Received {
+        info: MessageInfo,
+        arg1: usize,
+        arg2: usize,
+    },
 }
 
 struct InflightMap {
@@ -129,7 +133,8 @@ impl InflightMap {
         handle_id: HandleId,
         mid: MessageId,
         info: MessageInfo,
-        arg: usize,
+        arg1: usize,
+        arg2: usize,
     ) {
         let key = (handle_id, mid);
         debug_assert!(matches!(
@@ -137,18 +142,19 @@ impl InflightMap {
             Some(Inflight::WaitingForReply(_))
         ));
 
-        self.entries.insert(key, Inflight::Received { info, arg });
+        self.entries
+            .insert(key, Inflight::Received { info, arg1, arg2 });
     }
 
     pub fn remove_if_completed(
         &mut self,
         handle_id: HandleId,
         mid: MessageId,
-    ) -> Option<(MessageInfo, usize)> {
+    ) -> Option<(MessageInfo, usize, usize)> {
         let key = (handle_id, mid);
         match self.entries.get(&key) {
-            Some(Inflight::Received { info, arg }) => {
-                let pair = (*info, *arg);
+            Some(Inflight::Received { info, arg1, arg2 }) => {
+                let pair = (*info, *arg1, *arg2);
                 self.entries.remove(&key);
                 Some(pair)
             }
@@ -217,10 +223,10 @@ impl Executor {
             self.run_runnable_tasks();
             let (id, event) = self.sink.wait().unwrap();
             match event {
-                Event::Message { info, arg } => {
+                Event::Message { info, arg1, arg2 } => {
                     self.inflights
                         .lock()
-                        .complete_call(id, info.mid(), info, arg);
+                        .complete_call(id, info.mid(), info, arg1, arg2);
                 }
                 Event::PeerClosed => {
                     todo!()
@@ -236,7 +242,7 @@ struct Channel2(crate::channel::Channel);
 
 impl Channel2 {
     async fn open(&self, path: &[u8], options: OpenOptions) -> Result<Channel2, ErrorCode> {
-        let (info, arg) =
+        let (info, arg1, arg2) =
             CallFuture::call_with_body(&self.0, MessageKind::OPEN, options.as_usize(), path)?
                 .await?;
         let handle = self.0.recv_with_handle(info)?;
@@ -265,12 +271,12 @@ impl CallFuture {
 }
 
 impl Future for CallFuture {
-    type Output = Result<(MessageInfo, usize), ErrorCode>;
+    type Output = Result<(MessageInfo, usize, usize), ErrorCode>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let mut inflights = GLOBAL_EXECUTOR.inflights.lock();
         match inflights.remove_if_completed(self.ch_id, self.mid) {
-            Some((info, arg)) => Poll::Ready(Ok((info, arg))),
+            Some((info, arg1, arg2)) => Poll::Ready(Ok((info, arg1, arg2))),
             None => {
                 inflights.set_waker(self.ch_id, self.mid, cx.waker().clone());
                 Poll::Pending

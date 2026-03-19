@@ -30,7 +30,8 @@ use crate::thread::Thread;
 
 struct Message {
     info: MessageInfo,
-    arg: usize,
+    arg1: usize,
+    arg2: usize,
     body: Option<Vec<u8>>,
     handle: Option<AnyHandle>,
 }
@@ -77,17 +78,19 @@ impl Channel {
         isolation: &SharedRef<dyn Isolation>,
         handle_table: &mut HandleTable,
         info: MessageInfo,
-        arg: usize,
+        arg1: usize,
         body_slice: UserSlice,
-        handle: HandleId,
+        handle_or_arg2: usize,
     ) -> Result<(), ErrorCode> {
         let mut mutable = self.mutable.lock();
         let peer = mutable.peer.as_ref().ok_or(ErrorCode::PeerClosed)?.clone();
 
-        let handle = if info.has_handle() {
-            Some(handle_table.remove(handle)?)
+        let (handle, arg2) = if info.has_handle() {
+            let handle_id = HandleId::from_raw(handle_or_arg2);
+            let handle = handle_table.remove(handle_id)?;
+            (Some(handle), 0)
         } else {
-            None
+            (None, handle_or_arg2)
         };
 
         // Drop the lock before acquiring the peer's lock. Otherwise, we may
@@ -106,7 +109,8 @@ impl Channel {
 
         peer_mutable.rx_pending.push_back(Message {
             info,
-            arg,
+            arg1,
+            arg2,
             body,
             handle,
         });
@@ -196,7 +200,8 @@ impl Handleable for Channel {
                         id: handle_id,
                     },
                     info: message.info,
-                    arg: message.arg,
+                    arg1: message.arg1,
+                    arg2: message.arg2,
                 },
             };
 
@@ -251,9 +256,9 @@ pub fn sys_channel_send(
 ) -> Result<SyscallResult, ErrorCode> {
     let ch_id = HandleId::from_raw(a0);
     let info = MessageInfo::from_raw(a1);
-    let arg = a2;
+    let arg1 = a2;
     let body_ptr = UserPtr::new(a3);
-    let handle_id = HandleId::from_raw(a4);
+    let handle_or_arg2 = a4;
     let slice = UserSlice::new(body_ptr, info.body_len())?;
 
     let process = current.process();
@@ -266,9 +271,9 @@ pub fn sys_channel_send(
         process.isolation(),
         &mut handle_table,
         info,
-        arg,
+        arg1,
         slice,
-        handle_id,
+        handle_or_arg2,
     )?;
     Ok(SyscallResult::Return(0))
 }

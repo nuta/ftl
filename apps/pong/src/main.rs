@@ -7,6 +7,7 @@ use ftl::channel::MessageInfo;
 use ftl::channel::MessageKind;
 use ftl::channel::OpenOptions;
 use ftl::collections::HashMap;
+use ftl::error::ErrorCode;
 use ftl::handle::Handleable;
 use ftl::prelude::*;
 use ftl::sink::Event;
@@ -40,7 +41,7 @@ fn main() {
     let server_ch = loop {
         let (id, event) = sink.wait().unwrap();
         match event {
-            Event::Message { info, arg: _ } if id == supervisor_ch.handle().id() => {
+            Event::Message { info, .. } if id == supervisor_ch.handle().id() => {
                 match info.kind() {
                     MessageKind::OPEN_REPLY => {
                         let handle = supervisor_ch.recv_with_handle(info).unwrap();
@@ -65,13 +66,15 @@ fn main() {
         let (id, event) = sink.wait().unwrap();
         let context = contexts.get(&id).unwrap();
         match (context, event) {
-            (Context::Server, Event::Message { info, arg: _ }) => {
+            (Context::Server, Event::Message { info, .. }) => {
                 match info.kind() {
                     MessageKind::OPEN => {
                         if info.body_len() > 1024 {
                             let reply_info =
                                 MessageInfo::new(MessageKind::ERROR_REPLY, info.mid(), 0);
-                            server_ch.send(reply_info, 0).unwrap();
+                            server_ch
+                                .send(reply_info, ErrorCode::InvalidArgument.as_usize(), 0)
+                                .unwrap();
                             continue;
                         }
 
@@ -99,13 +102,13 @@ fn main() {
                     }
                 }
             }
-            (Context::Client { ch }, Event::Message { info, arg: _ }) => {
+            (Context::Client { ch }, Event::Message { info, .. }) => {
                 match info.kind() {
                     MessageKind::WRITE => {
                         if info.body_len() > 1024 {
                             let reply_info =
                                 MessageInfo::new(MessageKind::ERROR_REPLY, info.mid(), 0);
-                            ch.send(reply_info, 0).unwrap();
+                            ch.send(reply_info, 0, 0).unwrap();
                             continue;
                         }
 
@@ -117,7 +120,7 @@ fn main() {
 
                         info!("received write message: {:?}", core::str::from_utf8(&buf));
                         let reply_info = MessageInfo::new(MessageKind::WRITE_REPLY, info.mid(), 0);
-                        ch.send(reply_info, buf.len()).unwrap();
+                        ch.send(reply_info, buf.len(), 0).unwrap();
                     }
                     _ => {
                         warn!("unhandled message: {:?}", info.kind());
