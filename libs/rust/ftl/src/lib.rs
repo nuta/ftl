@@ -18,6 +18,7 @@ pub mod allocator;
 pub mod arch;
 mod panic;
 
+pub mod aio;
 pub mod buffer;
 pub mod collections;
 pub mod driver;
