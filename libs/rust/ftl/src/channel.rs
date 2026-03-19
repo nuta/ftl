@@ -130,8 +130,8 @@ pub fn sys_channel_send(
         SYS_CHANNEL_SEND,
         ch.as_usize(),
         info.as_raw(),
-        arg,
-        body as usize,
+        arg,           // X
+        body as usize, // X
         handle.as_usize(),
     )?;
     Ok(())
