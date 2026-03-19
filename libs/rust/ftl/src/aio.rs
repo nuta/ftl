@@ -165,7 +165,7 @@ enum Error {
 struct Executor {
     tasks: spin::Mutex<HashMap<TaskId, Task>>,
     run_queue: Arc<RunQueue>,
-    inflights: Arc<spin::Mutex<InflightMap>>,
+    inflights: spin::Mutex<InflightMap>,
     sink: Sink,
 }
 
@@ -175,7 +175,7 @@ impl Executor {
         Ok(Self {
             tasks: spin::Mutex::new(HashMap::new()),
             run_queue: Arc::new(RunQueue::new()),
-            inflights: Arc::new(spin::Mutex::new(InflightMap::new())),
+            inflights: spin::Mutex::new(InflightMap::new()),
             sink,
         })
     }
