@@ -3,7 +3,7 @@ use core::mem::MaybeUninit;
 
 use ftl_arrayvec::ArrayString;
 use ftl_arrayvec::ArrayVec;
-use ftl_types::environ::StartInfo;
+use ftl_types::start_info::StartInfo;
 
 use crate::address::PAddr;
 use crate::arch;

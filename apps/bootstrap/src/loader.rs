@@ -10,7 +10,7 @@ use ftl::thread::Thread;
 use ftl::vmarea::VmArea;
 use ftl::vmspace::PageAttrs;
 use ftl::vmspace::VmSpace;
-use ftl_types::environ::StartInfo;
+use ftl_types::start_info::StartInfo;
 use ftl_utils::alignment::align_up;
 
 use crate::elf::Elf;

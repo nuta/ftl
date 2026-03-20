@@ -1,9 +1,9 @@
 use core::fmt;
 use core::mem;
 
-pub use ftl_types::environ::PROCESS_NAME_MAX_LEN;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
+pub use ftl_types::start_info::PROCESS_NAME_MAX_LEN;
 use ftl_types::syscall::SYS_PROCESS_CREATE_INKERNEL;
 use ftl_types::syscall::SYS_PROCESS_CREATE_SANDBOXED;
 use ftl_types::syscall::SYS_PROCESS_EXIT;

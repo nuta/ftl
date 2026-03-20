@@ -2,7 +2,7 @@ use core::arch::asm;
 
 mod start;
 
-use ftl_types::environ::StartInfo;
+use ftl_types::start_info::StartInfo;
 
 pub fn start_info() -> &'static StartInfo {
     unsafe {

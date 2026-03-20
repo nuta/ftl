@@ -1,9 +1,9 @@
 use alloc::collections::btree_map::BTreeMap;
 
 use ftl_arrayvec::ArrayString;
-use ftl_types::environ::PROCESS_NAME_MAX_LEN;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
+use ftl_types::start_info::PROCESS_NAME_MAX_LEN;
 
 use crate::handle::AnyHandle;
 use crate::handle::Handle;
