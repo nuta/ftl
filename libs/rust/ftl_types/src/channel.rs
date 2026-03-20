@@ -117,7 +117,9 @@ impl Attr {
 pub struct OpenOptions(u32);
 
 impl OpenOptions {
-    pub const OPEN: Self = Self::new(1);
+    /// Connect mode: connect to a service, TCP socket, etc.
+    pub const CONNECT: Self = Self::new(1);
+    /// Listen mode: listen for connections on a TCP socket, etc.
     pub const LISTEN: Self = Self::new(2);
 
     const fn new(kind: u32) -> Self {

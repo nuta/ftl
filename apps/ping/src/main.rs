@@ -20,7 +20,7 @@ fn main(supervisor_ch: Channel) {
     // Ask the supervisor process to connect to the pong service.
     let mid = MessageId::new(1);
     let path = b"service/pong";
-    let options = OpenOptions::OPEN;
+    let options = OpenOptions::CONNECT;
     supervisor_ch
         .send_body(MessageKind::OPEN, mid, path, options.as_usize())
         .unwrap();

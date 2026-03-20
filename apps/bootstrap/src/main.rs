@@ -56,7 +56,7 @@ fn forward_connect(
     let path = format!("service/{service_name}");
     pending_opens.insert(mid, waiter);
 
-    let options = OpenOptions::OPEN;
+    let options = OpenOptions::CONNECT;
     if let Err(error) =
         server_ch.send_body(MessageKind::OPEN, mid, path.as_bytes(), options.as_usize())
     {
@@ -121,7 +121,7 @@ fn main(supervisor_ch: Channel) {
                         };
 
                         let options = OpenOptions::from_usize(arg1);
-                        if options == OpenOptions::OPEN {
+                        if options == OpenOptions::CONNECT {
                             let waiter = PendingOpen {
                                 client_ch: ch.clone(),
                                 client_mid: info.mid(),
