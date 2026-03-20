@@ -11,13 +11,10 @@ use ftl::sink::Event;
 use ftl::sink::Sink;
 
 #[ftl::main]
-fn main() {
+fn main(supervisor_ch: Channel) {
     info!("starting ping");
     let sink = Sink::new().unwrap();
 
-    use ftl::handle::HandleId;
-    use ftl::handle::OwnedHandle;
-    let supervisor_ch = Channel::from_handle(OwnedHandle::from_raw(HandleId::from_raw(1)));
     sink.add(&supervisor_ch).unwrap();
 
     // Ask the supervisor process to connect to the pong service.

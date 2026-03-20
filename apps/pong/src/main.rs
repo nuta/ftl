@@ -19,13 +19,10 @@ enum Context {
 }
 
 #[ftl::main]
-fn main() {
+fn main(supervisor_ch: Channel) {
     info!("starting pong");
     let sink = Sink::new().unwrap();
 
-    use ftl::handle::HandleId;
-    use ftl::handle::OwnedHandle;
-    let supervisor_ch = Channel::from_handle(OwnedHandle::from_raw(HandleId::from_raw(1)));
     sink.add(&supervisor_ch).unwrap();
 
     // Ask the supervisor process to register this service.

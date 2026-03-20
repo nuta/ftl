@@ -68,8 +68,12 @@ fn forward_connect(
 }
 
 #[ftl::main]
-fn main() {
+fn main(supervisor_ch: Channel) {
     info!("Hello from bootstrap!");
+
+    // Bootstrap is the first user process and there is no supervisor process
+    // for it. Avoid accidentally dropping handle #1.
+    core::mem::forget(supervisor_ch);
 
     let sink = Sink::new().unwrap();
     let mut contexts = HashMap::new();

@@ -1,6 +1,11 @@
 use core::arch::asm;
 use core::arch::naked_asm;
 
+use ftl_types::handle::HandleId;
+
+use crate::channel::Channel;
+use crate::handle::OwnedHandle;
+
 #[repr(C)]
 struct Elf64Rela {
     offset: u64,
@@ -34,7 +39,7 @@ extern "C" fn start() -> ! {
 }
 
 unsafe extern "Rust" {
-    fn main();
+    fn main(supervisor_ch: Channel);
 }
 
 extern "C" fn rust_start() -> ! {
@@ -58,8 +63,10 @@ extern "C" fn rust_start() -> ! {
     crate::log::init();
     crate::allocator::init();
 
+    let supervisor_ch_id = HandleId::from_raw(1);
+    let supervisor_ch = Channel::from_handle(OwnedHandle::from_raw(supervisor_ch_id));
     unsafe {
-        main();
+        main(supervisor_ch);
     }
     crate::process::process_exit();
 }
