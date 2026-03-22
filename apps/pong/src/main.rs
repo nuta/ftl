@@ -3,7 +3,6 @@
 
 use ftl::channel::Channel;
 use ftl::channel::MessageId;
-use ftl::channel::MessageInfo;
 use ftl::channel::MessageKind;
 use ftl::channel::OpenOptions;
 use ftl::collections::HashMap;
@@ -28,7 +27,6 @@ fn main(supervisor_ch: Channel) {
     // Ask the supervisor process to register this service.
     let listen_mid = MessageId::new(1);
     let path = b"service/pong";
-    let info = MessageInfo::new(MessageKind::OPEN, listen_mid, path.len());
     let options = OpenOptions::LISTEN;
     supervisor_ch
         .send_body(MessageKind::OPEN, listen_mid, path, options.as_usize())
@@ -137,9 +135,6 @@ fn main(supervisor_ch: Channel) {
             (_, Event::PeerClosed) => {
                 sink.remove(id).unwrap();
                 contexts.remove(&id);
-            }
-            (_context, event) => {
-                warn!("unhandled event: {:?}", event);
             }
         }
     }
