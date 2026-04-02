@@ -138,13 +138,14 @@ impl InflightMap {
         arg2: usize,
     ) {
         let key = (handle_id, mid);
-        debug_assert!(matches!(
-            self.entries.get(&key),
-            Some(Inflight::WaitingForReply(_))
-        ));
-
-        self.entries
+        let old = self.entries
             .insert(key, Inflight::Received { info, arg1, arg2 });
+
+        let Some(Inflight::WaitingForReply(waker)) = old else {
+            panic!("unexpected call completion: handle_id={:?} mid={:?}", handle_id, mid);
+        };
+
+        waker.wake();
     }
 
     pub fn remove_if_completed(
@@ -225,6 +226,7 @@ impl Executor {
             let (id, event) = self.sink.wait().unwrap();
             match event {
                 Event::Message { info, arg1, arg2 } => {
+                    log::info!("received message: id={:?} info={:?} arg1={} arg2={}", id, info, arg1, arg2);
                     self.inflights
                         .lock()
                         .complete_call(id, info.mid(), info, arg1, arg2);
@@ -252,6 +254,8 @@ pub struct AsyncChannel(crate::channel::Channel);
 
 impl AsyncChannel {
     pub fn new(ch: crate::channel::Channel) -> Self {
+        // FIXME:
+        GLOBAL_EXECUTOR.sink.add(&ch).unwrap();
         Self(ch)
     }
 
@@ -260,7 +264,7 @@ pub    async fn open(&self, path: &[u8], options: OpenOptions) -> Result<AsyncCh
             CallFuture::call_with_body(&self.0, MessageKind::OPEN, options.as_usize(), path)?
                 .await?;
         let handle = self.0.recv_handle(info)?;
-        Ok(AsyncChannel(Channel::from_handle(handle)))
+        Ok(AsyncChannel::new(Channel::from_handle(handle)))
     }
 
     pub async fn write(&self, data: &[u8]) -> Result<usize, ErrorCode> {
@@ -286,7 +290,7 @@ impl CallFuture {
     ) -> Result<Self, ErrorCode> {
         let ch_id = ch.handle().id();
         let mid = GLOBAL_EXECUTOR.inflights.lock().alloc_mid(ch_id)?;
-        ch.send_body(MessageKind::OPEN, mid,  body, arg)?;
+        ch.send_body(kind, mid,  body, arg)?;
         Ok(Self { ch_id, mid })
     }
 }

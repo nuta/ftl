@@ -1,4 +1,6 @@
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+use core::fmt;
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct MessageKind(u32);
 
@@ -26,6 +28,26 @@ impl MessageKind {
 
     const fn with_handle(self) -> Self {
         Self(self.0 | 1 << 27)
+    }
+}
+
+impl fmt::Debug for MessageKind {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let kind_str = match *self {
+            Self::ERROR_REPLY => "ERROR_REPLY",
+            Self::OPEN => "OPEN",
+            Self::OPEN_REPLY => "OPEN_REPLY",
+            Self::READ => "READ",
+            Self::READ_REPLY => "READ_REPLY",
+            Self::WRITE => "WRITE",
+            Self::WRITE_REPLY => "WRITE_REPLY",
+            Self::GETATTR => "GETATTR",
+            Self::GETATTR_REPLY => "GETATTR_REPLY",
+            Self::SETATTR => "SETATTR",
+            Self::SETATTR_REPLY => "SETATTR_REPLY",
+            _ => return write!(f, "Unknown({:#x})", self.0),
+        };
+        write!(f, "{}", kind_str)
     }
 }
 
