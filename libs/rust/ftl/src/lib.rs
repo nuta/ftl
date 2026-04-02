@@ -33,8 +33,9 @@ pub mod thread;
 pub mod time;
 pub mod vmarea;
 pub mod vmspace;
-
+pub mod aio;
 pub mod channel;
 pub mod interrupt;
+
 #[cfg(target_arch = "x86_64")]
 pub mod pci;
