@@ -138,11 +138,15 @@ impl InflightMap {
         arg2: usize,
     ) {
         let key = (handle_id, mid);
-        let old = self.entries
+        let old = self
+            .entries
             .insert(key, Inflight::Received { info, arg1, arg2 });
 
         let Some(Inflight::WaitingForReply(waker)) = old else {
-            panic!("unexpected call completion: handle_id={:?} mid={:?}", handle_id, mid);
+            panic!(
+                "unexpected call completion: handle_id={:?} mid={:?}",
+                handle_id, mid
+            );
         };
 
         waker.wake();
@@ -258,7 +262,7 @@ impl AsyncChannel {
         Self(ch)
     }
 
-pub    async fn open(&self, path: &[u8], options: OpenOptions) -> Result<AsyncChannel, ErrorCode> {
+    pub async fn open(&self, path: &[u8], options: OpenOptions) -> Result<AsyncChannel, ErrorCode> {
         let (info, arg1, arg2) =
             CallFuture::call_with_body(&self.0, MessageKind::OPEN, options.as_usize(), path)?
                 .await?;
@@ -272,6 +276,10 @@ pub    async fn open(&self, path: &[u8], options: OpenOptions) -> Result<AsyncCh
             CallFuture::call_with_body(&self.0, MessageKind::WRITE, offset, data)?.await?;
         let _ = self.0.recv_args(info)?;
         Ok(written_len)
+    }
+
+    pub async fn recv(&self) -> Result<MessageInfo, ErrorCode> {
+        todo!()
     }
 }
 
@@ -289,7 +297,7 @@ impl CallFuture {
     ) -> Result<Self, ErrorCode> {
         let ch_id = ch.handle().id();
         let mid = GLOBAL_EXECUTOR.inflights.lock().alloc_mid(ch_id)?;
-        ch.send_body(kind, mid,  body, arg)?;
+        ch.send_body(kind, mid, body, arg)?;
         Ok(Self { ch_id, mid })
     }
 }

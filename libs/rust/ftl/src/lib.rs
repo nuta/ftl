@@ -18,11 +18,14 @@ pub mod allocator;
 pub mod arch;
 mod panic;
 
+pub mod aio;
 pub mod buffer;
+pub mod channel;
 pub mod collections;
 pub mod driver;
 pub mod error;
 pub mod handle;
+pub mod interrupt;
 pub mod log;
 pub mod message;
 pub mod prelude;
@@ -33,9 +36,6 @@ pub mod thread;
 pub mod time;
 pub mod vmarea;
 pub mod vmspace;
-pub mod aio;
-pub mod channel;
-pub mod interrupt;
 
 #[cfg(target_arch = "x86_64")]
 pub mod pci;
