@@ -1,6 +1,8 @@
 #![no_std]
 #![no_main]
 
+use ftl::aio;
+use ftl::aio::AsyncChannel;
 use ftl::channel::Channel;
 use ftl::channel::MessageId;
 use ftl::channel::MessageKind;
@@ -10,8 +12,29 @@ use ftl::prelude::*;
 use ftl::sink::Event;
 use ftl::sink::Sink;
 
+
+async fn async_main(supervisor_ch: Channel) {
+    info!("starting ping");
+
+    let supervisor_ch = AsyncChannel::new(supervisor_ch);
+    let ch = supervisor_ch.open(b"service/pong", OpenOptions::CONNECT).await.unwrap();
+
+    info!("connected to pong");
+    for _ in 0..10 {
+        let written_len = ch.write(b"Hello, world!").await.unwrap();
+        info!("wrote {written_len} bytes");
+    }
+}
+
 #[ftl::main]
 fn main(supervisor_ch: Channel) {
+    aio::run(async {
+        async_main(supervisor_ch).await;
+    });
+}
+
+#[ftl::main]
+fn main_sync(supervisor_ch: Channel) {
     info!("starting ping");
     let sink = Sink::new().unwrap();
 

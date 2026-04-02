@@ -5,6 +5,7 @@ use alloc::collections::vec_deque::VecDeque;
 use alloc::rc::Rc;
 use alloc::sync::Arc;
 use alloc::task::Wake;
+use core::future;
 use core::future::Future;
 use core::pin::Pin;
 use core::task::Context;
@@ -238,15 +239,36 @@ impl Executor {
 
 static GLOBAL_EXECUTOR: spin::Lazy<Executor> = spin::Lazy::new(|| Executor::new().unwrap());
 
-struct AsyncChannel(crate::channel::Channel);
+pub fn spawn(future: impl Future<Output = ()> + Send + Sync + 'static) {
+    GLOBAL_EXECUTOR.spawn(future);
+}
+
+pub fn run(future: impl Future<Output = ()> + Send + Sync + 'static) {
+    spawn(future);
+    GLOBAL_EXECUTOR.run();
+}
+
+pub struct AsyncChannel(crate::channel::Channel);
 
 impl AsyncChannel {
-    async fn open(&self, path: &[u8], options: OpenOptions) -> Result<AsyncChannel, ErrorCode> {
+    pub fn new(ch: crate::channel::Channel) -> Self {
+        Self(ch)
+    }
+
+pub    async fn open(&self, path: &[u8], options: OpenOptions) -> Result<AsyncChannel, ErrorCode> {
         let (info, arg1, arg2) =
             CallFuture::call_with_body(&self.0, MessageKind::OPEN, options.as_usize(), path)?
                 .await?;
         let handle = self.0.recv_handle(info)?;
         Ok(AsyncChannel(Channel::from_handle(handle)))
+    }
+
+    pub async fn write(&self, data: &[u8]) -> Result<usize, ErrorCode> {
+        let offset = 0;
+        let (info, written_len, _) =
+            CallFuture::call_with_body(&self.0, MessageKind::WRITE, offset, data)?.await?;
+        let _ = self.0.recv_args(info)?;
+        Ok(written_len)
     }
 }
 
