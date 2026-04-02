@@ -7,7 +7,8 @@ use ftl::channel::Channel;
 use ftl::channel::OpenOptions;
 use ftl::prelude::*;
 
-async fn async_main(supervisor_ch: Channel) {
+#[ftl::main]
+async fn main(supervisor_ch: Channel) {
     info!("starting pong");
     let supervisor_ch = aio::Client::new(supervisor_ch);
     let listen_ch = supervisor_ch
@@ -39,11 +40,4 @@ async fn async_main(supervisor_ch: Channel) {
             }
         });
     }
-}
-
-#[ftl::main]
-fn main(supervisor_ch: Channel) {
-    aio::run(async {
-        async_main(supervisor_ch).await;
-    });
 }

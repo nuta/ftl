@@ -6,7 +6,8 @@ use ftl::channel::Channel;
 use ftl::channel::OpenOptions;
 use ftl::prelude::*;
 
-async fn async_main(supervisor_ch: Channel) {
+#[ftl::main]
+async fn main(supervisor_ch: Channel) {
     info!("starting ping");
     let supervisor_ch = aio::Client::new(supervisor_ch);
     let ch = supervisor_ch
@@ -20,11 +21,4 @@ async fn async_main(supervisor_ch: Channel) {
         let written_len = client.write(b"Hello, world!").await.unwrap();
         info!("wrote {written_len} bytes");
     }
-}
-
-#[ftl::main]
-fn main(supervisor_ch: Channel) {
-    aio::run(async {
-        async_main(supervisor_ch).await;
-    });
 }

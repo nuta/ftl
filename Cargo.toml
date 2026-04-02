@@ -25,6 +25,9 @@ hashbrown = "0.16.1"
 bytes = { version = "1", default-features = false }
 smoltcp = { version = "0.12.0", default-features = false }
 httparse = { version = "1.10.1", default-features = false }
+proc-macro2 = { version = "1.0.106" }
+quote = { version = "1.0.45" }
+syn = { version = "2.0.117", features = ["full"] }
 
 ftl = { path = "libs/rust/ftl" }
 ftl_types = { path = "libs/rust/ftl_types" }
