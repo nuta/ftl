@@ -226,7 +226,6 @@ impl Executor {
             let (id, event) = self.sink.wait().unwrap();
             match event {
                 Event::Message { info, arg1, arg2 } => {
-                    log::info!("received message: id={:?} info={:?} arg1={} arg2={}", id, info, arg1, arg2);
                     self.inflights
                         .lock()
                         .complete_call(id, info.mid(), info, arg1, arg2);
