@@ -8,15 +8,16 @@ use ftl::prelude::*;
 
 async fn async_main(supervisor_ch: Channel) {
     info!("starting ping");
-    let supervisor_ch = aio::AsyncChannel::new(supervisor_ch);
+    let supervisor_ch = aio::Client::new(supervisor_ch);
     let ch = supervisor_ch
         .open(b"service/pong", OpenOptions::CONNECT)
         .await
         .unwrap();
+    let client = aio::Client::new(ch);
 
     info!("connected to pong");
     for _ in 0..10 {
-        let written_len = ch.write(b"Hello, world!").await.unwrap();
+        let written_len = client.write(b"Hello, world!").await.unwrap();
         info!("wrote {written_len} bytes");
     }
 }

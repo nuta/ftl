@@ -2,6 +2,7 @@
 #![no_main]
 
 use ftl::aio;
+use ftl::aio::Request;
 use ftl::channel::Channel;
 use ftl::channel::MessageId;
 use ftl::channel::MessageKind;
@@ -20,26 +21,27 @@ enum Context {
 
 async fn async_main(supervisor_ch: Channel) {
     info!("starting pong");
-    let supervisor_ch = aio::AsyncChannel::new(supervisor_ch);
+    let supervisor_ch = aio::Client::new(supervisor_ch);
     let listen_ch = supervisor_ch
         .open(b"service/pong", OpenOptions::LISTEN)
         .await
         .unwrap();
+    let listen_client = aio::Client::new(listen_ch);
 
     loop {
-        let client_ch = match listen_ch.open(b"*", OpenOptions::CONNECT).await {
-            Ok(ch) => ch,
-            Err(err) => {
-                panic!("supervisor closed the listen channel: {:?}", err);
-            }
-        };
+        let client_ch = listen_client
+            .open(b"*", OpenOptions::CONNECT)
+            .await
+            .unwrap();
 
+        let server = aio::Server::new(client_ch);
         aio::spawn(async move {
             loop {
-                match client_ch.recv().await {
-                    Ok(msginfo) if msginfo.kind() == MessageKind::WRITE => {
-                        // let data = client_ch.recv_body().await.unwrap();
-                        // info!("received write message: {:?}", core::str::from_utf8(&data));
+                match server.recv().await {
+                    Ok(Request::Write { offset, data }) => {
+                        let mut buf = vec![0; data.len()];
+                        data.read(&mut buf).unwrap();
+                        info!("received write message: {:?}", core::str::from_utf8(&buf));
                         // client_ch.send_args(MessageKind::WRITE_REPLY, 0, data.len(), 0).await.unwrap();
                     }
                     _ => {

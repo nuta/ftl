@@ -12,6 +12,7 @@ use core::task::Context;
 use core::task::Poll;
 use core::task::Waker;
 
+use ftl_types::channel::Attr;
 use ftl_types::channel::MessageId;
 use ftl_types::channel::MessageInfo;
 use ftl_types::channel::MessageKind;
@@ -253,21 +254,21 @@ pub fn run(future: impl Future<Output = ()> + Send + Sync + 'static) {
     GLOBAL_EXECUTOR.run();
 }
 
-pub struct AsyncChannel(crate::channel::Channel);
+pub struct Client(Channel);
 
-impl AsyncChannel {
-    pub fn new(ch: crate::channel::Channel) -> Self {
+impl Client {
+    pub fn new(ch: Channel) -> Self {
         // FIXME:
         GLOBAL_EXECUTOR.sink.add(&ch).unwrap();
         Self(ch)
     }
 
-    pub async fn open(&self, path: &[u8], options: OpenOptions) -> Result<AsyncChannel, ErrorCode> {
+    pub async fn open(&self, path: &[u8], options: OpenOptions) -> Result<Channel, ErrorCode> {
         let (info, arg1, arg2) =
             CallFuture::call_with_body(&self.0, MessageKind::OPEN, options.as_usize(), path)?
                 .await?;
         let handle = self.0.recv_handle(info)?;
-        Ok(AsyncChannel::new(Channel::from_handle(handle)))
+        Ok(Channel::from_handle(handle))
     }
 
     pub async fn write(&self, data: &[u8]) -> Result<usize, ErrorCode> {
@@ -278,7 +279,63 @@ impl AsyncChannel {
         Ok(written_len)
     }
 
-    pub async fn recv(&self) -> Result<MessageInfo, ErrorCode> {
+    pub async fn recv(&self) -> Result<Request<'_>, ErrorCode> {
+        todo!()
+    }
+}
+
+pub struct Reader<'a> {
+    ch: &'a Channel,
+    msginfo: MessageInfo,
+}
+
+impl<'a> Reader<'a> {
+    pub fn new(ch: &'a Channel, msginfo: MessageInfo) -> Self {
+        Self { ch, msginfo }
+    }
+
+    pub fn len(&self) -> usize {
+        self.msginfo.body_len()
+    }
+
+    pub fn read(self, buf: &mut [u8]) -> Result<(), ErrorCode> {
+        self.ch.recv_body(self.msginfo, buf)?;
+        Ok(())
+    }
+}
+
+pub enum Request<'a> {
+    Open {
+        path: Reader<'a>,
+        options: OpenOptions,
+    },
+    Read {
+        offset: usize,
+        len: usize,
+    },
+    Write {
+        offset: usize,
+        data: Reader<'a>,
+    },
+    Getattr {
+        attr: Attr,
+    },
+    Setattr {
+        attr: Attr,
+        data: Reader<'a>,
+    },
+}
+
+pub struct Server {
+    ch: Channel,
+}
+
+impl Server {
+    pub fn new(ch: Channel) -> Self {
+        Self { ch }
+    }
+
+    pub async fn recv(&self) -> Result<Request<'_>, ErrorCode> {
         todo!()
     }
 }
