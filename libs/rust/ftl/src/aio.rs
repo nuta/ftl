@@ -198,7 +198,7 @@ impl Executor {
         self.run_queue.push(task_id);
     }
 
-    fn run_runnable_tasks(&mut self) {
+    fn run_runnable_tasks(&self) {
         while let Some(task_id) = self.run_queue.pop() {
             let mut task = {
                 let mut tasks = self.tasks.lock();
@@ -218,7 +218,7 @@ impl Executor {
         }
     }
 
-    pub fn run(&mut self) {
+    pub fn run(&self) {
         loop {
             self.run_runnable_tasks();
             let (id, event) = self.sink.wait().unwrap();
@@ -238,15 +238,15 @@ impl Executor {
 
 static GLOBAL_EXECUTOR: spin::Lazy<Executor> = spin::Lazy::new(|| Executor::new().unwrap());
 
-struct Channel2(crate::channel::Channel);
+struct AsyncChannel(crate::channel::Channel);
 
-impl Channel2 {
-    async fn open(&self, path: &[u8], options: OpenOptions) -> Result<Channel2, ErrorCode> {
+impl AsyncChannel {
+    async fn open(&self, path: &[u8], options: OpenOptions) -> Result<AsyncChannel, ErrorCode> {
         let (info, arg1, arg2) =
             CallFuture::call_with_body(&self.0, MessageKind::OPEN, options.as_usize(), path)?
                 .await?;
         let handle = self.0.recv_handle(info)?;
-        Ok(Channel2(Channel::from_handle(handle)))
+        Ok(AsyncChannel(Channel::from_handle(handle)))
     }
 }
 
