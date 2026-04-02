@@ -46,4 +46,4 @@ FTL uses message passing for IPC, without IDL. Instead, it has a predefined set 
 To summarize, FTL has *"everything is a file"*-like philosophy in message passing. That is, we prefer a simple interface which covers 90% of the use cases, instead of having specialized interfaces for each use case. A key finding here is that interactions between OS components are way simpler than gRPC-powered applications.
 
 > [!NOTE]
-> Learn more in [Channel](../learn/channel).
+> Learn more in [Channel](./learn/channel).
