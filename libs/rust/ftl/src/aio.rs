@@ -373,3 +373,7 @@ impl Future for CallFuture {
         }
     }
 }
+
+struct RecvFuture {
+    ch_id: HandleId,
+}
