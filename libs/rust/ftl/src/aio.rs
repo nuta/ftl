@@ -206,6 +206,7 @@ struct RecvEntry {
 }
 
 enum RecvState {
+    BeforeRecv,
     Waiting(Waker),
     Ready(VecDeque<RecvEntry>),
     Draining(VecDeque<RecvEntry>),
@@ -223,10 +224,19 @@ impl RecvMap {
         }
     }
 
+    pub fn add(&mut self, handle_id: HandleId) {
+        self.states.insert(handle_id, RecvState::BeforeRecv);
+    }
+
     pub fn receive(&mut self, handle_id: HandleId, info: MessageInfo, arg1: usize, arg2: usize) {
         let entry = RecvEntry { info, arg1, arg2 };
         let state = self.states.get_mut(&handle_id);
         match state {
+            Some(RecvState::BeforeRecv) => {
+                let mut queue = VecDeque::with_capacity(1);
+                queue.push_back(entry);
+                self.states.insert(handle_id, RecvState::Ready(queue));
+            }
             Some(RecvState::Waiting(waker)) => {
                 waker.wake_by_ref();
 
@@ -254,12 +264,18 @@ impl RecvMap {
         waker: &'b Waker,
     ) -> Option<Result<Request<'a>, ErrorCode>> {
         let handle_id = ch.handle().id();
-        let entry = match self.states.get_mut(&handle_id) {
-            Some(RecvState::Waiting(old_waker)) => {
+        let entry = match self.states.get_mut(&handle_id).unwrap() {
+            RecvState::BeforeRecv => {
+                self.states
+                    .insert(handle_id, RecvState::Waiting(waker.clone()));
+                return None;
+            }
+            RecvState::Waiting(old_waker) => {
+                // TODO: Should we support multiple receivers?
                 *old_waker = waker.clone();
                 return None;
             }
-            Some(RecvState::Ready(queue)) => {
+            RecvState::Ready(queue) => {
                 let entry = queue.pop_front().unwrap();
                 if queue.is_empty() {
                     self.states
@@ -267,20 +283,15 @@ impl RecvMap {
                 }
                 entry
             }
-            Some(RecvState::Draining(queue)) => {
+            RecvState::Draining(queue) => {
                 let entry = queue.pop_front().unwrap();
                 if queue.is_empty() {
                     self.states.insert(handle_id, RecvState::PeerClosed);
                 }
                 entry
             }
-            Some(RecvState::PeerClosed) => {
+            RecvState::PeerClosed => {
                 return Some(Err(ErrorCode::PeerClosed));
-            }
-            None => {
-                self.states
-                    .insert(handle_id, RecvState::Waiting(waker.clone()));
-                return None;
             }
         };
 
@@ -343,6 +354,9 @@ impl RecvMap {
 
     pub fn peer_closed(&mut self, handle_id: HandleId) {
         match self.states.remove(&handle_id) {
+            Some(RecvState::BeforeRecv) => {
+                self.states.insert(handle_id, RecvState::PeerClosed);
+            }
             Some(RecvState::Waiting(waker)) => {
                 waker.wake_by_ref();
                 self.states.insert(handle_id, RecvState::PeerClosed);
@@ -353,10 +367,7 @@ impl RecvMap {
             Some(RecvState::Draining(_)) | Some(RecvState::PeerClosed) => {
                 unreachable!();
             }
-            None => {
-                // Peer closed before the first recv().
-                self.states.insert(handle_id, RecvState::PeerClosed);
-            }
+            None => {}
         }
     }
 
@@ -683,6 +694,7 @@ struct RecvFuture<'a> {
 
 impl<'a> RecvFuture<'a> {
     fn new(ch: &'a Channel) -> Self {
+        GLOBAL_EXECUTOR.recvs.lock().add(ch.handle().id());
         Self { ch }
     }
 }
