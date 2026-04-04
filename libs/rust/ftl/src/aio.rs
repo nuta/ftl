@@ -367,6 +367,7 @@ impl Executor {
 
     pub fn run(&self) {
         loop {
+            // TODO: When should we exit the loop?
             self.run_runnable_tasks();
             let (id, event) = self.sink.wait().unwrap();
             match event {
@@ -398,6 +399,12 @@ pub fn run(future: impl Future<Output = ()> + Send + Sync + 'static) {
     GLOBAL_EXECUTOR.run();
 }
 
+#[derive(Debug)]
+pub enum CallError {
+    Syscall(ErrorCode),
+    ErrorReply(ErrorCode),
+}
+
 pub struct Client(Channel);
 
 impl Client {
@@ -407,19 +414,19 @@ impl Client {
         Self(ch)
     }
 
-    pub async fn open(&self, path: &[u8], options: OpenOptions) -> Result<Channel, ErrorCode> {
+    pub async fn open(&self, path: &[u8], options: OpenOptions) -> Result<Channel, CallError> {
         let (info, arg1, arg2) =
             CallFuture::call_with_body(&self.0, MessageKind::OPEN, options.as_usize(), path)?
                 .await?;
-        let handle = self.0.recv_handle(info)?;
+        let handle = self.0.recv_handle(info).map_err(CallError::Syscall)?;
         Ok(Channel::from_handle(handle))
     }
 
-    pub async fn write(&self, data: &[u8]) -> Result<usize, ErrorCode> {
+    pub async fn write(&self, data: &[u8]) -> Result<usize, CallError> {
         let offset = 0;
         let (info, written_len, _) =
             CallFuture::call_with_body(&self.0, MessageKind::WRITE, offset, data)?.await?;
-        let _ = self.0.recv_args(info)?;
+        let _ = self.0.recv_args(info).map_err(CallError::Syscall)?;
         Ok(written_len)
     }
 }
@@ -560,21 +567,34 @@ impl CallFuture {
         kind: MessageKind,
         arg: usize,
         body: &[u8],
-    ) -> Result<Self, ErrorCode> {
+    ) -> Result<Self, CallError> {
         let ch_id = ch.handle().id();
-        let mid = GLOBAL_EXECUTOR.calls.lock().alloc_mid(ch_id)?;
-        ch.send_body(kind, mid, body, arg)?;
+        let mid = GLOBAL_EXECUTOR
+            .calls
+            .lock()
+            .alloc_mid(ch_id)
+            .map_err(CallError::Syscall)?;
+        ch.send_body(kind, mid, body, arg)
+            .map_err(CallError::Syscall)?;
         Ok(Self { ch_id, mid })
     }
 }
 
 impl Future for CallFuture {
-    type Output = Result<(MessageInfo, usize, usize), ErrorCode>;
+    type Output = Result<(MessageInfo, usize, usize), CallError>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let mut inflights = GLOBAL_EXECUTOR.calls.lock();
         match inflights.remove_if_completed(self.ch_id, self.mid) {
-            Some((info, arg1, arg2)) => Poll::Ready(Ok((info, arg1, arg2))),
+            Some((info, arg1, arg2)) => {
+                let result = if info.kind() == MessageKind::ERROR_REPLY {
+                    Err(CallError::ErrorReply(ErrorCode::from(arg1)))
+                } else {
+                    Ok((info, arg1, arg2))
+                };
+
+                Poll::Ready(result)
+            }
             None => {
                 inflights.set_waker(self.ch_id, self.mid, cx.waker().clone());
                 Poll::Pending
