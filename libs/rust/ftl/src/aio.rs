@@ -513,6 +513,9 @@ impl Client {
 impl Drop for Client {
     fn drop(&mut self) {
         GLOBAL_EXECUTOR.calls.lock().close(self.0.handle().id());
+        if let Err(err) = GLOBAL_EXECUTOR.sink.remove(self.0.handle().id()) {
+            warn!("failed to remove a channel from sink: {:?}", err);
+        }
     }
 }
 
@@ -631,7 +634,6 @@ pub struct Server {
 
 impl Server {
     pub fn new(ch: Channel) -> Self {
-        // FIXME:
         GLOBAL_EXECUTOR.sink.add(&ch).unwrap();
         Self { ch }
     }
@@ -644,6 +646,9 @@ impl Server {
 impl Drop for Server {
     fn drop(&mut self) {
         GLOBAL_EXECUTOR.recvs.lock().close(self.ch.handle().id());
+        if let Err(err) = GLOBAL_EXECUTOR.sink.remove(self.ch.handle().id()) {
+            warn!("failed to remove a channel from sink: {:?}", err);
+        }
     }
 }
 
