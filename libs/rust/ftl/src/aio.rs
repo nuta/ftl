@@ -128,17 +128,7 @@ impl CallMap {
         }
     }
 
-    fn set_waker(&mut self, handle_id: HandleId, mid: MessageId, waker: Waker) {
-        let key = (handle_id, mid);
-        debug_assert!(matches!(
-            self.entries.get(&key),
-            Some(CallState::Reserved | CallState::WaitingForReply(_))
-        ));
-
-        self.entries.insert(key, CallState::WaitingForReply(waker));
-    }
-
-    pub fn complete_call(
+    fn complete_call(
         &mut self,
         handle_id: HandleId,
         mid: MessageId,
@@ -161,23 +151,39 @@ impl CallMap {
         waker.wake();
     }
 
-    pub fn remove_if_completed(
+    fn poll(
         &mut self,
         handle_id: HandleId,
         mid: MessageId,
-    ) -> Option<Result<(MessageInfo, usize, usize), CallError>> {
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<(MessageInfo, usize, usize), CallError>> {
         let key = (handle_id, mid);
         match self.entries.get(&key) {
             Some(CallState::Received { info, arg1, arg2 }) => {
-                let pair = (*info, *arg1, *arg2);
+                let info = *info;
+                let arg1 = *arg1;
+                let arg2 = *arg2;
                 self.entries.remove(&key);
-                Some(Ok(pair))
+                if info.kind() == MessageKind::ERROR_REPLY {
+                    Poll::Ready(Err(CallError::ErrorReply(ErrorCode::from(arg1))))
+                } else {
+                    Poll::Ready(Ok((info, arg1, arg2)))
+                }
             }
             Some(CallState::PeerClosed) => {
                 self.entries.remove(&key);
-                Some(Err(CallError::PeerClosed))
+                Poll::Ready(Err(CallError::PeerClosed))
             }
-            _ => None,
+            _ => {
+                debug_assert!(matches!(
+                    self.entries.get(&key),
+                    Some(CallState::Reserved | CallState::WaitingForReply(_))
+                ));
+
+                self.entries
+                    .insert(key, CallState::WaitingForReply(cx.waker().clone()));
+                Poll::Pending
+            }
         }
     }
 
@@ -264,19 +270,19 @@ impl RecvMap {
     pub fn poll<'a, 'b>(
         &mut self,
         ch: &'a Channel,
-        waker: &'b Waker,
-    ) -> Option<Result<Request<'a>, ErrorCode>> {
+        cx: &'b mut Context<'_>,
+    ) -> Poll<Result<Request<'a>, ErrorCode>> {
         let handle_id = ch.handle().id();
         let entry = match self.states.get_mut(&handle_id).unwrap() {
             RecvState::BeforeRecv => {
                 self.states
-                    .insert(handle_id, RecvState::Waiting(waker.clone()));
-                return None;
+                    .insert(handle_id, RecvState::Waiting(cx.waker().clone()));
+                return Poll::Pending;
             }
             RecvState::Waiting(old_waker) => {
                 // TODO: Should we support multiple receivers?
-                *old_waker = waker.clone();
-                return None;
+                *old_waker = cx.waker().clone();
+                return Poll::Pending;
             }
             RecvState::Ready(queue) => {
                 let entry = queue.pop_front().unwrap();
@@ -293,7 +299,7 @@ impl RecvMap {
                 entry
             }
             RecvState::PeerClosed => {
-                return Some(Err(ErrorCode::PeerClosed));
+                return Poll::Ready(Err(ErrorCode::PeerClosed));
             }
         };
 
@@ -346,12 +352,11 @@ impl RecvMap {
                 }
             }
             _ => {
-                warn!("unhandled message kind: {:?}", entry.info.kind());
-                return None;
+                return Poll::Ready(Err(ErrorCode::InvalidMessage));
             }
         };
 
-        Some(Ok(req))
+        Poll::Ready(Ok(req))
     }
 
     pub fn peer_closed(&mut self, handle_id: HandleId) {
@@ -671,23 +676,7 @@ impl Future for CallFuture {
     type Output = Result<(MessageInfo, usize, usize), CallError>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let mut inflights = GLOBAL_EXECUTOR.calls.lock();
-        match inflights.remove_if_completed(self.ch_id, self.mid) {
-            Some(Ok((info, arg1, arg2))) => {
-                let result = if info.kind() == MessageKind::ERROR_REPLY {
-                    Err(CallError::ErrorReply(ErrorCode::from(arg1)))
-                } else {
-                    Ok((info, arg1, arg2))
-                };
-
-                Poll::Ready(result)
-            }
-            Some(Err(error)) => Poll::Ready(Err(error)),
-            None => {
-                inflights.set_waker(self.ch_id, self.mid, cx.waker().clone());
-                Poll::Pending
-            }
-        }
+        GLOBAL_EXECUTOR.calls.lock().poll(self.ch_id, self.mid, cx)
     }
 }
 
@@ -706,11 +695,6 @@ impl<'a> Future for RecvFuture<'a> {
     type Output = Result<Request<'a>, ErrorCode>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let mut recvs = GLOBAL_EXECUTOR.recvs.lock();
-        match recvs.poll(self.ch, cx.waker()) {
-            Some(Ok(request)) => Poll::Ready(Ok(request)),
-            Some(Err(error)) => Poll::Ready(Err(error)),
-            None => Poll::Pending,
-        }
+        GLOBAL_EXECUTOR.recvs.lock().poll(self.ch, cx)
     }
 }
