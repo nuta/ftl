@@ -25,6 +25,7 @@ use ftl_types::channel::OpenOptions;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use hashbrown::HashMap;
+use hashbrown::hash_map::Entry;
 use log::warn;
 
 use crate::channel::Channel;
@@ -116,8 +117,8 @@ impl CallMap {
             self.next_mid = (self.next_mid + 1) & 0xfff;
 
             let key = (handle_id, mid);
-            if !self.entries.contains_key(&key) {
-                self.entries.insert(key, CallState::Reserved);
+            if let Entry::Vacant(entry) = self.entries.entry(key) {
+                entry.insert(CallState::Reserved);
                 return Ok(mid);
             }
 
@@ -225,9 +226,9 @@ impl RecvMap {
     }
 
     pub fn add(&mut self, handle_id: HandleId) {
-        if !self.states.contains_key(&handle_id) {
-            self.states.insert(handle_id, RecvState::BeforeRecv);
-        }
+        self.states
+            .entry(handle_id)
+            .or_insert(RecvState::BeforeRecv);
     }
 
     pub fn receive(&mut self, handle_id: HandleId, info: MessageInfo, arg1: usize, arg2: usize) {
