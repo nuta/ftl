@@ -128,7 +128,7 @@ impl CallMap {
         }
     }
 
-    fn complete_call(
+    fn receive_reply(
         &mut self,
         handle_id: HandleId,
         mid: MessageId,
@@ -237,7 +237,13 @@ impl RecvMap {
             .or_insert(RecvState::BeforeRecv);
     }
 
-    pub fn receive(&mut self, handle_id: HandleId, info: MessageInfo, arg1: usize, arg2: usize) {
+    pub fn receive_any(
+        &mut self,
+        handle_id: HandleId,
+        info: MessageInfo,
+        arg1: usize,
+        arg2: usize,
+    ) {
         let entry = RecvEntry { info, arg1, arg2 };
         let state = self.states.get_mut(&handle_id);
         match state {
@@ -452,9 +458,9 @@ impl Executor {
                     if info.is_reply() {
                         self.calls
                             .lock()
-                            .complete_call(id, info.mid(), info, arg1, arg2);
+                            .receive_reply(id, info.mid(), info, arg1, arg2);
                     } else {
-                        self.recvs.lock().receive(id, info, arg1, arg2);
+                        self.recvs.lock().receive_any(id, info, arg1, arg2);
                     }
                 }
                 Event::PeerClosed => {
