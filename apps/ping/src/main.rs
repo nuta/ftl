@@ -21,4 +21,6 @@ async fn main(supervisor_ch: Channel) {
         let written_len = client.write(b"Hello, world!").await.unwrap();
         info!("wrote {written_len} bytes");
     }
+
+    info!("sent 10 messages");
 }

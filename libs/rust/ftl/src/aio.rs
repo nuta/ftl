@@ -9,6 +9,7 @@ use core::fmt;
 use core::future;
 use core::future::Future;
 use core::marker::PhantomData;
+use core::mem;
 use core::pin::Pin;
 use core::sync::atomic::AtomicU32;
 use core::sync::atomic::Ordering;
@@ -86,6 +87,7 @@ impl Wake for TaskWaker {
 
 enum CallState {
     Reserved,
+    PeerClosed,
     WaitingForReply(Waker),
     Received {
         info: MessageInfo,
@@ -162,16 +164,38 @@ impl CallMap {
         &mut self,
         handle_id: HandleId,
         mid: MessageId,
-    ) -> Option<(MessageInfo, usize, usize)> {
+    ) -> Option<Result<(MessageInfo, usize, usize), CallError>> {
         let key = (handle_id, mid);
         match self.entries.get(&key) {
             Some(CallState::Received { info, arg1, arg2 }) => {
                 let pair = (*info, *arg1, *arg2);
                 self.entries.remove(&key);
-                Some(pair)
+                Some(Ok(pair))
+            }
+            Some(CallState::PeerClosed) => {
+                self.entries.remove(&key);
+                Some(Err(CallError::PeerClosed))
             }
             _ => None,
         }
+    }
+
+    pub fn peer_closed(&mut self, handle_id: HandleId) {
+        for ((id, _mid), value) in self.entries.iter_mut() {
+            if *id == handle_id {
+                let old = mem::replace(value, CallState::PeerClosed);
+                match old {
+                    CallState::WaitingForReply(waker) => {
+                        waker.wake();
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    pub fn close(&mut self, handle_id: HandleId) {
+        self.entries.retain(|key, _| key.0 != handle_id);
     }
 }
 
@@ -184,52 +208,53 @@ struct RecvEntry {
 enum RecvState {
     Waiting(Waker),
     Ready(VecDeque<RecvEntry>),
+    Draining(VecDeque<RecvEntry>),
+    PeerClosed,
 }
 
 struct RecvMap {
-    handles: HashMap<HandleId, RecvState>,
+    states: HashMap<HandleId, RecvState>,
 }
 
 impl RecvMap {
     pub fn new() -> Self {
         Self {
-            handles: HashMap::new(),
+            states: HashMap::new(),
         }
     }
 
     pub fn receive(&mut self, handle_id: HandleId, info: MessageInfo, arg1: usize, arg2: usize) {
-        log::info!(
-            "receive: handle_id={:?} info={:?} arg1={:?} arg2={:?}",
-            handle_id,
-            info,
-            arg1,
-            arg2
-        );
         let entry = RecvEntry { info, arg1, arg2 };
-        let state = self.handles.get_mut(&handle_id);
+        let state = self.states.get_mut(&handle_id);
         match state {
             Some(RecvState::Waiting(waker)) => {
                 waker.wake_by_ref();
 
                 let mut queue = VecDeque::with_capacity(1);
                 queue.push_back(entry);
-                self.handles.insert(handle_id, RecvState::Ready(queue));
+                self.states.insert(handle_id, RecvState::Ready(queue));
             }
             Some(RecvState::Ready(queue)) => {
                 queue.push_back(entry);
             }
+            Some(RecvState::Draining(_) | RecvState::PeerClosed) => {
+                unreachable!();
+            }
             None => {
                 let mut queue = VecDeque::with_capacity(1);
                 queue.push_back(entry);
-                self.handles.insert(handle_id, RecvState::Ready(queue));
+                self.states.insert(handle_id, RecvState::Ready(queue));
             }
         }
     }
 
-    pub fn poll<'a, 'b>(&mut self, ch: &'a Channel, waker: &'b Waker) -> Option<Request<'a>> {
+    pub fn poll<'a, 'b>(
+        &mut self,
+        ch: &'a Channel,
+        waker: &'b Waker,
+    ) -> Option<Result<Request<'a>, ErrorCode>> {
         let handle_id = ch.handle().id();
-        log::info!("recv poll: handle_id={:?}", handle_id);
-        let entry = match self.handles.get_mut(&handle_id) {
+        let entry = match self.states.get_mut(&handle_id) {
             Some(RecvState::Waiting(old_waker)) => {
                 *old_waker = waker.clone();
                 return None;
@@ -237,12 +262,23 @@ impl RecvMap {
             Some(RecvState::Ready(queue)) => {
                 let entry = queue.pop_front().unwrap();
                 if queue.is_empty() {
-                    self.handles.remove(&handle_id);
+                    self.states
+                        .insert(handle_id, RecvState::Waiting(waker.clone()));
                 }
                 entry
             }
+            Some(RecvState::Draining(queue)) => {
+                let entry = queue.pop_front().unwrap();
+                if queue.is_empty() {
+                    self.states.insert(handle_id, RecvState::PeerClosed);
+                }
+                entry
+            }
+            Some(RecvState::PeerClosed) => {
+                return Some(Err(ErrorCode::PeerClosed));
+            }
             None => {
-                self.handles
+                self.states
                     .insert(handle_id, RecvState::Waiting(waker.clone()));
                 return None;
             }
@@ -302,7 +338,30 @@ impl RecvMap {
             }
         };
 
-        Some(req)
+        Some(Ok(req))
+    }
+
+    pub fn peer_closed(&mut self, handle_id: HandleId) {
+        match self.states.remove(&handle_id) {
+            Some(RecvState::Waiting(waker)) => {
+                waker.wake_by_ref();
+                self.states.insert(handle_id, RecvState::PeerClosed);
+            }
+            Some(RecvState::Ready(queue)) => {
+                self.states.insert(handle_id, RecvState::Draining(queue));
+            }
+            Some(RecvState::Draining(_)) | Some(RecvState::PeerClosed) => {
+                unreachable!();
+            }
+            None => {
+                // Peer closed before the first recv().
+                self.states.insert(handle_id, RecvState::PeerClosed);
+            }
+        }
+    }
+
+    pub fn close(&mut self, handle_id: HandleId) {
+        self.states.remove(&handle_id);
     }
 }
 
@@ -381,7 +440,8 @@ impl Executor {
                     }
                 }
                 Event::PeerClosed => {
-                    todo!()
+                    self.calls.lock().peer_closed(id);
+                    self.recvs.lock().peer_closed(id);
                 }
             }
         }
@@ -402,6 +462,7 @@ pub fn run(future: impl Future<Output = ()> + Send + Sync + 'static) {
 #[derive(Debug)]
 pub enum CallError {
     Syscall(ErrorCode),
+    PeerClosed,
     ErrorReply(ErrorCode),
 }
 
@@ -428,6 +489,12 @@ impl Client {
             CallFuture::call_with_body(&self.0, MessageKind::WRITE, offset, data)?.await?;
         let _ = self.0.recv_args(info).map_err(CallError::Syscall)?;
         Ok(written_len)
+    }
+}
+
+impl Drop for Client {
+    fn drop(&mut self) {
+        GLOBAL_EXECUTOR.calls.lock().close(self.0.handle().id());
     }
 }
 
@@ -556,6 +623,12 @@ impl Server {
     }
 }
 
+impl Drop for Server {
+    fn drop(&mut self) {
+        GLOBAL_EXECUTOR.recvs.lock().close(self.ch.handle().id());
+    }
+}
+
 struct CallFuture {
     ch_id: HandleId,
     mid: MessageId,
@@ -586,7 +659,7 @@ impl Future for CallFuture {
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let mut inflights = GLOBAL_EXECUTOR.calls.lock();
         match inflights.remove_if_completed(self.ch_id, self.mid) {
-            Some((info, arg1, arg2)) => {
+            Some(Ok((info, arg1, arg2))) => {
                 let result = if info.kind() == MessageKind::ERROR_REPLY {
                     Err(CallError::ErrorReply(ErrorCode::from(arg1)))
                 } else {
@@ -595,6 +668,7 @@ impl Future for CallFuture {
 
                 Poll::Ready(result)
             }
+            Some(Err(error)) => Poll::Ready(Err(error)),
             None => {
                 inflights.set_waker(self.ch_id, self.mid, cx.waker().clone());
                 Poll::Pending
@@ -619,7 +693,8 @@ impl<'a> Future for RecvFuture<'a> {
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let mut recvs = GLOBAL_EXECUTOR.recvs.lock();
         match recvs.poll(self.ch, cx.waker()) {
-            Some(request) => Poll::Ready(Ok(request)),
+            Some(Ok(request)) => Poll::Ready(Ok(request)),
+            Some(Err(error)) => Poll::Ready(Err(error)),
             None => Poll::Pending,
         }
     }

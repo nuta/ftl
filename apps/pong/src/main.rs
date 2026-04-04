@@ -5,6 +5,7 @@ use ftl::aio;
 use ftl::aio::Request;
 use ftl::channel::Channel;
 use ftl::channel::OpenOptions;
+use ftl::error::ErrorCode;
 use ftl::prelude::*;
 
 #[ftl::main]
@@ -23,7 +24,7 @@ async fn main(supervisor_ch: Channel) {
         let client_ch = match req {
             Request::Open {
                 path,
-                options,
+                options: _,
                 completer,
             } => {
                 let mut buf = vec![0; path.len()];
@@ -56,8 +57,12 @@ async fn main(supervisor_ch: Channel) {
                         info!("received write message: {:?}", core::str::from_utf8(&buf));
                         completer.reply(data_len).unwrap();
                     }
-                    _ => {
-                        todo!();
+                    Err(ErrorCode::PeerClosed) => {
+                        debug!("peer closed");
+                        break;
+                    }
+                    result => {
+                        warn!("unhandled recv: {:?}", result);
                     }
                 }
             }
