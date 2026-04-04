@@ -5,6 +5,7 @@ use core::fmt;
 pub struct MessageKind(u32);
 
 impl MessageKind {
+    // Note: Reply messages must have odd numbers.
     pub const ERROR_REPLY: Self = Self::new(1);
     pub const OPEN: Self = Self::new(2).with_body();
     pub const OPEN_REPLY: Self = Self::new(3).with_handle();
@@ -91,6 +92,11 @@ impl MessageInfo {
 
     pub const fn body_len(self) -> usize {
         (self.0 & 0x3fff) as usize
+    }
+
+    pub const fn is_reply(self) -> bool {
+        let raw = self.kind().0 >> 28;
+        raw % 2 == 1
     }
 }
 

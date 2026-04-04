@@ -5,6 +5,7 @@ use alloc::collections::vec_deque::VecDeque;
 use alloc::rc::Rc;
 use alloc::sync::Arc;
 use alloc::task::Wake;
+use core::fmt;
 use core::future;
 use core::future::Future;
 use core::pin::Pin;
@@ -20,6 +21,7 @@ use ftl_types::channel::OpenOptions;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use hashbrown::HashMap;
+use log::warn;
 
 use crate::channel::Channel;
 use crate::handle::Handleable;
@@ -79,7 +81,7 @@ impl Wake for TaskWaker {
     }
 }
 
-enum Inflight {
+enum CallState {
     Reserved,
     WaitingForReply(Waker),
     Received {
@@ -89,12 +91,12 @@ enum Inflight {
     },
 }
 
-struct InflightMap {
-    entries: HashMap<(HandleId, MessageId), Inflight>,
+struct CallMap {
+    entries: HashMap<(HandleId, MessageId), CallState>,
     next_mid: u16,
 }
 
-impl InflightMap {
+impl CallMap {
     pub fn new() -> Self {
         Self {
             entries: HashMap::new(),
@@ -110,7 +112,7 @@ impl InflightMap {
 
             let key = (handle_id, mid);
             if !self.entries.contains_key(&key) {
-                self.entries.insert(key, Inflight::Reserved);
+                self.entries.insert(key, CallState::Reserved);
                 return Ok(mid);
             }
 
@@ -124,10 +126,10 @@ impl InflightMap {
         let key = (handle_id, mid);
         debug_assert!(matches!(
             self.entries.get(&key),
-            Some(Inflight::Reserved | Inflight::WaitingForReply(_))
+            Some(CallState::Reserved | CallState::WaitingForReply(_))
         ));
 
-        self.entries.insert(key, Inflight::WaitingForReply(waker));
+        self.entries.insert(key, CallState::WaitingForReply(waker));
     }
 
     pub fn complete_call(
@@ -141,9 +143,9 @@ impl InflightMap {
         let key = (handle_id, mid);
         let old = self
             .entries
-            .insert(key, Inflight::Received { info, arg1, arg2 });
+            .insert(key, CallState::Received { info, arg1, arg2 });
 
-        let Some(Inflight::WaitingForReply(waker)) = old else {
+        let Some(CallState::WaitingForReply(waker)) = old else {
             panic!(
                 "unexpected call completion: handle_id={:?} mid={:?}",
                 handle_id, mid
@@ -160,13 +162,126 @@ impl InflightMap {
     ) -> Option<(MessageInfo, usize, usize)> {
         let key = (handle_id, mid);
         match self.entries.get(&key) {
-            Some(Inflight::Received { info, arg1, arg2 }) => {
+            Some(CallState::Received { info, arg1, arg2 }) => {
                 let pair = (*info, *arg1, *arg2);
                 self.entries.remove(&key);
                 Some(pair)
             }
             _ => None,
         }
+    }
+}
+
+struct RecvEntry {
+    info: MessageInfo,
+    arg1: usize,
+    arg2: usize,
+}
+
+enum RecvState {
+    Waiting(Waker),
+    Ready(VecDeque<RecvEntry>),
+}
+
+struct RecvMap {
+    handles: HashMap<HandleId, RecvState>,
+}
+
+impl RecvMap {
+    pub fn new() -> Self {
+        Self {
+            handles: HashMap::new(),
+        }
+    }
+
+    pub fn receive(&mut self, handle_id: HandleId, info: MessageInfo, arg1: usize, arg2: usize) {
+        log::info!(
+            "receive: handle_id={:?} info={:?} arg1={:?} arg2={:?}",
+            handle_id,
+            info,
+            arg1,
+            arg2
+        );
+        let entry = RecvEntry { info, arg1, arg2 };
+        let state = self.handles.get_mut(&handle_id);
+        match state {
+            Some(RecvState::Waiting(waker)) => {
+                waker.wake_by_ref();
+
+                let mut queue = VecDeque::with_capacity(1);
+                queue.push_back(entry);
+                self.handles.insert(handle_id, RecvState::Ready(queue));
+            }
+            Some(RecvState::Ready(queue)) => {
+                queue.push_back(entry);
+            }
+            None => {
+                let mut queue = VecDeque::with_capacity(1);
+                queue.push_back(entry);
+                self.handles.insert(handle_id, RecvState::Ready(queue));
+            }
+        }
+    }
+
+    pub fn poll<'a, 'b>(&mut self, ch: &'a Channel, waker: &'b Waker) -> Option<Request<'a>> {
+        let handle_id = ch.handle().id();
+        log::info!("recv poll: handle_id={:?}", handle_id);
+        let entry = match self.handles.get_mut(&handle_id) {
+            Some(RecvState::Waiting(old_waker)) => {
+                *old_waker = waker.clone();
+                return None;
+            }
+            Some(RecvState::Ready(queue)) => {
+                let entry = queue.pop_front().unwrap();
+                if queue.is_empty() {
+                    self.handles.remove(&handle_id);
+                }
+                entry
+            }
+            None => {
+                self.handles
+                    .insert(handle_id, RecvState::Waiting(waker.clone()));
+                return None;
+            }
+        };
+
+        let req = match entry.info.kind() {
+            MessageKind::OPEN => {
+                Request::Open {
+                    path: Reader::new(ch, entry.info),
+                    options: OpenOptions::from_usize(entry.arg1),
+                }
+            }
+            MessageKind::READ => {
+                Request::Read {
+                    offset: entry.arg1,
+                    len: entry.arg2,
+                }
+            }
+            MessageKind::WRITE => {
+                Request::Write {
+                    offset: entry.arg1,
+                    data: Reader::new(ch, entry.info),
+                }
+            }
+            MessageKind::GETATTR => {
+                Request::Getattr {
+                    attr: Attr::from_usize(entry.arg1),
+                }
+            }
+            MessageKind::SETATTR => {
+                Request::Setattr {
+                    attr: Attr::from_usize(entry.arg1),
+                    data: Reader::new(ch, entry.info),
+                }
+            }
+            _ => {
+                warn!("unhandled message kind: {:?}", entry.info.kind());
+                return None;
+            }
+        };
+
+        Some(req)
     }
 }
 
@@ -178,7 +293,8 @@ enum Error {
 struct Executor {
     tasks: spin::Mutex<HashMap<TaskId, Task>>,
     run_queue: Arc<RunQueue>,
-    inflights: spin::Mutex<InflightMap>,
+    calls: spin::Mutex<CallMap>,
+    recvs: spin::Mutex<RecvMap>,
     sink: Sink,
 }
 
@@ -188,7 +304,8 @@ impl Executor {
         Ok(Self {
             tasks: spin::Mutex::new(HashMap::new()),
             run_queue: Arc::new(RunQueue::new()),
-            inflights: spin::Mutex::new(InflightMap::new()),
+            calls: spin::Mutex::new(CallMap::new()),
+            recvs: spin::Mutex::new(RecvMap::new()),
             sink,
         })
     }
@@ -231,9 +348,13 @@ impl Executor {
             let (id, event) = self.sink.wait().unwrap();
             match event {
                 Event::Message { info, arg1, arg2 } => {
-                    self.inflights
-                        .lock()
-                        .complete_call(id, info.mid(), info, arg1, arg2);
+                    if info.is_reply() {
+                        self.calls
+                            .lock()
+                            .complete_call(id, info.mid(), info, arg1, arg2);
+                    } else {
+                        self.recvs.lock().receive(id, info, arg1, arg2);
+                    }
                 }
                 Event::PeerClosed => {
                     todo!()
@@ -278,10 +399,6 @@ impl Client {
         let _ = self.0.recv_args(info)?;
         Ok(written_len)
     }
-
-    pub async fn recv(&self) -> Result<Request<'_>, ErrorCode> {
-        todo!()
-    }
 }
 
 pub struct Reader<'a> {
@@ -298,7 +415,7 @@ impl<'a> Reader<'a> {
         self.msginfo.body_len()
     }
 
-    pub fn read(self, buf: &mut [u8]) -> Result<(), ErrorCode> {
+    pub fn read_all(self, buf: &mut [u8]) -> Result<(), ErrorCode> {
         self.ch.recv_body(self.msginfo, buf)?;
         Ok(())
     }
@@ -326,17 +443,42 @@ pub enum Request<'a> {
     },
 }
 
+impl<'a> fmt::Debug for Request<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Request::Open { options, .. } => {
+                f.debug_struct("Open").field("options", options).finish()
+            }
+            Request::Read { offset, len } => {
+                f.debug_struct("Read")
+                    .field("offset", offset)
+                    .field("len", len)
+                    .finish()
+            }
+            Request::Write { offset, data } => {
+                f.debug_struct("Write").field("offset", offset).finish()
+            }
+            Request::Getattr { attr } => f.debug_struct("Getattr").field("attr", attr).finish(),
+            Request::Setattr { attr, data } => {
+                f.debug_struct("Setattr").field("attr", attr).finish()
+            }
+        }
+    }
+}
+
 pub struct Server {
     ch: Channel,
 }
 
 impl Server {
     pub fn new(ch: Channel) -> Self {
+        // FIXME:
+        GLOBAL_EXECUTOR.sink.add(&ch).unwrap();
         Self { ch }
     }
 
     pub async fn recv(&self) -> Result<Request<'_>, ErrorCode> {
-        todo!()
+        RecvFuture::new(&self.ch).await
     }
 }
 
@@ -353,7 +495,7 @@ impl CallFuture {
         body: &[u8],
     ) -> Result<Self, ErrorCode> {
         let ch_id = ch.handle().id();
-        let mid = GLOBAL_EXECUTOR.inflights.lock().alloc_mid(ch_id)?;
+        let mid = GLOBAL_EXECUTOR.calls.lock().alloc_mid(ch_id)?;
         ch.send_body(kind, mid, body, arg)?;
         Ok(Self { ch_id, mid })
     }
@@ -363,7 +505,7 @@ impl Future for CallFuture {
     type Output = Result<(MessageInfo, usize, usize), ErrorCode>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let mut inflights = GLOBAL_EXECUTOR.inflights.lock();
+        let mut inflights = GLOBAL_EXECUTOR.calls.lock();
         match inflights.remove_if_completed(self.ch_id, self.mid) {
             Some((info, arg1, arg2)) => Poll::Ready(Ok((info, arg1, arg2))),
             None => {
@@ -374,6 +516,24 @@ impl Future for CallFuture {
     }
 }
 
-struct RecvFuture {
-    ch_id: HandleId,
+struct RecvFuture<'a> {
+    ch: &'a Channel,
+}
+
+impl<'a> RecvFuture<'a> {
+    fn new(ch: &'a Channel) -> Self {
+        Self { ch }
+    }
+}
+
+impl<'a> Future for RecvFuture<'a> {
+    type Output = Result<Request<'a>, ErrorCode>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let mut recvs = GLOBAL_EXECUTOR.recvs.lock();
+        match recvs.poll(self.ch, cx.waker()) {
+            Some(request) => Poll::Ready(Ok(request)),
+            None => Poll::Pending,
+        }
+    }
 }
