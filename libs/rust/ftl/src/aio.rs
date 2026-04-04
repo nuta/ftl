@@ -225,7 +225,9 @@ impl RecvMap {
     }
 
     pub fn add(&mut self, handle_id: HandleId) {
-        self.states.insert(handle_id, RecvState::BeforeRecv);
+        if !self.states.contains_key(&handle_id) {
+            self.states.insert(handle_id, RecvState::BeforeRecv);
+        }
     }
 
     pub fn receive(&mut self, handle_id: HandleId, info: MessageInfo, arg1: usize, arg2: usize) {
@@ -658,6 +660,7 @@ impl CallFuture {
             .lock()
             .alloc_mid(ch_id)
             .map_err(CallError::Syscall)?;
+        // TODO: release the mid if the call fails.
         ch.send_body(kind, mid, body, arg)
             .map_err(CallError::Syscall)?;
         Ok(Self { ch_id, mid })
