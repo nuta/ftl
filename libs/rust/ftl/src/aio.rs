@@ -8,6 +8,7 @@ use alloc::task::Wake;
 use core::fmt;
 use core::future;
 use core::future::Future;
+use core::marker::PhantomData;
 use core::pin::Pin;
 use core::task::Context;
 use core::task::Poll;
@@ -250,6 +251,7 @@ impl RecvMap {
                 Request::Open {
                     path: Reader::new(ch, entry.info),
                     options: OpenOptions::from_usize(entry.arg1),
+                    completer: Completer::new(ch, MessageKind::OPEN_REPLY, entry.info.mid()),
                 }
             }
             MessageKind::READ => {
@@ -421,10 +423,36 @@ impl<'a> Reader<'a> {
     }
 }
 
+pub struct Completer<'a, T> {
+    ch: &'a Channel,
+    kind: MessageKind,
+    mid: MessageId,
+    _pd: PhantomData<T>,
+}
+
+impl<'a, T> Completer<'a, T> {
+    pub fn new(ch: &'a Channel, kind: MessageKind, mid: MessageId) -> Self {
+        Self {
+            ch,
+            kind,
+            mid,
+            _pd: PhantomData,
+        }
+    }
+}
+
+impl<'a> Completer<'a, Channel> {
+    pub fn reply(self, ch: Channel) -> Result<(), ErrorCode> {
+        self.ch.send_handle(self.kind, self.mid, ch.into_handle())?;
+        Ok(())
+    }
+}
+
 pub enum Request<'a> {
     Open {
         path: Reader<'a>,
         options: OpenOptions,
+        completer: Completer<'a, Channel>,
     },
     Read {
         offset: usize,

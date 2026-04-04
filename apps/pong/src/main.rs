@@ -21,13 +21,17 @@ async fn main(supervisor_ch: Channel) {
         info!("waiting for client");
         let req = listen_ch.recv().await.unwrap();
         let client_ch = match req {
-            Request::Open { path, options } => {
-                info!("received open message");
+            Request::Open {
+                path,
+                options,
+                completer,
+            } => {
                 let mut buf = vec![0; path.len()];
                 path.read_all(&mut buf).unwrap();
-                info!("path: {:?}", core::str::from_utf8(&buf));
+                info!("received open message: {:?}", core::str::from_utf8(&buf));
+
                 let (ours, theirs) = Channel::new().unwrap();
-                // TODO: reply here
+                completer.reply(theirs).unwrap();
                 ours
             }
             _ => {
@@ -36,10 +40,9 @@ async fn main(supervisor_ch: Channel) {
             }
         };
 
-        let server = aio::Server::new(client_ch);
-        info!("server created");
         aio::spawn(async move {
             info!("server spawned");
+            let server = aio::Server::new(client_ch);
             loop {
                 match server.recv().await {
                     Ok(Request::Write { offset: _, data }) => {
