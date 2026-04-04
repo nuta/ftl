@@ -250,13 +250,19 @@ impl RecvMap {
 
         let req = match entry.info.kind() {
             MessageKind::OPEN => {
+                let reader = Reader::new(ch, entry.info);
                 Request::Open {
-                    path: Reader::new(ch, entry.info),
+                    path: reader,
                     options: OpenOptions::from_usize(entry.arg1),
                     completer: Completer::new(ch, MessageKind::OPEN_REPLY, entry.info.mid()),
                 }
             }
             MessageKind::READ => {
+                if let Err(err) = ch.recv_args(entry.info) {
+                    // TODO: Should we return an error to the caller?
+                    warn!("failed to recv read message: {:?}", err);
+                }
+
                 Request::Read {
                     offset: entry.arg1,
                     len: entry.arg2,
@@ -264,22 +270,29 @@ impl RecvMap {
                 }
             }
             MessageKind::WRITE => {
+                let reader = Reader::new(ch, entry.info);
                 Request::Write {
                     offset: entry.arg1,
-                    data: Reader::new(ch, entry.info),
+                    data: reader,
                     completer: Completer::new(ch, MessageKind::WRITE_REPLY, entry.info.mid()),
                 }
             }
             MessageKind::GETATTR => {
+                if let Err(err) = ch.recv_args(entry.info) {
+                    // TODO: Should we return an error to the caller?
+                    warn!("failed to recv getattr message: {:?}", err);
+                }
+
                 Request::GetAttr {
                     attr: Attr::from_usize(entry.arg1),
                     completer: Completer::new(ch, MessageKind::GETATTR_REPLY, entry.info.mid()),
                 }
             }
             MessageKind::SETATTR => {
+                let reader = Reader::new(ch, entry.info);
                 Request::SetAttr {
                     attr: Attr::from_usize(entry.arg1),
-                    data: Reader::new(ch, entry.info),
+                    data: reader,
                     completer: Completer::new(ch, MessageKind::SETATTR_REPLY, entry.info.mid()),
                 }
             }
