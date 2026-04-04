@@ -10,6 +10,8 @@ use core::future;
 use core::future::Future;
 use core::marker::PhantomData;
 use core::pin::Pin;
+use core::sync::atomic::AtomicU32;
+use core::sync::atomic::Ordering;
 use core::task::Context;
 use core::task::Poll;
 use core::task::Waker;
@@ -258,23 +260,27 @@ impl RecvMap {
                 Request::Read {
                     offset: entry.arg1,
                     len: entry.arg2,
+                    completer: Completer::new(ch, MessageKind::READ_REPLY, entry.info.mid()),
                 }
             }
             MessageKind::WRITE => {
                 Request::Write {
                     offset: entry.arg1,
                     data: Reader::new(ch, entry.info),
+                    completer: Completer::new(ch, MessageKind::WRITE_REPLY, entry.info.mid()),
                 }
             }
             MessageKind::GETATTR => {
-                Request::Getattr {
+                Request::GetAttr {
                     attr: Attr::from_usize(entry.arg1),
+                    completer: Completer::new(ch, MessageKind::GETATTR_REPLY, entry.info.mid()),
                 }
             }
             MessageKind::SETATTR => {
-                Request::Setattr {
+                Request::SetAttr {
                     attr: Attr::from_usize(entry.arg1),
                     data: Reader::new(ch, entry.info),
+                    completer: Completer::new(ch, MessageKind::SETATTR_REPLY, entry.info.mid()),
                 }
             }
             _ => {
@@ -293,6 +299,7 @@ enum Error {
 }
 
 struct Executor {
+    next_task_id: AtomicU32,
     tasks: spin::Mutex<HashMap<TaskId, Task>>,
     run_queue: Arc<RunQueue>,
     calls: spin::Mutex<CallMap>,
@@ -304,6 +311,7 @@ impl Executor {
     pub fn new() -> Result<Self, Error> {
         let sink = Sink::new().map_err(Error::Sink)?;
         Ok(Self {
+            next_task_id: AtomicU32::new(0),
             tasks: spin::Mutex::new(HashMap::new()),
             run_queue: Arc::new(RunQueue::new()),
             calls: spin::Mutex::new(CallMap::new()),
@@ -314,7 +322,7 @@ impl Executor {
 
     pub fn spawn(&self, future: impl Future<Output = ()> + Send + Sync + 'static) {
         let mut tasks = self.tasks.lock();
-        let task_id = TaskId(tasks.len() as u32);
+        let task_id = TaskId(self.next_task_id.fetch_add(1, Ordering::Relaxed));
         let waker = TaskWaker::new(task_id, self.run_queue.clone());
         let task = Task {
             future: Box::pin(future),
@@ -423,14 +431,14 @@ impl<'a> Reader<'a> {
     }
 }
 
-pub struct Completer<'a, T> {
+pub struct Completer<'a, T: ?Sized> {
     ch: &'a Channel,
     kind: MessageKind,
     mid: MessageId,
     _pd: PhantomData<T>,
 }
 
-impl<'a, T> Completer<'a, T> {
+impl<'a, T: ?Sized> Completer<'a, T> {
     pub fn new(ch: &'a Channel, kind: MessageKind, mid: MessageId) -> Self {
         Self {
             ch,
@@ -448,6 +456,20 @@ impl<'a> Completer<'a, Channel> {
     }
 }
 
+impl<'a> Completer<'a, [u8]> {
+    pub fn reply(self, data: &[u8]) -> Result<(), ErrorCode> {
+        self.ch.send_body(self.kind, self.mid, data, 0)?;
+        Ok(())
+    }
+}
+
+impl<'a> Completer<'a, usize> {
+    pub fn reply(self, len: usize) -> Result<(), ErrorCode> {
+        self.ch.send_args(self.kind, self.mid, len, 0)?;
+        Ok(())
+    }
+}
+
 pub enum Request<'a> {
     Open {
         path: Reader<'a>,
@@ -457,17 +479,21 @@ pub enum Request<'a> {
     Read {
         offset: usize,
         len: usize,
+        completer: Completer<'a, [u8]>,
     },
     Write {
         offset: usize,
         data: Reader<'a>,
+        completer: Completer<'a, usize>,
     },
-    Getattr {
+    GetAttr {
         attr: Attr,
+        completer: Completer<'a, [u8]>,
     },
-    Setattr {
+    SetAttr {
         attr: Attr,
         data: Reader<'a>,
+        completer: Completer<'a, usize>,
     },
 }
 
@@ -477,17 +503,17 @@ impl<'a> fmt::Debug for Request<'a> {
             Request::Open { options, .. } => {
                 f.debug_struct("Open").field("options", options).finish()
             }
-            Request::Read { offset, len } => {
+            Request::Read { offset, len, .. } => {
                 f.debug_struct("Read")
                     .field("offset", offset)
                     .field("len", len)
                     .finish()
             }
-            Request::Write { offset, data } => {
+            Request::Write { offset, data, .. } => {
                 f.debug_struct("Write").field("offset", offset).finish()
             }
-            Request::Getattr { attr } => f.debug_struct("Getattr").field("attr", attr).finish(),
-            Request::Setattr { attr, data } => {
+            Request::GetAttr { attr, .. } => f.debug_struct("Getattr").field("attr", attr).finish(),
+            Request::SetAttr { attr, data, .. } => {
                 f.debug_struct("Setattr").field("attr", attr).finish()
             }
         }

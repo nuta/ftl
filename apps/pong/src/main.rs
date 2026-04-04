@@ -45,11 +45,16 @@ async fn main(supervisor_ch: Channel) {
             let server = aio::Server::new(client_ch);
             loop {
                 match server.recv().await {
-                    Ok(Request::Write { offset: _, data }) => {
-                        let mut buf = vec![0; data.len()];
+                    Ok(Request::Write {
+                        offset: _,
+                        data,
+                        completer,
+                    }) => {
+                        let data_len = data.len();
+                        let mut buf = vec![0; data_len];
                         data.read_all(&mut buf).unwrap();
                         info!("received write message: {:?}", core::str::from_utf8(&buf));
-                        // client_ch.send_args(MessageKind::WRITE_REPLY, 0, data.len(), 0).await.unwrap();
+                        completer.reply(data_len).unwrap();
                     }
                     _ => {
                         todo!();
