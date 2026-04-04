@@ -192,9 +192,6 @@ impl Handleable for Channel {
     ) -> Result<Option<Event>, ErrorCode> {
         let mut mutable = self.mutable.lock();
 
-        // TODO: if mutable.rx_notified.len() > threshold, do not report the
-        //       message event (backpressure) until more recv()s are done.
-
         if let Some(message) = mutable.rx_pending.pop_front() {
             let event = Event {
                 message: MessageEvent {
