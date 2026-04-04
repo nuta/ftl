@@ -128,15 +128,8 @@ impl CallMap {
         }
     }
 
-    fn receive_reply(
-        &mut self,
-        handle_id: HandleId,
-        mid: MessageId,
-        info: MessageInfo,
-        arg1: usize,
-        arg2: usize,
-    ) {
-        let key = (handle_id, mid);
+    fn receive_reply(&mut self, handle_id: HandleId, info: MessageInfo, arg1: usize, arg2: usize) {
+        let key = (handle_id, info.mid());
         let old = self
             .entries
             .insert(key, CallState::Received { info, arg1, arg2 });
@@ -144,7 +137,8 @@ impl CallMap {
         let Some(CallState::WaitingForReply(waker)) = old else {
             panic!(
                 "unexpected call completion: handle_id={:?} mid={:?}",
-                handle_id, mid
+                handle_id,
+                info.mid()
             );
         };
 
@@ -456,9 +450,7 @@ impl Executor {
             match event {
                 Event::Message { info, arg1, arg2 } => {
                     if info.is_reply() {
-                        self.calls
-                            .lock()
-                            .receive_reply(id, info.mid(), info, arg1, arg2);
+                        self.calls.lock().receive_reply(id, info, arg1, arg2);
                     } else {
                         self.recvs.lock().receive_any(id, info, arg1, arg2);
                     }
