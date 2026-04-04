@@ -280,8 +280,7 @@ impl RecvMap {
             RecvState::Ready(queue) => {
                 let entry = queue.pop_front().unwrap();
                 if queue.is_empty() {
-                    self.states
-                        .insert(handle_id, RecvState::Waiting(waker.clone()));
+                    self.states.insert(handle_id, RecvState::BeforeRecv);
                 }
                 entry
             }
