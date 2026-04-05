@@ -1,9 +1,6 @@
-#![allow(unused)]
-use alloc::collections::btree_map::BTreeMap;
 use alloc::collections::vec_deque::VecDeque;
 use alloc::vec;
 use alloc::vec::Vec;
-use core::cmp::min;
 use core::mem;
 
 use ftl_types::channel::MessageInfo;
@@ -95,7 +92,7 @@ impl Channel {
         body_slice: UserSlice,
         handle_or_arg2: usize,
     ) -> Result<(), ErrorCode> {
-        let mut mutable = self.mutable.lock();
+        let mutable = self.mutable.lock();
         let peer = match &mutable.state {
             State::Initializing => unreachable!(),
             State::Connected(peer) => peer.clone(),
