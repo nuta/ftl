@@ -49,9 +49,13 @@ enum State {
 }
 
 struct Mutable {
+    /// The channel state.
     state: State,
+    /// Pending messages that are not yet notified to the sink.
     rx_pending: VecDeque<Message>,
+    /// Messages that have been notified to the sink, but not yet received.
     rx_notified: Vec<Message>,
+    /// The sink waker.
     emitter: Option<EventEmitter>,
 }
 
