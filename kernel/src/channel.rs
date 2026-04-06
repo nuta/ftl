@@ -1,9 +1,7 @@
-#![allow(unused)]
-use alloc::collections::btree_map::BTreeMap;
 use alloc::collections::vec_deque::VecDeque;
 use alloc::vec;
 use alloc::vec::Vec;
-use core::cmp::min;
+use core::mem;
 
 use ftl_types::channel::MessageInfo;
 use ftl_types::error::ErrorCode;
@@ -36,12 +34,26 @@ struct Message {
     handle: Option<AnyHandle>,
 }
 
+enum State {
+    /// The channel is being created.
+    Initializing,
+    /// The peer is still connected.
+    Connected(SharedRef<Channel>),
+    /// The peer is closed, but there are still pending messages to receive.
+    Draining,
+    /// No more messages can be received.
+    PeerClosed,
+}
+
 struct Mutable {
-    peer: Option<SharedRef<Channel>>,
+    /// The channel state.
+    state: State,
+    /// Pending messages that are not yet notified to the sink.
     rx_pending: VecDeque<Message>,
+    /// Messages that have been notified to the sink, but not yet received.
     rx_notified: Vec<Message>,
+    /// The sink waker.
     emitter: Option<EventEmitter>,
-    peer_closed_notified: bool, // TODO: State: Connected(peer_ch), PeerClosed, Draining /* notified */
 }
 
 pub struct Channel {
@@ -52,23 +64,21 @@ impl Channel {
     pub fn new() -> Result<(SharedRef<Self>, SharedRef<Self>), ErrorCode> {
         let ch0 = SharedRef::new(Self {
             mutable: SpinLock::new(Mutable {
-                peer: None,
+                state: State::Initializing,
                 rx_pending: VecDeque::new(),
                 rx_notified: Vec::new(),
                 emitter: None,
-                peer_closed_notified: false,
             }),
         })?;
         let ch1 = SharedRef::new(Self {
             mutable: SpinLock::new(Mutable {
-                peer: Some(ch0.clone()),
+                state: State::Connected(ch0.clone()),
                 rx_pending: VecDeque::new(),
                 rx_notified: Vec::new(),
                 emitter: None,
-                peer_closed_notified: false,
             }),
         })?;
-        ch0.mutable.lock().peer = Some(ch1.clone());
+        ch0.mutable.lock().state = State::Connected(ch1.clone());
 
         Ok((ch0, ch1))
     }
@@ -82,8 +92,14 @@ impl Channel {
         body_slice: UserSlice,
         handle_or_arg2: usize,
     ) -> Result<(), ErrorCode> {
-        let mut mutable = self.mutable.lock();
-        let peer = mutable.peer.as_ref().ok_or(ErrorCode::PeerClosed)?.clone();
+        let mutable = self.mutable.lock();
+        let peer = match &mutable.state {
+            State::Initializing => unreachable!(),
+            State::Connected(peer) => peer.clone(),
+            _ => {
+                return Err(ErrorCode::PeerClosed);
+            }
+        };
 
         let (handle, arg2) = if info.has_handle() {
             let handle_id = HandleId::from_raw(handle_or_arg2);
@@ -170,16 +186,19 @@ impl Handleable for Channel {
         // Take the peer to decrement its reference count.
         let peer = {
             let mut mutable = self.mutable.lock();
-            mutable.peer.take()
-        };
-
-        let Some(peer) = peer else {
-            // The peer already cleared our peer field. Do nothing.
-            return;
+            match mem::replace(&mut mutable.state, State::Draining) {
+                State::Initializing => unreachable!(),
+                State::Connected(peer) => peer,
+                State::Draining | State::PeerClosed => {
+                    // The peer already cleared our peer field. Do nothing.
+                    return;
+                }
+            }
         };
 
         let mut peer_mutable = peer.mutable.lock();
-        peer_mutable.peer = None;
+        let old = mem::replace(&mut peer_mutable.state, State::Draining);
+        debug_assert!(matches!(old, State::Connected(_)));
         if let Some(ref emitter) = peer_mutable.emitter {
             emitter.notify();
         }
@@ -209,16 +228,23 @@ impl Handleable for Channel {
             return Ok(Some(event));
         };
 
-        if mutable.peer.is_none() && !mutable.peer_closed_notified {
-            mutable.peer_closed_notified = true;
-            return Ok(Some(Event {
-                peer_closed: PeerClosedEvent {
-                    header: EventHeader {
-                        ty: EventType::PEER_CLOSED,
-                        id: handle_id,
-                    },
-                },
-            }));
+        match mutable.state {
+            State::Initializing => unreachable!(),
+            State::Connected(_) => { /* do nothing */ }
+            State::Draining => {
+                if mutable.rx_pending.is_empty() {
+                    mutable.state = State::PeerClosed;
+                    return Ok(Some(Event {
+                        peer_closed: PeerClosedEvent {
+                            header: EventHeader {
+                                ty: EventType::PEER_CLOSED,
+                                id: handle_id,
+                            },
+                        },
+                    }));
+                }
+            }
+            State::PeerClosed => { /* do nothing */ }
         }
 
         return Ok(None);
