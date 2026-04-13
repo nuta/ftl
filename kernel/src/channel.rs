@@ -173,6 +173,30 @@ impl Channel {
 
         Ok(handle_id)
     }
+
+    fn discard(&self, info: MessageInfo) -> Result<(), ErrorCode> {
+        let mut mutable = self.mutable.lock();
+        let old_len = mutable.rx_notified.len();
+        mutable.rx_notified.retain_mut(|message| {
+            if message.info != info {
+                return true; // keep
+            }
+
+            // Drop the handle.
+            if let Some(handle) = message.handle.take() {
+                handle.bypass_check().close();
+            }
+
+            false
+        });
+        let new_len = mutable.rx_notified.len();
+
+        if old_len == new_len {
+            return Err(ErrorCode::NotFound);
+        }
+
+        Ok(())
+    }
 }
 
 impl Handleable for Channel {
@@ -323,4 +347,22 @@ pub fn sys_channel_recv(
 
     let handle_id = ch.recv(process.isolation(), &mut handle_table, info, slice)?;
     Ok(SyscallResult::Return(handle_id.as_usize()))
+}
+
+pub fn sys_channel_discard(
+    current: &SharedRef<Thread>,
+    a0: usize,
+    a1: usize,
+) -> Result<SyscallResult, ErrorCode> {
+    let ch_id = HandleId::from_raw(a0);
+    let info = MessageInfo::from_raw(a1);
+
+    let process = current.process();
+    let handle_table = process.handle_table().lock();
+    let ch = handle_table
+        .get::<Channel>(ch_id)?
+        .authorize(HandleRight::WRITE)?;
+
+    ch.discard(info)?;
+    Ok(SyscallResult::Return(0))
 }

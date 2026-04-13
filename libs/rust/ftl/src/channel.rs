@@ -15,6 +15,7 @@ pub use ftl_types::channel::OpenOptions;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use ftl_types::syscall::SYS_CHANNEL_CREATE;
+use ftl_types::syscall::SYS_CHANNEL_DISCARD;
 use ftl_types::syscall::SYS_CHANNEL_RECV;
 use ftl_types::syscall::SYS_CHANNEL_SEND;
 use log::warn;
@@ -22,6 +23,7 @@ use log::warn;
 use crate::handle::Handleable;
 use crate::handle::OwnedHandle;
 use crate::syscall::syscall1;
+use crate::syscall::syscall2;
 use crate::syscall::syscall3;
 use crate::syscall::syscall5;
 
@@ -170,4 +172,9 @@ pub fn sys_channel_recv(
         body as usize,
     )?;
     Ok(HandleId::from_raw(ret))
+}
+
+pub fn sys_channel_discard(ch: HandleId, info: MessageInfo) -> Result<(), ErrorCode> {
+    syscall2(SYS_CHANNEL_DISCARD, ch.as_usize(), info.as_raw())?;
+    Ok(())
 }
