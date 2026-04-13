@@ -7,13 +7,13 @@ impl MessageKind {
     pub const OPEN: Self = Self::new(2).with_body();
     pub const OPEN_REPLY: Self = Self::new(3).with_handle();
     pub const READ: Self = Self::new(4).with_body();
-    pub const READ_REPLY: Self = Self::new(5).with_handle();
+    pub const READ_REPLY: Self = Self::new(5).with_body();
     pub const WRITE: Self = Self::new(6).with_body();
     pub const WRITE_REPLY: Self = Self::new(7);
     pub const GETATTR: Self = Self::new(8).with_body();
-    pub const GETATTR_REPLY: Self = Self::new(9).with_handle();
+    pub const GETATTR_REPLY: Self = Self::new(9).with_body();
     pub const SETATTR: Self = Self::new(10).with_body();
-    pub const SETATTR_REPLY: Self = Self::new(11).with_handle();
+    pub const SETATTR_REPLY: Self = Self::new(11);
 
     const fn new(kind: u8) -> Self {
         debug_assert!(kind <= 0b1111);
