@@ -2,8 +2,8 @@ use alloc::collections::btree_set::BTreeSet;
 use alloc::collections::vec_deque::VecDeque;
 
 use ftl_types::error::ErrorCode;
-use ftl_types::sink::Event;
 use ftl_types::handle::HandleId;
+use ftl_types::sink::Event;
 
 use crate::handle::Handle;
 use crate::handle::HandleRight;
