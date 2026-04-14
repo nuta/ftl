@@ -18,6 +18,7 @@ A message is a unit of transfer between channels. It is a packet-like structure 
 
 | Field | Type | Description |
 |-------|------|-----------|
+| Message info | `u32` | Message type, ID, and body length. |
 | Inlined arguments | `(usize, usize)` | Arbitrary data that is copied as is. |
 | Message body | `&mut [u8]` | A pair of pointer and length of a memory region to be copied to the peer process. |
 | Handle | `Handle` | A handle (e.g. channel) to be moved to the peer process. |
@@ -38,10 +39,10 @@ fn read(offset: usize, len: usize) -> Vec<u8>
 // Writes data. Equivalent to: pwrite(2)
 fn write(offset: usize, buf: &[u8]) -> usize /* written bytes */
 
-// Gets attributes. Equivalent to: stat(2)
+// Gets an attribute. Equivalent to: stat(2)
 fn getattr(attr: Attr) -> Vec<u8>
 
-// Sets attributes. Equivalent to: chmod(2), rename(2), ....
+// Sets an attribute. Equivalent to: chmod(2), rename(2), ....
 fn setattr(attr: Attr, buf: &[u8]) -> usize /* written bytes */
 ```
 
@@ -89,3 +90,70 @@ let (ch1, ch2) = ftl::channel::Channel::new().unwrap();
 ```
 
 Both `ch1` and `ch2` can send/receive messages. Sending a message using `ch1` will deliver the message to `ch2`, and vice versa. This is similar to TCP connections where both sides can send/receive data.
+
+## Internals
+
+Under the hood, FTL channel is implemented by following system calls (simplified):
+
+```rs
+impl Channel {
+    fn create() -> (Channel, Channel);
+    fn send(&self, msg: Message);
+    fn recv(&self, mid: MessageId, buf: &mut [u8]) -> HandleId;
+    fn peek(&self) -> Peek;
+    fn discard(&self, mid: MessageId);
+}
+```
+
+The notable difference from typical IPC systems is the concept of *"peek"*. The receive operation is non-blocking, and receives a specific message selected by its ID, not any message.
+
+> ![NOTE]
+>
+> **Design decision: Peek then receive**
+>
+> Peek returns a message info (kind, ID, and body length) and inlined arguments. They are sufficient enough to identify how to handle the message.
+>
+> `recv` accepts the message and reads the message body into the desired memory space. This eliminates the need to allocate an extra buffer for the body.
+>
+> In practice, you'll use a sink to wait for messages, and it returns a peek struct so that you don't have to call the peek system call.
+
+For example, in server side (i.e. accept any messages), the typical operation is to peek then receive the message:
+
+```rs
+// Server side (Simplified API for demonstration).
+loop {
+    wait_for_message(&ch);
+    let peek = ch.peek();
+    match peek {
+        Peek::Write { mid, offset, body_len } => {
+            let mut buf = vec![0; body_len];
+            ch.recv(mid, &mut buf);
+            ch.send(Message::WriteReply { mid }); // Reply
+        }
+        Peek::Read { mid, .. } => {
+            // Ignore unhandled messages.
+            ch.discard(peek.mid());
+        }
+        ...
+    }
+}
+```
+
+In client side (i.e. receive a specific message), it's a RPC like operation and
+
+```rs
+// Client side (Simplified API for demonstration).
+let mid = ch.alloc_mid();
+ch.send(Message::Read { mid, offset: 0 });
+
+wait_for_message(&ch);
+
+let mut buf = vec![0; 1024];
+ch.recv(mid, &mut buf);
+```
+
+> [!NOTE]
+>
+> `channel_peek`/`channel_recv` are non-blocking operations. If there is no message to receive, it returns immediately with an error.
+>
+> Typically, you'll use sink to wait for events including channel messages.
