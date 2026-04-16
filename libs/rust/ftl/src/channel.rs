@@ -27,6 +27,57 @@ use crate::syscall::syscall2;
 use crate::syscall::syscall3;
 use crate::syscall::syscall5;
 
+pub enum Message<'a> {
+    Open {
+        mid: MessageId,
+        path: &'a [u8],
+        options: OpenOptions,
+    },
+    Read {
+        mid: MessageId,
+        offset: usize,
+        len: usize,
+    },
+    Write {
+        mid: MessageId,
+        offset: usize,
+        buf: &'a [u8],
+    },
+    Getattr {
+        mid: MessageId,
+        attr: Attr,
+    },
+    Setattr {
+        mid: MessageId,
+        attr: Attr,
+        buf: &'a [u8],
+    },
+    ErrorReply {
+        mid: MessageId,
+        error: ErrorCode,
+    },
+    OpenReply {
+        mid: MessageId,
+        handle: OwnedHandle,
+    },
+    ReadReply {
+        mid: MessageId,
+        buf: &'a [u8],
+    },
+    WriteReply {
+        mid: MessageId,
+        len: usize,
+    },
+    GetattrReply {
+        mid: MessageId,
+        buf: &'a [u8],
+    },
+    SetattrReply {
+        mid: MessageId,
+        len: usize,
+    },
+}
+
 pub struct Channel {
     handle: OwnedHandle,
 }
@@ -43,7 +94,45 @@ impl Channel {
         Self { handle }
     }
 
-    pub fn send_args(
+    pub fn send(&self, message: Message) -> Result<(), ErrorCode> {
+        match message {
+            Message::Open { mid, path, options } => {
+                self.send_body(MessageKind::OPEN, mid, path, options.as_usize())
+            }
+            Message::Read { mid, offset, len } => {
+                self.send_args(MessageKind::READ, mid, offset, len)
+            }
+            Message::Write { mid, offset, buf } => {
+                self.send_body(MessageKind::WRITE, mid, buf, offset)
+            }
+            Message::Getattr { mid, attr } => {
+                self.send_args(MessageKind::GETATTR, mid, attr.as_usize(), 0)
+            }
+            Message::Setattr { mid, attr, buf } => {
+                self.send_body(MessageKind::SETATTR, mid, buf, attr.as_usize())
+            }
+            Message::ErrorReply { mid, error } => {
+                self.send_args(MessageKind::ERROR_REPLY, mid, error.as_usize(), 0)
+            }
+            Message::OpenReply { mid, handle } => {
+                self.send_handle(MessageKind::OPEN_REPLY, mid, handle)
+            }
+            Message::ReadReply { mid, buf } => {
+                self.send_body(MessageKind::READ_REPLY, mid, buf, 0)
+            }
+            Message::WriteReply { mid, len } => {
+                self.send_args(MessageKind::WRITE_REPLY, mid, len, 0)
+            }
+            Message::GetattrReply { mid, buf } => {
+                self.send_body(MessageKind::GETATTR_REPLY, mid, buf, 0)
+            }
+            Message::SetattrReply { mid, len } => {
+                self.send_args(MessageKind::SETATTR_REPLY, mid, len, 0)
+            }
+        }
+    }
+
+     fn send_args(
         &self,
         kind: MessageKind,
         mid: MessageId,
@@ -57,7 +146,7 @@ impl Channel {
         Ok(())
     }
 
-    pub fn send_body(
+     fn send_body(
         &self,
         kind: MessageKind,
         mid: MessageId,
@@ -71,7 +160,7 @@ impl Channel {
         Ok(())
     }
 
-    pub fn send_handle(
+     fn send_handle(
         &self,
         kind: MessageKind,
         mid: MessageId,

@@ -2,6 +2,7 @@
 #![no_main]
 
 use ftl::channel::Channel;
+use ftl::channel::Message;
 use ftl::channel::MessageId;
 use ftl::channel::MessageKind;
 use ftl::channel::OpenOptions;
@@ -29,7 +30,11 @@ fn main(supervisor_ch: Channel) {
     let path = b"service/pong";
     let options = OpenOptions::LISTEN;
     supervisor_ch
-        .send_body(MessageKind::OPEN, listen_mid, path, options.as_usize())
+        .send(Message::Open {
+            mid: listen_mid,
+            path: path.as_slice(),
+            options,
+        })
         .unwrap();
 
     // Wait for the supervisor process to register this service.
@@ -66,13 +71,10 @@ fn main(supervisor_ch: Channel) {
                     MessageKind::OPEN => {
                         if info.body_len() > 1024 {
                             server_ch
-                                .send_args(
-                                    MessageKind::ERROR_REPLY,
-                                    info.mid(),
-                                    ErrorCode::InvalidArgument.as_usize(),
-                                    0,
-                                )
-                                .unwrap();
+                                .send(Message::ErrorReply {
+                                    mid: info.mid(),
+                                    error: ErrorCode::InvalidArgument,
+                                }).unwrap();
                             continue;
                         }
 
@@ -89,11 +91,10 @@ fn main(supervisor_ch: Channel) {
 
                         // Reply to the client.
                         server_ch
-                            .send_handle(
-                                MessageKind::OPEN_REPLY,
-                                info.mid(),
-                                their_ch.into_handle(),
-                            )
+                            .send(Message::OpenReply {
+                                mid: info.mid(),
+                                handle: their_ch.into_handle(),
+                            })
                             .unwrap();
 
                         info!("accepted a client");
@@ -107,13 +108,10 @@ fn main(supervisor_ch: Channel) {
                 match info.kind() {
                     MessageKind::WRITE => {
                         if info.body_len() > 1024 {
-                            ch.send_args(
-                                MessageKind::ERROR_REPLY,
-                                info.mid(),
-                                ErrorCode::InvalidArgument.as_usize(),
-                                0,
-                            )
-                            .unwrap();
+                            ch.send(Message::ErrorReply {
+                                mid: info.mid(),
+                                error: ErrorCode::InvalidArgument,
+                            }).unwrap();
                             continue;
                         }
 
@@ -124,8 +122,10 @@ fn main(supervisor_ch: Channel) {
                         }
 
                         info!("received write message: {:?}", core::str::from_utf8(&buf));
-                        ch.send_args(MessageKind::WRITE_REPLY, info.mid(), buf.len(), 0)
-                            .unwrap();
+                        ch.send(Message::WriteReply {
+                            mid: info.mid(),
+                            len: buf.len(),
+                        }).unwrap();
                     }
                     _ => {
                         warn!("unhandled message: {:?}", info.kind());

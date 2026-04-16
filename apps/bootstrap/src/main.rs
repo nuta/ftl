@@ -5,6 +5,7 @@
 extern crate alloc;
 
 use ftl::channel::Channel;
+use ftl::channel::Message;
 use ftl::channel::MessageId;
 use ftl::channel::MessageInfo;
 use ftl::channel::MessageKind;
@@ -58,7 +59,11 @@ fn forward_connect(
 
     let options = OpenOptions::CONNECT;
     if let Err(error) =
-        server_ch.send_body(MessageKind::OPEN, mid, path.as_bytes(), options.as_usize())
+        server_ch.send(Message::Open {
+            mid,
+            path: path.as_bytes(),
+            options,
+        })
     {
         let waiter = pending_opens.remove(&mid).unwrap();
         return Err((waiter, error));
@@ -177,11 +182,10 @@ fn main(supervisor_ch: Channel) {
                                 }
                             };
 
-                            if let Err(error) = ch.send_handle(
-                                MessageKind::OPEN_REPLY,
-                                info.mid(),
-                                their_ch.into_handle(),
-                            ) {
+                            if let Err(error) = ch.send(Message::OpenReply {
+                                mid: info.mid(),
+                                handle: their_ch.into_handle(),
+                            }) {
                                 warn!("failed to reply to service registration: {:?}", error);
                                 continue;
                             }
@@ -253,11 +257,10 @@ fn main(supervisor_ch: Channel) {
                             continue;
                         };
 
-                        if let Err(error) = waiter.client_ch.send_handle(
-                            MessageKind::OPEN_REPLY,
-                            waiter.client_mid,
+                        if let Err(error) = waiter.client_ch.send(Message::OpenReply {
+                            mid: waiter.client_mid,
                             handle,
-                        ) {
+                        }) {
                             warn!("failed to send open reply to client: {:?}", error);
                         }
                     }

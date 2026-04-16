@@ -2,6 +2,7 @@
 #![no_main]
 
 use ftl::channel::Channel;
+use ftl::channel::Message;
 use ftl::channel::MessageId;
 use ftl::channel::MessageKind;
 use ftl::channel::OpenOptions;
@@ -22,7 +23,11 @@ fn main(supervisor_ch: Channel) {
     let path = b"service/pong";
     let options = OpenOptions::CONNECT;
     supervisor_ch
-        .send_body(MessageKind::OPEN, mid, path, options.as_usize())
+        .send(Message::Open {
+            mid,
+            path: path.as_slice(),
+            options,
+        })
         .unwrap();
 
     // Wait for the pong channel.
@@ -52,7 +57,11 @@ fn main(supervisor_ch: Channel) {
     // Send the first message to the pong service.
     let mid = MessageId::new(1);
     let body = b"Hello, world!";
-    pong_ch.send_body(MessageKind::WRITE, mid, body, 0).unwrap();
+    pong_ch.send(Message::Write {
+        mid,
+        offset: 0,
+        buf: body,
+    }).unwrap();
 
     let mut num_received = 0;
     loop {
@@ -75,7 +84,11 @@ fn main(supervisor_ch: Channel) {
                         let mid = MessageId::new(1);
 
                         // Send more messages!
-                        pong_ch.send_body(MessageKind::WRITE, mid, body, 0).unwrap();
+                        pong_ch.send(Message::Write {
+                            mid,
+                            offset: 0,
+                            buf: body,
+                        }).unwrap();
                     }
                     kind => {
                         warn!("unhandled message: {:?}", kind);
