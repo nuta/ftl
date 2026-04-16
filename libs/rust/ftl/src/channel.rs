@@ -2,6 +2,7 @@ use alloc::format;
 use alloc::rc::Rc;
 use alloc::string::String;
 use core::fmt;
+use core::marker::PhantomData;
 use core::mem;
 use core::mem::MaybeUninit;
 use core::ptr::null;
@@ -78,6 +79,76 @@ pub enum Message<'a> {
     },
 }
 
+struct RecvToken<'a, R: ?Sized> {
+    ch: &'a Channel,
+    info: MessageInfo,
+    _pd: PhantomData<R>,
+}
+
+impl<'a, R> RecvToken<'a, R> {
+    pub fn new(ch: &'a Channel, info: MessageInfo) -> Self {
+        Self { ch, info, _pd: PhantomData }
+    }
+}
+
+impl<'a> RecvToken<'a, (usize, usize)> {
+    pub fn recv(self) -> Result<(), ErrorCode> {
+        self.ch.recv_args(self.info)?;
+        Ok(())
+    }
+}
+
+impl<'a> RecvToken<'a, OwnedHandle> {
+    pub fn recv(self) -> Result<OwnedHandle, ErrorCode> {
+        let handle =self.ch.recv_handle(self.info)?;
+        Ok(handle)
+    }
+}
+
+impl<'a> RecvToken<'a, [u8]> {
+    pub fn recv(self, buf: &mut [u8]) -> Result<(), ErrorCode> {
+        self.ch.recv_body(self.info, buf)?;
+        Ok(())
+    }
+}
+
+pub enum Peek<'a> {
+    Open {
+        recv: RecvToken<'a, ()>,
+        options: OpenOptions,
+    },
+    Read {
+        recv: RecvToken<'a, [u8]>,
+    },
+    Write {
+        recv: RecvToken<'a, [u8]>,
+    },
+    GetAttr {
+        recv: RecvToken<'a, [u8]>,
+    },
+    SetAttr {
+        recv: RecvToken<'a, [u8]>,
+    },
+    ErrorReply {
+        recv: RecvToken<'a, ()>,
+    },
+    OpenReply {
+        recv: RecvToken<'a, OwnedHandle>,
+    },
+    ReadReply {
+        recv: RecvToken<'a, [u8]>,
+    },
+    WriteReply {
+        recv: RecvToken<'a, ()>,
+    },
+    GetAttrReply {
+        recv: RecvToken<'a, [u8]>,
+    },
+    SetAttrReply {
+        recv: RecvToken<'a, ()>,
+    },
+}
+
 pub struct Channel {
     handle: OwnedHandle,
 }
@@ -130,6 +201,10 @@ impl Channel {
                 self.send_args(MessageKind::SETATTR_REPLY, mid, len, 0)
             }
         }
+    }
+
+    pub fn peek(&self) -> Result<Peek, ErrorCode> {
+        todo!()
     }
 
      fn send_args(
