@@ -87,6 +87,13 @@ impl MessageId {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct PeekedMessage {
+    pub info: MessageInfo,
+    pub arg1: usize,
+    pub arg2: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Attr(u32);
 
 impl Attr {

@@ -13,10 +13,12 @@ pub use ftl_types::channel::MessageId;
 pub use ftl_types::channel::MessageInfo;
 pub use ftl_types::channel::MessageKind;
 pub use ftl_types::channel::OpenOptions;
+use ftl_types::channel::PeekedMessage;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use ftl_types::syscall::SYS_CHANNEL_CREATE;
 use ftl_types::syscall::SYS_CHANNEL_DISCARD;
+use ftl_types::syscall::SYS_CHANNEL_PEEK;
 use ftl_types::syscall::SYS_CHANNEL_RECV;
 use ftl_types::syscall::SYS_CHANNEL_SEND;
 use log::warn;
@@ -79,7 +81,7 @@ pub enum Message<'a> {
     },
 }
 
-struct RecvToken<'a, R: ?Sized> {
+pub struct RecvToken<'a, R: ?Sized> {
     ch: &'a Channel,
     info: MessageInfo,
     _pd: PhantomData<R>,
@@ -87,7 +89,11 @@ struct RecvToken<'a, R: ?Sized> {
 
 impl<'a, R> RecvToken<'a, R> {
     pub fn new(ch: &'a Channel, info: MessageInfo) -> Self {
-        Self { ch, info, _pd: PhantomData }
+        Self {
+            ch,
+            info,
+            _pd: PhantomData,
+        }
     }
 }
 
@@ -100,7 +106,7 @@ impl<'a> RecvToken<'a, (usize, usize)> {
 
 impl<'a> RecvToken<'a, OwnedHandle> {
     pub fn recv(self) -> Result<OwnedHandle, ErrorCode> {
-        let handle =self.ch.recv_handle(self.info)?;
+        let handle = self.ch.recv_handle(self.info)?;
         Ok(handle)
     }
 }
@@ -188,9 +194,7 @@ impl Channel {
             Message::OpenReply { mid, handle } => {
                 self.send_handle(MessageKind::OPEN_REPLY, mid, handle)
             }
-            Message::ReadReply { mid, buf } => {
-                self.send_body(MessageKind::READ_REPLY, mid, buf, 0)
-            }
+            Message::ReadReply { mid, buf } => self.send_body(MessageKind::READ_REPLY, mid, buf, 0),
             Message::WriteReply { mid, len } => {
                 self.send_args(MessageKind::WRITE_REPLY, mid, len, 0)
             }
@@ -207,7 +211,7 @@ impl Channel {
         todo!()
     }
 
-     fn send_args(
+    fn send_args(
         &self,
         kind: MessageKind,
         mid: MessageId,
@@ -221,7 +225,7 @@ impl Channel {
         Ok(())
     }
 
-     fn send_body(
+    fn send_body(
         &self,
         kind: MessageKind,
         mid: MessageId,
@@ -235,7 +239,7 @@ impl Channel {
         Ok(())
     }
 
-     fn send_handle(
+    fn send_handle(
         &self,
         kind: MessageKind,
         mid: MessageId,
@@ -322,6 +326,13 @@ pub fn sys_channel_send(
         handle_or_arg2,
     )?;
     Ok(())
+}
+
+pub fn sys_channel_peek(ch: HandleId) -> Result<PeekedMessage, ErrorCode> {
+    let mut peek = MaybeUninit::<PeekedMessage>::uninit();
+    let ret = syscall2(SYS_CHANNEL_PEEK, ch.as_usize(), peek.as_mut_ptr() as usize)?;
+
+    Ok(unsafe { peek.assume_init() })
 }
 
 pub fn sys_channel_recv(

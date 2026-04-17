@@ -57,11 +57,13 @@ fn main(supervisor_ch: Channel) {
     // Send the first message to the pong service.
     let mid = MessageId::new(1);
     let body = b"Hello, world!";
-    pong_ch.send(Message::Write {
-        mid,
-        offset: 0,
-        buf: body,
-    }).unwrap();
+    pong_ch
+        .send(Message::Write {
+            mid,
+            offset: 0,
+            buf: body,
+        })
+        .unwrap();
 
     let mut num_received = 0;
     loop {
@@ -84,11 +86,13 @@ fn main(supervisor_ch: Channel) {
                         let mid = MessageId::new(1);
 
                         // Send more messages!
-                        pong_ch.send(Message::Write {
-                            mid,
-                            offset: 0,
-                            buf: body,
-                        }).unwrap();
+                        pong_ch
+                            .send(Message::Write {
+                                mid,
+                                offset: 0,
+                                buf: body,
+                            })
+                            .unwrap();
                     }
                     kind => {
                         warn!("unhandled message: {:?}", kind);

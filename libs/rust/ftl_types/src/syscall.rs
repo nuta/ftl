@@ -43,3 +43,4 @@ pub const SYS_PROCESS_CREATE_SANDBOXED: usize = 34;
 pub const SYS_THREAD_RESUME_WITH: usize = 35;
 pub const SYS_PROCESS_INJECT_HANDLE: usize = 36;
 pub const SYS_CHANNEL_DISCARD: usize = 37;
+pub const SYS_CHANNEL_PEEK: usize = 38;

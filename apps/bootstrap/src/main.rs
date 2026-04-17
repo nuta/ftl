@@ -58,13 +58,11 @@ fn forward_connect(
     pending_opens.insert(mid, waiter);
 
     let options = OpenOptions::CONNECT;
-    if let Err(error) =
-        server_ch.send(Message::Open {
-            mid,
-            path: path.as_bytes(),
-            options,
-        })
-    {
+    if let Err(error) = server_ch.send(Message::Open {
+        mid,
+        path: path.as_bytes(),
+        options,
+    }) {
         let waiter = pending_opens.remove(&mid).unwrap();
         return Err((waiter, error));
     }

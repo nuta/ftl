@@ -74,7 +74,8 @@ fn main(supervisor_ch: Channel) {
                                 .send(Message::ErrorReply {
                                     mid: info.mid(),
                                     error: ErrorCode::InvalidArgument,
-                                }).unwrap();
+                                })
+                                .unwrap();
                             continue;
                         }
 
@@ -111,7 +112,8 @@ fn main(supervisor_ch: Channel) {
                             ch.send(Message::ErrorReply {
                                 mid: info.mid(),
                                 error: ErrorCode::InvalidArgument,
-                            }).unwrap();
+                            })
+                            .unwrap();
                             continue;
                         }
 
@@ -125,7 +127,8 @@ fn main(supervisor_ch: Channel) {
                         ch.send(Message::WriteReply {
                             mid: info.mid(),
                             len: buf.len(),
-                        }).unwrap();
+                        })
+                        .unwrap();
                     }
                     _ => {
                         warn!("unhandled message: {:?}", info.kind());
