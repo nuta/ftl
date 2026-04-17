@@ -328,7 +328,7 @@ pub enum Peek<'a> {
     },
     Unknown {
         discard: DiscardToken<'a>,
-    }
+    },
 }
 
 pub struct Channel {

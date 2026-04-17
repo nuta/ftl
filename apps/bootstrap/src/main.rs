@@ -142,7 +142,7 @@ fn main(supervisor_ch: Channel) {
                                         waiter,
                                     ) {
                                         warn!("failed to forward connect request: {:?}", error);
-                                        completer.reply_error(error);
+                                        waiter.completer.reply_error(error);
                                     }
                                 }
                                 Some(Service::Waiting { waiters }) => {
