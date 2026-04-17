@@ -103,7 +103,12 @@ fn main(supervisor_ch: Channel) {
         match (context, event) {
             (Context::Client { ch }, Event::Message(peeked)) => {
                 match Peek::parse(ch, peeked) {
-                    Peek::Open { recv, options, path_len, completer } => {
+                    Peek::Open {
+                        recv,
+                        options,
+                        path_len,
+                        completer,
+                    } => {
                         let mut buf = vec![0; path_len];
                         if let Err(error) = recv.recv(&mut buf) {
                             warn!("failed to recv with body: {:?}", error);
@@ -126,9 +131,7 @@ fn main(supervisor_ch: Channel) {
                         };
 
                         if options == OpenOptions::CONNECT {
-                            let waiter = PendingOpen {
-                                completer: todo!(),
-                            };
+                            let waiter = PendingOpen { completer: todo!() };
 
                             match services.get_mut(service_name) {
                                 Some(Service::Registered {
@@ -240,7 +243,7 @@ fn main(supervisor_ch: Channel) {
                 match Peek::parse(server_ch, peeked) {
                     Peek::OpenReply { recv } => {
                         let Some(waiter) = pending_opens.remove(&recv.mid()) else {
-                            warn!("unknown open reply: mid={:?}",   recv.mid());
+                            warn!("unknown open reply: mid={:?}", recv.mid());
                             continue;
                         };
 

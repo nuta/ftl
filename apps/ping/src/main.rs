@@ -39,7 +39,7 @@ fn main(supervisor_ch: Channel) {
                     Peek::OpenReply { recv } => {
                         match recv.recv() {
                             Ok(handle) => {
-                                break Channel::from_handle(handle);                                
+                                break Channel::from_handle(handle);
                             }
                             Err(error) => {
                                 warn!("failed to recv with handle: {:?}", error);

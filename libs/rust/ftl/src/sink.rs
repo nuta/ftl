@@ -53,9 +53,7 @@ impl Sink {
         let raw = unsafe { buf.assume_init_ref() };
         let header = raw.header();
         let event = match header.ty {
-            EventType::MESSAGE => {
-                Event::Message(unsafe { raw.message.peeked })
-            }
+            EventType::MESSAGE => Event::Message(unsafe { raw.message.peeked }),
             EventType::PEER_CLOSED => Event::PeerClosed,
             type_ => panic!("unimplemented event type: {:?}", type_),
         };

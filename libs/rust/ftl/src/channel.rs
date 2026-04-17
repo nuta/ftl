@@ -145,7 +145,6 @@ impl<'a> DiscardToken<'a> {
     }
 }
 
-
 impl<'a> Peek<'a> {
     pub fn parse(ch: &'a Channel, raw: PeekedMessage) -> Peek<'a> {
         match raw.info.kind() {
@@ -153,7 +152,12 @@ impl<'a> Peek<'a> {
                 let recv = RecvToken::new(ch, raw.info);
                 let options = OpenOptions::from_usize(raw.arg1);
                 let completer = Completer::new(ch, MessageKind::OPEN_REPLY, raw.info.mid());
-                Peek::Open { recv, completer, options, path_len: raw.info.body_len() }
+                Peek::Open {
+                    recv,
+                    completer,
+                    options,
+                    path_len: raw.info.body_len(),
+                }
             }
             MessageKind::READ => {
                 let recv = RecvToken::new(ch, raw.info);
@@ -162,7 +166,11 @@ impl<'a> Peek<'a> {
             MessageKind::WRITE => {
                 let recv = RecvToken::new(ch, raw.info);
                 let completer = Completer::new(ch, MessageKind::WRITE_REPLY, raw.info.mid());
-                Peek::Write { recv, len: raw.info.body_len(), completer }
+                Peek::Write {
+                    recv,
+                    len: raw.info.body_len(),
+                    completer,
+                }
             }
             MessageKind::GETATTR => {
                 let recv = RecvToken::new(ch, raw.info);
@@ -185,11 +193,17 @@ impl<'a> Peek<'a> {
             }
             MessageKind::READ_REPLY => {
                 let recv = RecvToken::new(ch, raw.info);
-                Peek::ReadReply { recv, len: raw.arg1 }
+                Peek::ReadReply {
+                    recv,
+                    len: raw.arg1,
+                }
             }
             MessageKind::WRITE_REPLY => {
                 let recv = RecvToken::new(ch, raw.info);
-                Peek::WriteReply { recv, len: raw.arg1 }
+                Peek::WriteReply {
+                    recv,
+                    len: raw.arg1,
+                }
             }
             MessageKind::GETATTR_REPLY => {
                 let recv = RecvToken::new(ch, raw.info);
@@ -197,9 +211,13 @@ impl<'a> Peek<'a> {
             }
             MessageKind::SETATTR_REPLY => {
                 let recv = RecvToken::new(ch, raw.info);
-                    Peek::SetAttrReply { recv }
+                Peek::SetAttrReply { recv }
             }
-            _ => Peek::Unknown { discard: DiscardToken::new(ch, raw.info) },
+            _ => {
+                Peek::Unknown {
+                    discard: DiscardToken::new(ch, raw.info),
+                }
+            }
         }
     }
 }
@@ -213,11 +231,17 @@ pub struct Completer<'a, T: ?Sized> {
 
 impl<'a, T: ?Sized> Completer<'a, T> {
     pub fn new(ch: &'a Channel, reply_kind: MessageKind, mid: MessageId) -> Self {
-        Self { ch, reply_kind, mid, _pd: PhantomData }
+        Self {
+            ch,
+            reply_kind,
+            mid,
+            _pd: PhantomData,
+        }
     }
 
     pub fn reply_error(self, error: ErrorCode) -> Result<(), ErrorCode> {
-        self.ch.send_args(self.reply_kind, self.mid, error.as_usize(), 0)?;
+        self.ch
+            .send_args(self.reply_kind, self.mid, error.as_usize(), 0)?;
         Ok(())
     }
 }
@@ -252,11 +276,17 @@ pub struct OwnedCompleter<T: ?Sized> {
 
 impl<T: ?Sized> OwnedCompleter<T> {
     pub fn new(ch: Rc<Channel>, reply_kind: MessageKind, mid: MessageId) -> Self {
-        Self { ch, reply_kind, mid, _pd: PhantomData     }
+        Self {
+            ch,
+            reply_kind,
+            mid,
+            _pd: PhantomData,
+        }
     }
 
     pub fn reply_error(self, error: ErrorCode) -> Result<(), ErrorCode> {
-        self.ch.send_args(self.reply_kind, self.mid, error.as_usize(), 0)?;
+        self.ch
+            .send_args(self.reply_kind, self.mid, error.as_usize(), 0)?;
         Ok(())
     }
 }

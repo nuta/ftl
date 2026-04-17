@@ -69,7 +69,12 @@ fn main(supervisor_ch: Channel) {
         match (context, event) {
             (Context::Server, Event::Message(peeked)) => {
                 match Peek::parse(&server_ch, peeked) {
-                    Peek::Open { recv, options, path_len, completer } => {
+                    Peek::Open {
+                        recv,
+                        options,
+                        path_len,
+                        completer,
+                    } => {
                         if path_len > 1024 {
                             completer.reply_error(ErrorCode::InvalidArgument);
                             continue;
@@ -98,7 +103,11 @@ fn main(supervisor_ch: Channel) {
             }
             (Context::Client { ch }, Event::Message(peeked)) => {
                 match Peek::parse(ch, peeked) {
-                    Peek::Write { recv, len, completer } => {
+                    Peek::Write {
+                        recv,
+                        len,
+                        completer,
+                    } => {
                         if len > 1024 {
                             completer.reply_error(ErrorCode::InvalidArgument);
                             continue;
