@@ -6,6 +6,7 @@ use ftl::channel::Message;
 use ftl::channel::MessageId;
 use ftl::channel::MessageKind;
 use ftl::channel::OpenOptions;
+use ftl::channel::Peek;
 use ftl::collections::HashMap;
 use ftl::error::ErrorCode;
 use ftl::handle::Handleable;
@@ -41,14 +42,14 @@ fn main(supervisor_ch: Channel) {
     let server_ch = loop {
         let (id, event) = sink.wait().unwrap();
         match event {
-            Event::Message { info, .. } if id == supervisor_ch.handle().id() => {
-                match info.kind() {
-                    MessageKind::OPEN_REPLY => {
-                        let handle = supervisor_ch.recv_handle(info).unwrap();
+            Event::Message(peeked) if id == supervisor_ch.handle().id() => {
+                match Peek::parse(&supervisor_ch, peeked) {
+                    Peek::OpenReply { recv } => {
+                        let handle = recv.recv().unwrap();
                         break Channel::from_handle(handle);
                     }
                     _ => {
-                        warn!("unhandled message: {:?}", info.kind());
+                        warn!("unhandled message: {:?}", peeked);
                     }
                 }
             }
@@ -66,22 +67,17 @@ fn main(supervisor_ch: Channel) {
         let (id, event) = sink.wait().unwrap();
         let context = contexts.get(&id).unwrap();
         match (context, event) {
-            (Context::Server, Event::Message { info, .. }) => {
-                match info.kind() {
-                    MessageKind::OPEN => {
-                        if info.body_len() > 1024 {
-                            server_ch
-                                .send(Message::ErrorReply {
-                                    mid: info.mid(),
-                                    error: ErrorCode::InvalidArgument,
-                                })
-                                .unwrap();
+            (Context::Server, Event::Message(peeked)) => {
+                match Peek::parse(&server_ch, peeked) {
+                    Peek::Open { recv, options, path_len, completer } => {
+                        if path_len > 1024 {
+                            completer.reply_error(ErrorCode::InvalidArgument);
                             continue;
                         }
 
                         // Receive the message.
-                        let mut buf = vec![0; info.body_len()];
-                        if let Err(error) = server_ch.recv_body(info, &mut buf) {
+                        let mut buf = vec![0; path_len];
+                        if let Err(error) = recv.recv(&mut buf) {
                             warn!("failed to recv with body: {:?}", error);
                             continue;
                         }
@@ -91,47 +87,34 @@ fn main(supervisor_ch: Channel) {
                         contexts.insert(our_ch.handle().id(), Context::Client { ch: our_ch });
 
                         // Reply to the client.
-                        server_ch
-                            .send(Message::OpenReply {
-                                mid: info.mid(),
-                                handle: their_ch.into_handle(),
-                            })
-                            .unwrap();
+                        completer.reply(their_ch.into_handle());
 
                         info!("accepted a client");
                     }
                     _ => {
-                        warn!("unhandled message: {:?}", info.kind());
+                        warn!("unhandled message: {:?}", peeked);
                     }
                 }
             }
-            (Context::Client { ch }, Event::Message { info, .. }) => {
-                match info.kind() {
-                    MessageKind::WRITE => {
-                        if info.body_len() > 1024 {
-                            ch.send(Message::ErrorReply {
-                                mid: info.mid(),
-                                error: ErrorCode::InvalidArgument,
-                            })
-                            .unwrap();
+            (Context::Client { ch }, Event::Message(peeked)) => {
+                match Peek::parse(ch, peeked) {
+                    Peek::Write { recv, len, completer } => {
+                        if len > 1024 {
+                            completer.reply_error(ErrorCode::InvalidArgument);
                             continue;
                         }
 
-                        let mut buf = vec![0; info.body_len()];
-                        if let Err(error) = ch.recv_body(info, &mut buf) {
+                        let mut buf = vec![0; len];
+                        if let Err(error) = recv.recv(&mut buf) {
                             warn!("failed to recv with body: {:?}", error);
                             continue;
                         }
 
                         info!("received write message: {:?}", core::str::from_utf8(&buf));
-                        ch.send(Message::WriteReply {
-                            mid: info.mid(),
-                            len: buf.len(),
-                        })
-                        .unwrap();
+                        completer.reply(buf.len());
                     }
                     _ => {
-                        warn!("unhandled message: {:?}", info.kind());
+                        warn!("unhandled message: {:?}", peeked);
                     }
                 }
             }

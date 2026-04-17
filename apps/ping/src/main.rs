@@ -4,8 +4,8 @@
 use ftl::channel::Channel;
 use ftl::channel::Message;
 use ftl::channel::MessageId;
-use ftl::channel::MessageKind;
 use ftl::channel::OpenOptions;
+use ftl::channel::Peek;
 use ftl::handle::Handleable;
 use ftl::prelude::*;
 use ftl::sink::Event;
@@ -34,14 +34,20 @@ fn main(supervisor_ch: Channel) {
     let pong_ch = loop {
         let (id, event) = sink.wait().unwrap();
         match event {
-            Event::Message { info, arg1, arg2 } if id == supervisor_ch.handle().id() => {
-                match info.kind() {
-                    MessageKind::OPEN_REPLY => {
-                        let handle = supervisor_ch.recv_handle(info).unwrap();
-                        break Channel::from_handle(handle);
+            Event::Message(peeked) if id == supervisor_ch.handle().id() => {
+                match Peek::parse(&supervisor_ch, peeked) {
+                    Peek::OpenReply { recv } => {
+                        match recv.recv() {
+                            Ok(handle) => {
+                                break Channel::from_handle(handle);                                
+                            }
+                            Err(error) => {
+                                warn!("failed to recv with handle: {:?}", error);
+                            }
+                        }
                     }
-                    kind => {
-                        warn!("unhandled message: {:?}", kind);
+                    _ => {
+                        warn!("unhandled message: {:?}", peeked);
                     }
                 }
             }
@@ -69,11 +75,11 @@ fn main(supervisor_ch: Channel) {
     loop {
         let (id, event) = sink.wait().unwrap();
         match event {
-            Event::Message { info, arg1, arg2 } if id == pong_ch.handle().id() => {
-                match info.kind() {
-                    MessageKind::WRITE_REPLY => {
-                        pong_ch.recv_args(info).unwrap();
-                        info!("received write reply: written_len={arg1}");
+            Event::Message(peeked) if id == pong_ch.handle().id() => {
+                match Peek::parse(&pong_ch, peeked) {
+                    Peek::WriteReply { recv, len } => {
+                        recv.recv().unwrap();
+                        info!("received write reply: written_len={}", len);
 
                         num_received += 1;
                         if num_received >= 10 {
@@ -94,8 +100,8 @@ fn main(supervisor_ch: Channel) {
                             })
                             .unwrap();
                     }
-                    kind => {
-                        warn!("unhandled message: {:?}", kind);
+                    _ => {
+                        warn!("unhandled message: {:?}", peeked);
                     }
                 }
             }

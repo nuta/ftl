@@ -264,9 +264,11 @@ impl Handleable for Channel {
                         ty: EventType::MESSAGE,
                         id: handle_id,
                     },
-                    info: message.info,
-                    arg1: message.arg1,
-                    arg2: message.arg2,
+                    peeked: PeekedMessage {
+                        info: message.info,
+                        arg1: message.arg1,
+                        arg2: message.arg2,
+                    },
                 },
             };
 

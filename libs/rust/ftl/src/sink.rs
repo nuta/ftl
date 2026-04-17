@@ -2,6 +2,7 @@ use core::fmt;
 use core::mem::MaybeUninit;
 
 use ftl_types::channel::MessageInfo;
+use ftl_types::channel::PeekedMessage;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use ftl_types::sink::Event as RawEvent;
@@ -19,11 +20,7 @@ use crate::syscall::syscall2;
 
 #[derive(Debug)]
 pub enum Event {
-    Message {
-        info: MessageInfo,
-        arg1: usize,
-        arg2: usize,
-    },
+    Message(PeekedMessage),
     PeerClosed,
 }
 
@@ -57,11 +54,7 @@ impl Sink {
         let header = raw.header();
         let event = match header.ty {
             EventType::MESSAGE => {
-                Event::Message {
-                    info: unsafe { raw.message.info },
-                    arg1: unsafe { raw.message.arg1 },
-                    arg2: unsafe { raw.message.arg2 },
-                }
+                Event::Message(unsafe { raw.message.peeked })
             }
             EventType::PEER_CLOSED => Event::PeerClosed,
             type_ => panic!("unimplemented event type: {:?}", type_),

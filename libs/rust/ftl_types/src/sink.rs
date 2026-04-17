@@ -1,6 +1,6 @@
 use core::fmt;
 
-use crate::channel::MessageInfo;
+use crate::channel::PeekedMessage;
 use crate::handle::HandleId;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -56,9 +56,7 @@ pub struct EventHeader {
 #[repr(C)]
 pub struct MessageEvent {
     pub header: EventHeader,
-    pub info: MessageInfo,
-    pub arg1: usize,
-    pub arg2: usize,
+    pub peeked: PeekedMessage,
 }
 
 #[derive(Clone, Copy, Debug)]

@@ -87,13 +87,24 @@ pub struct RecvToken<'a, R: ?Sized> {
     _pd: PhantomData<R>,
 }
 
-impl<'a, R> RecvToken<'a, R> {
+impl<'a, R: ?Sized> RecvToken<'a, R> {
     pub fn new(ch: &'a Channel, info: MessageInfo) -> Self {
         Self {
             ch,
             info,
             _pd: PhantomData,
         }
+    }
+
+    pub fn mid(&self) -> MessageId {
+        self.info.mid()
+    }
+}
+
+impl<'a> RecvToken<'a, ()> {
+    pub fn recv(self) -> Result<(), ErrorCode> {
+        self.ch.recv_args(self.info)?;
+        Ok(())
     }
 }
 
@@ -118,33 +129,195 @@ impl<'a> RecvToken<'a, [u8]> {
     }
 }
 
+pub struct DiscardToken<'a> {
+    ch: &'a Channel,
+    info: MessageInfo,
+}
+
+impl<'a> DiscardToken<'a> {
+    pub fn new(ch: &'a Channel, info: MessageInfo) -> Self {
+        Self { ch, info }
+    }
+
+    pub fn discard(self) -> Result<(), ErrorCode> {
+        self.ch.discard(self.info)?;
+        Ok(())
+    }
+}
+
+
+impl<'a> Peek<'a> {
+    pub fn parse(ch: &'a Channel, raw: PeekedMessage) -> Peek<'a> {
+        match raw.info.kind() {
+            MessageKind::OPEN => {
+                let recv = RecvToken::new(ch, raw.info);
+                let options = OpenOptions::from_usize(raw.arg1);
+                let completer = Completer::new(ch, MessageKind::OPEN_REPLY, raw.info.mid());
+                Peek::Open { recv, completer, options, path_len: raw.info.body_len() }
+            }
+            MessageKind::READ => {
+                let recv = RecvToken::new(ch, raw.info);
+                Peek::Read { recv }
+            }
+            MessageKind::WRITE => {
+                let recv = RecvToken::new(ch, raw.info);
+                let completer = Completer::new(ch, MessageKind::WRITE_REPLY, raw.info.mid());
+                Peek::Write { recv, len: raw.info.body_len(), completer }
+            }
+            MessageKind::GETATTR => {
+                let recv = RecvToken::new(ch, raw.info);
+                let attr = Attr::from_usize(raw.arg1);
+                Peek::GetAttr { recv, attr }
+            }
+            MessageKind::SETATTR => {
+                let recv = RecvToken::new(ch, raw.info);
+                let attr = Attr::from_usize(raw.arg1);
+                Peek::SetAttr { recv, attr }
+            }
+            MessageKind::ERROR_REPLY => {
+                let recv = RecvToken::new(ch, raw.info);
+                let error = ErrorCode::from(raw.arg1);
+                Peek::ErrorReply { recv, error }
+            }
+            MessageKind::OPEN_REPLY => {
+                let recv = RecvToken::new(ch, raw.info);
+                Peek::OpenReply { recv }
+            }
+            MessageKind::READ_REPLY => {
+                let recv = RecvToken::new(ch, raw.info);
+                Peek::ReadReply { recv, len: raw.arg1 }
+            }
+            MessageKind::WRITE_REPLY => {
+                let recv = RecvToken::new(ch, raw.info);
+                Peek::WriteReply { recv, len: raw.arg1 }
+            }
+            MessageKind::GETATTR_REPLY => {
+                let recv = RecvToken::new(ch, raw.info);
+                Peek::GetAttrReply { recv }
+            }
+            MessageKind::SETATTR_REPLY => {
+                let recv = RecvToken::new(ch, raw.info);
+                    Peek::SetAttrReply { recv }
+            }
+            _ => Peek::Unknown { discard: DiscardToken::new(ch, raw.info) },
+        }
+    }
+}
+
+pub struct Completer<'a, T: ?Sized> {
+    ch: &'a Channel,
+    reply_kind: MessageKind,
+    mid: MessageId,
+    _pd: PhantomData<T>,
+}
+
+impl<'a, T: ?Sized> Completer<'a, T> {
+    pub fn new(ch: &'a Channel, reply_kind: MessageKind, mid: MessageId) -> Self {
+        Self { ch, reply_kind, mid, _pd: PhantomData }
+    }
+
+    pub fn reply_error(self, error: ErrorCode) -> Result<(), ErrorCode> {
+        self.ch.send_args(self.reply_kind, self.mid, error.as_usize(), 0)?;
+        Ok(())
+    }
+}
+
+impl<'a> Completer<'a, usize> {
+    pub fn reply(self, value: usize) -> Result<(), ErrorCode> {
+        self.ch.send_args(self.reply_kind, self.mid, value, 0)?;
+        Ok(())
+    }
+}
+
+impl<'a> Completer<'a, [u8]> {
+    pub fn reply(self, buf: &[u8]) -> Result<(), ErrorCode> {
+        self.ch.send_body(self.reply_kind, self.mid, buf, 0)?;
+        Ok(())
+    }
+}
+
+impl<'a> Completer<'a, OwnedHandle> {
+    pub fn reply(self, handle: OwnedHandle) -> Result<(), ErrorCode> {
+        self.ch.send_handle(self.reply_kind, self.mid, handle)?;
+        Ok(())
+    }
+}
+
+pub struct OwnedCompleter<T: ?Sized> {
+    ch: Rc<Channel>,
+    reply_kind: MessageKind,
+    mid: MessageId,
+    _pd: PhantomData<T>,
+}
+
+impl<T: ?Sized> OwnedCompleter<T> {
+    pub fn new(ch: Rc<Channel>, reply_kind: MessageKind, mid: MessageId) -> Self {
+        Self { ch, reply_kind, mid, _pd: PhantomData     }
+    }
+
+    pub fn reply_error(self, error: ErrorCode) -> Result<(), ErrorCode> {
+        self.ch.send_args(self.reply_kind, self.mid, error.as_usize(), 0)?;
+        Ok(())
+    }
+}
+
+impl OwnedCompleter<usize> {
+    pub fn reply(self, value: usize) -> Result<(), ErrorCode> {
+        self.ch.send_args(self.reply_kind, self.mid, value, 0)?;
+        Ok(())
+    }
+}
+
+impl OwnedCompleter<[u8]> {
+    pub fn reply(self, buf: &[u8]) -> Result<(), ErrorCode> {
+        self.ch.send_body(self.reply_kind, self.mid, buf, 0)?;
+        Ok(())
+    }
+}
+
+impl OwnedCompleter<OwnedHandle> {
+    pub fn reply(self, handle: OwnedHandle) -> Result<(), ErrorCode> {
+        self.ch.send_handle(self.reply_kind, self.mid, handle)?;
+        Ok(())
+    }
+}
+
 pub enum Peek<'a> {
     Open {
-        recv: RecvToken<'a, ()>,
+        recv: RecvToken<'a, [u8]>,
+        completer: Completer<'a, OwnedHandle>,
+        path_len: usize,
         options: OpenOptions,
     },
     Read {
-        recv: RecvToken<'a, [u8]>,
+        recv: RecvToken<'a, (usize, usize)>,
     },
     Write {
+        len: usize,
         recv: RecvToken<'a, [u8]>,
+        completer: Completer<'a, usize>,
     },
     GetAttr {
-        recv: RecvToken<'a, [u8]>,
+        attr: Attr,
+        recv: RecvToken<'a, (usize, usize)>,
     },
     SetAttr {
+        attr: Attr,
         recv: RecvToken<'a, [u8]>,
     },
     ErrorReply {
+        error: ErrorCode,
         recv: RecvToken<'a, ()>,
     },
     OpenReply {
         recv: RecvToken<'a, OwnedHandle>,
     },
     ReadReply {
+        len: usize,
         recv: RecvToken<'a, [u8]>,
     },
     WriteReply {
+        len: usize,
         recv: RecvToken<'a, ()>,
     },
     GetAttrReply {
@@ -153,6 +326,9 @@ pub enum Peek<'a> {
     SetAttrReply {
         recv: RecvToken<'a, ()>,
     },
+    Unknown {
+        discard: DiscardToken<'a>,
+    }
 }
 
 pub struct Channel {
@@ -207,8 +383,14 @@ impl Channel {
         }
     }
 
-    pub fn peek(&self) -> Result<Peek, ErrorCode> {
-        todo!()
+    pub fn peek(&self) -> Result<Peek<'_>, ErrorCode> {
+        let raw = sys_channel_peek(self.handle.id())?;
+        Ok(Peek::parse(self, raw))
+    }
+
+    pub fn discard(&self, info: MessageInfo) -> Result<(), ErrorCode> {
+        sys_channel_discard(self.handle.id(), info)?;
+        Ok(())
     }
 
     fn send_args(
