@@ -136,19 +136,22 @@ impl<C: AsRef<Channel>> RequestInner<C> {
         }
     }
 
-    fn discard_and_reply<'a>(self, f: impl FnOnce(MessageId) -> Message<'a>) {
-        self.do_discard_and_reply(f(self.mid()));
-    }
 
     fn reply_error(self, error: ErrorCode) {
         self.reply(|mid| Message::ErrorReply { mid, error });
+    }
+
+    fn discard_and_reply<'a>(mut self, f: impl FnOnce(MessageId) -> Message<'a>) {
+        self.do_discard_and_reply(f(self.mid()));
     }
 
     fn discard_and_reply_error(self, error: ErrorCode) {
         self.discard_and_reply(|mid| Message::ErrorReply { mid, error });
     }
 
-    fn do_discard_and_reply(&self, m: Message) {
+    fn do_discard_and_reply(&mut self, m: Message) {
+        self.handled = true;
+
         if let Err(error) = self.ch.as_ref().discard(self.info) {
             debug!("failed to discard before reply: {:?}", error);
         }
