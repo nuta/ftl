@@ -110,49 +110,95 @@ The notable difference from typical IPC systems is the concept of *"peek"*. The 
 >
 > **Design decision: Peek then receive**
 >
-> Peek returns a message info (kind, ID, and body length) and inlined arguments. They are sufficient enough to identify how to handle the message.
+> To efficiently handle messages, you first peek at the message in the queue to examine its type, ID, and other metadata (e.g. the body length). This allows you to decide how to handle each message before actually reading it.
 >
-> `recv` accepts the message and reads the message body into the desired memory space. This eliminates the need to allocate an extra buffer for the body.
->
-> In practice, you'll use a sink to wait for messages, and it returns a peek struct so that you don't have to call the peek system call.
+> This design eliminates the need to allocate an extra intermediate buffer for the incoming data, and applications can naturally implement backpressure (i.e. pause the sender) until you receive the message.
 
 For example, in server side (i.e. accept any messages), the typical operation is to peek then receive the message:
 
 ```rs
-// Server side (Simplified API for demonstration).
-loop {
-    wait_for_message(&ch);
-    let peek = ch.peek();
-    match peek {
-        Peek::Write { mid, offset, body_len } => {
-            let mut buf = vec![0; body_len];
-            ch.recv(mid, &mut buf);
-            ch.send(Message::WriteReply { mid }); // Reply
+/// Receives a "write" message, and replies the written bytes.
+fn receive_message(ch: &Channel) -> Result<(), ErrorCode> {
+    // Watch events from the channel.
+    let mut sink = Sink::new()?;
+    sink.add(ch)?;
+
+    // Wait for a message.
+    match sink.wait()? {
+        // Message is ready. The message is automatically peeked.
+        Event::Message(Peek { info, .. }) => {
+            let mid = info.mid();
+            match info.kind() {
+                MessageKind::WRITE => {
+                    let mut buf = vec![0; info.body_len()];
+
+                    // Receive the message.
+                    ch.recv_body(info, &mut buf)?;
+
+                    info!("received a write message: {:?}", core::str::from_utf8(&buf));
+                    ch.send(Message::WriteReply { mid, len: buf.len() })?;
+                }
+                _ => {
+                    ch.send(Message::ErrorReply { mid, error: ErrorCode::Unsupported })?;
+                }
+            }
         }
-        Peek::Read { mid, .. } => {
-            // Ignore unhandled messages.
-            ch.discard(peek.mid());
+        // The peer closed the channel, and no more messages can be received.
+        Event::PeerClosed => return Err(ErrorCode::PeerClosed),
+    }
+
+    Ok(())
+}
+```
+
+In client side (i.e. receive a specific message) is a RPC-like operation: send a request and wait for a reply. This looks very similar to the server side, and the key difference is that the client side expects a specific message kind:
+
+```rs
+fn send_message(ch: &Channel) -> Result<(), ErrorCode> {
+    // Client side (Simplified API for demonstration).
+    let mid = MessageId::new(1);
+    ch.send(Message::Write { mid, offset: 0, buf: b"Hello, world!" });
+
+    // Watch events from the channel.
+    let mut sink = Sink::new()?;
+    sink.add(&ch)?;
+
+    // Wait for a message.
+    let (id, event) = sink.wait()?;
+    match event {
+        Event::Message(Peek { info, arg1, .. }) if info.mid() == mid => {
+            match info.kind() {
+                MessageKind::WRITE_REPLY => {
+                    // We already know the written length through the peek, but
+                    // need to consume the reply message.
+                    ch.recv_args(info)?;
+
+                    info!("received a write reply: written_len={}", arg1);
+                }
+                MessageKind::ERROR_REPLY => {
+                    // We already know the error code through the peek, but
+                    // need to consume the reply message.
+                    ch.recv_args(info)?;
+
+                    panic!("server replied with an error: {:?}", arg1);
+                }
+                _ => {
+                    panic!("unexpected message type: {:?}", info.kind());
+                }
+            }
         }
-        ...
+        Event::Message(Peek { info, .. }) => {
+            // The server replied to an unknown request.
+            panic!("unexpected mid: {:?}", info.mid());
+        }
+        Event::PeerClosed => {
+            // The server has died. The client should retry or cleanup.
+            panic!("peer has closed the channel");
+        }
     }
 }
 ```
 
-In client side (i.e. receive a specific message), it's a RPC like operation and
-
-```rs
-// Client side (Simplified API for demonstration).
-let mid = ch.alloc_mid();
-ch.send(Message::Read { mid, offset: 0 });
-
-wait_for_message(&ch);
-
-let mut buf = vec![0; 1024];
-ch.recv(mid, &mut buf);
-```
-
 > [!NOTE]
 >
-> `channel_peek`/`channel_recv` are non-blocking operations. If there is no message to receive, it returns immediately with an error.
->
-> Typically, you'll use sink to wait for events including channel messages.
+> Receving a message is a non-blocking operation. If there is no message that matches the message info, it returns immediately with an error.
