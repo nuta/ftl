@@ -177,12 +177,8 @@ impl<C: ChannelRef> Incoming<C> {
                 let error = todo!();
                 Incoming::ErrorReply(ErrorReply::new(ch, raw.info, error))
             }
-            MessageKind::OPEN_REPLY => {
-                Incoming::OpenReply(OpenReply::new(ch, raw.info))
-            }
-            MessageKind::READ_REPLY => {
-                Incoming::ReadReply(ReadReply::new(ch, raw.info))
-            }
+            MessageKind::OPEN_REPLY => Incoming::OpenReply(OpenReply::new(ch, raw.info)),
+            MessageKind::READ_REPLY => Incoming::ReadReply(ReadReply::new(ch, raw.info)),
             MessageKind::WRITE_REPLY => {
                 let written_len = raw.arg1;
                 Incoming::WriteReply(WriteReply::new(ch, raw.info, written_len))
@@ -419,7 +415,11 @@ struct ReplyInner<C: ChannelRef> {
 
 impl<C: ChannelRef> ReplyInner<C> {
     fn new(ch: C, info: MessageInfo) -> Self {
-        Self { ch, info, received: false }
+        Self {
+            ch,
+            info,
+            received: false,
+        }
     }
 
     fn mid(&self) -> MessageId {
@@ -553,7 +553,7 @@ impl<C: ChannelRef> ReadRequest<C> {
     }
 }
 
-pub struct ReadCompleter<C: ChannelRef>(CompleterInner<C>);     
+pub struct ReadCompleter<C: ChannelRef>(CompleterInner<C>);
 
 impl<C: ChannelRef> ReadCompleter<C> {
     fn new(request: RequestInner<C>) -> Self {
@@ -663,7 +663,7 @@ impl<C: ChannelRef> OpenReply<C> {
 pub struct ReadReply<C: ChannelRef>(ReplyInner<C>);
 
 impl<C: ChannelRef> ReadReply<C> {
-     fn new(ch: C, info: MessageInfo) -> Self {
+    fn new(ch: C, info: MessageInfo) -> Self {
         Self(ReplyInner::new(ch, info))
     }
 
@@ -672,30 +672,39 @@ impl<C: ChannelRef> ReadReply<C> {
     }
 }
 
-pub struct WriteReply<C: ChannelRef> { 
+pub struct WriteReply<C: ChannelRef> {
     inner: ReplyInner<C>,
     written_len: usize,
 }
 
 impl<C: ChannelRef> WriteReply<C> {
     fn new(ch: C, info: MessageInfo, written_len: usize) -> Self {
-        Self { inner: ReplyInner::new(ch, info), written_len }
+        Self {
+            inner: ReplyInner::new(ch, info),
+            written_len,
+        }
     }
 
     pub fn mid(&self) -> MessageId {
         self.inner.mid()
     }
 
-pub    fn written_len(&self) -> usize {
+    pub fn written_len(&self) -> usize {
         self.written_len
     }
 }
 
-pub struct ErrorReply<C: ChannelRef> {inner: ReplyInner<C>, error: ErrorCode}
+pub struct ErrorReply<C: ChannelRef> {
+    inner: ReplyInner<C>,
+    error: ErrorCode,
+}
 
 impl<C: ChannelRef> ErrorReply<C> {
-     fn new(ch: C, info: MessageInfo, error: ErrorCode) -> Self {
-        Self { inner: ReplyInner::new(ch, info), error }
+    fn new(ch: C, info: MessageInfo, error: ErrorCode) -> Self {
+        Self {
+            inner: ReplyInner::new(ch, info),
+            error,
+        }
     }
 
     pub fn mid(&self) -> MessageId {
@@ -711,20 +720,15 @@ pub enum Incoming<C: ChannelRef> {
     Open(OpenRequest<C>),
     Read(ReadRequest<C>),
     Write(WriteRequest<C>),
-    GetAttr {
-    },
-    SetAttr {
-    },
+    GetAttr {},
+    SetAttr {},
     ErrorReply(ErrorReply<C>),
     OpenReply(OpenReply<C>),
     ReadReply(ReadReply<C>),
     WriteReply(WriteReply<C>),
-    GetAttrReply {
-    },
-    SetAttrReply {
-    },
-    Unknown {
-    },
+    GetAttrReply {},
+    SetAttrReply {},
+    Unknown {},
 }
 
 pub struct Channel {

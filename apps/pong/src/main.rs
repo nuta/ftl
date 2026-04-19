@@ -85,11 +85,10 @@ fn main(supervisor_ch: Channel) {
                         let (path, completer) = match request.recv(&mut buf) {
                             Ok((path, completer)) => (path, completer),
                             Err(error) => {
-                            warn!("failed to recv with body: {:?}", error);
-                            continue;
-                        
-                            }};
-
+                                warn!("failed to recv with body: {:?}", error);
+                                continue;
+                            }
+                        };
 
                         let (our_ch, their_ch) = Channel::new().unwrap();
                         sink.add(&our_ch).unwrap();
