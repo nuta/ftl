@@ -4,7 +4,7 @@ use alloc::vec::Vec;
 use core::mem;
 
 use ftl_types::channel::MessageInfo;
-use ftl_types::channel::PeekedMessage;
+use ftl_types::channel::Peek;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use ftl_types::sink::Event;
@@ -186,7 +186,7 @@ impl Channel {
             isolation,
             &slice,
             0,
-            PeekedMessage {
+            Peek {
                 info: message.info,
                 arg1: message.arg1,
                 arg2: message.arg2,
@@ -264,7 +264,7 @@ impl Handleable for Channel {
                         ty: EventType::MESSAGE,
                         id: handle_id,
                     },
-                    peeked: PeekedMessage {
+                    peek: Peek {
                         info: message.info,
                         arg1: message.arg1,
                         arg2: message.arg2,
@@ -379,7 +379,7 @@ pub fn sys_channel_peek(
     a1: usize,
 ) -> Result<SyscallResult, ErrorCode> {
     let ch_id = HandleId::from_raw(a0);
-    let slice = UserSlice::new(UserPtr::new(a1), size_of::<PeekedMessage>())?;
+    let slice = UserSlice::new(UserPtr::new(a1), size_of::<Peek>())?;
 
     let process = current.process();
     let handle_table = process.handle_table().lock();

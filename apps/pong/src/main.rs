@@ -41,8 +41,8 @@ fn main(supervisor_ch: Channel) {
     let server_ch = loop {
         let (id, event) = sink.wait().unwrap();
         match event {
-            Event::Message(peeked) if id == supervisor_ch.handle().id() => {
-                match Incoming::parse(&supervisor_ch, peeked) {
+            Event::Message(peek) if id == supervisor_ch.handle().id() => {
+                match Incoming::parse(&supervisor_ch, peek) {
                     Incoming::OpenReply(reply) => {
                         match reply.recv() {
                             Ok(handle) => {
@@ -54,7 +54,7 @@ fn main(supervisor_ch: Channel) {
                         }
                     }
                     _ => {
-                        warn!("unhandled message: {:?}", peeked);
+                        warn!("unhandled message: {:?}", peek);
                     }
                 }
             }
@@ -72,8 +72,8 @@ fn main(supervisor_ch: Channel) {
         let (id, event) = sink.wait().unwrap();
         let context = contexts.get(&id).unwrap();
         match (context, event) {
-            (Context::Server, Event::Message(peeked)) => {
-                match Incoming::parse(&server_ch, peeked) {
+            (Context::Server, Event::Message(peek)) => {
+                match Incoming::parse(&server_ch, peek) {
                     Incoming::Open(request) => {
                         if request.path_len() > 1024 {
                             request.reply_error(ErrorCode::InvalidArgument);
@@ -100,12 +100,12 @@ fn main(supervisor_ch: Channel) {
                         info!("accepted a client");
                     }
                     _ => {
-                        warn!("unhandled message: {:?}", peeked);
+                        warn!("unhandled message: {:?}", peek);
                     }
                 }
             }
-            (Context::Client { ch }, Event::Message(peeked)) => {
-                match Incoming::parse(ch, peeked) {
+            (Context::Client { ch }, Event::Message(peek)) => {
+                match Incoming::parse(ch, peek) {
                     Incoming::Write(request) => {
                         if request.len() > 1024 {
                             request.reply_error(ErrorCode::InvalidArgument);
@@ -119,7 +119,7 @@ fn main(supervisor_ch: Channel) {
                         completer.reply(buf.len());
                     }
                     _ => {
-                        warn!("unhandled message: {:?}", peeked);
+                        warn!("unhandled message: {:?}", peek);
                     }
                 }
             }

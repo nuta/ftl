@@ -15,7 +15,7 @@ pub use ftl_types::channel::MessageId;
 pub use ftl_types::channel::MessageInfo;
 pub use ftl_types::channel::MessageKind;
 pub use ftl_types::channel::OpenOptions;
-use ftl_types::channel::PeekedMessage;
+use ftl_types::channel::Peek;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use ftl_types::syscall::SYS_CHANNEL_CREATE;
@@ -85,22 +85,22 @@ pub enum Message<'a> {
 }
 
 impl<C: ChannelRef> Incoming<C> {
-    pub fn parse(ch: C, raw: PeekedMessage) -> Incoming<C> {
-        match raw.info.kind() {
+    pub fn parse(ch: C, peek: Peek) -> Incoming<C> {
+        match peek.info.kind() {
             MessageKind::OPEN => {
-                let inner = RequestInner::new(ch, raw.info);
-                let options = OpenOptions::from_usize(raw.arg1);
+                let inner = RequestInner::new(ch, peek.info);
+                let options = OpenOptions::from_usize(peek.arg1);
                 Incoming::Open(OpenRequest::new(inner, options))
             }
             MessageKind::READ => {
-                let inner = RequestInner::new(ch, raw.info);
-                let offset = raw.arg1;
-                let len = raw.arg2;
+                let inner = RequestInner::new(ch, peek.info);
+                let offset = peek.arg1;
+                let len = peek.arg2;
                 Incoming::Read(ReadRequest::new(inner, offset, len))
             }
             MessageKind::WRITE => {
-                let inner = RequestInner::new(ch, raw.info);
-                let offset = raw.arg1;
+                let inner = RequestInner::new(ch, peek.info);
+                let offset = peek.arg1;
                 Incoming::Write(WriteRequest::new(inner, offset))
             }
             MessageKind::GETATTR => {
@@ -111,13 +111,13 @@ impl<C: ChannelRef> Incoming<C> {
             }
             MessageKind::ERROR_REPLY => {
                 let error = todo!();
-                Incoming::ErrorReply(ErrorReply::new(ch, raw.info, error))
+                Incoming::ErrorReply(ErrorReply::new(ch, peek.info, error))
             }
-            MessageKind::OPEN_REPLY => Incoming::OpenReply(OpenReply::new(ch, raw.info)),
-            MessageKind::READ_REPLY => Incoming::ReadReply(ReadReply::new(ch, raw.info)),
+            MessageKind::OPEN_REPLY => Incoming::OpenReply(OpenReply::new(ch, peek.info)),
+            MessageKind::READ_REPLY => Incoming::ReadReply(ReadReply::new(ch, peek.info)),
             MessageKind::WRITE_REPLY => {
-                let written_len = raw.arg1;
-                Incoming::WriteReply(WriteReply::new(ch, raw.info, written_len))
+                let written_len = peek.arg1;
+                Incoming::WriteReply(WriteReply::new(ch, peek.info, written_len))
             }
             MessageKind::GETATTR_REPLY => {
                 todo!()
@@ -846,8 +846,8 @@ pub fn sys_channel_send(
     Ok(())
 }
 
-pub fn sys_channel_peek(ch: HandleId) -> Result<PeekedMessage, ErrorCode> {
-    let mut peek = MaybeUninit::<PeekedMessage>::uninit();
+pub fn sys_channel_peek(ch: HandleId) -> Result<Peek, ErrorCode> {
+    let mut peek = MaybeUninit::<Peek>::uninit();
     let ret = syscall2(SYS_CHANNEL_PEEK, ch.as_usize(), peek.as_mut_ptr() as usize)?;
 
     Ok(unsafe { peek.assume_init() })

@@ -34,8 +34,8 @@ fn main(supervisor_ch: Channel) {
     let pong_ch = loop {
         let (id, event) = sink.wait().unwrap();
         match event {
-            Event::Message(peeked) if id == supervisor_ch.handle().id() => {
-                match Incoming::parse(&supervisor_ch, peeked) {
+            Event::Message(peek) if id == supervisor_ch.handle().id() => {
+                match Incoming::parse(&supervisor_ch, peek) {
                     Incoming::OpenReply(reply) => {
                         match reply.recv() {
                             Ok(handle) => {
@@ -47,7 +47,7 @@ fn main(supervisor_ch: Channel) {
                         }
                     }
                     _ => {
-                        warn!("unhandled message: {:?}", peeked);
+                        warn!("unhandled message: {:?}", peek);
                     }
                 }
             }
@@ -75,8 +75,8 @@ fn main(supervisor_ch: Channel) {
     loop {
         let (id, event) = sink.wait().unwrap();
         match event {
-            Event::Message(peeked) if id == pong_ch.handle().id() => {
-                match Incoming::parse(&pong_ch, peeked) {
+            Event::Message(peek) if id == pong_ch.handle().id() => {
+                match Incoming::parse(&pong_ch, peek) {
                     Incoming::WriteReply(reply) => {
                         let len = reply.written_len();
                         drop(reply);
@@ -103,7 +103,7 @@ fn main(supervisor_ch: Channel) {
                             .unwrap();
                     }
                     _ => {
-                        warn!("unhandled message: {:?}", peeked);
+                        warn!("unhandled message: {:?}", peek);
                     }
                 }
             }

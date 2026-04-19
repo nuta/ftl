@@ -98,8 +98,8 @@ fn main(supervisor_ch: Channel) {
         let (id, event) = sink.wait().unwrap();
         let context = contexts.get(&id).unwrap();
         match (context, event) {
-            (Context::Client { ch }, Event::Message(peeked)) => {
-                let incoming = Incoming::parse(ch.clone() /* FIXME: avoid cloning */, peeked);
+            (Context::Client { ch }, Event::Message(peek)) => {
+                let incoming = Incoming::parse(ch.clone() /* FIXME: avoid cloning */, peek);
                 match incoming {
                     Incoming::Open(request) => {
                         let options = request.options();
@@ -218,11 +218,11 @@ fn main(supervisor_ch: Channel) {
                         }
                     }
                     _ => {
-                        warn!("unhandled message: {:?}", peeked);
+                        warn!("unhandled message: {:?}", peek);
                     }
                 }
             }
-            (Context::Service { name }, Event::Message(peeked)) => {
+            (Context::Service { name }, Event::Message(peek)) => {
                 let Some(Service::Registered {
                     server_ch,
                     pending_opens,
@@ -233,7 +233,7 @@ fn main(supervisor_ch: Channel) {
                     continue;
                 };
 
-                match Incoming::parse(server_ch, peeked) {
+                match Incoming::parse(server_ch, peek) {
                     Incoming::OpenReply(reply) => {
                         let Some(waiter) = pending_opens.remove(&reply.mid()) else {
                             warn!("unknown open reply: mid={:?}", reply.mid());
@@ -260,7 +260,7 @@ fn main(supervisor_ch: Channel) {
                         waiter.reply_error(reply.error());
                     }
                     _ => {
-                        warn!("unhandled service message: {:?}", peeked);
+                        warn!("unhandled service message: {:?}", peek);
                     }
                 }
             }
