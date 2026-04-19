@@ -175,27 +175,6 @@ impl Channel {
         Ok(handle_id)
     }
 
-    fn peek(
-        &self,
-        isolation: &SharedRef<dyn Isolation>,
-        slice: UserSlice,
-    ) -> Result<(), ErrorCode> {
-        let mutable = self.mutable.lock();
-        let message = mutable.rx_pending.front().ok_or(ErrorCode::NotFound)?;
-        crate::isolation::write(
-            isolation,
-            &slice,
-            0,
-            Peek {
-                info: message.info,
-                arg1: message.arg1,
-                arg2: message.arg2,
-            },
-        )?;
-
-        Ok(())
-    }
-
     fn discard(&self, info: MessageInfo) -> Result<(), ErrorCode> {
         let mut mutable = self.mutable.lock();
         let old_len = mutable.rx_notified.len();
@@ -371,24 +350,6 @@ pub fn sys_channel_recv(
 
     let handle_id = ch.recv(process.isolation(), &mut handle_table, info, slice)?;
     Ok(SyscallResult::Return(handle_id.as_usize()))
-}
-
-pub fn sys_channel_peek(
-    current: &SharedRef<Thread>,
-    a0: usize,
-    a1: usize,
-) -> Result<SyscallResult, ErrorCode> {
-    let ch_id = HandleId::from_raw(a0);
-    let slice = UserSlice::new(UserPtr::new(a1), size_of::<Peek>())?;
-
-    let process = current.process();
-    let handle_table = process.handle_table().lock();
-    let ch = handle_table
-        .get::<Channel>(ch_id)?
-        .authorize(HandleRight::WRITE)?;
-
-    ch.peek(process.isolation(), slice)?;
-    Ok(SyscallResult::Return(0))
 }
 
 pub fn sys_channel_discard(

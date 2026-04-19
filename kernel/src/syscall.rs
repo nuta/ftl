@@ -1,7 +1,6 @@
 use ftl_types::error::ErrorCode;
 use ftl_types::syscall::SYS_CHANNEL_CREATE;
 use ftl_types::syscall::SYS_CHANNEL_DISCARD;
-use ftl_types::syscall::SYS_CHANNEL_PEEK;
 use ftl_types::syscall::SYS_CHANNEL_RECV;
 use ftl_types::syscall::SYS_CHANNEL_SEND;
 use ftl_types::syscall::SYS_CONSOLE_WRITE;
@@ -67,7 +66,6 @@ fn do_syscall(
         SYS_CHANNEL_CREATE => crate::channel::sys_channel_create(thread, a0),
         SYS_CHANNEL_SEND => crate::channel::sys_channel_send(thread, a0, a1, a2, a3, a4),
         SYS_CHANNEL_RECV => crate::channel::sys_channel_recv(thread, a0, a1, a2),
-        SYS_CHANNEL_PEEK => crate::channel::sys_channel_peek(thread, a0, a1),
         SYS_CHANNEL_DISCARD => crate::channel::sys_channel_discard(thread, a0, a1),
         SYS_SINK_CREATE => crate::sink::sys_sink_create(thread),
         SYS_SINK_ADD => crate::sink::sys_sink_add(thread, a0, a1),

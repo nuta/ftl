@@ -20,7 +20,6 @@ use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use ftl_types::syscall::SYS_CHANNEL_CREATE;
 use ftl_types::syscall::SYS_CHANNEL_DISCARD;
-use ftl_types::syscall::SYS_CHANNEL_PEEK;
 use ftl_types::syscall::SYS_CHANNEL_RECV;
 use ftl_types::syscall::SYS_CHANNEL_SEND;
 use log::debug;
@@ -719,11 +718,6 @@ impl Channel {
         }
     }
 
-    pub fn peek(&self) -> Result<Incoming<&Channel>, ErrorCode> {
-        let raw = sys_channel_peek(self.handle.id())?;
-        Ok(Incoming::parse(self, raw))
-    }
-
     pub fn discard(&self, info: MessageInfo) -> Result<(), ErrorCode> {
         sys_channel_discard(self.handle.id(), info)?;
         Ok(())
@@ -844,13 +838,6 @@ pub fn sys_channel_send(
         handle_or_arg2,
     )?;
     Ok(())
-}
-
-pub fn sys_channel_peek(ch: HandleId) -> Result<Peek, ErrorCode> {
-    let mut peek = MaybeUninit::<Peek>::uninit();
-    let ret = syscall2(SYS_CHANNEL_PEEK, ch.as_usize(), peek.as_mut_ptr() as usize)?;
-
-    Ok(unsafe { peek.assume_init() })
 }
 
 pub fn sys_channel_recv(
