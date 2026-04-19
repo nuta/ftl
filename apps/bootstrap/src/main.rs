@@ -5,9 +5,10 @@
 extern crate alloc;
 
 use ftl::channel::Channel;
+use ftl::channel::Incoming;
+use ftl::channel::Message;
 use ftl::channel::MessageId;
-use ftl::channel::MessageInfo;
-use ftl::channel::MessageKind;
+use ftl::channel::OpenCompleter;
 use ftl::channel::OpenOptions;
 use ftl::collections::HashMap;
 use ftl::collections::VecDeque;
@@ -26,11 +27,6 @@ mod elf;
 mod initfs;
 mod loader;
 
-struct PendingOpen {
-    client_ch: Rc<Channel>,
-    client_mid: MessageId,
-}
-
 enum Context {
     Client { ch: Rc<Channel> },
     Service { name: String },
@@ -38,28 +34,30 @@ enum Context {
 
 enum Service {
     Waiting {
-        waiters: VecDeque<PendingOpen>,
+        waiters: VecDeque<OpenCompleter<Rc<Channel>>>,
     },
     Registered {
         server_ch: Rc<Channel>,
-        pending_opens: HashMap<MessageId, PendingOpen>,
+        pending_opens: HashMap<MessageId, OpenCompleter<Rc<Channel>>>,
     },
 }
 
 fn forward_connect(
     service_name: &str,
     server_ch: &Rc<Channel>,
-    pending_opens: &mut HashMap<MessageId, PendingOpen>,
-    waiter: PendingOpen,
-) -> Result<(), (PendingOpen, ErrorCode)> {
+    pending_opens: &mut HashMap<MessageId, OpenCompleter<Rc<Channel>>>,
+    waiter: OpenCompleter<Rc<Channel>>,
+) -> Result<(), (OpenCompleter<Rc<Channel>>, ErrorCode)> {
     let mid = MessageId::new(1);
     let path = format!("service/{service_name}");
     pending_opens.insert(mid, waiter);
 
     let options = OpenOptions::CONNECT;
-    if let Err(error) =
-        server_ch.send_body(MessageKind::OPEN, mid, path.as_bytes(), options.as_usize())
-    {
+    if let Err(error) = server_ch.send(Message::Open {
+        mid,
+        path: path.as_bytes(),
+        options,
+    }) {
         let waiter = pending_opens.remove(&mid).unwrap();
         return Err((waiter, error));
     }
@@ -96,58 +94,58 @@ fn main(supervisor_ch: Channel) {
         let (id, event) = sink.wait().unwrap();
         let context = contexts.get(&id).unwrap();
         match (context, event) {
-            (Context::Client { ch }, Event::Message { info, arg1, arg2 }) => {
-                match info.kind() {
-                    MessageKind::OPEN => {
-                        let mut buf = vec![0; info.body_len()];
-                        if let Err(error) = ch.recv_body(info, &mut buf) {
-                            warn!("failed to recv with body: {:?}", error);
-                            continue;
-                        }
+            (Context::Client { ch }, Event::Message(peek)) => {
+                let incoming = Incoming::parse(ch.clone() /* FIXME: avoid cloning */, peek);
+                match incoming {
+                    Incoming::Open(request) => {
+                        let options = request.options();
+                        let mut buf = vec![0; request.path_len()];
+                        let (path, completer) = match request.recv(&mut buf) {
+                            Ok((path, completer)) => (path, completer),
+                            Err(error) => {
+                                // FIXME: Should we reply an error?
+                                warn!("failed to recv with body: {:?}", error);
+                                continue;
+                            }
+                        };
 
-                        let path = match core::str::from_utf8(&buf) {
+                        let path = match core::str::from_utf8(path) {
                             Ok(path) => path,
                             Err(error) => {
                                 warn!("failed to convert path to string: {:?}", error);
-                                ch.reply_error(info.mid(), ErrorCode::InvalidArgument);
+                                completer.reply_error(ErrorCode::InvalidArgument);
                                 continue;
                             }
                         };
 
                         let Some(service_name) = path.strip_prefix("service/") else {
                             warn!("invalid path: {:?}", path);
-                            ch.reply_error(info.mid(), ErrorCode::InvalidArgument);
+                            completer.reply_error(ErrorCode::InvalidArgument);
                             continue;
                         };
 
-                        let options = OpenOptions::from_usize(arg1);
                         if options == OpenOptions::CONNECT {
-                            let waiter = PendingOpen {
-                                client_ch: ch.clone(),
-                                client_mid: info.mid(),
-                            };
-
                             match services.get_mut(service_name) {
                                 Some(Service::Registered {
                                     server_ch,
                                     pending_opens,
                                 }) => {
-                                    if let Err((waiter, error)) = forward_connect(
+                                    if let Err((completer, error)) = forward_connect(
                                         service_name,
                                         server_ch,
                                         pending_opens,
-                                        waiter,
+                                        completer,
                                     ) {
                                         warn!("failed to forward connect request: {:?}", error);
-                                        waiter.client_ch.reply_error(waiter.client_mid, error);
+                                        completer.reply_error(error);
                                     }
                                 }
                                 Some(Service::Waiting { waiters }) => {
-                                    waiters.push_back(waiter);
+                                    waiters.push_back(completer);
                                 }
                                 None => {
                                     let mut waiters = VecDeque::new();
-                                    waiters.push_back(waiter);
+                                    waiters.push_back(completer);
                                     services.insert(
                                         service_name.to_string(),
                                         Service::Waiting { waiters },
@@ -159,7 +157,7 @@ fn main(supervisor_ch: Channel) {
                                 services.get(service_name),
                                 Some(Service::Registered { .. })
                             ) {
-                                ch.reply_error(info.mid(), ErrorCode::AlreadyExists);
+                                completer.reply_error(ErrorCode::AlreadyExists);
                                 continue;
                             }
 
@@ -172,22 +170,15 @@ fn main(supervisor_ch: Channel) {
                             let (our_ch, their_ch) = match Channel::new() {
                                 Ok(pair) => pair,
                                 Err(error) => {
-                                    ch.reply_error(info.mid(), error);
+                                    completer.reply_error(error);
                                     continue;
                                 }
                             };
 
-                            if let Err(error) = ch.send_handle(
-                                MessageKind::OPEN_REPLY,
-                                info.mid(),
-                                their_ch.into_handle(),
-                            ) {
-                                warn!("failed to reply to service registration: {:?}", error);
-                                continue;
-                            }
-
+                            completer.reply(their_ch.into_handle());
                             let server_ch = Rc::new(our_ch);
                             sink.add(server_ch.as_ref()).unwrap();
+
                             contexts.insert(
                                 server_ch.handle().id(),
                                 Context::Service {
@@ -214,20 +205,20 @@ fn main(supervisor_ch: Channel) {
                                     forward_connect(service_name, server_ch, pending_opens, waiter)
                                 {
                                     warn!("failed to forward queued connect request: {:?}", error);
-                                    waiter.client_ch.reply_error(waiter.client_mid, error);
+                                    waiter.reply_error(error);
                                 }
                             }
                         } else {
                             warn!("invalid options: {:?}", options);
-                            ch.reply_error(info.mid(), ErrorCode::InvalidArgument);
+                            completer.reply_error(ErrorCode::InvalidArgument);
                         }
                     }
                     _ => {
-                        warn!("unhandled message: {:?}", info.kind());
+                        warn!("unhandled message: {:?}", peek);
                     }
                 }
             }
-            (Context::Service { name }, Event::Message { info, arg1, arg2 }) => {
+            (Context::Service { name }, Event::Message(peek)) => {
                 let Some(Service::Registered {
                     server_ch,
                     pending_opens,
@@ -238,45 +229,34 @@ fn main(supervisor_ch: Channel) {
                     continue;
                 };
 
-                match info.kind() {
-                    MessageKind::OPEN_REPLY => {
-                        let handle = match server_ch.recv_handle(info) {
+                match Incoming::parse(server_ch, peek) {
+                    Incoming::OpenReply(reply) => {
+                        let Some(waiter) = pending_opens.remove(&reply.mid()) else {
+                            warn!("unknown open reply: mid={:?}", reply.mid());
+                            continue;
+                        };
+
+                        let handle = match reply.recv() {
                             Ok(handle) => handle,
                             Err(error) => {
-                                warn!("failed to receive open reply: {:?}", error);
+                                warn!("failed to recv with handle: {:?}", error);
+                                waiter.reply_error(error);
                                 continue;
                             }
                         };
 
-                        let Some(waiter) = pending_opens.remove(&info.mid()) else {
-                            warn!("unknown open reply: mid={:?}", info.mid());
-                            continue;
-                        };
-
-                        if let Err(error) = waiter.client_ch.send_handle(
-                            MessageKind::OPEN_REPLY,
-                            waiter.client_mid,
-                            handle,
-                        ) {
-                            warn!("failed to send open reply to client: {:?}", error);
-                        }
+                        waiter.reply(handle);
                     }
-                    MessageKind::ERROR_REPLY => {
-                        if let Err(error) = server_ch.recv_args(info) {
-                            warn!("failed to receive error reply: {:?}", error);
-                            continue;
-                        }
-
-                        let Some(waiter) = pending_opens.remove(&info.mid()) else {
-                            warn!("unknown error reply: mid={:?}", info.mid());
+                    Incoming::ErrorReply(reply) => {
+                        let Some(waiter) = pending_opens.remove(&reply.mid()) else {
+                            warn!("unknown error reply: mid={:?}", reply.mid());
                             continue;
                         };
 
-                        let error = ErrorCode::from(arg1);
-                        waiter.client_ch.reply_error(waiter.client_mid, error);
+                        waiter.reply_error(reply.error());
                     }
                     _ => {
-                        warn!("unhandled service message: {:?}", info.kind());
+                        warn!("unhandled service message: {:?}", peek);
                     }
                 }
             }

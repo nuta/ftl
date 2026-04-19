@@ -2,8 +2,9 @@
 #![no_main]
 
 use ftl::channel::Channel;
+use ftl::channel::Incoming;
+use ftl::channel::Message;
 use ftl::channel::MessageId;
-use ftl::channel::MessageKind;
 use ftl::channel::OpenOptions;
 use ftl::handle::Handleable;
 use ftl::prelude::*;
@@ -22,21 +23,31 @@ fn main(supervisor_ch: Channel) {
     let path = b"service/pong";
     let options = OpenOptions::CONNECT;
     supervisor_ch
-        .send_body(MessageKind::OPEN, mid, path, options.as_usize())
+        .send(Message::Open {
+            mid,
+            path: path.as_slice(),
+            options,
+        })
         .unwrap();
 
     // Wait for the pong channel.
     let pong_ch = loop {
         let (id, event) = sink.wait().unwrap();
         match event {
-            Event::Message { info, arg1, arg2 } if id == supervisor_ch.handle().id() => {
-                match info.kind() {
-                    MessageKind::OPEN_REPLY => {
-                        let handle = supervisor_ch.recv_handle(info).unwrap();
-                        break Channel::from_handle(handle);
+            Event::Message(peek) if id == supervisor_ch.handle().id() => {
+                match Incoming::parse(&supervisor_ch, peek) {
+                    Incoming::OpenReply(reply) => {
+                        match reply.recv() {
+                            Ok(handle) => {
+                                break Channel::from_handle(handle);
+                            }
+                            Err(error) => {
+                                warn!("failed to recv with handle: {:?}", error);
+                            }
+                        }
                     }
-                    kind => {
-                        warn!("unhandled message: {:?}", kind);
+                    _ => {
+                        warn!("unhandled message: {:?}", peek);
                     }
                 }
             }
@@ -52,17 +63,25 @@ fn main(supervisor_ch: Channel) {
     // Send the first message to the pong service.
     let mid = MessageId::new(1);
     let body = b"Hello, world!";
-    pong_ch.send_body(MessageKind::WRITE, mid, body, 0).unwrap();
+    pong_ch
+        .send(Message::Write {
+            mid,
+            offset: 0,
+            buf: body,
+        })
+        .unwrap();
 
     let mut num_received = 0;
     loop {
         let (id, event) = sink.wait().unwrap();
         match event {
-            Event::Message { info, arg1, arg2 } if id == pong_ch.handle().id() => {
-                match info.kind() {
-                    MessageKind::WRITE_REPLY => {
-                        pong_ch.recv_args(info).unwrap();
-                        info!("received write reply: written_len={arg1}");
+            Event::Message(peek) if id == pong_ch.handle().id() => {
+                match Incoming::parse(&pong_ch, peek) {
+                    Incoming::WriteReply(reply) => {
+                        let len = reply.written_len();
+                        drop(reply);
+
+                        info!("received write reply: written_len={}", len);
 
                         num_received += 1;
                         if num_received >= 10 {
@@ -75,10 +94,16 @@ fn main(supervisor_ch: Channel) {
                         let mid = MessageId::new(1);
 
                         // Send more messages!
-                        pong_ch.send_body(MessageKind::WRITE, mid, body, 0).unwrap();
+                        pong_ch
+                            .send(Message::Write {
+                                mid,
+                                offset: 0,
+                                buf: body,
+                            })
+                            .unwrap();
                     }
-                    kind => {
-                        warn!("unhandled message: {:?}", kind);
+                    _ => {
+                        warn!("unhandled message: {:?}", peek);
                     }
                 }
             }

@@ -18,6 +18,7 @@ A message is a unit of transfer between channels. It is a packet-like structure 
 
 | Field | Type | Description |
 |-------|------|-----------|
+| Message info | `u32` | Message type, ID, and body length. |
 | Inlined arguments | `(usize, usize)` | Arbitrary data that is copied as is. |
 | Message body | `&mut [u8]` | A pair of pointer and length of a memory region to be copied to the peer process. |
 | Handle | `Handle` | A handle (e.g. channel) to be moved to the peer process. |
@@ -38,10 +39,10 @@ fn read(offset: usize, len: usize) -> Vec<u8>
 // Writes data. Equivalent to: pwrite(2)
 fn write(offset: usize, buf: &[u8]) -> usize /* written bytes */
 
-// Gets attributes. Equivalent to: stat(2)
+// Gets an attribute. Equivalent to: stat(2)
 fn getattr(attr: Attr) -> Vec<u8>
 
-// Sets attributes. Equivalent to: chmod(2), rename(2), ....
+// Sets an attribute. Equivalent to: chmod(2), rename(2), ....
 fn setattr(attr: Attr, buf: &[u8]) -> usize /* written bytes */
 ```
 
@@ -89,3 +90,117 @@ let (ch1, ch2) = ftl::channel::Channel::new().unwrap();
 ```
 
 Both `ch1` and `ch2` can send/receive messages. Sending a message using `ch1` will deliver the message to `ch2`, and vice versa. This is similar to TCP connections where both sides can send/receive data.
+
+## Internals
+
+Under the hood, FTL channel is implemented by following system calls (simplified):
+
+```rs
+impl Channel {
+    fn create() -> (Channel, Channel);
+    fn send(&self, msg: Message);
+    fn recv(&self, mid: MessageId, buf: &mut [u8]) -> HandleId;
+    fn discard(&self, info: MessageInfo);
+}
+```
+
+The notable difference from typical IPC systems is the concept of *"peek"*. The receive operation is non-blocking, and receives a specific message selected by its ID, not any message.
+
+> ![NOTE]
+>
+> **Design decision: Peek then receive**
+>
+> To efficiently handle messages, you first peek at the message in the queue to examine its type, ID, and other metadata (e.g. the body length). This allows you to decide how to handle each message before actually reading it.
+>
+> This design eliminates the need to allocate an extra intermediate buffer for the incoming data, and applications can naturally implement backpressure (i.e. pause the sender) until you receive the message.
+
+For example, in server side (i.e. accept any messages), the typical operation is to peek then receive the message:
+
+```rs
+fn server_main(ch: &Channel) -> Result<(), ErrorCode> {
+    // Watch events from the channel.
+    let mut sink = Sink::new()?;
+    sink.add(ch)?;
+
+    // Wait for a message.
+    match sink.wait()? {
+        // Message is ready. The message is automatically peeked.
+        Event::Message(Peek { info, .. }) => {
+            let mid = info.mid();
+            match info.kind() {
+                MessageKind::WRITE => {
+                    let mut buf = vec![0; info.body_len()];
+
+                    // Receive the message.
+                    ch.recv_body(info, &mut buf)?;
+
+                    info!("received a write message: {:?}", core::str::from_utf8(&buf));
+                    ch.send(Message::WriteReply { mid, len: buf.len() })?;
+                }
+                _ => {
+                    ch.send(Message::ErrorReply { mid, error: ErrorCode::Unsupported })?;
+                }
+            }
+        }
+        // The peer closed the channel, and no more messages can be received.
+        Event::PeerClosed => return Err(ErrorCode::PeerClosed),
+    }
+
+    Ok(())
+}
+```
+
+In client side (i.e. receive a specific message) is a RPC-like operation: send a request and wait for a reply. This looks very similar to the server side, and the key difference is that the client side expects a specific message kind:
+
+```rs
+fn client_main(ch: &Channel) -> Result<(), ErrorCode> {
+    let mid = MessageId::new(1);
+    ch.send(Message::Write { mid, offset: 0, buf: b"Hello, world!" });
+
+    // Watch events from the channel.
+    let mut sink = Sink::new()?;
+    sink.add(&ch)?;
+
+    // Wait for a message.
+    let (id, event) = sink.wait()?;
+    match event {
+        Event::Message(Peek { info, arg1, .. }) if info.mid() == mid => {
+            match info.kind() {
+                MessageKind::WRITE_REPLY => {
+                    // We already know the written length through the peek, but
+                    // need to consume the reply message.
+                    ch.recv_args(info)?;
+
+                    info!("received a write reply: written_len={}", arg1);
+                }
+                MessageKind::ERROR_REPLY => {
+                    // We already know the error code through the peek, but
+                    // need to consume the reply message.
+                    ch.recv_args(info)?;
+
+                    panic!("server replied with an error: {:?}", arg1);
+                }
+                _ => {
+                    panic!("unexpected message type: {:?}", info.kind());
+                }
+            }
+        }
+        Event::Message(Peek { info, .. }) => {
+            // The server replied to an unknown request.
+            panic!("unexpected mid: {:?}", info.mid());
+        }
+        Event::PeerClosed => {
+            // The server has died. The client should retry or cleanup.
+            panic!("peer has closed the channel");
+        }
+    }
+}
+```
+
+> [!NOTE]
+>
+> Receving a message is a non-blocking operation. If there is no message that matches the message info, it returns immediately with an error. Sink is the only way to wait for events including channel messages.
+
+> ![TIP]
+>
+> `ftl::channel::Incoming` provides a convenient API to handle `Event::Message` elegantly.

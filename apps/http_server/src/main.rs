@@ -11,6 +11,7 @@ use ftl::eventloop::EventLoop;
 use ftl::eventloop::Reply;
 use ftl::handle::Handleable;
 use ftl::log::*;
+
 use crate::connection::Connection;
 
 mod connection;

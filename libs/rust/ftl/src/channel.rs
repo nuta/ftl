@@ -1,6 +1,4 @@
-use alloc::format;
 use alloc::rc::Rc;
-use alloc::string::String;
 use core::fmt;
 use core::mem;
 use core::mem::MaybeUninit;
@@ -12,16 +10,37 @@ pub use ftl_types::channel::MessageId;
 pub use ftl_types::channel::MessageInfo;
 pub use ftl_types::channel::MessageKind;
 pub use ftl_types::channel::OpenOptions;
+use ftl_types::channel::Peek;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use ftl_types::syscall::SYS_CHANNEL_CREATE;
 use ftl_types::syscall::SYS_CHANNEL_DISCARD;
 use ftl_types::syscall::SYS_CHANNEL_RECV;
 use ftl_types::syscall::SYS_CHANNEL_SEND;
+use log::debug;
 use log::warn;
 
 use crate::handle::Handleable;
 use crate::handle::OwnedHandle;
+pub use crate::message::ErrorReply;
+pub use crate::message::GetAttrCompleter;
+pub use crate::message::GetAttrReply;
+pub use crate::message::GetAttrRequest;
+pub use crate::message::Incoming;
+pub use crate::message::Message;
+pub use crate::message::OpenCompleter;
+pub use crate::message::OpenReply;
+pub use crate::message::OpenRequest;
+pub use crate::message::ReadCompleter;
+pub use crate::message::ReadReply;
+pub use crate::message::ReadRequest;
+pub use crate::message::SetAttrCompleter;
+pub use crate::message::SetAttrReply;
+pub use crate::message::SetAttrRequest;
+pub use crate::message::UnknownMessage;
+pub use crate::message::WriteCompleter;
+pub use crate::message::WriteReply;
+pub use crate::message::WriteRequest;
 use crate::syscall::syscall1;
 use crate::syscall::syscall2;
 use crate::syscall::syscall3;
@@ -43,7 +62,48 @@ impl Channel {
         Self { handle }
     }
 
-    pub fn send_args(
+    pub fn send(&self, message: Message) -> Result<(), ErrorCode> {
+        match message {
+            Message::Open { mid, path, options } => {
+                self.send_body(MessageKind::OPEN, mid, path, options.as_usize())
+            }
+            Message::Read { mid, offset, len } => {
+                self.send_args(MessageKind::READ, mid, offset, len)
+            }
+            Message::Write { mid, offset, buf } => {
+                self.send_body(MessageKind::WRITE, mid, buf, offset)
+            }
+            Message::Getattr { mid, attr } => {
+                self.send_args(MessageKind::GETATTR, mid, attr.as_usize(), 0)
+            }
+            Message::Setattr { mid, attr, buf } => {
+                self.send_body(MessageKind::SETATTR, mid, buf, attr.as_usize())
+            }
+            Message::ErrorReply { mid, error } => {
+                self.send_args(MessageKind::ERROR_REPLY, mid, error.as_usize(), 0)
+            }
+            Message::OpenReply { mid, handle } => {
+                self.send_handle(MessageKind::OPEN_REPLY, mid, handle)
+            }
+            Message::ReadReply { mid, buf } => self.send_body(MessageKind::READ_REPLY, mid, buf, 0),
+            Message::WriteReply { mid, len } => {
+                self.send_args(MessageKind::WRITE_REPLY, mid, len, 0)
+            }
+            Message::GetAttrReply { mid, buf } => {
+                self.send_body(MessageKind::GETATTR_REPLY, mid, buf, 0)
+            }
+            Message::SetAttrReply { mid, len } => {
+                self.send_args(MessageKind::SETATTR_REPLY, mid, len, 0)
+            }
+        }
+    }
+
+    pub(crate) fn discard(&self, info: MessageInfo) -> Result<(), ErrorCode> {
+        sys_channel_discard(self.handle.id(), info)?;
+        Ok(())
+    }
+
+    fn send_args(
         &self,
         kind: MessageKind,
         mid: MessageId,
@@ -57,7 +117,7 @@ impl Channel {
         Ok(())
     }
 
-    pub fn send_body(
+    fn send_body(
         &self,
         kind: MessageKind,
         mid: MessageId,
@@ -71,7 +131,7 @@ impl Channel {
         Ok(())
     }
 
-    pub fn send_handle(
+    fn send_handle(
         &self,
         kind: MessageKind,
         mid: MessageId,
@@ -83,17 +143,19 @@ impl Channel {
         let handle_id = handle.id();
         mem::forget(handle);
         sys_channel_send(self.handle.id(), info, 0, null(), handle_id.as_usize())?;
+        // TODO: Close the handle if it fails
+
         Ok(())
     }
 
-    pub fn recv_args(&self, info: MessageInfo) -> Result<(), ErrorCode> {
+    pub(crate) fn recv_args(&self, info: MessageInfo) -> Result<(), ErrorCode> {
         debug_assert!(!info.has_body() && !info.has_handle());
 
         sys_channel_recv(self.handle.id(), info, null_mut())?;
         Ok(())
     }
 
-    pub fn recv_body(&self, info: MessageInfo, body: &mut [u8]) -> Result<(), ErrorCode> {
+    pub(crate) fn recv_body(&self, info: MessageInfo, body: &mut [u8]) -> Result<(), ErrorCode> {
         debug_assert!(info.has_body() && !info.has_handle());
         assert_eq!(body.len(), info.body_len());
 
@@ -101,17 +163,17 @@ impl Channel {
         Ok(())
     }
 
-    pub fn recv_handle(&self, info: MessageInfo) -> Result<OwnedHandle, ErrorCode> {
+    pub(crate) fn recv_handle(&self, info: MessageInfo) -> Result<OwnedHandle, ErrorCode> {
         debug_assert!(!info.has_body() && info.has_handle());
 
         let handle_id = sys_channel_recv(self.handle.id(), info, null_mut())?;
         Ok(OwnedHandle::from_raw(handle_id))
     }
+}
 
-    pub fn reply_error(&self, mid: MessageId, error: ErrorCode) {
-        if let Err(send_err) = self.send_args(MessageKind::ERROR_REPLY, mid, error.as_usize(), 0) {
-            warn!("failed to reply error {:?} to : {:?}", error, send_err);
-        }
+impl AsRef<Channel> for Channel {
+    fn as_ref(&self) -> &Channel {
+        self
     }
 }
 

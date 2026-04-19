@@ -4,6 +4,7 @@ use alloc::vec::Vec;
 use core::mem;
 
 use ftl_types::channel::MessageInfo;
+use ftl_types::channel::Peek;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use ftl_types::sink::Event;
@@ -234,9 +235,11 @@ impl Handleable for Channel {
                         ty: EventType::MESSAGE,
                         id: handle_id,
                     },
-                    info: message.info,
-                    arg1: message.arg1,
-                    arg2: message.arg2,
+                    peek: Peek {
+                        info: message.info,
+                        arg1: message.arg1,
+                        arg2: message.arg2,
+                    },
                 },
             };
 

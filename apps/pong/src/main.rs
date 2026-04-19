@@ -2,8 +2,9 @@
 #![no_main]
 
 use ftl::channel::Channel;
+use ftl::channel::Incoming;
+use ftl::channel::Message;
 use ftl::channel::MessageId;
-use ftl::channel::MessageKind;
 use ftl::channel::OpenOptions;
 use ftl::collections::HashMap;
 use ftl::error::ErrorCode;
@@ -29,21 +30,31 @@ fn main(supervisor_ch: Channel) {
     let path = b"service/pong";
     let options = OpenOptions::LISTEN;
     supervisor_ch
-        .send_body(MessageKind::OPEN, listen_mid, path, options.as_usize())
+        .send(Message::Open {
+            mid: listen_mid,
+            path: path.as_slice(),
+            options,
+        })
         .unwrap();
 
     // Wait for the supervisor process to register this service.
     let server_ch = loop {
         let (id, event) = sink.wait().unwrap();
         match event {
-            Event::Message { info, .. } if id == supervisor_ch.handle().id() => {
-                match info.kind() {
-                    MessageKind::OPEN_REPLY => {
-                        let handle = supervisor_ch.recv_handle(info).unwrap();
-                        break Channel::from_handle(handle);
+            Event::Message(peek) if id == supervisor_ch.handle().id() => {
+                match Incoming::parse(&supervisor_ch, peek) {
+                    Incoming::OpenReply(reply) => {
+                        match reply.recv() {
+                            Ok(handle) => {
+                                break Channel::from_handle(handle);
+                            }
+                            Err(error) => {
+                                panic!("failed to recv with handle: {:?}", error);
+                            }
+                        }
                     }
                     _ => {
-                        warn!("unhandled message: {:?}", info.kind());
+                        warn!("unhandled message: {:?}", peek);
                     }
                 }
             }
@@ -61,74 +72,54 @@ fn main(supervisor_ch: Channel) {
         let (id, event) = sink.wait().unwrap();
         let context = contexts.get(&id).unwrap();
         match (context, event) {
-            (Context::Server, Event::Message { info, .. }) => {
-                match info.kind() {
-                    MessageKind::OPEN => {
-                        if info.body_len() > 1024 {
-                            server_ch
-                                .send_args(
-                                    MessageKind::ERROR_REPLY,
-                                    info.mid(),
-                                    ErrorCode::InvalidArgument.as_usize(),
-                                    0,
-                                )
-                                .unwrap();
+            (Context::Server, Event::Message(peek)) => {
+                match Incoming::parse(&server_ch, peek) {
+                    Incoming::Open(request) => {
+                        if request.path_len() > 1024 {
+                            request.reply_error(ErrorCode::InvalidArgument);
                             continue;
                         }
 
                         // Receive the message.
-                        let mut buf = vec![0; info.body_len()];
-                        if let Err(error) = server_ch.recv_body(info, &mut buf) {
-                            warn!("failed to recv with body: {:?}", error);
-                            continue;
-                        }
+                        let mut buf = vec![0; request.path_len()];
+                        let (path, completer) = match request.recv(&mut buf) {
+                            Ok((path, completer)) => (path, completer),
+                            Err(error) => {
+                                warn!("failed to recv with body: {:?}", error);
+                                continue;
+                            }
+                        };
 
                         let (our_ch, their_ch) = Channel::new().unwrap();
                         sink.add(&our_ch).unwrap();
                         contexts.insert(our_ch.handle().id(), Context::Client { ch: our_ch });
 
                         // Reply to the client.
-                        server_ch
-                            .send_handle(
-                                MessageKind::OPEN_REPLY,
-                                info.mid(),
-                                their_ch.into_handle(),
-                            )
-                            .unwrap();
+                        completer.reply(their_ch.into_handle());
 
                         info!("accepted a client");
                     }
                     _ => {
-                        warn!("unhandled message: {:?}", info.kind());
+                        warn!("unhandled message: {:?}", peek);
                     }
                 }
             }
-            (Context::Client { ch }, Event::Message { info, .. }) => {
-                match info.kind() {
-                    MessageKind::WRITE => {
-                        if info.body_len() > 1024 {
-                            ch.send_args(
-                                MessageKind::ERROR_REPLY,
-                                info.mid(),
-                                ErrorCode::InvalidArgument.as_usize(),
-                                0,
-                            )
-                            .unwrap();
+            (Context::Client { ch }, Event::Message(peek)) => {
+                match Incoming::parse(ch, peek) {
+                    Incoming::Write(request) => {
+                        if request.len() > 1024 {
+                            request.reply_error(ErrorCode::InvalidArgument);
                             continue;
                         }
 
-                        let mut buf = vec![0; info.body_len()];
-                        if let Err(error) = ch.recv_body(info, &mut buf) {
-                            warn!("failed to recv with body: {:?}", error);
-                            continue;
-                        }
+                        let mut buf = vec![0; request.len()];
+                        let (body, completer) = request.recv(&mut buf).unwrap();
 
                         info!("received write message: {:?}", core::str::from_utf8(&buf));
-                        ch.send_args(MessageKind::WRITE_REPLY, info.mid(), buf.len(), 0)
-                            .unwrap();
+                        completer.reply(buf.len());
                     }
                     _ => {
-                        warn!("unhandled message: {:?}", info.kind());
+                        warn!("unhandled message: {:?}", peek);
                     }
                 }
             }
