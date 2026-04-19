@@ -242,6 +242,8 @@ impl<C: ChannelRef> RequestInner<C> {
     }
 }
 
+// FIXME: impl Drop for RequestInner<C> to discard and reply with ErrorCode::NotHandled
+
 struct CompleterInner<C: ChannelRef> {
     ch: C,
     mid: MessageId,
