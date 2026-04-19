@@ -117,8 +117,7 @@ The notable difference from typical IPC systems is the concept of *"peek"*. The 
 For example, in server side (i.e. accept any messages), the typical operation is to peek then receive the message:
 
 ```rs
-/// Receives a "write" message, and replies the written bytes.
-fn receive_message(ch: &Channel) -> Result<(), ErrorCode> {
+fn server_main(ch: &Channel) -> Result<(), ErrorCode> {
     // Watch events from the channel.
     let mut sink = Sink::new()?;
     sink.add(ch)?;
@@ -154,8 +153,7 @@ fn receive_message(ch: &Channel) -> Result<(), ErrorCode> {
 In client side (i.e. receive a specific message) is a RPC-like operation: send a request and wait for a reply. This looks very similar to the server side, and the key difference is that the client side expects a specific message kind:
 
 ```rs
-fn send_message(ch: &Channel) -> Result<(), ErrorCode> {
-    // Client side (Simplified API for demonstration).
+fn client_main(ch: &Channel) -> Result<(), ErrorCode> {
     let mid = MessageId::new(1);
     ch.send(Message::Write { mid, offset: 0, buf: b"Hello, world!" });
 
