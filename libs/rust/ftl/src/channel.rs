@@ -643,15 +643,29 @@ impl<C: ChannelRef> OpenReply<C> {
     }
 }
 
-pub struct ReadReply<C: ChannelRef>(ReplyInner<C>);
+pub struct ReadReply<C: ChannelRef> {
+    inner: ReplyInner<C>,
+    read_len: usize,
+}
 
 impl<C: ChannelRef> ReadReply<C> {
-    fn new(ch: C, info: MessageInfo) -> Self {
-        Self(ReplyInner::new(ch, info))
+    fn new(ch: C, info: MessageInfo, read_len: usize) -> Self {
+        Self {
+            inner: ReplyInner::new(ch, info),
+            read_len,
+        }
+    }
+
+    pub fn mid(&self) -> MessageId {
+        self.inner.mid()
+    }
+
+    pub fn read_len(&self) -> usize {
+        self.read_len
     }
 
     pub fn recv<'a>(self, buf: &'a mut [u8]) -> Result<&'a [u8], ErrorCode> {
-        self.0.recv_body(buf)
+        self.inner.recv_body(buf)
     }
 }
 
@@ -677,15 +691,29 @@ impl<C: ChannelRef> WriteReply<C> {
     }
 }
 
-pub struct GetAttrReply<C: ChannelRef>(ReplyInner<C>);
+pub struct GetAttrReply<C: ChannelRef> {
+    inner: ReplyInner<C>,
+    read_len: usize,
+}
 
 impl<C: ChannelRef> GetAttrReply<C> {
-    fn new(ch: C, info: MessageInfo) -> Self {
-        Self(ReplyInner::new(ch, info))
+    fn new(ch: C, info: MessageInfo, read_len: usize) -> Self {
+        Self {
+            inner: ReplyInner::new(ch, info),
+            read_len,
+        }
+    }
+
+    pub fn mid(&self) -> MessageId {
+        self.inner.mid()
+    }
+
+    pub fn read_len(&self) -> usize {
+        self.read_len
     }
 
     pub fn recv<'a>(self, buf: &'a mut [u8]) -> Result<&'a [u8], ErrorCode> {
-        self.0.recv_body(buf)
+        self.inner.recv_body(buf)
     }
 }
 
@@ -805,12 +833,18 @@ impl<C: ChannelRef> Incoming<C> {
                 Incoming::ErrorReply(ErrorReply::new(ch, peek.info, error))
             }
             MessageKind::OPEN_REPLY => Incoming::OpenReply(OpenReply::new(ch, peek.info)),
-            MessageKind::READ_REPLY => Incoming::ReadReply(ReadReply::new(ch, peek.info)),
+            MessageKind::READ_REPLY => {
+                let read_len = peek.arg1;
+                Incoming::ReadReply(ReadReply::new(ch, peek.info, read_len))
+            }
             MessageKind::WRITE_REPLY => {
                 let written_len = peek.arg1;
                 Incoming::WriteReply(WriteReply::new(ch, peek.info, written_len))
             }
-            MessageKind::GETATTR_REPLY => Incoming::GetAttrReply(GetAttrReply::new(ch, peek.info)),
+            MessageKind::GETATTR_REPLY => {
+                let read_len = peek.arg1;
+                Incoming::GetAttrReply(GetAttrReply::new(ch, peek.info, read_len))
+            }
             MessageKind::SETATTR_REPLY => {
                 let written_len = peek.arg1;
                 Incoming::SetAttrReply(SetAttrReply::new(ch, peek.info, written_len))
