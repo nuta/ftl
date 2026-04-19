@@ -332,6 +332,7 @@ impl<C: ChannelRef> Drop for CompleterInner<C> {
             caller.line(),
             self.mid
         );
+
         let m = Message::ErrorReply {
             mid: self.mid,
             error: ErrorCode::NotHandled,
@@ -481,10 +482,9 @@ impl<C: ChannelRef> ReadRequest<C> {
     }
 
     pub fn reply(self, buf: &[u8]) {
-        let m = Message::ReadReply {
-            mid: self.inner.mid(),
-            buf,
-        };
+        let mid = self.inner.mid();
+        self.inner
+            .discard_and_reply(Message::ReadReply { mid, buf });
     }
 }
 
@@ -497,19 +497,13 @@ impl<C: ChannelRef> ReadCompleter<C> {
     }
 
     pub fn reply(self, buf: &[u8]) {
-        let m = Message::ReadReply {
-            mid: self.0.mid(),
-            buf,
-        };
-        self.0.reply(m);
+        let mid = self.0.mid();
+        self.0.reply(Message::ReadReply { mid, buf });
     }
 
     pub fn reply_error(self, error: ErrorCode) {
-        let m = Message::ErrorReply {
-            mid: self.0.mid(),
-            error,
-        };
-        self.0.reply(m);
+        let mid = self.0.mid();
+        self.0.reply(Message::ErrorReply { mid, error });
     }
 }
 
@@ -538,19 +532,17 @@ impl<C: ChannelRef> WriteRequest<C> {
     }
 
     pub fn reply(self, written_len: usize) {
-        let m = Message::WriteReply {
-            mid: self.inner.mid(),
+        let mid = self.inner.mid();
+        self.inner.discard_and_reply(Message::WriteReply {
+            mid,
             len: written_len,
-        };
-        self.inner.discard_and_reply(m);
+        });
     }
 
     pub fn reply_error(self, error: ErrorCode) {
-        let m = Message::ErrorReply {
-            mid: self.inner.mid(),
-            error,
-        };
-        self.inner.discard_and_reply(m);
+        let mid = self.inner.mid();
+        self.inner
+            .discard_and_reply(Message::ErrorReply { mid, error });
     }
 }
 
@@ -563,19 +555,16 @@ impl<C: ChannelRef> WriteCompleter<C> {
     }
 
     pub fn reply(self, written_len: usize) {
-        let m = Message::WriteReply {
-            mid: self.0.mid(),
+        let mid = self.0.mid();
+        self.0.reply(Message::WriteReply {
+            mid,
             len: written_len,
-        };
-        self.0.reply(m);
+        });
     }
 
     pub fn reply_error(self, error: ErrorCode) {
-        let m = Message::ErrorReply {
-            mid: self.0.mid(),
-            error,
-        };
-        self.0.reply(m);
+        let mid = self.0.mid();
+        self.0.reply(Message::ErrorReply { mid, error });
     }
 }
 
