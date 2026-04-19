@@ -87,6 +87,7 @@ impl MessageId {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(C)]
 pub struct Peek {
     pub info: MessageInfo,
     pub arg1: usize,
