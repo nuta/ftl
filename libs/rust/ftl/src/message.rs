@@ -75,7 +75,7 @@ pub enum Incoming<C: ChannelRef> {
     WriteReply(WriteReply<C>),
     GetAttrReply(GetAttrReply<C>),
     SetAttrReply(SetAttrReply<C>),
-    Unknown(Unknown<C>),
+    Unknown(UnknownMessage<C>),
 }
 
 impl<C: ChannelRef> Incoming<C> {
@@ -92,7 +92,7 @@ impl<C: ChannelRef> Incoming<C> {
             MessageKind::WRITE_REPLY => Incoming::WriteReply(WriteReply::new(ch, peek)),
             MessageKind::GETATTR_REPLY => Incoming::GetAttrReply(GetAttrReply::new(ch, peek)),
             MessageKind::SETATTR_REPLY => Incoming::SetAttrReply(SetAttrReply::new(ch, peek)),
-            _ => Incoming::Unknown(Unknown::new(ch, peek)),
+            _ => Incoming::Unknown(UnknownMessage::new(ch, peek)),
         }
     }
 }
@@ -664,12 +664,12 @@ impl<C: ChannelRef> ErrorReply<C> {
     }
 }
 
-pub struct Unknown<C: ChannelRef> {
+pub struct UnknownMessage<C: ChannelRef> {
     ch: C,
     info: MessageInfo,
 }
 
-impl<C: ChannelRef> Unknown<C> {
+impl<C: ChannelRef> UnknownMessage<C> {
     fn new(ch: C, peek: Peek) -> Self {
         Self {
             ch,
@@ -682,7 +682,7 @@ impl<C: ChannelRef> Unknown<C> {
     }
 }
 
-impl<C: ChannelRef> Drop for Unknown<C> {
+impl<C: ChannelRef> Drop for UnknownMessage<C> {
     fn drop(&mut self) {
         if let Err(error) = self.ch.as_ref().discard(self.info) {
             debug!("failed to discard unknown message: {:?}", error);

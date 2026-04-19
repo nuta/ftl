@@ -33,7 +33,7 @@ pub use crate::message::ReadCompleter;
 pub use crate::message::ReadReply;
 pub use crate::message::SetAttrCompleter;
 pub use crate::message::SetAttrReply;
-pub use crate::message::Unknown;
+pub use crate::message::UnknownMessage;
 pub use crate::message::WriteCompleter;
 pub use crate::message::WriteReply;
 use crate::syscall::syscall1;
