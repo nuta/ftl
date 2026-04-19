@@ -353,7 +353,7 @@ pub fn sys_channel_discard(
     let handle_table = process.handle_table().lock();
     let ch = handle_table
         .get::<Channel>(ch_id)?
-        .authorize(HandleRight::WRITE)?;
+        .authorize(HandleRight::READ)?;
 
     ch.discard(info)?;
     Ok(SyscallResult::Return(0))
