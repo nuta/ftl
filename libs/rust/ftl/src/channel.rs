@@ -73,11 +73,11 @@ pub enum Message<'a> {
         mid: MessageId,
         len: usize,
     },
-    GetattrReply {
+    GetAttrReply {
         mid: MessageId,
         buf: &'a [u8],
     },
-    SetattrReply {
+    SetAttrReply {
         mid: MessageId,
         len: usize,
     },
@@ -543,7 +543,7 @@ impl<C: ChannelRef> GetAttrRequest<C> {
     pub fn reply(self, buf: &[u8]) {
         let mid = self.inner.mid();
         self.inner
-            .discard_and_reply(Message::GetattrReply { mid, buf });
+            .discard_and_reply(Message::GetAttrReply { mid, buf });
     }
 
     pub fn reply_error(self, error: ErrorCode) {
@@ -563,7 +563,7 @@ impl<C: ChannelRef> GetAttrCompleter<C> {
 
     pub fn reply(self, buf: &[u8]) {
         let mid = self.0.mid();
-        self.0.reply(Message::GetattrReply { mid, buf });
+        self.0.reply(Message::GetAttrReply { mid, buf });
     }
 
     pub fn reply_error(self, error: ErrorCode) {
@@ -594,7 +594,7 @@ impl<C: ChannelRef> SetAttrRequest<C> {
 
     pub fn reply(self, written_len: usize) {
         let mid = self.inner.mid();
-        self.inner.discard_and_reply(Message::SetattrReply {
+        self.inner.discard_and_reply(Message::SetAttrReply {
             mid,
             len: written_len,
         });
@@ -617,7 +617,7 @@ impl<C: ChannelRef> SetAttrCompleter<C> {
 
     pub fn reply(self, written_len: usize) {
         let mid = self.0.mid();
-        self.0.reply(Message::SetattrReply {
+        self.0.reply(Message::SetAttrReply {
             mid,
             len: written_len,
         });
@@ -691,11 +691,25 @@ impl<C: ChannelRef> GetAttrReply<C> {
     }
 }
 
-pub struct SetAttrReply<C: ChannelRef>(ReplyInner<C>);
+pub struct SetAttrReply<C: ChannelRef> {
+    inner: ReplyInner<C>,
+    written_len: usize,
+}
 
 impl<C: ChannelRef> SetAttrReply<C> {
-    fn new(ch: C, info: MessageInfo) -> Self {
-        Self(ReplyInner::new(ch, info))
+    fn new(ch: C, info: MessageInfo, written_len: usize) -> Self {
+        Self {
+            inner: ReplyInner::new(ch, info),
+            written_len,
+        }
+    }
+
+    pub fn mid(&self) -> MessageId {
+        self.inner.mid()
+    }
+
+    pub fn written_len(&self) -> usize {
+        self.written_len
     }
 }
 
@@ -799,7 +813,10 @@ impl<C: ChannelRef> Incoming<C> {
                 Incoming::WriteReply(WriteReply::new(ch, peek.info, written_len))
             }
             MessageKind::GETATTR_REPLY => Incoming::GetAttrReply(GetAttrReply::new(ch, peek.info)),
-            MessageKind::SETATTR_REPLY => Incoming::SetAttrReply(SetAttrReply::new(ch, peek.info)),
+            MessageKind::SETATTR_REPLY => {
+                let written_len = peek.arg1;
+                Incoming::SetAttrReply(SetAttrReply::new(ch, peek.info, written_len))
+            }
             _ => Incoming::Unknown(Unknown::new(ch, peek.info)),
         }
     }
@@ -848,10 +865,10 @@ impl Channel {
             Message::WriteReply { mid, len } => {
                 self.send_args(MessageKind::WRITE_REPLY, mid, len, 0)
             }
-            Message::GetattrReply { mid, buf } => {
+            Message::GetAttrReply { mid, buf } => {
                 self.send_body(MessageKind::GETATTR_REPLY, mid, buf, 0)
             }
-            Message::SetattrReply { mid, len } => {
+            Message::SetAttrReply { mid, len } => {
                 self.send_args(MessageKind::SETATTR_REPLY, mid, len, 0)
             }
         }
