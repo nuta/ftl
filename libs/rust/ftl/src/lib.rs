@@ -16,6 +16,7 @@ pub mod print;
 pub mod allocator;
 
 pub mod arch;
+mod message;
 mod panic;
 
 pub mod buffer;
@@ -26,7 +27,6 @@ pub mod error;
 pub mod handle;
 pub mod interrupt;
 pub mod log;
-pub mod message;
 pub mod prelude;
 pub mod process;
 pub mod sink;
