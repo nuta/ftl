@@ -2,7 +2,6 @@ use alloc::rc::Rc;
 use core::fmt;
 use core::mem;
 use core::mem::MaybeUninit;
-use core::panic::Location;
 use core::ptr::null;
 use core::ptr::null_mut;
 
@@ -126,10 +125,6 @@ impl<C: ChannelRef> RequestInner<C> {
         self.info.mid()
     }
 
-    fn channel(&self) -> &C {
-        &self.ch
-    }
-
     fn recv_args(&self) -> Result<(), ErrorCode> {
         self.ch.as_ref().recv_args(self.info)?;
         Ok(())
@@ -151,9 +146,27 @@ impl<C: ChannelRef> RequestInner<C> {
         }
     }
 
+    fn reply_with<'a>(self, f: impl FnOnce(MessageId) -> Message<'a>) {
+        let mid = self.mid();
+        self.reply(f(mid));
+    }
+
     fn discard_and_reply(mut self, m: Message) {
         self.handled = true;
         self.do_discard_and_reply(m);
+    }
+
+    fn discard_and_reply_with<'a>(self, f: impl FnOnce(MessageId) -> Message<'a>) {
+        let mid = self.mid();
+        self.discard_and_reply(f(mid));
+    }
+
+    fn reply_error(self, error: ErrorCode) {
+        self.reply_with(|mid| Message::ErrorReply { mid, error });
+    }
+
+    fn discard_and_reply_error(self, error: ErrorCode) {
+        self.discard_and_reply_with(|mid| Message::ErrorReply { mid, error });
     }
 
     fn do_discard_and_reply(&self, m: Message) {
@@ -168,18 +181,12 @@ impl<C: ChannelRef> RequestInner<C> {
 }
 
 impl<C: ChannelRef> Drop for RequestInner<C> {
-    #[track_caller]
     fn drop(&mut self) {
         if self.handled {
             return;
         }
 
-        let caller = Location::caller();
-        debug!(
-            "request dropped without reply at {}:{}",
-            caller.file(),
-            caller.line(),
-        );
+        debug!("request dropped without reply");
 
         self.do_discard_and_reply(Message::ErrorReply {
             mid: self.mid(),
@@ -209,12 +216,6 @@ impl<C: ChannelRef> ReplyInner<C> {
 
     fn body_len(&self) -> usize {
         self.info.body_len()
-    }
-
-    fn recv_args(mut self) -> Result<(), ErrorCode> {
-        self.received = true;
-        self.ch.as_ref().recv_args(self.info)?;
-        Ok(())
     }
 
     fn recv_handle(mut self) -> Result<OwnedHandle, ErrorCode> {
@@ -266,19 +267,12 @@ impl<C: ChannelRef> OpenRequest<C> {
     }
 
     pub fn reply(self, handle: OwnedHandle) {
-        let m = Message::OpenReply {
-            mid: self.inner.mid(),
-            handle,
-        };
-        self.inner.discard_and_reply(m);
+        self.inner
+            .discard_and_reply_with(|mid| Message::OpenReply { mid, handle });
     }
 
     pub fn reply_error(self, error: ErrorCode) {
-        let m = Message::ErrorReply {
-            mid: self.inner.mid(),
-            error,
-        };
-        self.inner.discard_and_reply(m);
+        self.inner.discard_and_reply_error(error);
     }
 }
 
@@ -289,20 +283,12 @@ impl<C: ChannelRef> OpenCompleter<C> {
         Self(request)
     }
 
-    pub fn reply(mut self, handle: OwnedHandle) {
-        let m = Message::OpenReply {
-            mid: self.0.mid(),
-            handle,
-        };
-        self.0.reply(m);
+    pub fn reply(self, handle: OwnedHandle) {
+        self.0.reply_with(|mid| Message::OpenReply { mid, handle });
     }
 
-    pub fn reply_error(mut self, error: ErrorCode) {
-        let m = Message::ErrorReply {
-            mid: self.0.mid(),
-            error,
-        };
-        self.0.reply(m);
+    pub fn reply_error(self, error: ErrorCode) {
+        self.0.reply_error(error);
     }
 }
 
@@ -332,9 +318,8 @@ impl<C: ChannelRef> ReadRequest<C> {
     }
 
     pub fn reply(self, buf: &[u8]) {
-        let mid = self.inner.mid();
         self.inner
-            .discard_and_reply(Message::ReadReply { mid, buf });
+            .discard_and_reply_with(|mid| Message::ReadReply { mid, buf });
     }
 }
 
@@ -346,13 +331,11 @@ impl<C: ChannelRef> ReadCompleter<C> {
     }
 
     pub fn reply(self, buf: &[u8]) {
-        let mid = self.0.mid();
-        self.0.reply(Message::ReadReply { mid, buf });
+        self.0.reply_with(|mid| Message::ReadReply { mid, buf });
     }
 
     pub fn reply_error(self, error: ErrorCode) {
-        let mid = self.0.mid();
-        self.0.reply(Message::ErrorReply { mid, error });
+        self.0.reply_error(error);
     }
 }
 
@@ -381,17 +364,15 @@ impl<C: ChannelRef> WriteRequest<C> {
     }
 
     pub fn reply(self, written_len: usize) {
-        let mid = self.inner.mid();
-        self.inner.discard_and_reply(Message::WriteReply {
-            mid,
-            len: written_len,
-        });
+        self.inner
+            .discard_and_reply_with(|mid| Message::WriteReply {
+                mid,
+                len: written_len,
+            });
     }
 
     pub fn reply_error(self, error: ErrorCode) {
-        let mid = self.inner.mid();
-        self.inner
-            .discard_and_reply(Message::ErrorReply { mid, error });
+        self.inner.discard_and_reply_error(error);
     }
 }
 
@@ -403,16 +384,14 @@ impl<C: ChannelRef> WriteCompleter<C> {
     }
 
     pub fn reply(self, written_len: usize) {
-        let mid = self.0.mid();
-        self.0.reply(Message::WriteReply {
+        self.0.reply_with(|mid| Message::WriteReply {
             mid,
             len: written_len,
         });
     }
 
     pub fn reply_error(self, error: ErrorCode) {
-        let mid = self.0.mid();
-        self.0.reply(Message::ErrorReply { mid, error });
+        self.0.reply_error(error);
     }
 }
 
@@ -437,15 +416,12 @@ impl<C: ChannelRef> GetAttrRequest<C> {
     }
 
     pub fn reply(self, buf: &[u8]) {
-        let mid = self.inner.mid();
         self.inner
-            .discard_and_reply(Message::GetAttrReply { mid, buf });
+            .discard_and_reply_with(|mid| Message::GetAttrReply { mid, buf });
     }
 
     pub fn reply_error(self, error: ErrorCode) {
-        let mid = self.inner.mid();
-        self.inner
-            .discard_and_reply(Message::ErrorReply { mid, error });
+        self.inner.discard_and_reply_error(error);
     }
 }
 
@@ -457,13 +433,11 @@ impl<C: ChannelRef> GetAttrCompleter<C> {
     }
 
     pub fn reply(self, buf: &[u8]) {
-        let mid = self.0.mid();
-        self.0.reply(Message::GetAttrReply { mid, buf });
+        self.0.reply_with(|mid| Message::GetAttrReply { mid, buf });
     }
 
     pub fn reply_error(self, error: ErrorCode) {
-        let mid = self.0.mid();
-        self.0.reply(Message::ErrorReply { mid, error });
+        self.0.reply_error(error);
     }
 }
 
@@ -488,17 +462,15 @@ impl<C: ChannelRef> SetAttrRequest<C> {
     }
 
     pub fn reply(self, written_len: usize) {
-        let mid = self.inner.mid();
-        self.inner.discard_and_reply(Message::SetAttrReply {
-            mid,
-            len: written_len,
-        });
+        self.inner
+            .discard_and_reply_with(|mid| Message::SetAttrReply {
+                mid,
+                len: written_len,
+            });
     }
 
     pub fn reply_error(self, error: ErrorCode) {
-        let mid = self.inner.mid();
-        self.inner
-            .discard_and_reply(Message::ErrorReply { mid, error });
+        self.inner.discard_and_reply_error(error);
     }
 }
 
@@ -510,16 +482,14 @@ impl<C: ChannelRef> SetAttrCompleter<C> {
     }
 
     pub fn reply(self, written_len: usize) {
-        let mid = self.0.mid();
-        self.0.reply(Message::SetAttrReply {
+        self.0.reply_with(|mid| Message::SetAttrReply {
             mid,
             len: written_len,
         });
     }
 
     pub fn reply_error(self, error: ErrorCode) {
-        let mid = self.0.mid();
-        self.0.reply(Message::ErrorReply { mid, error });
+        self.0.reply_error(error);
     }
 }
 
