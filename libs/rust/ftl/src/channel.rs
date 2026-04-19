@@ -206,11 +206,16 @@ impl<'a> ChannelRef for &'a mut Rc<Channel> {
 struct RequestInner<C: ChannelRef> {
     ch: C,
     info: MessageInfo,
+    handled: bool,
 }
 
 impl<C: ChannelRef> RequestInner<C> {
     fn new(ch: C, info: MessageInfo) -> Self {
-        Self { ch, info }
+        Self {
+            ch,
+            info,
+            handled: false,
+        }
     }
 
     fn mid(&self) -> MessageId {
@@ -231,7 +236,23 @@ impl<C: ChannelRef> RequestInner<C> {
         Ok(&body[..])
     }
 
-    fn discard_and_reply(self, m: Message) {
+    /// Sends a reply message to the channel.
+    ///
+    /// The caller must ensure that the request message has been received
+    /// or discarded before calling this method.
+    fn reply(mut self, m: Message) {
+        self.handled = true;
+        if let Err(error) = self.ch.as_ref().send(m) {
+            debug!("failed to reply: {:?}", error);
+        }
+    }
+
+    fn discard_and_reply(mut self, m: Message) {
+        self.handled = true;
+        self.do_discard_and_reply(m);
+    }
+
+    fn do_discard_and_reply(&self, m: Message) {
         if let Err(error) = self.ch.as_ref().discard(self.info) {
             debug!("failed to discard before reply: {:?}", error);
         }
@@ -242,57 +263,24 @@ impl<C: ChannelRef> RequestInner<C> {
     }
 }
 
-// FIXME: impl Drop for RequestInner<C> to discard and reply with ErrorCode::NotHandled
-
-struct CompleterInner<C: ChannelRef> {
-    ch: C,
-    mid: MessageId,
-    completed: bool,
-}
-
-impl<C: ChannelRef> CompleterInner<C> {
-    fn new(ch: C, mid: MessageId) -> Self {
-        Self {
-            ch,
-            mid,
-            completed: false,
-        }
-    }
-
-    pub fn mid(&self) -> MessageId {
-        self.mid
-    }
-
-    fn reply(mut self, m: Message) {
-        self.completed = true;
-        if let Err(error) = self.ch.as_ref().send(m) {
-            debug!("failed to reply: {:?}", error);
-        }
-    }
-}
-
-impl<C: ChannelRef> Drop for CompleterInner<C> {
+impl<C: ChannelRef> Drop for RequestInner<C> {
     #[track_caller]
     fn drop(&mut self) {
-        if self.completed {
+        if self.handled {
             return;
         }
 
         let caller = Location::caller();
         debug!(
-            "completer dropped without reply at {}:{}: {:?}",
+            "request dropped without reply at {}:{}",
             caller.file(),
             caller.line(),
-            self.mid
         );
 
-        let m = Message::ErrorReply {
-            mid: self.mid,
+        self.do_discard_and_reply(Message::ErrorReply {
+            mid: self.mid(),
             error: ErrorCode::NotHandled,
-        };
-        if let Err(error) = self.ch.as_ref().send(m) {
-            debug!("failed to reply: {:?}", error);
-        }
+        });
     }
 }
 
@@ -341,7 +329,7 @@ impl<C: ChannelRef> Drop for ReplyInner<C> {
         }
 
         if let Err(error) = self.ch.as_ref().discard(self.info) {
-            debug!("failed to discard before reply: {:?}", error);
+            debug!("failed to discard reply message: {:?}", error);
         }
     }
 }
@@ -387,12 +375,11 @@ impl<C: ChannelRef> OpenRequest<C> {
     }
 }
 
-pub struct OpenCompleter<C: ChannelRef>(CompleterInner<C>);
+pub struct OpenCompleter<C: ChannelRef>(RequestInner<C>);
 
 impl<C: ChannelRef> OpenCompleter<C> {
     fn new(request: RequestInner<C>) -> Self {
-        let mid = request.mid();
-        Self(CompleterInner::new(request.ch, mid))
+        Self(request)
     }
 
     pub fn reply(mut self, handle: OwnedHandle) {
@@ -444,12 +431,11 @@ impl<C: ChannelRef> ReadRequest<C> {
     }
 }
 
-pub struct ReadCompleter<C: ChannelRef>(CompleterInner<C>);
+pub struct ReadCompleter<C: ChannelRef>(RequestInner<C>);
 
 impl<C: ChannelRef> ReadCompleter<C> {
     fn new(request: RequestInner<C>) -> Self {
-        let mid = request.mid();
-        Self(CompleterInner::new(request.ch, mid))
+        Self(request)
     }
 
     pub fn reply(self, buf: &[u8]) {
@@ -502,12 +488,11 @@ impl<C: ChannelRef> WriteRequest<C> {
     }
 }
 
-pub struct WriteCompleter<C: ChannelRef>(CompleterInner<C>);
+pub struct WriteCompleter<C: ChannelRef>(RequestInner<C>);
 
 impl<C: ChannelRef> WriteCompleter<C> {
     fn new(request: RequestInner<C>) -> Self {
-        let mid = request.mid();
-        Self(CompleterInner::new(request.ch, mid))
+        Self(request)
     }
 
     pub fn reply(self, written_len: usize) {
@@ -557,12 +542,11 @@ impl<C: ChannelRef> GetAttrRequest<C> {
     }
 }
 
-pub struct GetAttrCompleter<C: ChannelRef>(CompleterInner<C>);
+pub struct GetAttrCompleter<C: ChannelRef>(RequestInner<C>);
 
 impl<C: ChannelRef> GetAttrCompleter<C> {
     fn new(request: RequestInner<C>) -> Self {
-        let mid = request.mid();
-        Self(CompleterInner::new(request.ch, mid))
+        Self(request)
     }
 
     pub fn reply(self, buf: &[u8]) {
@@ -611,12 +595,11 @@ impl<C: ChannelRef> SetAttrRequest<C> {
     }
 }
 
-pub struct SetAttrCompleter<C: ChannelRef>(CompleterInner<C>);
+pub struct SetAttrCompleter<C: ChannelRef>(RequestInner<C>);
 
 impl<C: ChannelRef> SetAttrCompleter<C> {
     fn new(request: RequestInner<C>) -> Self {
-        let mid = request.mid();
-        Self(CompleterInner::new(request.ch, mid))
+        Self(request)
     }
 
     pub fn reply(self, written_len: usize) {
