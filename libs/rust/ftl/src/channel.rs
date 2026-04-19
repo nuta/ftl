@@ -157,10 +157,15 @@ impl<C: ChannelRef> Incoming<C> {
                 Incoming::Open(OpenRequest::new(inner, options))
             }
             MessageKind::READ => {
-                todo!()
+                let inner = RequestInner::new(ch, raw.info);
+                let offset = raw.arg1;
+                let len = raw.arg2;
+                Incoming::Read(ReadRequest::new(inner, offset, len))
             }
             MessageKind::WRITE => {
-                todo!()
+                let inner = RequestInner::new(ch, raw.info);
+                let offset = raw.arg1;
+                Incoming::Write(WriteRequest::new(inner, offset))
             }
             MessageKind::GETATTR => {
                 todo!()
@@ -169,16 +174,18 @@ impl<C: ChannelRef> Incoming<C> {
                 todo!()
             }
             MessageKind::ERROR_REPLY => {
-                todo!()
+                let error = todo!();
+                Incoming::ErrorReply(ErrorReply::new(ch, raw.info, error))
             }
             MessageKind::OPEN_REPLY => {
-                todo!()
+                Incoming::OpenReply(OpenReply::new(ch, raw.info))
             }
             MessageKind::READ_REPLY => {
-                todo!()
+                Incoming::ReadReply(ReadReply::new(ch, raw.info))
             }
             MessageKind::WRITE_REPLY => {
-                todo!()
+                let written_len = raw.arg1;
+                Incoming::WriteReply(WriteReply::new(ch, raw.info, written_len))
             }
             MessageKind::GETATTR_REPLY => {
                 todo!()
@@ -584,19 +591,29 @@ impl<C: ChannelRef> WriteRequest<C> {
     pub fn offset(&self) -> usize {
         self.offset
     }
-}
 
-impl<C: ChannelRef> WriteRequest<C> {
+    pub fn len(&self) -> usize {
+        self.inner.info.body_len()
+    }
+
     pub fn recv<'a>(self, buf: &'a mut [u8]) -> Result<(&'a [u8], WriteCompleter<C>), ErrorCode> {
         let body = self.inner.recv_body(buf)?;
         let completer = WriteCompleter::new(self.inner);
         Ok((body, completer))
     }
 
-    pub fn reply(self, len: usize) {
+    pub fn reply(self, written_len: usize) {
         let m = Message::WriteReply {
             mid: self.inner.mid(),
-            len,
+            len: written_len,
+        };
+        self.inner.discard_and_reply(m);
+    }
+
+    pub fn reply_error(self, error: ErrorCode) {
+        let m = Message::ErrorReply {
+            mid: self.inner.mid(),
+            error,
         };
         self.inner.discard_and_reply(m);
     }
@@ -669,7 +686,7 @@ impl<C: ChannelRef> WriteReply<C> {
         self.inner.mid()
     }
 
-    fn written_len(&self) -> usize {
+pub    fn written_len(&self) -> usize {
         self.written_len
     }
 }

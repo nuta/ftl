@@ -36,8 +36,8 @@ fn main(supervisor_ch: Channel) {
         match event {
             Event::Message(peeked) if id == supervisor_ch.handle().id() => {
                 match Incoming::parse(&supervisor_ch, peeked) {
-                    Incoming::OpenReply { recv } => {
-                        match recv.recv() {
+                    Incoming::OpenReply(reply) => {
+                        match reply.recv() {
                             Ok(handle) => {
                                 break Channel::from_handle(handle);
                             }
@@ -77,8 +77,10 @@ fn main(supervisor_ch: Channel) {
         match event {
             Event::Message(peeked) if id == pong_ch.handle().id() => {
                 match Incoming::parse(&pong_ch, peeked) {
-                    Incoming::WriteReply { recv, len } => {
-                        recv.recv().unwrap();
+                    Incoming::WriteReply(reply) => {
+                        let len = reply.written_len();
+                        drop(reply);
+
                         info!("received write reply: written_len={}", len);
 
                         num_received += 1;

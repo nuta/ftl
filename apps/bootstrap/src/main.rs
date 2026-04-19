@@ -10,6 +10,7 @@ use ftl::channel::Message;
 use ftl::channel::MessageId;
 use ftl::channel::MessageInfo;
 use ftl::channel::MessageKind;
+use ftl::channel::OpenCompleter;
 use ftl::channel::OpenOptions;
 use ftl::channel::OwnedCompleter;
 use ftl::collections::HashMap;
@@ -30,10 +31,6 @@ mod elf;
 mod initfs;
 mod loader;
 
-struct PendingOpen {
-    completer: OwnedCompleter<OwnedHandle>,
-}
-
 enum Context {
     Client { ch: Rc<Channel> },
     Service { name: String },
@@ -41,20 +38,20 @@ enum Context {
 
 enum Service {
     Waiting {
-        waiters: VecDeque<PendingOpen>,
+        waiters: VecDeque<OpenCompleter<Rc<Channel>>>,
     },
     Registered {
         server_ch: Rc<Channel>,
-        pending_opens: HashMap<MessageId, PendingOpen>,
+        pending_opens: HashMap<MessageId, OpenCompleter<Rc<Channel>>>,
     },
 }
 
 fn forward_connect(
     service_name: &str,
     server_ch: &Rc<Channel>,
-    pending_opens: &mut HashMap<MessageId, PendingOpen>,
-    waiter: PendingOpen,
-) -> Result<(), (PendingOpen, ErrorCode)> {
+    pending_opens: &mut HashMap<MessageId, OpenCompleter<Rc<Channel>>>,
+    waiter: OpenCompleter<Rc<Channel>>,
+) -> Result<(), (OpenCompleter<Rc<Channel>>, ErrorCode)> {
     let mid = MessageId::new(1);
     let path = format!("service/{service_name}");
     pending_opens.insert(mid, waiter);
@@ -102,7 +99,8 @@ fn main(supervisor_ch: Channel) {
         let context = contexts.get(&id).unwrap();
         match (context, event) {
             (Context::Client { ch }, Event::Message(peeked)) => {
-                match Incoming::parse(ch, peeked) {
+                let incoming = Incoming::parse(ch.clone() /* FIXME: avoid cloning */, peeked);
+                match incoming {
                     Incoming::Open(request) => {
                         let options = request.options();
                         let mut buf = vec![0; request.path_len()];
@@ -131,29 +129,27 @@ fn main(supervisor_ch: Channel) {
                         };
 
                         if options == OpenOptions::CONNECT {
-                            let waiter = PendingOpen { completer: todo!() };
-
                             match services.get_mut(service_name) {
                                 Some(Service::Registered {
                                     server_ch,
                                     pending_opens,
                                 }) => {
-                                    if let Err((waiter, error)) = forward_connect(
+                                    if let Err((completer, error)) = forward_connect(
                                         service_name,
                                         server_ch,
                                         pending_opens,
-                                        waiter,
+                                        completer,
                                     ) {
                                         warn!("failed to forward connect request: {:?}", error);
-                                        waiter.completer.reply_error(error);
+                                        completer.reply_error(error);
                                     }
                                 }
                                 Some(Service::Waiting { waiters }) => {
-                                    waiters.push_back(waiter);
+                                    waiters.push_back(completer);
                                 }
                                 None => {
                                     let mut waiters = VecDeque::new();
-                                    waiters.push_back(waiter);
+                                    waiters.push_back(completer);
                                     services.insert(
                                         service_name.to_string(),
                                         Service::Waiting { waiters },
@@ -213,7 +209,7 @@ fn main(supervisor_ch: Channel) {
                                     forward_connect(service_name, server_ch, pending_opens, waiter)
                                 {
                                     warn!("failed to forward queued connect request: {:?}", error);
-                                    waiter.completer.reply_error(error);
+                                    waiter.reply_error(error);
                                 }
                             }
                         } else {
@@ -248,12 +244,12 @@ fn main(supervisor_ch: Channel) {
                             Ok(handle) => handle,
                             Err(error) => {
                                 warn!("failed to recv with handle: {:?}", error);
-                                waiter.completer.reply_error(error);
+                                waiter.reply_error(error);
                                 continue;
                             }
                         };
 
-                        waiter.completer.reply(handle);
+                        waiter.reply(handle);
                     }
                     Incoming::ErrorReply(reply) => {
                         let Some(waiter) = pending_opens.remove(&reply.mid()) else {
@@ -261,7 +257,7 @@ fn main(supervisor_ch: Channel) {
                             continue;
                         };
 
-                        waiter.completer.reply_error(reply.error());
+                        waiter.reply_error(reply.error());
                     }
                     _ => {
                         warn!("unhandled service message: {:?}", peeked);
