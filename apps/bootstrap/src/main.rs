@@ -12,7 +12,6 @@ use ftl::channel::MessageInfo;
 use ftl::channel::MessageKind;
 use ftl::channel::OpenCompleter;
 use ftl::channel::OpenOptions;
-use ftl::channel::OwnedCompleter;
 use ftl::collections::HashMap;
 use ftl::collections::VecDeque;
 use ftl::error::ErrorCode;
