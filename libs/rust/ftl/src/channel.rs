@@ -103,10 +103,14 @@ impl<C: ChannelRef> Incoming<C> {
                 Incoming::Write(WriteRequest::new(inner, offset))
             }
             MessageKind::GETATTR => {
-                todo!()
+                let inner = RequestInner::new(ch, peek.info);
+                let attr = Attr::from_usize(peek.arg1);
+                Incoming::GetAttr(GetAttrRequest::new(inner, attr))
             }
             MessageKind::SETATTR => {
-                todo!()
+                let inner = RequestInner::new(ch, peek.info);
+                let attr = Attr::from_usize(peek.arg1);
+                Incoming::SetAttr(SetAttrRequest::new(inner, attr))
             }
             MessageKind::ERROR_REPLY => {
                 let error = todo!();
@@ -118,15 +122,9 @@ impl<C: ChannelRef> Incoming<C> {
                 let written_len = peek.arg1;
                 Incoming::WriteReply(WriteReply::new(ch, peek.info, written_len))
             }
-            MessageKind::GETATTR_REPLY => {
-                todo!()
-            }
-            MessageKind::SETATTR_REPLY => {
-                todo!()
-            }
-            _ => {
-                todo!()
-            }
+            MessageKind::GETATTR_REPLY => Incoming::GetAttrReply(GetAttrReply::new(ch, peek.info)),
+            MessageKind::SETATTR_REPLY => Incoming::SetAttrReply(SetAttrReply::new(ch, peek.info)),
+            _ => Incoming::Unknown(Unknown::new(ch, peek.info)),
         }
     }
 }
@@ -568,6 +566,115 @@ impl<C: ChannelRef> WriteCompleter<C> {
     }
 }
 
+pub struct GetAttrRequest<C: ChannelRef> {
+    attr: Attr,
+    inner: RequestInner<C>,
+}
+
+impl<C: ChannelRef> GetAttrRequest<C> {
+    fn new(inner: RequestInner<C>, attr: Attr) -> Self {
+        Self { inner, attr }
+    }
+
+    pub fn attr(&self) -> Attr {
+        self.attr
+    }
+
+    pub fn recv(self) -> Result<GetAttrCompleter<C>, ErrorCode> {
+        self.inner.recv_args()?;
+        let completer = GetAttrCompleter::new(self.inner);
+        Ok(completer)
+    }
+
+    pub fn reply(self, buf: &[u8]) {
+        let mid = self.inner.mid();
+        self.inner
+            .discard_and_reply(Message::GetattrReply { mid, buf });
+    }
+
+    pub fn reply_error(self, error: ErrorCode) {
+        let mid = self.inner.mid();
+        self.inner
+            .discard_and_reply(Message::ErrorReply { mid, error });
+    }
+}
+
+pub struct GetAttrCompleter<C: ChannelRef>(CompleterInner<C>);
+
+impl<C: ChannelRef> GetAttrCompleter<C> {
+    fn new(request: RequestInner<C>) -> Self {
+        let mid = request.mid();
+        Self(CompleterInner::new(request.ch, mid))
+    }
+
+    pub fn reply(self, buf: &[u8]) {
+        let mid = self.0.mid();
+        self.0.reply(Message::GetattrReply { mid, buf });
+    }
+
+    pub fn reply_error(self, error: ErrorCode) {
+        let mid = self.0.mid();
+        self.0.reply(Message::ErrorReply { mid, error });
+    }
+}
+
+pub struct SetAttrRequest<C: ChannelRef> {
+    attr: Attr,
+    inner: RequestInner<C>,
+}
+
+impl<C: ChannelRef> SetAttrRequest<C> {
+    fn new(inner: RequestInner<C>, attr: Attr) -> Self {
+        Self { inner, attr }
+    }
+
+    pub fn attr(&self) -> Attr {
+        self.attr
+    }
+
+    pub fn recv<'a>(self, buf: &'a mut [u8]) -> Result<(&'a [u8], SetAttrCompleter<C>), ErrorCode> {
+        let body = self.inner.recv_body(buf)?;
+        let completer = SetAttrCompleter::new(self.inner);
+        Ok((body, completer))
+    }
+
+    pub fn reply(self, written_len: usize) {
+        let mid = self.inner.mid();
+        self.inner.discard_and_reply(Message::SetattrReply {
+            mid,
+            len: written_len,
+        });
+    }
+
+    pub fn reply_error(self, error: ErrorCode) {
+        let mid = self.inner.mid();
+        self.inner
+            .discard_and_reply(Message::ErrorReply { mid, error });
+    }
+}
+
+pub struct SetAttrCompleter<C: ChannelRef>(CompleterInner<C>);
+
+impl<C: ChannelRef> SetAttrCompleter<C> {
+    fn new(request: RequestInner<C>) -> Self {
+        let mid = request.mid();
+        Self(CompleterInner::new(request.ch, mid))
+    }
+
+    pub fn reply(self, written_len: usize) {
+        let mid = self.0.mid();
+        self.0.reply(Message::SetattrReply {
+            mid,
+            len: written_len,
+        });
+    }
+
+    pub fn reply_error(self, error: ErrorCode) {
+        let mid = self.0.mid();
+        self.0.reply(Message::ErrorReply { mid, error });
+    }
+}
+
 pub struct OpenReply<C: ChannelRef>(ReplyInner<C>);
 
 impl<C: ChannelRef> OpenReply<C> {
@@ -618,6 +725,26 @@ impl<C: ChannelRef> WriteReply<C> {
     }
 }
 
+pub struct GetAttrReply<C: ChannelRef>(ReplyInner<C>);
+
+impl<C: ChannelRef> GetAttrReply<C> {
+    fn new(ch: C, info: MessageInfo) -> Self {
+        Self(ReplyInner::new(ch, info))
+    }
+
+    pub fn recv<'a>(self, buf: &'a mut [u8]) -> Result<&'a [u8], ErrorCode> {
+        self.0.recv_body(buf)
+    }
+}
+
+pub struct SetAttrReply<C: ChannelRef>(ReplyInner<C>);
+
+impl<C: ChannelRef> SetAttrReply<C> {
+    fn new(ch: C, info: MessageInfo) -> Self {
+        Self(ReplyInner::new(ch, info))
+    }
+}
+
 pub struct ErrorReply<C: ChannelRef> {
     inner: ReplyInner<C>,
     error: ErrorCode,
@@ -640,19 +767,42 @@ impl<C: ChannelRef> ErrorReply<C> {
     }
 }
 
+pub struct Unknown<C: ChannelRef> {
+    ch: C,
+    info: MessageInfo,
+}
+
+impl<C: ChannelRef> Unknown<C> {
+    fn new(ch: C, info: MessageInfo) -> Self {
+        Self { ch, info }
+    }
+
+    pub fn info(&self) -> MessageInfo {
+        self.info
+    }
+}
+
+impl<C: ChannelRef> Drop for Unknown<C> {
+    fn drop(&mut self) {
+        if let Err(error) = self.ch.as_ref().discard(self.info) {
+            debug!("failed to discard unknown message: {:?}", error);
+        }
+    }
+}
+
 pub enum Incoming<C: ChannelRef> {
     Open(OpenRequest<C>),
     Read(ReadRequest<C>),
     Write(WriteRequest<C>),
-    GetAttr {},
-    SetAttr {},
+    GetAttr(GetAttrRequest<C>),
+    SetAttr(SetAttrRequest<C>),
     ErrorReply(ErrorReply<C>),
     OpenReply(OpenReply<C>),
     ReadReply(ReadReply<C>),
     WriteReply(WriteReply<C>),
-    GetAttrReply {},
-    SetAttrReply {},
-    Unknown {},
+    GetAttrReply(GetAttrReply<C>),
+    SetAttrReply(SetAttrReply<C>),
+    Unknown(Unknown<C>),
 }
 
 pub struct Channel {
