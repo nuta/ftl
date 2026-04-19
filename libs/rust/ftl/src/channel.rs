@@ -307,16 +307,19 @@ impl<C: ChannelRef> ReplyInner<C> {
         self.info.body_len()
     }
 
-    fn recv_args(self) -> Result<(), ErrorCode> {
+    fn recv_args(mut self) -> Result<(), ErrorCode> {
+        self.received = true;
         self.ch.as_ref().recv_args(self.info)?;
         Ok(())
     }
 
-    fn recv_handle(self) -> Result<OwnedHandle, ErrorCode> {
+    fn recv_handle(mut self) -> Result<OwnedHandle, ErrorCode> {
+        self.received = true;
         self.ch.as_ref().recv_handle(self.info)
     }
 
-    fn recv_body<'a>(&self, body: &'a mut [u8]) -> Result<&'a [u8], ErrorCode> {
+    fn recv_body<'a>(mut self, body: &'a mut [u8]) -> Result<&'a [u8], ErrorCode> {
+        self.received = true;
         self.ch.as_ref().recv_body(self.info, body)?;
         Ok(&body[..])
     }
