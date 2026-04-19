@@ -5,7 +5,7 @@ export async function main(args: string[]) {
         mode: process.env.BUILD === 'release' ? 'release' : 'debug',
         arch: 'x64',
         // apps: ['virtio_net', 'tcpip', 'http_server', 'ping', 'pong'],
-        apps: ['ping', 'pong'],
+        apps: ['virtio_net', 'ping', 'pong'],
     }
 
     await build(params);

@@ -127,6 +127,9 @@ fn main(supervisor_ch: Channel) {
                 sink.remove(id).unwrap();
                 contexts.remove(&id);
             }
+            (_, event) => {
+                warn!("unhandled event: {:?}", event);
+            }
         }
     }
 }
