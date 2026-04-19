@@ -136,7 +136,6 @@ impl<C: AsRef<Channel>> RequestInner<C> {
         }
     }
 
-
     fn reply_error(self, error: ErrorCode) {
         self.reply(|mid| Message::ErrorReply { mid, error });
     }
