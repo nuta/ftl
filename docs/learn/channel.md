@@ -100,8 +100,7 @@ impl Channel {
     fn create() -> (Channel, Channel);
     fn send(&self, msg: Message);
     fn recv(&self, mid: MessageId, buf: &mut [u8]) -> HandleId;
-    fn peek(&self) -> Peek;
-    fn discard(&self, mid: MessageId);
+    fn discard(&self, info: MessageInfo);
 }
 ```
 
