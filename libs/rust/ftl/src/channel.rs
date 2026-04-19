@@ -228,8 +228,7 @@ impl<C: ChannelRef> RequestInner<C> {
 
     fn recv_body<'a>(&self, body: &'a mut [u8]) -> Result<&'a [u8], ErrorCode> {
         self.ch.as_ref().recv_body(self.info, body)?;
-        let read_len = min(body.len(), self.info.body_len());
-        Ok(&body[..read_len])
+        Ok(&body[..])
     }
 
     fn discard_and_reply(self, m: Message) {
@@ -325,8 +324,7 @@ impl<C: ChannelRef> ReplyInner<C> {
 
     fn recv_body<'a>(&self, body: &'a mut [u8]) -> Result<&'a [u8], ErrorCode> {
         self.ch.as_ref().recv_body(self.info, body)?;
-        let read_len = min(body.len(), self.info.body_len());
-        Ok(&body[..read_len])
+        Ok(&body[..])
     }
 }
 
