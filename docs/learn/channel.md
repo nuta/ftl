@@ -201,4 +201,4 @@ fn send_message(ch: &Channel) -> Result<(), ErrorCode> {
 
 > [!NOTE]
 >
-> Receving a message is a non-blocking operation. If there is no message that matches the message info, it returns immediately with an error.
+> Receving a message is a non-blocking operation. If there is no message that matches the message info, it returns immediately with an error. Sink is the only way to wait for events including channel messages.
