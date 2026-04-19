@@ -21,6 +21,7 @@ use crate::syscall::syscall2;
 #[derive(Debug)]
 pub enum Event {
     Message(Peek),
+    Irq { irq: u8 },
     PeerClosed,
 }
 
@@ -54,6 +55,9 @@ impl Sink {
         let header = raw.header();
         let event = match header.ty {
             EventType::MESSAGE => Event::Message(unsafe { raw.message.peek }),
+            EventType::IRQ => Event::Irq {
+                irq: unsafe { raw.irq.irq },
+            },
             EventType::PEER_CLOSED => Event::PeerClosed,
             type_ => panic!("unimplemented event type: {:?}", type_),
         };
