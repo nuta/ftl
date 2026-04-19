@@ -1,5 +1,3 @@
-use alloc::rc::Rc;
-
 use ftl_types::channel::Attr;
 use ftl_types::channel::MessageId;
 use ftl_types::channel::OpenOptions;
@@ -63,7 +61,7 @@ pub enum Message<'a> {
     },
 }
 
-pub enum Incoming<C: ChannelRef> {
+pub enum Incoming<C: AsRef<Channel>> {
     Open(OpenRequest<C>),
     Read(ReadRequest<C>),
     Write(WriteRequest<C>),
@@ -78,7 +76,7 @@ pub enum Incoming<C: ChannelRef> {
     Unknown(UnknownMessage<C>),
 }
 
-impl<C: ChannelRef> Incoming<C> {
+impl<C: AsRef<Channel>> Incoming<C> {
     pub fn parse(ch: C, peek: Peek) -> Incoming<C> {
         match peek.info.kind() {
             MessageKind::OPEN => Incoming::Open(OpenRequest::new(ch, peek)),
@@ -97,41 +95,13 @@ impl<C: ChannelRef> Incoming<C> {
     }
 }
 
-pub trait ChannelRef {
-    fn as_ref(&self) -> &Channel;
-}
-
-impl<'a> ChannelRef for &'a Channel {
-    fn as_ref(&self) -> &Channel {
-        self
-    }
-}
-
-impl ChannelRef for Rc<Channel> {
-    fn as_ref(&self) -> &Channel {
-        &self
-    }
-}
-
-impl<'a> ChannelRef for &'a Rc<Channel> {
-    fn as_ref(&self) -> &Channel {
-        &self
-    }
-}
-
-impl<'a> ChannelRef for &'a mut Rc<Channel> {
-    fn as_ref(&self) -> &Channel {
-        &self
-    }
-}
-
-struct RequestInner<C: ChannelRef> {
+struct RequestInner<C: AsRef<Channel>> {
     ch: C,
     info: MessageInfo,
     handled: bool,
 }
 
-impl<C: ChannelRef> RequestInner<C> {
+impl<C: AsRef<Channel>> RequestInner<C> {
     fn new(ch: C, info: MessageInfo) -> Self {
         Self {
             ch,
@@ -158,34 +128,24 @@ impl<C: ChannelRef> RequestInner<C> {
     ///
     /// The caller must ensure that the request message has been received
     /// or discarded before calling this method.
-    fn reply(mut self, m: Message) {
+    fn reply<'a>(mut self, f: impl FnOnce(MessageId) -> Message<'a>) {
         self.handled = true;
+        let m = f(self.mid());
         if let Err(error) = self.ch.as_ref().send(m) {
             debug!("failed to reply: {:?}", error);
         }
     }
 
-    fn reply_with<'a>(self, f: impl FnOnce(MessageId) -> Message<'a>) {
-        let mid = self.mid();
-        self.reply(f(mid));
-    }
-
-    fn discard_and_reply(mut self, m: Message) {
-        self.handled = true;
-        self.do_discard_and_reply(m);
-    }
-
-    fn discard_and_reply_with<'a>(self, f: impl FnOnce(MessageId) -> Message<'a>) {
-        let mid = self.mid();
-        self.discard_and_reply(f(mid));
+    fn discard_and_reply<'a>(self, f: impl FnOnce(MessageId) -> Message<'a>) {
+        self.do_discard_and_reply(f(self.mid()));
     }
 
     fn reply_error(self, error: ErrorCode) {
-        self.reply_with(|mid| Message::ErrorReply { mid, error });
+        self.reply(|mid| Message::ErrorReply { mid, error });
     }
 
     fn discard_and_reply_error(self, error: ErrorCode) {
-        self.discard_and_reply_with(|mid| Message::ErrorReply { mid, error });
+        self.discard_and_reply(|mid| Message::ErrorReply { mid, error });
     }
 
     fn do_discard_and_reply(&self, m: Message) {
@@ -199,7 +159,7 @@ impl<C: ChannelRef> RequestInner<C> {
     }
 }
 
-impl<C: ChannelRef> Drop for RequestInner<C> {
+impl<C: AsRef<Channel>> Drop for RequestInner<C> {
     fn drop(&mut self) {
         if self.handled {
             return;
@@ -214,13 +174,13 @@ impl<C: ChannelRef> Drop for RequestInner<C> {
     }
 }
 
-struct ReplyInner<C: ChannelRef> {
+struct ReplyInner<C: AsRef<Channel>> {
     ch: C,
     info: MessageInfo,
     received: bool,
 }
 
-impl<C: ChannelRef> ReplyInner<C> {
+impl<C: AsRef<Channel>> ReplyInner<C> {
     fn new(ch: C, info: MessageInfo) -> Self {
         Self {
             ch,
@@ -249,7 +209,7 @@ impl<C: ChannelRef> ReplyInner<C> {
     }
 }
 
-impl<C: ChannelRef> Drop for ReplyInner<C> {
+impl<C: AsRef<Channel>> Drop for ReplyInner<C> {
     fn drop(&mut self) {
         if self.received {
             return;
@@ -261,12 +221,12 @@ impl<C: ChannelRef> Drop for ReplyInner<C> {
     }
 }
 
-pub struct OpenRequest<C: ChannelRef> {
+pub struct OpenRequest<C: AsRef<Channel>> {
     options: OpenOptions,
     inner: RequestInner<C>,
 }
 
-impl<C: ChannelRef> OpenRequest<C> {
+impl<C: AsRef<Channel>> OpenRequest<C> {
     fn new(ch: C, peek: Peek) -> Self {
         Self {
             inner: RequestInner::new(ch, peek.info),
@@ -290,7 +250,7 @@ impl<C: ChannelRef> OpenRequest<C> {
 
     pub fn reply(self, handle: OwnedHandle) {
         self.inner
-            .discard_and_reply_with(|mid| Message::OpenReply { mid, handle });
+            .discard_and_reply(|mid| Message::OpenReply { mid, handle });
     }
 
     pub fn reply_error(self, error: ErrorCode) {
@@ -298,15 +258,15 @@ impl<C: ChannelRef> OpenRequest<C> {
     }
 }
 
-pub struct OpenCompleter<C: ChannelRef>(RequestInner<C>);
+pub struct OpenCompleter<C: AsRef<Channel>>(RequestInner<C>);
 
-impl<C: ChannelRef> OpenCompleter<C> {
+impl<C: AsRef<Channel>> OpenCompleter<C> {
     fn new(request: RequestInner<C>) -> Self {
         Self(request)
     }
 
     pub fn reply(self, handle: OwnedHandle) {
-        self.0.reply_with(|mid| Message::OpenReply { mid, handle });
+        self.0.reply(|mid| Message::OpenReply { mid, handle });
     }
 
     pub fn reply_error(self, error: ErrorCode) {
@@ -314,9 +274,9 @@ impl<C: ChannelRef> OpenCompleter<C> {
     }
 }
 
-pub struct OpenReply<C: ChannelRef>(ReplyInner<C>);
+pub struct OpenReply<C: AsRef<Channel>>(ReplyInner<C>);
 
-impl<C: ChannelRef> OpenReply<C> {
+impl<C: AsRef<Channel>> OpenReply<C> {
     fn new(ch: C, peek: Peek) -> Self {
         Self(ReplyInner::new(ch, peek.info))
     }
@@ -330,13 +290,13 @@ impl<C: ChannelRef> OpenReply<C> {
     }
 }
 
-pub struct ReadRequest<C: ChannelRef> {
+pub struct ReadRequest<C: AsRef<Channel>> {
     offset: usize,
     len: usize,
     inner: RequestInner<C>,
 }
 
-impl<C: ChannelRef> ReadRequest<C> {
+impl<C: AsRef<Channel>> ReadRequest<C> {
     fn new(ch: C, peek: Peek) -> Self {
         Self {
             inner: RequestInner::new(ch, peek.info),
@@ -361,19 +321,19 @@ impl<C: ChannelRef> ReadRequest<C> {
 
     pub fn reply(self, buf: &[u8]) {
         self.inner
-            .discard_and_reply_with(|mid| Message::ReadReply { mid, buf });
+            .discard_and_reply(|mid| Message::ReadReply { mid, buf });
     }
 }
 
-pub struct ReadCompleter<C: ChannelRef>(RequestInner<C>);
+pub struct ReadCompleter<C: AsRef<Channel>>(RequestInner<C>);
 
-impl<C: ChannelRef> ReadCompleter<C> {
+impl<C: AsRef<Channel>> ReadCompleter<C> {
     fn new(request: RequestInner<C>) -> Self {
         Self(request)
     }
 
     pub fn reply(self, buf: &[u8]) {
-        self.0.reply_with(|mid| Message::ReadReply { mid, buf });
+        self.0.reply(|mid| Message::ReadReply { mid, buf });
     }
 
     pub fn reply_error(self, error: ErrorCode) {
@@ -381,11 +341,11 @@ impl<C: ChannelRef> ReadCompleter<C> {
     }
 }
 
-pub struct ReadReply<C: ChannelRef> {
+pub struct ReadReply<C: AsRef<Channel>> {
     inner: ReplyInner<C>,
 }
 
-impl<C: ChannelRef> ReadReply<C> {
+impl<C: AsRef<Channel>> ReadReply<C> {
     fn new(ch: C, peek: Peek) -> Self {
         Self {
             inner: ReplyInner::new(ch, peek.info),
@@ -405,12 +365,12 @@ impl<C: ChannelRef> ReadReply<C> {
     }
 }
 
-pub struct WriteRequest<C: ChannelRef> {
+pub struct WriteRequest<C: AsRef<Channel>> {
     offset: usize,
     inner: RequestInner<C>,
 }
 
-impl<C: ChannelRef> WriteRequest<C> {
+impl<C: AsRef<Channel>> WriteRequest<C> {
     fn new(ch: C, peek: Peek) -> Self {
         Self {
             inner: RequestInner::new(ch, peek.info),
@@ -433,7 +393,7 @@ impl<C: ChannelRef> WriteRequest<C> {
     }
 
     pub fn reply(self, written_len: usize) {
-        self.inner.discard_and_reply_with(|mid| {
+        self.inner.discard_and_reply(|mid| {
             Message::WriteReply {
                 mid,
                 len: written_len,
@@ -446,15 +406,15 @@ impl<C: ChannelRef> WriteRequest<C> {
     }
 }
 
-pub struct WriteCompleter<C: ChannelRef>(RequestInner<C>);
+pub struct WriteCompleter<C: AsRef<Channel>>(RequestInner<C>);
 
-impl<C: ChannelRef> WriteCompleter<C> {
+impl<C: AsRef<Channel>> WriteCompleter<C> {
     fn new(request: RequestInner<C>) -> Self {
         Self(request)
     }
 
     pub fn reply(self, written_len: usize) {
-        self.0.reply_with(|mid| {
+        self.0.reply(|mid| {
             Message::WriteReply {
                 mid,
                 len: written_len,
@@ -467,12 +427,12 @@ impl<C: ChannelRef> WriteCompleter<C> {
     }
 }
 
-pub struct WriteReply<C: ChannelRef> {
+pub struct WriteReply<C: AsRef<Channel>> {
     inner: ReplyInner<C>,
     written_len: usize,
 }
 
-impl<C: ChannelRef> WriteReply<C> {
+impl<C: AsRef<Channel>> WriteReply<C> {
     fn new(ch: C, peek: Peek) -> Self {
         Self {
             inner: ReplyInner::new(ch, peek.info),
@@ -489,12 +449,12 @@ impl<C: ChannelRef> WriteReply<C> {
     }
 }
 
-pub struct GetAttrRequest<C: ChannelRef> {
+pub struct GetAttrRequest<C: AsRef<Channel>> {
     attr: Attr,
     inner: RequestInner<C>,
 }
 
-impl<C: ChannelRef> GetAttrRequest<C> {
+impl<C: AsRef<Channel>> GetAttrRequest<C> {
     fn new(ch: C, peek: Peek) -> Self {
         Self {
             inner: RequestInner::new(ch, peek.info),
@@ -514,7 +474,7 @@ impl<C: ChannelRef> GetAttrRequest<C> {
 
     pub fn reply(self, buf: &[u8]) {
         self.inner
-            .discard_and_reply_with(|mid| Message::GetAttrReply { mid, buf });
+            .discard_and_reply(|mid| Message::GetAttrReply { mid, buf });
     }
 
     pub fn reply_error(self, error: ErrorCode) {
@@ -522,15 +482,15 @@ impl<C: ChannelRef> GetAttrRequest<C> {
     }
 }
 
-pub struct GetAttrCompleter<C: ChannelRef>(RequestInner<C>);
+pub struct GetAttrCompleter<C: AsRef<Channel>>(RequestInner<C>);
 
-impl<C: ChannelRef> GetAttrCompleter<C> {
+impl<C: AsRef<Channel>> GetAttrCompleter<C> {
     fn new(request: RequestInner<C>) -> Self {
         Self(request)
     }
 
     pub fn reply(self, buf: &[u8]) {
-        self.0.reply_with(|mid| Message::GetAttrReply { mid, buf });
+        self.0.reply(|mid| Message::GetAttrReply { mid, buf });
     }
 
     pub fn reply_error(self, error: ErrorCode) {
@@ -538,11 +498,11 @@ impl<C: ChannelRef> GetAttrCompleter<C> {
     }
 }
 
-pub struct GetAttrReply<C: ChannelRef> {
+pub struct GetAttrReply<C: AsRef<Channel>> {
     inner: ReplyInner<C>,
 }
 
-impl<C: ChannelRef> GetAttrReply<C> {
+impl<C: AsRef<Channel>> GetAttrReply<C> {
     fn new(ch: C, peek: Peek) -> Self {
         Self {
             inner: ReplyInner::new(ch, peek.info),
@@ -562,12 +522,12 @@ impl<C: ChannelRef> GetAttrReply<C> {
     }
 }
 
-pub struct SetAttrRequest<C: ChannelRef> {
+pub struct SetAttrRequest<C: AsRef<Channel>> {
     attr: Attr,
     inner: RequestInner<C>,
 }
 
-impl<C: ChannelRef> SetAttrRequest<C> {
+impl<C: AsRef<Channel>> SetAttrRequest<C> {
     fn new(ch: C, peek: Peek) -> Self {
         Self {
             inner: RequestInner::new(ch, peek.info),
@@ -586,7 +546,7 @@ impl<C: ChannelRef> SetAttrRequest<C> {
     }
 
     pub fn reply(self, written_len: usize) {
-        self.inner.discard_and_reply_with(|mid| {
+        self.inner.discard_and_reply(|mid| {
             Message::SetAttrReply {
                 mid,
                 len: written_len,
@@ -599,15 +559,15 @@ impl<C: ChannelRef> SetAttrRequest<C> {
     }
 }
 
-pub struct SetAttrCompleter<C: ChannelRef>(RequestInner<C>);
+pub struct SetAttrCompleter<C: AsRef<Channel>>(RequestInner<C>);
 
-impl<C: ChannelRef> SetAttrCompleter<C> {
+impl<C: AsRef<Channel>> SetAttrCompleter<C> {
     fn new(request: RequestInner<C>) -> Self {
         Self(request)
     }
 
     pub fn reply(self, written_len: usize) {
-        self.0.reply_with(|mid| {
+        self.0.reply(|mid| {
             Message::SetAttrReply {
                 mid,
                 len: written_len,
@@ -620,12 +580,12 @@ impl<C: ChannelRef> SetAttrCompleter<C> {
     }
 }
 
-pub struct SetAttrReply<C: ChannelRef> {
+pub struct SetAttrReply<C: AsRef<Channel>> {
     inner: ReplyInner<C>,
     written_len: usize,
 }
 
-impl<C: ChannelRef> SetAttrReply<C> {
+impl<C: AsRef<Channel>> SetAttrReply<C> {
     fn new(ch: C, peek: Peek) -> Self {
         Self {
             inner: ReplyInner::new(ch, peek.info),
@@ -642,12 +602,12 @@ impl<C: ChannelRef> SetAttrReply<C> {
     }
 }
 
-pub struct ErrorReply<C: ChannelRef> {
+pub struct ErrorReply<C: AsRef<Channel>> {
     inner: ReplyInner<C>,
     error: ErrorCode,
 }
 
-impl<C: ChannelRef> ErrorReply<C> {
+impl<C: AsRef<Channel>> ErrorReply<C> {
     fn new(ch: C, peek: Peek) -> Self {
         Self {
             inner: ReplyInner::new(ch, peek.info),
@@ -664,12 +624,12 @@ impl<C: ChannelRef> ErrorReply<C> {
     }
 }
 
-pub struct UnknownMessage<C: ChannelRef> {
+pub struct UnknownMessage<C: AsRef<Channel>> {
     ch: C,
     info: MessageInfo,
 }
 
-impl<C: ChannelRef> UnknownMessage<C> {
+impl<C: AsRef<Channel>> UnknownMessage<C> {
     fn new(ch: C, peek: Peek) -> Self {
         Self {
             ch,
@@ -682,7 +642,7 @@ impl<C: ChannelRef> UnknownMessage<C> {
     }
 }
 
-impl<C: ChannelRef> Drop for UnknownMessage<C> {
+impl<C: AsRef<Channel>> Drop for UnknownMessage<C> {
     fn drop(&mut self) {
         if let Err(error) = self.ch.as_ref().discard(self.info) {
             debug!("failed to discard unknown message: {:?}", error);

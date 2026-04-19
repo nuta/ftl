@@ -172,6 +172,12 @@ impl Channel {
     }
 }
 
+impl AsRef<Channel> for Channel {
+    fn as_ref(&self) -> &Channel {
+        self
+    }
+}
+
 impl fmt::Debug for Channel {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_tuple("Channel")
