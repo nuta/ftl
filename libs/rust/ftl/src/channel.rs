@@ -83,52 +83,6 @@ pub enum Message<'a> {
     },
 }
 
-impl<C: ChannelRef> Incoming<C> {
-    pub fn parse(ch: C, peek: Peek) -> Incoming<C> {
-        match peek.info.kind() {
-            MessageKind::OPEN => {
-                let inner = RequestInner::new(ch, peek.info);
-                let options = OpenOptions::from_usize(peek.arg1);
-                Incoming::Open(OpenRequest::new(inner, options))
-            }
-            MessageKind::READ => {
-                let inner = RequestInner::new(ch, peek.info);
-                let offset = peek.arg1;
-                let len = peek.arg2;
-                Incoming::Read(ReadRequest::new(inner, offset, len))
-            }
-            MessageKind::WRITE => {
-                let inner = RequestInner::new(ch, peek.info);
-                let offset = peek.arg1;
-                Incoming::Write(WriteRequest::new(inner, offset))
-            }
-            MessageKind::GETATTR => {
-                let inner = RequestInner::new(ch, peek.info);
-                let attr = Attr::from_usize(peek.arg1);
-                Incoming::GetAttr(GetAttrRequest::new(inner, attr))
-            }
-            MessageKind::SETATTR => {
-                let inner = RequestInner::new(ch, peek.info);
-                let attr = Attr::from_usize(peek.arg1);
-                Incoming::SetAttr(SetAttrRequest::new(inner, attr))
-            }
-            MessageKind::ERROR_REPLY => {
-                let error = todo!();
-                Incoming::ErrorReply(ErrorReply::new(ch, peek.info, error))
-            }
-            MessageKind::OPEN_REPLY => Incoming::OpenReply(OpenReply::new(ch, peek.info)),
-            MessageKind::READ_REPLY => Incoming::ReadReply(ReadReply::new(ch, peek.info)),
-            MessageKind::WRITE_REPLY => {
-                let written_len = peek.arg1;
-                Incoming::WriteReply(WriteReply::new(ch, peek.info, written_len))
-            }
-            MessageKind::GETATTR_REPLY => Incoming::GetAttrReply(GetAttrReply::new(ch, peek.info)),
-            MessageKind::SETATTR_REPLY => Incoming::SetAttrReply(SetAttrReply::new(ch, peek.info)),
-            _ => Incoming::Unknown(Unknown::new(ch, peek.info)),
-        }
-    }
-}
-
 pub struct Completer<'a, T: ?Sized> {
     ch: &'a Channel,
     reply_kind: MessageKind,
@@ -803,6 +757,52 @@ pub enum Incoming<C: ChannelRef> {
     GetAttrReply(GetAttrReply<C>),
     SetAttrReply(SetAttrReply<C>),
     Unknown(Unknown<C>),
+}
+
+impl<C: ChannelRef> Incoming<C> {
+    pub fn parse(ch: C, peek: Peek) -> Incoming<C> {
+        match peek.info.kind() {
+            MessageKind::OPEN => {
+                let inner = RequestInner::new(ch, peek.info);
+                let options = OpenOptions::from_usize(peek.arg1);
+                Incoming::Open(OpenRequest::new(inner, options))
+            }
+            MessageKind::READ => {
+                let inner = RequestInner::new(ch, peek.info);
+                let offset = peek.arg1;
+                let len = peek.arg2;
+                Incoming::Read(ReadRequest::new(inner, offset, len))
+            }
+            MessageKind::WRITE => {
+                let inner = RequestInner::new(ch, peek.info);
+                let offset = peek.arg1;
+                Incoming::Write(WriteRequest::new(inner, offset))
+            }
+            MessageKind::GETATTR => {
+                let inner = RequestInner::new(ch, peek.info);
+                let attr = Attr::from_usize(peek.arg1);
+                Incoming::GetAttr(GetAttrRequest::new(inner, attr))
+            }
+            MessageKind::SETATTR => {
+                let inner = RequestInner::new(ch, peek.info);
+                let attr = Attr::from_usize(peek.arg1);
+                Incoming::SetAttr(SetAttrRequest::new(inner, attr))
+            }
+            MessageKind::ERROR_REPLY => {
+                let error = todo!();
+                Incoming::ErrorReply(ErrorReply::new(ch, peek.info, error))
+            }
+            MessageKind::OPEN_REPLY => Incoming::OpenReply(OpenReply::new(ch, peek.info)),
+            MessageKind::READ_REPLY => Incoming::ReadReply(ReadReply::new(ch, peek.info)),
+            MessageKind::WRITE_REPLY => {
+                let written_len = peek.arg1;
+                Incoming::WriteReply(WriteReply::new(ch, peek.info, written_len))
+            }
+            MessageKind::GETATTR_REPLY => Incoming::GetAttrReply(GetAttrReply::new(ch, peek.info)),
+            MessageKind::SETATTR_REPLY => Incoming::SetAttrReply(SetAttrReply::new(ch, peek.info)),
+            _ => Incoming::Unknown(Unknown::new(ch, peek.info)),
+        }
+    }
 }
 
 pub struct Channel {
