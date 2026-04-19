@@ -177,23 +177,15 @@ impl Channel {
 
     fn discard(&self, info: MessageInfo) -> Result<(), ErrorCode> {
         let mut mutable = self.mutable.lock();
-        let old_len = mutable.rx_notified.len();
-        mutable.rx_notified.retain_mut(|message| {
-            if message.info != info {
-                return true; // keep
-            }
 
-            // Drop the handle.
-            if let Some(handle) = message.handle.take() {
-                handle.bypass_check().close();
-            }
-
-            false
-        });
-        let new_len = mutable.rx_notified.len();
-
-        if old_len == new_len {
+        // Remove the first matching message.
+        let Some(pos) = mutable.rx_notified.iter().position(|m| m.info == info) else {
             return Err(ErrorCode::NotFound);
+        };
+
+        let mut message = mutable.rx_notified.remove(pos);
+        if let Some(handle) = message.handle.take() {
+            handle.bypass_check().close();
         }
 
         Ok(())
