@@ -81,49 +81,18 @@ pub enum Incoming<C: ChannelRef> {
 impl<C: ChannelRef> Incoming<C> {
     pub fn parse(ch: C, peek: Peek) -> Incoming<C> {
         match peek.info.kind() {
-            MessageKind::OPEN => {
-                let inner = RequestInner::new(ch, peek.info);
-                let options = OpenOptions::from_usize(peek.arg1);
-                Incoming::Open(OpenRequest::new(inner, options))
-            }
-            MessageKind::READ => {
-                let inner = RequestInner::new(ch, peek.info);
-                let offset = peek.arg1;
-                let len = peek.arg2;
-                Incoming::Read(ReadRequest::new(inner, offset, len))
-            }
-            MessageKind::WRITE => {
-                let inner = RequestInner::new(ch, peek.info);
-                let offset = peek.arg1;
-                Incoming::Write(WriteRequest::new(inner, offset))
-            }
-            MessageKind::GETATTR => {
-                let inner = RequestInner::new(ch, peek.info);
-                let attr = Attr::from_usize(peek.arg1);
-                Incoming::GetAttr(GetAttrRequest::new(inner, attr))
-            }
-            MessageKind::SETATTR => {
-                let inner = RequestInner::new(ch, peek.info);
-                let attr = Attr::from_usize(peek.arg1);
-                Incoming::SetAttr(SetAttrRequest::new(inner, attr))
-            }
-            MessageKind::ERROR_REPLY => {
-                let error = todo!();
-                Incoming::ErrorReply(ErrorReply::new(ch, peek.info, error))
-            }
-            MessageKind::OPEN_REPLY => Incoming::OpenReply(OpenReply::new(ch, peek.info)),
-            MessageKind::READ_REPLY => Incoming::ReadReply(ReadReply::new(ch, peek.info)),
-            MessageKind::WRITE_REPLY => {
-                let written_len = peek.arg1;
-                Incoming::WriteReply(WriteReply::new(ch, peek.info, written_len))
-            }
-            MessageKind::GETATTR_REPLY => Incoming::GetAttrReply(GetAttrReply::new(ch, peek.info)),
-
-            MessageKind::SETATTR_REPLY => {
-                let written_len = peek.arg1;
-                Incoming::SetAttrReply(SetAttrReply::new(ch, peek.info, written_len))
-            }
-            _ => Incoming::Unknown(Unknown::new(ch, peek.info)),
+            MessageKind::OPEN => Incoming::Open(OpenRequest::new(ch, peek)),
+            MessageKind::READ => Incoming::Read(ReadRequest::new(ch, peek)),
+            MessageKind::WRITE => Incoming::Write(WriteRequest::new(ch, peek)),
+            MessageKind::GETATTR => Incoming::GetAttr(GetAttrRequest::new(ch, peek)),
+            MessageKind::SETATTR => Incoming::SetAttr(SetAttrRequest::new(ch, peek)),
+            MessageKind::ERROR_REPLY => Incoming::ErrorReply(ErrorReply::new(ch, peek)),
+            MessageKind::OPEN_REPLY => Incoming::OpenReply(OpenReply::new(ch, peek)),
+            MessageKind::READ_REPLY => Incoming::ReadReply(ReadReply::new(ch, peek)),
+            MessageKind::WRITE_REPLY => Incoming::WriteReply(WriteReply::new(ch, peek)),
+            MessageKind::GETATTR_REPLY => Incoming::GetAttrReply(GetAttrReply::new(ch, peek)),
+            MessageKind::SETATTR_REPLY => Incoming::SetAttrReply(SetAttrReply::new(ch, peek)),
+            _ => Incoming::Unknown(Unknown::new(ch, peek)),
         }
     }
 }
@@ -298,8 +267,11 @@ pub struct OpenRequest<C: ChannelRef> {
 }
 
 impl<C: ChannelRef> OpenRequest<C> {
-    fn new(inner: RequestInner<C>, options: OpenOptions) -> Self {
-        Self { inner, options }
+    fn new(ch: C, peek: Peek) -> Self {
+        Self {
+            inner: RequestInner::new(ch, peek.info),
+            options: OpenOptions::from_usize(peek.arg1),
+        }
     }
 
     pub fn options(&self) -> OpenOptions {
@@ -345,8 +317,8 @@ impl<C: ChannelRef> OpenCompleter<C> {
 pub struct OpenReply<C: ChannelRef>(ReplyInner<C>);
 
 impl<C: ChannelRef> OpenReply<C> {
-    fn new(ch: C, info: MessageInfo) -> Self {
-        Self(ReplyInner::new(ch, info))
+    fn new(ch: C, peek: Peek) -> Self {
+        Self(ReplyInner::new(ch, peek.info))
     }
 
     pub fn mid(&self) -> MessageId {
@@ -365,8 +337,12 @@ pub struct ReadRequest<C: ChannelRef> {
 }
 
 impl<C: ChannelRef> ReadRequest<C> {
-    fn new(inner: RequestInner<C>, offset: usize, len: usize) -> Self {
-        Self { inner, offset, len }
+    fn new(ch: C, peek: Peek) -> Self {
+        Self {
+            inner: RequestInner::new(ch, peek.info),
+            offset: peek.arg1,
+            len: peek.arg2,
+        }
     }
 
     pub fn offset(&self) -> usize {
@@ -410,9 +386,9 @@ pub struct ReadReply<C: ChannelRef> {
 }
 
 impl<C: ChannelRef> ReadReply<C> {
-    fn new(ch: C, info: MessageInfo) -> Self {
+    fn new(ch: C, peek: Peek) -> Self {
         Self {
-            inner: ReplyInner::new(ch, info),
+            inner: ReplyInner::new(ch, peek.info),
         }
     }
 
@@ -435,8 +411,11 @@ pub struct WriteRequest<C: ChannelRef> {
 }
 
 impl<C: ChannelRef> WriteRequest<C> {
-    fn new(inner: RequestInner<C>, offset: usize) -> Self {
-        Self { inner, offset }
+    fn new(ch: C, peek: Peek) -> Self {
+        Self {
+            inner: RequestInner::new(ch, peek.info),
+            offset: peek.arg1,
+        }
     }
 
     pub fn offset(&self) -> usize {
@@ -494,10 +473,10 @@ pub struct WriteReply<C: ChannelRef> {
 }
 
 impl<C: ChannelRef> WriteReply<C> {
-    fn new(ch: C, info: MessageInfo, written_len: usize) -> Self {
+    fn new(ch: C, peek: Peek) -> Self {
         Self {
-            inner: ReplyInner::new(ch, info),
-            written_len,
+            inner: ReplyInner::new(ch, peek.info),
+            written_len: peek.arg1,
         }
     }
 
@@ -516,8 +495,11 @@ pub struct GetAttrRequest<C: ChannelRef> {
 }
 
 impl<C: ChannelRef> GetAttrRequest<C> {
-    fn new(inner: RequestInner<C>, attr: Attr) -> Self {
-        Self { inner, attr }
+    fn new(ch: C, peek: Peek) -> Self {
+        Self {
+            inner: RequestInner::new(ch, peek.info),
+            attr: Attr::from_usize(peek.arg1),
+        }
     }
 
     pub fn attr(&self) -> Attr {
@@ -561,9 +543,9 @@ pub struct GetAttrReply<C: ChannelRef> {
 }
 
 impl<C: ChannelRef> GetAttrReply<C> {
-    fn new(ch: C, info: MessageInfo) -> Self {
+    fn new(ch: C, peek: Peek) -> Self {
         Self {
-            inner: ReplyInner::new(ch, info),
+            inner: ReplyInner::new(ch, peek.info),
         }
     }
 
@@ -586,8 +568,11 @@ pub struct SetAttrRequest<C: ChannelRef> {
 }
 
 impl<C: ChannelRef> SetAttrRequest<C> {
-    fn new(inner: RequestInner<C>, attr: Attr) -> Self {
-        Self { inner, attr }
+    fn new(ch: C, peek: Peek) -> Self {
+        Self {
+            inner: RequestInner::new(ch, peek.info),
+            attr: Attr::from_usize(peek.arg1),
+        }
     }
 
     pub fn attr(&self) -> Attr {
@@ -641,10 +626,10 @@ pub struct SetAttrReply<C: ChannelRef> {
 }
 
 impl<C: ChannelRef> SetAttrReply<C> {
-    fn new(ch: C, info: MessageInfo, written_len: usize) -> Self {
+    fn new(ch: C, peek: Peek) -> Self {
         Self {
-            inner: ReplyInner::new(ch, info),
-            written_len,
+            inner: ReplyInner::new(ch, peek.info),
+            written_len: peek.arg1,
         }
     }
 
@@ -663,10 +648,10 @@ pub struct ErrorReply<C: ChannelRef> {
 }
 
 impl<C: ChannelRef> ErrorReply<C> {
-    fn new(ch: C, info: MessageInfo, error: ErrorCode) -> Self {
+    fn new(ch: C, peek: Peek) -> Self {
         Self {
-            inner: ReplyInner::new(ch, info),
-            error,
+            inner: ReplyInner::new(ch, peek.info),
+            error: todo!(),
         }
     }
 
@@ -685,8 +670,11 @@ pub struct Unknown<C: ChannelRef> {
 }
 
 impl<C: ChannelRef> Unknown<C> {
-    fn new(ch: C, info: MessageInfo) -> Self {
-        Self { ch, info }
+    fn new(ch: C, peek: Peek) -> Self {
+        Self {
+            ch,
+            info: peek.info,
+        }
     }
 
     pub fn info(&self) -> MessageInfo {
