@@ -842,6 +842,8 @@ impl Channel {
         let handle_id = handle.id();
         mem::forget(handle);
         sys_channel_send(self.handle.id(), info, 0, null(), handle_id.as_usize())?;
+        // TODO: Close the handle if it fails
+
         Ok(())
     }
 
