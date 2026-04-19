@@ -2,10 +2,10 @@
 #![no_main]
 
 use ftl::channel::Channel;
+use ftl::channel::Incoming;
 use ftl::channel::Message;
 use ftl::channel::MessageId;
 use ftl::channel::OpenOptions;
-use ftl::channel::Peek;
 use ftl::handle::Handleable;
 use ftl::prelude::*;
 use ftl::sink::Event;
@@ -35,8 +35,8 @@ fn main(supervisor_ch: Channel) {
         let (id, event) = sink.wait().unwrap();
         match event {
             Event::Message(peeked) if id == supervisor_ch.handle().id() => {
-                match Peek::parse(&supervisor_ch, peeked) {
-                    Peek::OpenReply { recv } => {
+                match Incoming::parse(&supervisor_ch, peeked) {
+                    Incoming::OpenReply { recv } => {
                         match recv.recv() {
                             Ok(handle) => {
                                 break Channel::from_handle(handle);
@@ -76,8 +76,8 @@ fn main(supervisor_ch: Channel) {
         let (id, event) = sink.wait().unwrap();
         match event {
             Event::Message(peeked) if id == pong_ch.handle().id() => {
-                match Peek::parse(&pong_ch, peeked) {
-                    Peek::WriteReply { recv, len } => {
+                match Incoming::parse(&pong_ch, peeked) {
+                    Incoming::WriteReply { recv, len } => {
                         recv.recv().unwrap();
                         info!("received write reply: written_len={}", len);
 

@@ -1,10 +1,12 @@
 use alloc::format;
 use alloc::rc::Rc;
 use alloc::string::String;
+use core::cmp::min;
 use core::fmt;
 use core::marker::PhantomData;
 use core::mem;
 use core::mem::MaybeUninit;
+use core::panic::Location;
 use core::ptr::null;
 use core::ptr::null_mut;
 
@@ -21,6 +23,7 @@ use ftl_types::syscall::SYS_CHANNEL_DISCARD;
 use ftl_types::syscall::SYS_CHANNEL_PEEK;
 use ftl_types::syscall::SYS_CHANNEL_RECV;
 use ftl_types::syscall::SYS_CHANNEL_SEND;
+use log::debug;
 use log::warn;
 
 use crate::handle::Handleable;
@@ -145,78 +148,46 @@ impl<'a> DiscardToken<'a> {
     }
 }
 
-impl<'a> Peek<'a> {
-    pub fn parse(ch: &'a Channel, raw: PeekedMessage) -> Peek<'a> {
+impl<C: ChannelRef> Incoming<C> {
+    pub fn parse(ch: C, raw: PeekedMessage) -> Incoming<C> {
         match raw.info.kind() {
             MessageKind::OPEN => {
-                let recv = RecvToken::new(ch, raw.info);
+                let inner = RequestInner::new(ch, raw.info);
                 let options = OpenOptions::from_usize(raw.arg1);
-                let completer = Completer::new(ch, MessageKind::OPEN_REPLY, raw.info.mid());
-                Peek::Open {
-                    recv,
-                    completer,
-                    options,
-                    path_len: raw.info.body_len(),
-                }
+                Incoming::Open(OpenRequest::new(inner, options))
             }
             MessageKind::READ => {
-                let recv = RecvToken::new(ch, raw.info);
-                Peek::Read { recv }
+                todo!()
             }
             MessageKind::WRITE => {
-                let recv = RecvToken::new(ch, raw.info);
-                let completer = Completer::new(ch, MessageKind::WRITE_REPLY, raw.info.mid());
-                Peek::Write {
-                    recv,
-                    len: raw.info.body_len(),
-                    completer,
-                }
+                todo!()
             }
             MessageKind::GETATTR => {
-                let recv = RecvToken::new(ch, raw.info);
-                let attr = Attr::from_usize(raw.arg1);
-                Peek::GetAttr { recv, attr }
+                todo!()
             }
             MessageKind::SETATTR => {
-                let recv = RecvToken::new(ch, raw.info);
-                let attr = Attr::from_usize(raw.arg1);
-                Peek::SetAttr { recv, attr }
+                todo!()
             }
             MessageKind::ERROR_REPLY => {
-                let recv = RecvToken::new(ch, raw.info);
-                let error = ErrorCode::from(raw.arg1);
-                Peek::ErrorReply { recv, error }
+                todo!()
             }
             MessageKind::OPEN_REPLY => {
-                let recv = RecvToken::new(ch, raw.info);
-                Peek::OpenReply { recv }
+                todo!()
             }
             MessageKind::READ_REPLY => {
-                let recv = RecvToken::new(ch, raw.info);
-                Peek::ReadReply {
-                    recv,
-                    len: raw.arg1,
-                }
+                todo!()
             }
             MessageKind::WRITE_REPLY => {
-                let recv = RecvToken::new(ch, raw.info);
-                Peek::WriteReply {
-                    recv,
-                    len: raw.arg1,
-                }
+                todo!()
             }
             MessageKind::GETATTR_REPLY => {
-                let recv = RecvToken::new(ch, raw.info);
-                Peek::GetAttrReply { recv }
+                todo!()
             }
             MessageKind::SETATTR_REPLY => {
-                let recv = RecvToken::new(ch, raw.info);
-                Peek::SetAttrReply { recv }
+                todo!()
             }
             _ => {
-                Peek::Unknown {
-                    discard: DiscardToken::new(ch, raw.info),
-                }
+                todo!()
             }
         }
     }
@@ -230,7 +201,7 @@ pub struct Completer<'a, T: ?Sized> {
 }
 
 impl<'a, T: ?Sized> Completer<'a, T> {
-    pub fn new(ch: &'a Channel, reply_kind: MessageKind, mid: MessageId) -> Self {
+    fn new(ch: &'a Channel, reply_kind: MessageKind, mid: MessageId) -> Self {
         Self {
             ch,
             reply_kind,
@@ -275,7 +246,7 @@ pub struct OwnedCompleter<T: ?Sized> {
 }
 
 impl<T: ?Sized> OwnedCompleter<T> {
-    pub fn new(ch: Rc<Channel>, reply_kind: MessageKind, mid: MessageId) -> Self {
+    fn new(ch: Rc<Channel>, reply_kind: MessageKind, mid: MessageId) -> Self {
         Self {
             ch,
             reply_kind,
@@ -312,52 +283,430 @@ impl OwnedCompleter<OwnedHandle> {
     }
 }
 
-pub enum Peek<'a> {
-    Open {
-        recv: RecvToken<'a, [u8]>,
-        completer: Completer<'a, OwnedHandle>,
-        path_len: usize,
-        options: OpenOptions,
-    },
-    Read {
-        recv: RecvToken<'a, (usize, usize)>,
-    },
-    Write {
-        len: usize,
-        recv: RecvToken<'a, [u8]>,
-        completer: Completer<'a, usize>,
-    },
+// ---------------------------------------------------------
+
+pub trait ChannelRef {
+    fn as_ref(&self) -> &Channel;
+}
+
+impl<'a> ChannelRef for &'a Channel {
+    fn as_ref(&self) -> &Channel {
+        self
+    }
+}
+
+impl ChannelRef for Rc<Channel> {
+    fn as_ref(&self) -> &Channel {
+        &self
+    }
+}
+
+impl<'a> ChannelRef for &'a Rc<Channel> {
+    fn as_ref(&self) -> &Channel {
+        &self
+    }
+}
+
+impl<'a> ChannelRef for &'a mut Rc<Channel> {
+    fn as_ref(&self) -> &Channel {
+        &self
+    }
+}
+
+struct RequestInner<C: ChannelRef> {
+    ch: C,
+    info: MessageInfo,
+}
+
+impl<C: ChannelRef> RequestInner<C> {
+    fn new(ch: C, info: MessageInfo) -> Self {
+        Self { ch, info }
+    }
+
+    fn mid(&self) -> MessageId {
+        self.info.mid()
+    }
+
+    fn channel(&self) -> &C {
+        &self.ch
+    }
+
+    fn recv_args(&self) -> Result<(), ErrorCode> {
+        self.ch.as_ref().recv_args(self.info)?;
+        Ok(())
+    }
+
+    fn recv_body<'a>(&self, body: &'a mut [u8]) -> Result<&'a [u8], ErrorCode> {
+        self.ch.as_ref().recv_body(self.info, body)?;
+        let read_len = min(body.len(), self.info.body_len());
+        Ok(&body[..read_len])
+    }
+
+    fn discard_and_reply(self, m: Message) {
+        if let Err(error) = self.ch.as_ref().discard(self.info) {
+            debug!("failed to discard before reply: {:?}", error);
+        }
+
+        if let Err(error) = self.ch.as_ref().send(m) {
+            debug!("failed to reply: {:?}", error);
+        }
+    }
+}
+
+struct CompleterInner<C: ChannelRef> {
+    ch: C,
+    mid: MessageId,
+    completed: bool,
+}
+
+impl<C: ChannelRef> CompleterInner<C> {
+    fn new(ch: C, mid: MessageId) -> Self {
+        Self {
+            ch,
+            mid,
+            completed: false,
+        }
+    }
+
+    pub fn mid(&self) -> MessageId {
+        self.mid
+    }
+
+    fn reply(mut self, m: Message) {
+        self.completed = true;
+        if let Err(error) = self.ch.as_ref().send(m) {
+            debug!("failed to reply: {:?}", error);
+        }
+    }
+}
+
+impl<C: ChannelRef> Drop for CompleterInner<C> {
+    #[track_caller]
+    fn drop(&mut self) {
+        if self.completed {
+            return;
+        }
+
+        let caller = Location::caller();
+        debug!(
+            "completer dropped without reply at {}:{}: {:?}",
+            caller.file(),
+            caller.line(),
+            self.mid
+        );
+        let m = Message::ErrorReply {
+            mid: self.mid,
+            error: ErrorCode::NotHandled,
+        };
+        if let Err(error) = self.ch.as_ref().send(m) {
+            debug!("failed to reply: {:?}", error);
+        }
+    }
+}
+
+struct ReplyInner<C: ChannelRef> {
+    ch: C,
+    info: MessageInfo,
+    received: bool,
+}
+
+impl<C: ChannelRef> ReplyInner<C> {
+    fn new(ch: C, info: MessageInfo) -> Self {
+        Self { ch, info, received: false }
+    }
+
+    fn mid(&self) -> MessageId {
+        self.info.mid()
+    }
+
+    fn recv_args(self) -> Result<(), ErrorCode> {
+        self.ch.as_ref().recv_args(self.info)?;
+        Ok(())
+    }
+
+    fn recv_handle(self) -> Result<OwnedHandle, ErrorCode> {
+        self.ch.as_ref().recv_handle(self.info)
+    }
+
+    fn recv_body<'a>(&self, body: &'a mut [u8]) -> Result<&'a [u8], ErrorCode> {
+        self.ch.as_ref().recv_body(self.info, body)?;
+        let read_len = min(body.len(), self.info.body_len());
+        Ok(&body[..read_len])
+    }
+}
+
+impl<C: ChannelRef> Drop for ReplyInner<C> {
+    fn drop(&mut self) {
+        if self.received {
+            return;
+        }
+
+        if let Err(error) = self.ch.as_ref().discard(self.info) {
+            debug!("failed to discard before reply: {:?}", error);
+        }
+    }
+}
+
+pub struct OpenRequest<C: ChannelRef> {
+    options: OpenOptions,
+    inner: RequestInner<C>,
+}
+
+impl<C: ChannelRef> OpenRequest<C> {
+    fn new(inner: RequestInner<C>, options: OpenOptions) -> Self {
+        Self { inner, options }
+    }
+
+    pub fn options(&self) -> OpenOptions {
+        self.options
+    }
+
+    pub fn path_len(&self) -> usize {
+        self.inner.info.body_len()
+    }
+
+    pub fn recv<'a>(self, path: &'a mut [u8]) -> Result<(&'a [u8], OpenCompleter<C>), ErrorCode> {
+        let body = self.inner.recv_body(path)?;
+        let completer = OpenCompleter::new(self.inner);
+        Ok((body, completer))
+    }
+
+    pub fn reply(self, handle: OwnedHandle) {
+        let m = Message::OpenReply {
+            mid: self.inner.mid(),
+            handle,
+        };
+        self.inner.discard_and_reply(m);
+    }
+
+    pub fn reply_error(self, error: ErrorCode) {
+        let m = Message::ErrorReply {
+            mid: self.inner.mid(),
+            error,
+        };
+        self.inner.discard_and_reply(m);
+    }
+}
+
+pub struct OpenCompleter<C: ChannelRef>(CompleterInner<C>);
+
+impl<C: ChannelRef> OpenCompleter<C> {
+    fn new(request: RequestInner<C>) -> Self {
+        let mid = request.mid();
+        Self(CompleterInner::new(request.ch, mid))
+    }
+
+    pub fn reply(mut self, handle: OwnedHandle) {
+        let m = Message::OpenReply {
+            mid: self.0.mid(),
+            handle,
+        };
+        self.0.reply(m);
+    }
+
+    pub fn reply_error(mut self, error: ErrorCode) {
+        let m = Message::ErrorReply {
+            mid: self.0.mid(),
+            error,
+        };
+        self.0.reply(m);
+    }
+}
+
+pub struct ReadRequest<C: ChannelRef> {
+    offset: usize,
+    len: usize,
+    inner: RequestInner<C>,
+}
+
+impl<C: ChannelRef> ReadRequest<C> {
+    fn new(inner: RequestInner<C>, offset: usize, len: usize) -> Self {
+        Self { inner, offset, len }
+    }
+
+    pub fn offset(&self) -> usize {
+        self.offset
+    }
+
+    pub fn len(&self) -> usize {
+        self.len
+    }
+
+    pub fn recv<'a>(self) -> Result<ReadCompleter<C>, ErrorCode> {
+        self.inner.recv_args()?;
+        let completer = ReadCompleter::new(self.inner);
+        Ok(completer)
+    }
+
+    pub fn reply(self, buf: &[u8]) {
+        let m = Message::ReadReply {
+            mid: self.inner.mid(),
+            buf,
+        };
+    }
+}
+
+pub struct ReadCompleter<C: ChannelRef>(CompleterInner<C>);     
+
+impl<C: ChannelRef> ReadCompleter<C> {
+    fn new(request: RequestInner<C>) -> Self {
+        let mid = request.mid();
+        Self(CompleterInner::new(request.ch, mid))
+    }
+
+    pub fn reply(self, buf: &[u8]) {
+        let m = Message::ReadReply {
+            mid: self.0.mid(),
+            buf,
+        };
+        self.0.reply(m);
+    }
+
+    pub fn reply_error(self, error: ErrorCode) {
+        let m = Message::ErrorReply {
+            mid: self.0.mid(),
+            error,
+        };
+        self.0.reply(m);
+    }
+}
+
+pub struct WriteRequest<C: ChannelRef> {
+    offset: usize,
+    inner: RequestInner<C>,
+}
+
+impl<C: ChannelRef> WriteRequest<C> {
+    fn new(inner: RequestInner<C>, offset: usize) -> Self {
+        Self { inner, offset }
+    }
+
+    pub fn offset(&self) -> usize {
+        self.offset
+    }
+}
+
+impl<C: ChannelRef> WriteRequest<C> {
+    pub fn recv<'a>(self, buf: &'a mut [u8]) -> Result<(&'a [u8], WriteCompleter<C>), ErrorCode> {
+        let body = self.inner.recv_body(buf)?;
+        let completer = WriteCompleter::new(self.inner);
+        Ok((body, completer))
+    }
+
+    pub fn reply(self, len: usize) {
+        let m = Message::WriteReply {
+            mid: self.inner.mid(),
+            len,
+        };
+        self.inner.discard_and_reply(m);
+    }
+}
+
+pub struct WriteCompleter<C: ChannelRef>(CompleterInner<C>);
+
+impl<C: ChannelRef> WriteCompleter<C> {
+    fn new(request: RequestInner<C>) -> Self {
+        let mid = request.mid();
+        Self(CompleterInner::new(request.ch, mid))
+    }
+
+    pub fn reply(self, written_len: usize) {
+        let m = Message::WriteReply {
+            mid: self.0.mid(),
+            len: written_len,
+        };
+        self.0.reply(m);
+    }
+
+    pub fn reply_error(self, error: ErrorCode) {
+        let m = Message::ErrorReply {
+            mid: self.0.mid(),
+            error,
+        };
+        self.0.reply(m);
+    }
+}
+
+pub struct OpenReply<C: ChannelRef>(ReplyInner<C>);
+
+impl<C: ChannelRef> OpenReply<C> {
+    fn new(ch: C, info: MessageInfo) -> Self {
+        Self(ReplyInner::new(ch, info))
+    }
+
+    pub fn mid(&self) -> MessageId {
+        self.0.mid()
+    }
+
+    pub fn recv(self) -> Result<OwnedHandle, ErrorCode> {
+        self.0.recv_handle()
+    }
+}
+
+pub struct ReadReply<C: ChannelRef>(ReplyInner<C>);
+
+impl<C: ChannelRef> ReadReply<C> {
+     fn new(ch: C, info: MessageInfo) -> Self {
+        Self(ReplyInner::new(ch, info))
+    }
+
+    pub fn recv<'a>(self, buf: &'a mut [u8]) -> Result<&'a [u8], ErrorCode> {
+        self.0.recv_body(buf)
+    }
+}
+
+pub struct WriteReply<C: ChannelRef> { 
+    inner: ReplyInner<C>,
+    written_len: usize,
+}
+
+impl<C: ChannelRef> WriteReply<C> {
+    fn new(ch: C, info: MessageInfo, written_len: usize) -> Self {
+        Self { inner: ReplyInner::new(ch, info), written_len }
+    }
+
+    pub fn mid(&self) -> MessageId {
+        self.inner.mid()
+    }
+
+    fn written_len(&self) -> usize {
+        self.written_len
+    }
+}
+
+pub struct ErrorReply<C: ChannelRef> {inner: ReplyInner<C>, error: ErrorCode}
+
+impl<C: ChannelRef> ErrorReply<C> {
+     fn new(ch: C, info: MessageInfo, error: ErrorCode) -> Self {
+        Self { inner: ReplyInner::new(ch, info), error }
+    }
+
+    pub fn mid(&self) -> MessageId {
+        self.inner.mid()
+    }
+
+    pub fn error(&self) -> ErrorCode {
+        self.error
+    }
+}
+
+pub enum Incoming<C: ChannelRef> {
+    Open(OpenRequest<C>),
+    Read(ReadRequest<C>),
+    Write(WriteRequest<C>),
     GetAttr {
-        attr: Attr,
-        recv: RecvToken<'a, (usize, usize)>,
     },
     SetAttr {
-        attr: Attr,
-        recv: RecvToken<'a, [u8]>,
     },
-    ErrorReply {
-        error: ErrorCode,
-        recv: RecvToken<'a, ()>,
-    },
-    OpenReply {
-        recv: RecvToken<'a, OwnedHandle>,
-    },
-    ReadReply {
-        len: usize,
-        recv: RecvToken<'a, [u8]>,
-    },
-    WriteReply {
-        len: usize,
-        recv: RecvToken<'a, ()>,
-    },
+    ErrorReply(ErrorReply<C>),
+    OpenReply(OpenReply<C>),
+    ReadReply(ReadReply<C>),
+    WriteReply(WriteReply<C>),
     GetAttrReply {
-        recv: RecvToken<'a, [u8]>,
     },
     SetAttrReply {
-        recv: RecvToken<'a, ()>,
     },
     Unknown {
-        discard: DiscardToken<'a>,
     },
 }
 
@@ -413,9 +762,9 @@ impl Channel {
         }
     }
 
-    pub fn peek(&self) -> Result<Peek<'_>, ErrorCode> {
+    pub fn peek(&self) -> Result<Incoming<&Channel>, ErrorCode> {
         let raw = sys_channel_peek(self.handle.id())?;
-        Ok(Peek::parse(self, raw))
+        Ok(Incoming::parse(self, raw))
     }
 
     pub fn discard(&self, info: MessageInfo) -> Result<(), ErrorCode> {

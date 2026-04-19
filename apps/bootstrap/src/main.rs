@@ -5,13 +5,13 @@
 extern crate alloc;
 
 use ftl::channel::Channel;
+use ftl::channel::Incoming;
 use ftl::channel::Message;
 use ftl::channel::MessageId;
 use ftl::channel::MessageInfo;
 use ftl::channel::MessageKind;
 use ftl::channel::OpenOptions;
 use ftl::channel::OwnedCompleter;
-use ftl::channel::Peek;
 use ftl::collections::HashMap;
 use ftl::collections::VecDeque;
 use ftl::error::ErrorCode;
@@ -102,20 +102,20 @@ fn main(supervisor_ch: Channel) {
         let context = contexts.get(&id).unwrap();
         match (context, event) {
             (Context::Client { ch }, Event::Message(peeked)) => {
-                match Peek::parse(ch, peeked) {
-                    Peek::Open {
-                        recv,
-                        options,
-                        path_len,
-                        completer,
-                    } => {
-                        let mut buf = vec![0; path_len];
-                        if let Err(error) = recv.recv(&mut buf) {
-                            warn!("failed to recv with body: {:?}", error);
-                            continue;
-                        }
+                match Incoming::parse(ch, peeked) {
+                    Incoming::Open(request) => {
+                        let options = request.options();
+                        let mut buf = vec![0; request.path_len()];
+                        let (path, completer) = match request.recv(&mut buf) {
+                            Ok((path, completer)) => (path, completer),
+                            Err(error) => {
+                                // FIXME: Should we reply an error?
+                                warn!("failed to recv with body: {:?}", error);
+                                continue;
+                            }
+                        };
 
-                        let path = match core::str::from_utf8(&buf) {
+                        let path = match core::str::from_utf8(path) {
                             Ok(path) => path,
                             Err(error) => {
                                 warn!("failed to convert path to string: {:?}", error);
@@ -183,13 +183,10 @@ fn main(supervisor_ch: Channel) {
                                 }
                             };
 
-                            if let Err(error) = completer.reply(their_ch.into_handle()) {
-                                warn!("failed to reply to service registration: {:?}", error);
-                                continue;
-                            }
-
+                            completer.reply(their_ch.into_handle());
                             let server_ch = Rc::new(our_ch);
                             sink.add(server_ch.as_ref()).unwrap();
+
                             contexts.insert(
                                 server_ch.handle().id(),
                                 Context::Service {
@@ -240,14 +237,14 @@ fn main(supervisor_ch: Channel) {
                     continue;
                 };
 
-                match Peek::parse(server_ch, peeked) {
-                    Peek::OpenReply { recv } => {
-                        let Some(waiter) = pending_opens.remove(&recv.mid()) else {
-                            warn!("unknown open reply: mid={:?}", recv.mid());
+                match Incoming::parse(server_ch, peeked) {
+                    Incoming::OpenReply(reply) => {
+                        let Some(waiter) = pending_opens.remove(&reply.mid()) else {
+                            warn!("unknown open reply: mid={:?}", reply.mid());
                             continue;
                         };
 
-                        let handle = match recv.recv() {
+                        let handle = match reply.recv() {
                             Ok(handle) => handle,
                             Err(error) => {
                                 warn!("failed to recv with handle: {:?}", error);
@@ -258,19 +255,13 @@ fn main(supervisor_ch: Channel) {
 
                         waiter.completer.reply(handle);
                     }
-                    Peek::ErrorReply { recv, error } => {
-                        let Some(waiter) = pending_opens.remove(&recv.mid()) else {
-                            warn!("unknown error reply: mid={:?}", recv.mid());
+                    Incoming::ErrorReply(reply) => {
+                        let Some(waiter) = pending_opens.remove(&reply.mid()) else {
+                            warn!("unknown error reply: mid={:?}", reply.mid());
                             continue;
                         };
 
-                        if let Err(error) = recv.recv() {
-                            warn!("failed to receive error reply: {:?}", error);
-                            waiter.completer.reply_error(error);
-                            continue;
-                        }
-
-                        waiter.completer.reply_error(error);
+                        waiter.completer.reply_error(reply.error());
                     }
                     _ => {
                         warn!("unhandled service message: {:?}", peeked);

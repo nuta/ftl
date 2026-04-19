@@ -2,11 +2,11 @@
 #![no_main]
 
 use ftl::channel::Channel;
+use ftl::channel::Incoming;
 use ftl::channel::Message;
 use ftl::channel::MessageId;
 use ftl::channel::MessageKind;
 use ftl::channel::OpenOptions;
-use ftl::channel::Peek;
 use ftl::collections::HashMap;
 use ftl::error::ErrorCode;
 use ftl::handle::Handleable;
@@ -43,8 +43,8 @@ fn main(supervisor_ch: Channel) {
         let (id, event) = sink.wait().unwrap();
         match event {
             Event::Message(peeked) if id == supervisor_ch.handle().id() => {
-                match Peek::parse(&supervisor_ch, peeked) {
-                    Peek::OpenReply { recv } => {
+                match Incoming::parse(&supervisor_ch, peeked) {
+                    Incoming::OpenReply { recv } => {
                         let handle = recv.recv().unwrap();
                         break Channel::from_handle(handle);
                     }
@@ -68,8 +68,8 @@ fn main(supervisor_ch: Channel) {
         let context = contexts.get(&id).unwrap();
         match (context, event) {
             (Context::Server, Event::Message(peeked)) => {
-                match Peek::parse(&server_ch, peeked) {
-                    Peek::Open {
+                match Incoming::parse(&server_ch, peeked) {
+                    Incoming::Open {
                         recv,
                         options,
                         path_len,
@@ -102,8 +102,8 @@ fn main(supervisor_ch: Channel) {
                 }
             }
             (Context::Client { ch }, Event::Message(peeked)) => {
-                match Peek::parse(ch, peeked) {
-                    Peek::Write {
+                match Incoming::parse(ch, peeked) {
+                    Incoming::Write {
                         recv,
                         len,
                         completer,
