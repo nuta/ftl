@@ -27,26 +27,27 @@ A message is a unit of transfer between channels. It is a packet-like structure 
 
 In applications, channel is used a RPC mechanism between processes: opening a TCP socket, reading/writing data, etc.
 
-RPC is built on top of channel. Messages are categorized into request and reply, like `open` and `open_reply`. Here's the complete list of request/reply message types:
+RPC is built on top of channel. Messages are categorized into request and reply, like `open` and `open_reply`. Here's the complete list of RPC methods:
 
 ```rs
 // Opens a resource. Equivalent to: open(2), socket(2), bind(2), listen(2)
-fn open(path: &[u8], options: OpenOptions) -> Channel
+async fn open(path: &[u8], options: OpenOptions) -> Result<Channel, ErrorCode>
 
 // Reads data. Equivalent to: pread(2)
-fn read(offset: usize, len: usize) -> Vec<u8>
+async fn read(offset: usize, buf: &mut [u8]) -> Result<usize, ErrorCode>
 
 // Writes data. Equivalent to: pwrite(2)
-fn write(offset: usize, buf: &[u8]) -> usize /* written bytes */
+async fn write(offset: usize, buf: &[u8]) -> Result<usize, ErrorCode>
 
 // Gets an attribute. Equivalent to: stat(2)
-fn getattr(attr: Attr) -> Vec<u8>
+async fn getattr(attr: Attr, buf: &mut [u8]) -> Result<usize, ErrorCode>
 
 // Sets an attribute. Equivalent to: chmod(2), rename(2), ....
-fn setattr(attr: Attr, buf: &[u8]) -> usize /* written bytes */
+async fn setattr(attr: Attr, buf: &[u8]) -> Result<usize, ErrorCode>
 ```
 
-Any request can be replied with an error (`error_reply` message).
+Any request can be replied with an error (`error_reply` message) containing an 
+error code (`ErrorCode`).
 
 > [!NOTE]
 > **Design decision: Schema-less IPC**
