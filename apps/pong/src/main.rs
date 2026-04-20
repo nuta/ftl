@@ -85,7 +85,7 @@ fn main(supervisor_ch: Channel) {
                         let completer = match request.recv(&mut buf) {
                             Ok((_, completer)) => completer,
                             Err(err) => {
-                                warn!("failed to recv with body: {:?}", err.code());
+                                warn!("failed to recv with body: {:?}", err.error());
                                 err.reply_error(ErrorCode::Overloaded);
                                 continue;
                             }
@@ -117,7 +117,7 @@ fn main(supervisor_ch: Channel) {
                         let completer = match request.recv(&mut buf) {
                             Ok((_, completer)) => completer,
                             Err(err) => {
-                                warn!("failed to recv write body: {:?}", err.code());
+                                warn!("failed to recv write body: {:?}", err.error());
                                 err.reply_error(ErrorCode::Overloaded);
                                 continue;
                             }

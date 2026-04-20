@@ -186,7 +186,7 @@ impl<C: AsRef<Channel>> RecvError<C> {
         Self { inner, error }
     }
 
-    pub fn code(&self) -> ErrorCode {
+    pub fn error(&self) -> ErrorCode {
         self.error
     }
 

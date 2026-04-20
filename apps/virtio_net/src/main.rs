@@ -205,7 +205,7 @@ fn main(supervisor_ch: Channel) {
                         let completer = match request.recv() {
                             Ok(completer) => completer,
                             Err(err) => {
-                                warn!("failed to recv read: {:?}", err.code());
+                                warn!("failed to recv read: {:?}", err.error());
                                 err.reply_error(ErrorCode::Overloaded);
                                 continue;
                             }
@@ -234,7 +234,7 @@ fn main(supervisor_ch: Channel) {
                         let completer = match request.recv(payload_slice) {
                             Ok((_, completer)) => completer,
                             Err(err) => {
-                                warn!("failed to recv write body: {:?}", err.code());
+                                warn!("failed to recv write body: {:?}", err.error());
                                 err.reply_error(ErrorCode::Overloaded);
                                 dmabuf_pool.free(dmabuf);
                                 continue;

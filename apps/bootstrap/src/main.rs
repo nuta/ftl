@@ -104,7 +104,7 @@ fn main(supervisor_ch: Channel) {
                         let (path, completer) = match request.recv(&mut buf) {
                             Ok((path, completer)) => (path, completer),
                             Err(err) => {
-                                warn!("failed to recv request path: {:?}", err.code());
+                                warn!("failed to recv request path: {:?}", err.error());
                                 err.reply_error(ErrorCode::Overloaded);
                                 continue;
                             }
