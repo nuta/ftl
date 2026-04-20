@@ -57,6 +57,18 @@ impl Process {
 
 const NUM_HANDLES_MAX: usize = 1024;
 
+pub struct Reserve<'a>(&'a mut HandleTable);
+
+impl<'a> Reserve<'a> {
+    pub fn new(table: &'a mut HandleTable) -> Self {
+        Self(table)
+    }
+
+    pub fn insert<H: Into<AnyHandle>>(self, object: H) -> HandleId {
+        self.0.do_insert(object)
+    }
+}
+
 pub struct HandleTable {
     handles: BTreeMap<usize, AnyHandle>,
     next_id: usize,
@@ -70,15 +82,19 @@ impl HandleTable {
         }
     }
 
-    pub fn insert<H: Into<AnyHandle>>(&mut self, object: H) -> Result<HandleId, ErrorCode> {
+    fn do_insert<H: Into<AnyHandle>>(&mut self, object: H) -> HandleId {
+        let id = HandleId::from_raw(self.next_id);
+        self.next_id += 1;
+        self.handles.insert(id.as_usize(), object.into());
+        id
+    }
+
+    pub fn reserve(&mut self) -> Result<Reserve<'_>, ErrorCode> {
         if self.handles.len() >= NUM_HANDLES_MAX {
             return Err(ErrorCode::TooManyHandles);
         }
 
-        let id = HandleId::from_raw(self.next_id);
-        self.next_id += 1;
-        self.handles.insert(id.as_usize(), object.into());
-        Ok(id)
+        Ok(Reserve::new(self))
     }
 
     // TODO: Can we return a reference instead of a clone?
@@ -142,10 +158,13 @@ pub fn sys_process_create_sandboxed(
         .get::<VmSpace>(vmspace_id)?
         .authorize(HandleRight::WRITE)?;
 
+    let reserve = handle_table.reserve()?;
+
     let isolation = SandboxIsolation::new(vmspace)?;
     let new_process = Process::new(name, isolation)?;
 
-    let id = handle_table.insert(Handle::new(new_process, HandleRight::ALL))?;
+    let handle = Handle::new(new_process, HandleRight::ALL);
+    let id = reserve.insert(handle);
     Ok(SyscallResult::Return(id.as_usize()))
 }
 
@@ -168,10 +187,13 @@ pub fn sys_process_create_inkernel(
         .get::<VmSpace>(vmspace_id)?
         .authorize(HandleRight::WRITE)?;
 
+    let reserve = handle_table.reserve()?;
+
     let isolation = InKernelIsolation::new(vmspace)?;
     let new_process = Process::new(name, isolation)?;
 
-    let id = handle_table.insert(Handle::new(new_process, HandleRight::ALL))?;
+    let handle = Handle::new(new_process, HandleRight::ALL);
+    let id = reserve.insert(handle);
     Ok(SyscallResult::Return(id.as_usize()))
 }
 
@@ -203,9 +225,10 @@ pub fn sys_process_inject_handle(
 
     drop(current_table);
     let mut target_table = target_process.handle_table().lock();
+    let reserve = target_table.reserve()?;
 
     // TODO: What if the target table is full? Should we roll back?
-    let id = target_table.insert(handle)?;
+    let id = reserve.insert(handle);
     Ok(SyscallResult::Return(id.as_usize()))
 }
 

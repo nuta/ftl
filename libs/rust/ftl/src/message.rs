@@ -586,7 +586,10 @@ impl<C: AsRef<Channel>> SetAttrRequest<C> {
         self.attr
     }
 
-    pub fn recv<'a>(self, buf: &'a mut [u8]) -> Result<(&'a [u8], SetAttrCompleter<C>), RecvError<C>> {
+    pub fn recv<'a>(
+        self,
+        buf: &'a mut [u8],
+    ) -> Result<(&'a [u8], SetAttrCompleter<C>), RecvError<C>> {
         match self.inner.recv_body(buf) {
             Ok(body) => {
                 let completer = SetAttrCompleter::new(self.inner);

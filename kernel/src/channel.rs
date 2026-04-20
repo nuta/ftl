@@ -147,6 +147,7 @@ impl Channel {
         body_slice: UserSlice,
     ) -> Result<HandleId, ErrorCode> {
         let mut mutable: crate::spinlock::SpinLockGuard<'_, Mutable> = self.mutable.lock();
+        let reserve = handle_table.reserve()?;
 
         // Find the message in the notified queue, and remove it from the vec.
         let Some(message) = mutable
@@ -158,19 +159,18 @@ impl Channel {
             return Err(ErrorCode::NotFound);
         };
 
-        let handle_id = if let Some(handle) = message.handle {
-            debug_assert!(info.has_handle());
-            // TODO: What if the handle table is full? Should we roll back?
-            handle_table.insert(handle)?
-        } else {
-            HandleId::from_raw(0)
-        };
-
         // Copy the body to the isolation.
         if let Some(body) = message.body {
             debug_assert!(info.has_body());
             isolation.write_bytes(&body_slice, &body)?;
         }
+
+        let handle_id = if let Some(handle) = message.handle {
+            debug_assert!(info.has_handle());
+            reserve.insert(handle)
+        } else {
+            HandleId::from_raw(0)
+        };
 
         Ok(handle_id)
     }
@@ -282,8 +282,9 @@ pub fn sys_channel_create(
 
     let process = current.process();
     let mut handle_table = process.handle_table().lock();
-    let id0 = handle_table.insert(handle0)?;
-    let id1 = handle_table.insert(handle1)?;
+    // TODO: Reserve2?
+    let id0 = handle_table.reserve()?.insert(handle0);
+    let id1 = handle_table.reserve()?.insert(handle1);
 
     let isolation = process.isolation();
     crate::isolation::write(isolation, &ids, 0, [id0, id1])?;

@@ -103,11 +103,12 @@ pub fn sys_interrupt_acquire(
     let interrupt = Interrupt::new(irq)?;
     interrupts[irq as usize] = Some(interrupt.clone());
 
-    let handle = Handle::new(interrupt, HandleRight::ALL);
     let process = current.process();
     let mut handle_table = process.handle_table().lock();
-    let id = handle_table.insert(handle)?;
+    let reserve = handle_table.reserve()?;
 
+    let handle = Handle::new(interrupt, HandleRight::ALL);
+    let id = reserve.insert(handle);
     Ok(SyscallResult::Return(id.as_usize()))
 }
 
