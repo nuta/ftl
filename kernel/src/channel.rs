@@ -166,8 +166,7 @@ impl Channel {
 
         let handle_id = if let Some(handle) = message.handle {
             debug_assert!(info.has_handle());
-            handle_table.reserve()?
-    .insert(handle)
+            handle_table.reserve()?.insert(handle)
         } else {
             HandleId::from_raw(0)
         };
