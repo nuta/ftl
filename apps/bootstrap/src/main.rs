@@ -100,12 +100,12 @@ fn main(supervisor_ch: Channel) {
                     Incoming::Open(request) => {
                         let options = request.options();
                         let mut buf = vec![0; request.path_len()];
-                        let (result, completer) = request.recv(&mut buf);
-                        let path = match result {
-                            Ok(path) => path,
-                            Err(error) => {
-                                warn!("failed to recv request path: {:?}", error);
-                                completer.reply_error(error);
+
+                        let (path, completer) = match request.recv(&mut buf) {
+                            Ok((path, completer)) => (path, completer),
+                            Err(err) => {
+                                warn!("failed to recv request path: {:?}", err.code());
+                                err.reply_error(ErrorCode::Overloaded);
                                 continue;
                             }
                         };

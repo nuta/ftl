@@ -202,12 +202,14 @@ fn main(supervisor_ch: Channel) {
                 let ch = clients.get(&id).unwrap().clone();
                 match Incoming::parse(ch, peek) {
                     Incoming::Read(request) => {
-                        let (result, completer) = request.recv();
-                        if let Err(error) = result {
-                            warn!("failed to recv read: {:?}", error);
-                            completer.reply_error(error);
-                            continue;
-                        }
+                        let completer = match request.recv() {
+                            Ok(completer) => completer,
+                            Err(err) => {
+                                warn!("failed to recv read: {:?}", err.code());
+                                err.reply_error(ErrorCode::Overloaded);
+                                continue;
+                            }
+                        };
 
                         if let Some((dmabuf, total_len)) = rxq.pop() {
                             handle_rx(&mut rxq, dmabuf, total_len, completer);
@@ -229,13 +231,15 @@ fn main(supervisor_ch: Channel) {
                         let payload_len = min(request.len(), PAYLOAD_SIZE_MAX);
                         let payload_slice =
                             &mut dmabuf.as_mut_slice()[HEADER_LEN..HEADER_LEN + payload_len];
-                        let (result, completer) = request.recv(payload_slice);
-                        if let Err(error) = result {
-                            warn!("failed to recv write body: {:?}", error);
-                            dmabuf_pool.free(dmabuf);
-                            completer.reply_error(error);
-                            continue;
-                        }
+                        let completer = match request.recv(payload_slice) {
+                            Ok((_, completer)) => completer,
+                            Err(err) => {
+                                warn!("failed to recv write body: {:?}", err.code());
+                                err.reply_error(ErrorCode::Overloaded);
+                                dmabuf_pool.free(dmabuf);
+                                continue;
+                            }
+                        };
 
                         let chain = &[ChainEntry::Read {
                             paddr: dmabuf.paddr() as u64,

@@ -176,6 +176,25 @@ impl<C: AsRef<Channel>> Drop for RequestInner<C> {
     }
 }
 
+pub struct RecvError<C: AsRef<Channel>> {
+    inner: RequestInner<C>,
+    error: ErrorCode,
+}
+
+impl<C: AsRef<Channel>> RecvError<C> {
+    fn new(inner: RequestInner<C>, error: ErrorCode) -> Self {
+        Self { inner, error }
+    }
+
+    pub fn code(&self) -> ErrorCode {
+        self.error
+    }
+
+    pub fn reply_error(self, error: ErrorCode) {
+        self.inner.reply_error(error);
+    }
+}
+
 struct ReplyInner<C: AsRef<Channel>> {
     ch: C,
     info: MessageInfo,
@@ -244,10 +263,17 @@ impl<C: AsRef<Channel>> OpenRequest<C> {
         self.inner.info.body_len()
     }
 
-    pub fn recv<'a>(self, path: &'a mut [u8]) -> (Result<&'a [u8], ErrorCode>, OpenCompleter<C>) {
-        let result = self.inner.recv_body(path);
-        let completer = OpenCompleter::new(self.inner);
-        (result, completer)
+    pub fn recv<'a>(
+        self,
+        path: &'a mut [u8],
+    ) -> Result<(&'a [u8], OpenCompleter<C>), RecvError<C>> {
+        match self.inner.recv_body(path) {
+            Ok(body) => {
+                let completer = OpenCompleter::new(self.inner);
+                Ok((body, completer))
+            }
+            Err(error) => Err(RecvError::new(self.inner, error)),
+        }
     }
 
     pub fn reply(self, handle: OwnedHandle) {
@@ -315,10 +341,14 @@ impl<C: AsRef<Channel>> ReadRequest<C> {
         self.len
     }
 
-    pub fn recv(self) -> (Result<(), ErrorCode>, ReadCompleter<C>) {
-        let result = self.inner.recv_args();
-        let completer = ReadCompleter::new(self.inner);
-        (result, completer)
+    pub fn recv(self) -> Result<ReadCompleter<C>, RecvError<C>> {
+        match self.inner.recv_args() {
+            Ok(()) => {
+                let completer = ReadCompleter::new(self.inner);
+                Ok(completer)
+            }
+            Err(error) => Err(RecvError::new(self.inner, error)),
+        }
     }
 
     pub fn reply(self, buf: &[u8]) {
@@ -392,10 +422,17 @@ impl<C: AsRef<Channel>> WriteRequest<C> {
         self.inner.info.body_len()
     }
 
-    pub fn recv<'a>(self, buf: &'a mut [u8]) -> (Result<&'a [u8], ErrorCode>, WriteCompleter<C>) {
-        let result = self.inner.recv_body(buf);
-        let completer = WriteCompleter::new(self.inner);
-        (result, completer)
+    pub fn recv<'a>(
+        self,
+        buf: &'a mut [u8],
+    ) -> Result<(&'a [u8], WriteCompleter<C>), RecvError<C>> {
+        match self.inner.recv_body(buf) {
+            Ok(body) => {
+                let completer = WriteCompleter::new(self.inner);
+                Ok((body, completer))
+            }
+            Err(error) => Err(RecvError::new(self.inner, error)),
+        }
     }
 
     pub fn reply(self, written_len: usize) {
@@ -472,10 +509,14 @@ impl<C: AsRef<Channel>> GetAttrRequest<C> {
         self.attr
     }
 
-    pub fn recv(self) -> (Result<(), ErrorCode>, GetAttrCompleter<C>) {
-        let result = self.inner.recv_args();
-        let completer = GetAttrCompleter::new(self.inner);
-        (result, completer)
+    pub fn recv(self) -> Result<GetAttrCompleter<C>, RecvError<C>> {
+        match self.inner.recv_args() {
+            Ok(()) => {
+                let completer = GetAttrCompleter::new(self.inner);
+                Ok(completer)
+            }
+            Err(error) => Err(RecvError::new(self.inner, error)),
+        }
     }
 
     pub fn reply(self, buf: &[u8]) {
@@ -545,10 +586,14 @@ impl<C: AsRef<Channel>> SetAttrRequest<C> {
         self.attr
     }
 
-    pub fn recv<'a>(self, buf: &'a mut [u8]) -> (Result<&'a [u8], ErrorCode>, SetAttrCompleter<C>) {
-        let result = self.inner.recv_body(buf);
-        let completer = SetAttrCompleter::new(self.inner);
-        (result, completer)
+    pub fn recv<'a>(self, buf: &'a mut [u8]) -> Result<(&'a [u8], SetAttrCompleter<C>), RecvError<C>> {
+        match self.inner.recv_body(buf) {
+            Ok(body) => {
+                let completer = SetAttrCompleter::new(self.inner);
+                Ok((body, completer))
+            }
+            Err(error) => Err(RecvError::new(self.inner, error)),
+        }
     }
 
     pub fn reply(self, written_len: usize) {
