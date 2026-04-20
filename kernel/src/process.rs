@@ -57,15 +57,25 @@ impl Process {
 
 const NUM_HANDLES_MAX: usize = 1024;
 
-pub struct ReservedSlot<'a>(&'a mut HandleTable);
+pub struct ReservedSlot<'a, const N: usize>(&'a mut HandleTable);
 
-impl<'a> ReservedSlot<'a> {
+impl<'a, const N: usize> ReservedSlot<'a, N> {
     pub fn new(table: &'a mut HandleTable) -> Self {
         Self(table)
     }
+}
 
+impl<'a> ReservedSlot<'a, 1> {
     pub fn insert<H: Into<AnyHandle>>(self, object: H) -> HandleId {
         self.0.do_insert(object)
+    }
+}
+
+impl<'a> ReservedSlot<'a, 2> {
+    pub fn insert2<H: Into<AnyHandle>>(self, object0: H, object1: H) -> (HandleId, HandleId) {
+        let id0 = self.0.do_insert(object0);
+        let id1 = self.0.do_insert(object1);
+        (id0, id1)
     }
 }
 
@@ -89,7 +99,7 @@ impl HandleTable {
         id
     }
 
-    pub fn reserve(&mut self) -> Result<ReservedSlot<'_>, ErrorCode> {
+    pub fn reserve<const N: usize>(&mut self) -> Result<ReservedSlot<'_, N>, ErrorCode> {
         if self.handles.len() >= NUM_HANDLES_MAX {
             return Err(ErrorCode::TooManyHandles);
         }
