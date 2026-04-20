@@ -191,7 +191,8 @@ impl<C: AsRef<Channel>> RecvError<C> {
     }
 
     pub fn reply_error(self, error: ErrorCode) {
-        self.inner.reply_error(error);
+        // FIXME: Guarantee that the message is still in the queue if recv fails.
+        self.inner.discard_and_reply_error(error);
     }
 }
 
