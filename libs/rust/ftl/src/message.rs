@@ -244,10 +244,10 @@ impl<C: AsRef<Channel>> OpenRequest<C> {
         self.inner.info.body_len()
     }
 
-    pub fn recv<'a>(self, path: &'a mut [u8]) -> Result<(&'a [u8], OpenCompleter<C>), ErrorCode> {
-        let body = self.inner.recv_body(path)?;
+    pub fn recv<'a>(self, path: &'a mut [u8]) -> (Result<&'a [u8], ErrorCode>, OpenCompleter<C>) {
+        let result = self.inner.recv_body(path);
         let completer = OpenCompleter::new(self.inner);
-        Ok((body, completer))
+        (result, completer)
     }
 
     pub fn reply(self, handle: OwnedHandle) {
@@ -315,10 +315,10 @@ impl<C: AsRef<Channel>> ReadRequest<C> {
         self.len
     }
 
-    pub fn recv(self) -> Result<ReadCompleter<C>, ErrorCode> {
-        self.inner.recv_args()?;
+    pub fn recv(self) -> (Result<(), ErrorCode>, ReadCompleter<C>) {
+        let result = self.inner.recv_args();
         let completer = ReadCompleter::new(self.inner);
-        Ok(completer)
+        (result, completer)
     }
 
     pub fn reply(self, buf: &[u8]) {
@@ -392,10 +392,10 @@ impl<C: AsRef<Channel>> WriteRequest<C> {
         self.inner.info.body_len()
     }
 
-    pub fn recv<'a>(self, buf: &'a mut [u8]) -> Result<(&'a [u8], WriteCompleter<C>), ErrorCode> {
-        let body = self.inner.recv_body(buf)?;
+    pub fn recv<'a>(self, buf: &'a mut [u8]) -> (Result<&'a [u8], ErrorCode>, WriteCompleter<C>) {
+        let result = self.inner.recv_body(buf);
         let completer = WriteCompleter::new(self.inner);
-        Ok((body, completer))
+        (result, completer)
     }
 
     pub fn reply(self, written_len: usize) {
@@ -472,10 +472,10 @@ impl<C: AsRef<Channel>> GetAttrRequest<C> {
         self.attr
     }
 
-    pub fn recv(self) -> Result<GetAttrCompleter<C>, ErrorCode> {
-        self.inner.recv_args()?;
+    pub fn recv(self) -> (Result<(), ErrorCode>, GetAttrCompleter<C>) {
+        let result = self.inner.recv_args();
         let completer = GetAttrCompleter::new(self.inner);
-        Ok(completer)
+        (result, completer)
     }
 
     pub fn reply(self, buf: &[u8]) {
@@ -545,10 +545,10 @@ impl<C: AsRef<Channel>> SetAttrRequest<C> {
         self.attr
     }
 
-    pub fn recv<'a>(self, buf: &'a mut [u8]) -> Result<(&'a [u8], SetAttrCompleter<C>), ErrorCode> {
-        let body = self.inner.recv_body(buf)?;
+    pub fn recv<'a>(self, buf: &'a mut [u8]) -> (Result<&'a [u8], ErrorCode>, SetAttrCompleter<C>) {
+        let result = self.inner.recv_body(buf);
         let completer = SetAttrCompleter::new(self.inner);
-        Ok((body, completer))
+        (result, completer)
     }
 
     pub fn reply(self, written_len: usize) {

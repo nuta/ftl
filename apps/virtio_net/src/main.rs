@@ -95,10 +95,12 @@ fn main(supervisor_ch: Channel) {
         match event {
             Event::Message(peek) if id == supervisor_ch.handle().id() => {
                 match Incoming::parse(&supervisor_ch, peek) {
-                    Incoming::OpenReply(reply) => match reply.recv() {
-                        Ok(handle) => break Channel::from_handle(handle),
-                        Err(error) => panic!("failed to recv with handle: {:?}", error),
-                    },
+                    Incoming::OpenReply(reply) => {
+                        match reply.recv() {
+                            Ok(handle) => break Channel::from_handle(handle),
+                            Err(error) => panic!("failed to recv with handle: {:?}", error),
+                        }
+                    }
                     _ => warn!("unhandled supervisor message: {:?}", peek),
                 }
             }
@@ -200,13 +202,12 @@ fn main(supervisor_ch: Channel) {
                 let ch = clients.get(&id).unwrap().clone();
                 match Incoming::parse(ch, peek) {
                     Incoming::Read(request) => {
-                        let completer = match request.recv() {
-                            Ok(completer) => completer,
-                            Err(error) => {
-                                warn!("failed to recv read: {:?}", error);
-                                continue;
-                            }
-                        };
+                        let (result, completer) = request.recv();
+                        if let Err(error) = result {
+                            warn!("failed to recv read: {:?}", error);
+                            completer.reply_error(error);
+                            continue;
+                        }
 
                         if let Some((dmabuf, total_len)) = rxq.pop() {
                             handle_rx(&mut rxq, dmabuf, total_len, completer);
@@ -228,14 +229,13 @@ fn main(supervisor_ch: Channel) {
                         let payload_len = min(request.len(), PAYLOAD_SIZE_MAX);
                         let payload_slice =
                             &mut dmabuf.as_mut_slice()[HEADER_LEN..HEADER_LEN + payload_len];
-                        let (_body, completer) = match request.recv(payload_slice) {
-                            Ok(v) => v,
-                            Err(error) => {
-                                warn!("failed to recv write body: {:?}", error);
-                                dmabuf_pool.free(dmabuf);
-                                continue;
-                            }
-                        };
+                        let (result, completer) = request.recv(payload_slice);
+                        if let Err(error) = result {
+                            warn!("failed to recv write body: {:?}", error);
+                            dmabuf_pool.free(dmabuf);
+                            completer.reply_error(error);
+                            continue;
+                        }
 
                         let chain = &[ChainEntry::Read {
                             paddr: dmabuf.paddr() as u64,
@@ -255,7 +255,6 @@ fn main(supervisor_ch: Channel) {
                     Incoming::GetAttr(request) => {
                         match request.attr() {
                             Attr::MAC => {
-
                                 request.reply(&mac);
                             }
                             _ => {
