@@ -100,7 +100,7 @@ impl HandleTable {
     }
 
     pub fn reserve<const N: usize>(&mut self) -> Result<ReservedSlot<'_, N>, ErrorCode> {
-        if self.handles.len() >= NUM_HANDLES_MAX {
+        if self.handles.len() + N > NUM_HANDLES_MAX {
             return Err(ErrorCode::TooManyHandles);
         }
 
