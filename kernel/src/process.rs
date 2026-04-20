@@ -57,9 +57,9 @@ impl Process {
 
 const NUM_HANDLES_MAX: usize = 1024;
 
-pub struct Reserve<'a>(&'a mut HandleTable);
+pub struct ReservedSlot<'a>(&'a mut HandleTable);
 
-impl<'a> Reserve<'a> {
+impl<'a> ReservedSlot<'a> {
     pub fn new(table: &'a mut HandleTable) -> Self {
         Self(table)
     }
@@ -89,12 +89,12 @@ impl HandleTable {
         id
     }
 
-    pub fn reserve(&mut self) -> Result<Reserve<'_>, ErrorCode> {
+    pub fn reserve(&mut self) -> Result<ReservedSlot<'_>, ErrorCode> {
         if self.handles.len() >= NUM_HANDLES_MAX {
             return Err(ErrorCode::TooManyHandles);
         }
 
-        Ok(Reserve::new(self))
+        Ok(ReservedSlot::new(self))
     }
 
     // TODO: Can we return a reference instead of a clone?
@@ -158,13 +158,13 @@ pub fn sys_process_create_sandboxed(
         .get::<VmSpace>(vmspace_id)?
         .authorize(HandleRight::WRITE)?;
 
-    let reserve = handle_table.reserve()?;
+    let slot = handle_table.reserve()?;
 
     let isolation = SandboxIsolation::new(vmspace)?;
     let new_process = Process::new(name, isolation)?;
 
     let handle = Handle::new(new_process, HandleRight::ALL);
-    let id = reserve.insert(handle);
+    let id = slot.insert(handle);
     Ok(SyscallResult::Return(id.as_usize()))
 }
 
@@ -187,13 +187,13 @@ pub fn sys_process_create_inkernel(
         .get::<VmSpace>(vmspace_id)?
         .authorize(HandleRight::WRITE)?;
 
-    let reserve = handle_table.reserve()?;
+    let slot = handle_table.reserve()?;
 
     let isolation = InKernelIsolation::new(vmspace)?;
     let new_process = Process::new(name, isolation)?;
 
     let handle = Handle::new(new_process, HandleRight::ALL);
-    let id = reserve.insert(handle);
+    let id = slot.insert(handle);
     Ok(SyscallResult::Return(id.as_usize()))
 }
 
@@ -225,10 +225,10 @@ pub fn sys_process_inject_handle(
 
     drop(current_table);
     let mut target_table = target_process.handle_table().lock();
-    let reserve = target_table.reserve()?;
+    let slot = target_table.reserve()?;
 
     // TODO: What if the target table is full? Should we roll back?
-    let id = reserve.insert(handle);
+    let id = slot.insert(handle);
     Ok(SyscallResult::Return(id.as_usize()))
 }
 

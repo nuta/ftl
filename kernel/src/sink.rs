@@ -133,12 +133,12 @@ impl Handleable for Sink {}
 pub fn sys_sink_create(current: &SharedRef<Thread>) -> Result<SyscallResult, ErrorCode> {
     let process = current.process();
     let mut handle_table = process.handle_table().lock();
-    let reserve = handle_table.reserve()?;
+    let slot = handle_table.reserve()?;
 
     let sink = Sink::new()?;
     let handle = Handle::new(sink, HandleRight::ALL);
 
-    let id = reserve.insert(handle);
+    let id = slot.insert(handle);
 
     Ok(SyscallResult::Return(id.as_usize()))
 }

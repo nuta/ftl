@@ -147,7 +147,7 @@ impl Channel {
         body_slice: UserSlice,
     ) -> Result<HandleId, ErrorCode> {
         let mut mutable: crate::spinlock::SpinLockGuard<'_, Mutable> = self.mutable.lock();
-        let reserve = handle_table.reserve()?;
+        let slot = handle_table.reserve()?;
 
         // Find the message in the notified queue, and remove it from the vec.
         let Some(message) = mutable
@@ -167,7 +167,7 @@ impl Channel {
 
         let handle_id = if let Some(handle) = message.handle {
             debug_assert!(info.has_handle());
-            reserve.insert(handle)
+            slot.insert(handle)
         } else {
             HandleId::from_raw(0)
         };

@@ -239,10 +239,10 @@ pub fn sys_vmarea_create(
     let len = a0;
 
     let mut handle_table = current.process().handle_table().lock();
-    let reserve = handle_table.reserve()?;
+    let slot = handle_table.reserve()?;
 
     let vmarea = VmArea::create_any(len)?;
-    let id = reserve.insert(Handle::new(vmarea, HandleRight::ALL));
+    let id = slot.insert(Handle::new(vmarea, HandleRight::ALL));
     Ok(SyscallResult::Return(id.as_usize()))
 }
 

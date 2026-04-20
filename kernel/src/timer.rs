@@ -190,11 +190,11 @@ pub fn sys_time_now() -> Result<SyscallResult, ErrorCode> {
 
 pub fn sys_timer_create(thread: &SharedRef<Thread>) -> Result<SyscallResult, ErrorCode> {
     let mut handle_table = thread.process().handle_table().lock();
-    let reserve = handle_table.reserve()?;
+    let slot = handle_table.reserve()?;
 
     let timer = Timer::new()?;
     let handle = Handle::new(timer, HandleRight::ALL);
-    let id = reserve.insert(handle);
+    let id = slot.insert(handle);
     Ok(SyscallResult::Return(id.as_usize()))
 }
 
