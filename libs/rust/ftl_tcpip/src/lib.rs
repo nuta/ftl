@@ -1,7 +1,8 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 #![allow(unused)] // TODO:
 
-use core::ops::{Deref, DerefMut};
+use core::ops::Deref;
+use core::ops::DerefMut;
 
 use crate::route::RouteTable;
 use crate::socket::SocketMap;
