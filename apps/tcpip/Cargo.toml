@@ -6,6 +6,7 @@ edition.workspace = true
 
 [dependencies]
 ftl = { workspace = true }
+ftl_tcpip = { workspace = true }
 smoltcp = { workspace = true, default-features = false, features = [
     "log",
     "alloc",
