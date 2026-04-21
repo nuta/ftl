@@ -2,6 +2,14 @@ use alloc::collections::VecDeque;
 
 use crate::socket::AnySocket;
 
+pub trait ReadRequest {
+    type Error;
+
+    fn write(self, buf: &[u8]) -> Result<(), Self::Error>;
+    fn error(self, error: Self::Error) -> Result<(), Self::Error>;
+    fn complete(self, read_len: usize) -> Result<(), Self::Error>;
+}
+
 pub trait WriteRequest {
     type Error;
 
@@ -14,6 +22,20 @@ pub trait AcceptRequest: Send + Sync + Sized + 'static {
     type Error;
 
     fn complete(self) -> Result<(), Self::Error>;
+}
+
+pub struct TcpConn<WriteR: WriteRequest, ReadR: ReadRequest> {
+    pending_writes: VecDeque<WriteR>,
+    pending_reads: VecDeque<ReadR>,
+}
+
+impl<WriteR: WriteRequest, ReadR: ReadRequest> TcpConn<WriteR, ReadR> {
+    pub fn new() -> Self {
+        Self {
+            pending_writes: VecDeque::new(),
+            pending_reads: VecDeque::new(),
+        }
+    }
 }
 
 pub struct TcpListener<AcceptR: AcceptRequest> {
