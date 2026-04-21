@@ -5,9 +5,10 @@ use hashbrown::HashMap;
 use hashbrown::hash_map::OccupiedError;
 
 use crate::Io;
-use crate::address::IpAddr;
+use crate::ip::IpAddr;
 use crate::tcp::TcpListener;
 use crate::tcp::{self};
+use crate::transport;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Endpoint {
@@ -15,17 +16,11 @@ pub struct Endpoint {
     port: u16,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-enum TransportProtocol {
-    Tcp,
-    Udp,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(crate) struct FiveTuple {
+pub struct FiveTuple {
     remote: Option<Endpoint>,
     local: Option<Endpoint>,
-    protocol: TransportProtocol,
+    protocol: transport::Protocol,
 }
 
 pub trait AnySocket: Any + Send + Sync {}
@@ -72,7 +67,7 @@ impl SocketMap {
         let five_tuple = FiveTuple {
             remote: None,
             local: Some(local),
-            protocol: TransportProtocol::Tcp,
+            protocol: transport::Protocol::Tcp,
         };
 
         let socket = Arc::new(TcpListener::<I>::new());

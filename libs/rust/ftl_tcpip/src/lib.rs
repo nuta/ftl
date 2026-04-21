@@ -3,16 +3,16 @@
 
 use crate::route::RouteTable;
 use crate::socket::SocketMap;
-use crate::tcp::TcpListener;
+use crate::transport::tcp;
+use crate::transport::tcp::TcpListener;
 
 extern crate alloc;
 
-pub mod address;
-pub mod ipv4;
+pub mod arp;
+pub mod ip;
 pub mod route;
 pub mod socket;
-pub mod arp;
-pub mod tcp;
+pub mod transport;
 mod utils;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
