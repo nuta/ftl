@@ -1,10 +1,13 @@
+use alloc::sync::Arc;
 use core::any::Any;
 
-use alloc::sync::Arc;
+use hashbrown::HashMap;
+use hashbrown::hash_map::OccupiedError;
 
-use hashbrown::{HashMap, hash_map::OccupiedError};
-
-use crate::{address::IpAddr, tcp::{self, AcceptRequest, TcpListener}};
+use crate::address::IpAddr;
+use crate::tcp::AcceptRequest;
+use crate::tcp::TcpListener;
+use crate::tcp::{self};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Endpoint {
@@ -19,14 +22,13 @@ enum TransportProtocol {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(crate)struct FiveTuple {
+pub(crate) struct FiveTuple {
     remote: Option<Endpoint>,
     local: Option<Endpoint>,
     protocol: TransportProtocol,
 }
 
-pub trait AnySocket: Any + Send + Sync {
-}
+pub trait AnySocket: Any + Send + Sync {}
 
 #[derive(Debug)]
 pub enum TryInsertError {
@@ -45,9 +47,15 @@ impl SocketMap {
         }
     }
 
-    fn try_insert(&mut self, five_tuple: FiveTuple, socket: Arc<dyn AnySocket>) -> Result<(), TryInsertError> {
+    fn try_insert(
+        &mut self,
+        five_tuple: FiveTuple,
+        socket: Arc<dyn AnySocket>,
+    ) -> Result<(), TryInsertError> {
         self.inner.try_reserve(1).map_err(TryInsertError::Reserve)?;
-        self.inner.try_insert(five_tuple, socket).map_err(|_| TryInsertError::AlreadyExists)?;
+        self.inner
+            .try_insert(five_tuple, socket)
+            .map_err(|_| TryInsertError::AlreadyExists)?;
         Ok(())
     }
 
@@ -57,7 +65,10 @@ impl SocketMap {
         Some(socket)
     }
 
-    pub fn tcp_listen<AcceptR: tcp::AcceptRequest>(&mut self, local: Endpoint) -> Result<Arc<TcpListener<AcceptR>>, TryInsertError> {
+    pub fn tcp_listen<AcceptR: tcp::AcceptRequest>(
+        &mut self,
+        local: Endpoint,
+    ) -> Result<Arc<TcpListener<AcceptR>>, TryInsertError> {
         let five_tuple = FiveTuple {
             remote: None,
             local: Some(local),
