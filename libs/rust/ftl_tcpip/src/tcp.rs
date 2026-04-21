@@ -27,7 +27,7 @@ pub struct TcpConn<I: Io> {
 }
 
 impl<I: Io> TcpConn<I> {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             pending_writes: VecDeque::new(),
             pending_reads: VecDeque::new(),
@@ -42,7 +42,7 @@ pub struct TcpListener<I: Io> {
 }
 
 impl<I: Io> TcpListener<I> {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             pending_accepts: VecDeque::new(),
         }
