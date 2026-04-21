@@ -5,7 +5,7 @@ use hashbrown::HashMap;
 use hashbrown::hash_map::OccupiedError;
 
 use crate::address::IpAddr;
-use crate::tcp::AcceptRequest;
+use crate::Io;
 use crate::tcp::TcpListener;
 use crate::tcp::{self};
 
@@ -65,17 +65,17 @@ impl SocketMap {
         Some(socket)
     }
 
-    pub fn tcp_listen<AcceptR: tcp::AcceptRequest>(
+    pub fn tcp_listen<I: Io>(
         &mut self,
         local: Endpoint,
-    ) -> Result<Arc<TcpListener<AcceptR>>, TryInsertError> {
+    ) -> Result<Arc<TcpListener<I>>, TryInsertError> {
         let five_tuple = FiveTuple {
             remote: None,
             local: Some(local),
             protocol: TransportProtocol::Tcp,
         };
 
-        let socket = Arc::new(TcpListener::new());
+        let socket = Arc::new(TcpListener::<I>::new());
         self.try_insert(five_tuple, socket.clone())?;
         Ok(socket)
     }

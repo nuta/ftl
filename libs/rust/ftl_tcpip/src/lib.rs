@@ -13,11 +13,17 @@ pub mod route;
 pub mod socket;
 pub mod tcp;
 
-pub fn handle_packet<AcceptR: tcp::AcceptRequest>(
+pub trait Io: 'static {
+    type TcpWrite: tcp::WriteRequest;
+    type TcpRead: tcp::ReadRequest;
+    type TcpAccept: tcp::AcceptRequest;
+}
+
+pub fn handle_packet<I: Io>(
     sockets: &SocketMap,
     routes: &RouteTable,
     packet: &[u8],
 ) {
     let fivetuple = todo!();
-    let listener = sockets.get::<TcpListener<AcceptR>>(fivetuple);
+    let listener = sockets.get::<TcpListener<I>>(fivetuple);
 }

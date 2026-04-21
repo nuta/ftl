@@ -1,6 +1,6 @@
 use alloc::collections::VecDeque;
 
-use crate::socket::AnySocket;
+use crate::{Io, socket::AnySocket};
 
 pub trait ReadRequest {
     type Error;
@@ -24,12 +24,12 @@ pub trait AcceptRequest: Send + Sync + Sized + 'static {
     fn complete(self) -> Result<(), Self::Error>;
 }
 
-pub struct TcpConn<WriteR: WriteRequest, ReadR: ReadRequest> {
-    pending_writes: VecDeque<WriteR>,
-    pending_reads: VecDeque<ReadR>,
+pub struct TcpConn<I: Io> {
+    pending_writes: VecDeque<I::TcpWrite>,
+    pending_reads: VecDeque<I::TcpRead>,
 }
 
-impl<WriteR: WriteRequest, ReadR: ReadRequest> TcpConn<WriteR, ReadR> {
+impl<I: Io> TcpConn<I> {
     pub fn new() -> Self {
         Self {
             pending_writes: VecDeque::new(),
@@ -38,20 +38,20 @@ impl<WriteR: WriteRequest, ReadR: ReadRequest> TcpConn<WriteR, ReadR> {
     }
 }
 
-pub struct TcpListener<AcceptR: AcceptRequest> {
-    pending_accepts: VecDeque<AcceptR>,
+pub struct TcpListener<I: Io> {
+    pending_accepts: VecDeque<I::TcpAccept>,
 }
 
-impl<AcceptR: AcceptRequest> TcpListener<AcceptR> {
+impl<I: Io> TcpListener<I> {
     pub fn new() -> Self {
         Self {
             pending_accepts: VecDeque::new(),
         }
     }
 
-    pub fn accept(&mut self) -> Result<AcceptR, ()> {
+    pub fn accept(&mut self) -> Result<I::TcpAccept, ()> {
         self.pending_accepts.pop_front().ok_or(())
     }
 }
 
-impl<AcceptR: AcceptRequest> AnySocket for TcpListener<AcceptR> {}
+impl<I: Io> AnySocket for TcpListener<I> {}
