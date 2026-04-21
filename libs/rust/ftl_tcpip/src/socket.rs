@@ -4,8 +4,8 @@ use core::any::Any;
 use hashbrown::HashMap;
 use hashbrown::hash_map::OccupiedError;
 
-use crate::address::IpAddr;
 use crate::Io;
+use crate::address::IpAddr;
 use crate::tcp::TcpListener;
 use crate::tcp::{self};
 

@@ -1,6 +1,7 @@
 use alloc::collections::VecDeque;
 
-use crate::{Io, socket::AnySocket};
+use crate::Io;
+use crate::socket::AnySocket;
 
 pub trait ReadRequest {
     type Error;

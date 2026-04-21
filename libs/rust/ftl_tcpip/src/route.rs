@@ -8,8 +8,6 @@ pub struct RouteTable {
 
 impl RouteTable {
     pub const fn new() -> Self {
-        Self {
-            routes: Vec::new(),
-        }
+        Self { routes: Vec::new() }
     }
 }
