@@ -49,8 +49,7 @@ impl<I: Io> TcpListener<I> {
     }
 
     pub fn accept(&mut self, req: I::TcpAccept) -> Result<(), OutOfMemoryError> {
-        self.pending_accepts
-            .try_push_back(req)?;
+        self.pending_accepts.try_push_back(req)?;
 
         Ok(())
     }
