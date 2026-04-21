@@ -1,6 +1,6 @@
 use alloc::collections::VecDeque;
 
-use crate::Io;
+use crate::{Io, OutOfMemoryError};
 use crate::socket::AnySocket;
 
 pub trait ReadRequest {
@@ -50,8 +50,10 @@ impl<I: Io> TcpListener<I> {
         }
     }
 
-    pub fn accept(&mut self) -> Result<I::TcpAccept, ()> {
-        self.pending_accepts.pop_front().ok_or(())
+    pub fn accept(&mut self, req: I::TcpAccept) -> Result<(), OutOfMemoryError> {
+        self.pending_accepts.try_reserve(1).map_err(|_| OutOfMemoryError)?;
+        self.pending_accepts.push_back(req);
+        Ok(())
     }
 }
 

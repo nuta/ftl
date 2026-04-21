@@ -13,6 +13,9 @@ pub mod route;
 pub mod socket;
 pub mod tcp;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct OutOfMemoryError;
+
 pub trait Io: 'static {
     type TcpWrite: tcp::WriteRequest;
     type TcpRead: tcp::ReadRequest;
