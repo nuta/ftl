@@ -20,13 +20,7 @@ mod utils;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct OutOfMemoryError;
 
-pub trait Mutex<T: ?Sized>: Send + Sync {
-    type Guard<'a>: Deref<Target=T> + DerefMut<Target=T> + 'a where Self: 'a;
-    fn lock(&self) -> Self::Guard<'_>;
-}
-
 pub trait Io: 'static {
-    type Mutex<T>: Mutex<T>;
     type TcpWrite: tcp::Write;
     type TcpRead: tcp::Read;
     type TcpAccept: tcp::Accept;
