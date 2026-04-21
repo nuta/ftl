@@ -11,6 +11,7 @@ pub mod address;
 pub mod ipv4;
 pub mod route;
 pub mod socket;
+pub mod arp;
 pub mod tcp;
 mod utils;
 
@@ -23,7 +24,7 @@ pub trait Io: 'static {
     type TcpAccept: tcp::Accept;
 }
 
-pub fn handle_packet<I: Io>(sockets: &SocketMap, routes: &RouteTable, packet: &[u8]) {
+pub fn receive_packet<I: Io>(sockets: &SocketMap, routes: &RouteTable, packet: &[u8]) {
     let fivetuple = todo!();
     let listener = sockets.get::<TcpListener<I>>(fivetuple);
 }
