@@ -17,9 +17,9 @@ pub mod tcp;
 pub struct OutOfMemoryError;
 
 pub trait Io: 'static {
-    type TcpWrite: tcp::WriteRequest;
-    type TcpRead: tcp::ReadRequest;
-    type TcpAccept: tcp::AcceptRequest;
+    type TcpWrite: tcp::Write;
+    type TcpRead: tcp::Read;
+    type TcpAccept: tcp::Accept;
 }
 
 pub fn handle_packet<I: Io>(sockets: &SocketMap, routes: &RouteTable, packet: &[u8]) {

@@ -3,7 +3,7 @@ use alloc::collections::VecDeque;
 use crate::{Io, OutOfMemoryError};
 use crate::socket::AnySocket;
 
-pub trait ReadRequest {
+pub trait Read {
     type Error;
 
     fn write(self, buf: &[u8]) -> Result<(), Self::Error>;
@@ -11,7 +11,7 @@ pub trait ReadRequest {
     fn complete(self, read_len: usize) -> Result<(), Self::Error>;
 }
 
-pub trait WriteRequest {
+pub trait Write {
     type Error;
 
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error>;
@@ -19,7 +19,7 @@ pub trait WriteRequest {
     fn complete(self, written_len: usize) -> Result<(), Self::Error>;
 }
 
-pub trait AcceptRequest: Send + Sync + Sized + 'static {
+pub trait Accept: Send + Sync + Sized + 'static {
     type Error;
 
     fn complete(self) -> Result<(), Self::Error>;
