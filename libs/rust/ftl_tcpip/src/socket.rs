@@ -8,18 +8,24 @@ use crate::Io;
 use crate::ip::IpAddr;
 use crate::tcp::TcpListener;
 use crate::tcp::{self};
-use crate::transport;
+use crate::transport::{self, Port};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Endpoint {
     addr: IpAddr,
-    port: u16,
+    port: Port,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct FiveTuple {
-    remote: Option<Endpoint>,
-    local: Option<Endpoint>,
+pub struct ActiveKey {
+    remote: Endpoint,
+    local: Endpoint,
+    protocol: transport::Protocol,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ListenerKey {
+    local: Endpoint,
     protocol: transport::Protocol,
 }
 
@@ -32,30 +38,26 @@ pub enum TryInsertError {
 }
 
 pub struct SocketMap {
-    inner: HashMap<FiveTuple, Arc<dyn AnySocket>>,
+    actives: HashMap<ActiveKey, Arc<dyn AnySocket>>,
+    listeners: HashMap<ListenerKey, Arc<dyn AnySocket>>,
 }
 
 impl SocketMap {
     pub fn new() -> Self {
         Self {
-            inner: HashMap::new(),
+            actives: HashMap::new(),
+            listeners: HashMap::new(),
         }
     }
 
-    fn try_insert(
-        &mut self,
-        five_tuple: FiveTuple,
-        socket: Arc<dyn AnySocket>,
-    ) -> Result<(), TryInsertError> {
-        self.inner.try_reserve(1).map_err(TryInsertError::Reserve)?;
-        self.inner
-            .try_insert(five_tuple, socket)
-            .map_err(|_| TryInsertError::AlreadyExists)?;
-        Ok(())
+    pub(crate) fn get_active<T: AnySocket>(&self, key: ActiveKey) -> Option<Arc<T>> {
+        let any_socket = self.actives.get(&key)?.clone() as Arc<dyn Any + Send + Sync>;
+        let socket = any_socket.downcast::<T>().ok()?;
+        Some(socket)
     }
 
-    pub(crate) fn get<T: AnySocket>(&self, five_tuple: FiveTuple) -> Option<Arc<T>> {
-        let any_socket = self.inner.get(&five_tuple)?.clone() as Arc<dyn Any + Send + Sync>;
+    pub(crate) fn get_listener<T: AnySocket>(&self, key: ListenerKey) -> Option<Arc<T>> {
+        let any_socket = self.listeners.get(&key)?.clone() as Arc<dyn Any + Send + Sync>;
         let socket = any_socket.downcast::<T>().ok()?;
         Some(socket)
     }
@@ -64,14 +66,18 @@ impl SocketMap {
         &mut self,
         local: Endpoint,
     ) -> Result<Arc<TcpListener<I>>, TryInsertError> {
-        let five_tuple = FiveTuple {
-            remote: None,
-            local: Some(local),
+        let key = ListenerKey {
+            local,
             protocol: transport::Protocol::Tcp,
         };
 
         let socket = Arc::new(TcpListener::<I>::new());
-        self.try_insert(five_tuple, socket.clone())?;
+
+        self.listeners.try_reserve(1).map_err(TryInsertError::Reserve)?;
+        self.listeners
+            .try_insert(key, socket.clone())
+            .map_err(|_| TryInsertError::AlreadyExists)?;
+
         Ok(socket)
     }
 }

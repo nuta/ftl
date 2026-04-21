@@ -25,6 +25,6 @@ pub trait Io: 'static {
 }
 
 pub fn receive_packet<I: Io>(sockets: &SocketMap, routes: &RouteTable, packet: &[u8]) {
-    let fivetuple = todo!();
-    let listener = sockets.get::<TcpListener<I>>(fivetuple);
+    let key = todo!();
+    let listener = sockets.get_listener::<TcpListener<I>>(key);
 }
