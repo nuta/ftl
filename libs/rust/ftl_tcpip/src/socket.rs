@@ -8,7 +8,8 @@ use crate::Io;
 use crate::ip::IpAddr;
 use crate::tcp::TcpListener;
 use crate::tcp::{self};
-use crate::transport::{self, Port};
+use crate::transport::Port;
+use crate::transport::{self};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Endpoint {
@@ -73,7 +74,9 @@ impl SocketMap {
 
         let socket = Arc::new(TcpListener::<I>::new());
 
-        self.listeners.try_reserve(1).map_err(TryInsertError::Reserve)?;
+        self.listeners
+            .try_reserve(1)
+            .map_err(TryInsertError::Reserve)?;
         self.listeners
             .try_insert(key, socket.clone())
             .map_err(|_| TryInsertError::AlreadyExists)?;
