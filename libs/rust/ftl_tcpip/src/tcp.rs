@@ -3,6 +3,7 @@ use alloc::collections::VecDeque;
 use crate::Io;
 use crate::OutOfMemoryError;
 use crate::socket::AnySocket;
+use crate::utils::TryPushBack;
 
 pub enum Error {}
 
@@ -49,9 +50,8 @@ impl<I: Io> TcpListener<I> {
 
     pub fn accept(&mut self, req: I::TcpAccept) -> Result<(), OutOfMemoryError> {
         self.pending_accepts
-            .try_reserve(1)
-            .map_err(|_| OutOfMemoryError)?;
-        self.pending_accepts.push_back(req);
+            .try_push_back(req)?;
+
         Ok(())
     }
 }

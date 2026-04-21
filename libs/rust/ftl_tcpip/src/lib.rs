@@ -12,6 +12,7 @@ pub mod ipv4;
 pub mod route;
 pub mod socket;
 pub mod tcp;
+mod utils;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct OutOfMemoryError;
