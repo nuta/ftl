@@ -13,6 +13,7 @@ pub enum ReserveError {
     BufferTooShort,
 }
 
+const HEAD_PAD: usize = 2; // eth frame is 14 bytes
 const BUF_MIN_ALIGN: usize = size_of::<u32>();
 
 pub struct Packet {
@@ -24,7 +25,7 @@ pub struct Packet {
 
 impl Packet {
     pub fn new(capacity: usize) -> Result<Self, AllocError> {
-        let layout = Layout::from_size_align(capacity, BUF_MIN_ALIGN)
+        let layout = Layout::from_size_align(capacity + HEAD_PAD, BUF_MIN_ALIGN)
             .map_err(|e| AllocError::InvalidLayout(e))?;
 
         let buf = unsafe {
@@ -56,8 +57,14 @@ impl Packet {
         unsafe { self.buf.as_ptr().add(self.head()) }
     }
 
+    fn buf_mut_ptr(&self) -> *mut u8 {
+        unsafe {
+            self.buf.as_ptr().add(HEAD_PAD)
+        }
+    }
+
     pub fn uninit_buf(&self) -> &mut [u8] {
-        unsafe { slice::from_raw_parts_mut(self.buf.as_ptr(), self.capacity) }
+        unsafe { slice::from_raw_parts_mut(self.buf_mut_ptr(), self.capacity) }
     }
 
     pub fn set_len(&mut self, len: usize) {
@@ -70,6 +77,7 @@ impl Packet {
     }
 
     pub fn read<T>(&mut self) -> Result<&T, ReserveError> {
+        info!("reading type: {:?}, align: {:?}", core::any::type_name::<T>(), align_of::<T>());
         assert!(align_of::<T>() <= BUF_MIN_ALIGN);
 
         let len = size_of::<T>();
@@ -89,5 +97,18 @@ impl Packet {
         // SAFETY: The pointer is aligned and the length is checked,
         //         and is alive as long as the `self` is alive.
         Ok(unsafe { &*ptr })
+    }
+}
+
+impl Drop for Packet {
+    fn drop(&mut self) {
+        // SAFETY: The layout is already validated in the constructor.
+        let layout = unsafe {
+            Layout::from_size_align_unchecked(self.capacity + HEAD_PAD, BUF_MIN_ALIGN)
+        };
+        
+        unsafe {
+            alloc::alloc::dealloc(self.buf.as_ptr() as *mut u8, layout);
+        }
     }
 }
