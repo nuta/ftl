@@ -1,4 +1,4 @@
-use crate::{endian::Ne, ethernet::MacAddr, packet::Packet};
+use crate::{endian::Ne, ethernet::MacAddr, ip::ipv4::Ipv4Addr, packet::Packet};
 
 #[derive(Debug)]
 #[repr(C)]
@@ -17,4 +17,7 @@ struct ArpPacket {
 pub(crate) fn handle_rx(pkt: &mut Packet) {
     let arp = pkt.read::<ArpPacket>().unwrap();
     info!("ARP packet: {:#?}", arp);
+    let sender_addr =Ipv4Addr::from(arp.sender_proto_addr);
+    let target_addr =Ipv4Addr::from(arp.target_proto_addr);
+    info!("ARP packet: sender: {}, target: {}", sender_addr, target_addr);
 }
