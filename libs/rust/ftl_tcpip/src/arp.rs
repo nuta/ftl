@@ -29,6 +29,8 @@ struct ArpPacket {
     target_proto_addr: Ne<u32>,
 }
 
+const HWTYPE_ETHERNET: u16 = 1;
+const PROTOTYPE_IPV4: u16 = 0x0800;
 const OPCODE_REQUEST: u16 = 1;
 const OPCODE_REPLY: u16 = 2;
 
@@ -40,10 +42,10 @@ pub enum TxError {
 fn transmit_tx(route: &Route, remote_addr: Ipv4Addr, remote_mac: MacAddr) -> Result<(), TxError> {
     let mut pkt = Packet::new(1024).map_err(TxError::PacketAlloc)?;
     let header = ArpPacket {
-        hw_type: 1.into(),
-        proto_type: 0x0800.into(),
-        hw_len: 6.into(),
-        proto_len: 4.into(),
+        hw_type: HWTYPE_ETHERNET.into(),
+        proto_type: PROTOTYPE_IPV4.into(),
+        hw_len: 6.into(),    // 6 bytes for Ethernet address
+        proto_len: 4.into(), // 4 bytes for IPv4 address
         opcode: OPCODE_REPLY.into(),
         sender_hw_addr: route.mac_addr(),
         sender_proto_addr: remote_addr.into(),
@@ -58,10 +60,33 @@ fn transmit_tx(route: &Route, remote_addr: Ipv4Addr, remote_mac: MacAddr) -> Res
 pub enum RxError {
     PacketRead(packet::ReserveError),
     BadOpcode(u16),
+    BadHardwareType(u16),
+    BadProtocolType(u16),
+    BadHardwareLength(u8),
+    BadProtocolLength(u8),
 }
 
 pub(crate) fn handle_rx(routes: &mut RouteTable, pkt: &mut Packet) -> Result<(), RxError> {
     let arp = pkt.read::<ArpPacket>().map_err(RxError::PacketRead)?;
+
+    let hw_type = arp.hw_type.into();
+    if hw_type != HWTYPE_ETHERNET {
+        return Err(RxError::BadHardwareType(hw_type));
+    }
+
+    let proto_type = arp.proto_type.into();
+    if proto_type != PROTOTYPE_IPV4 {
+        return Err(RxError::BadProtocolType(proto_type));
+    }
+
+    if arp.hw_len != 6 {
+        return Err(RxError::BadHardwareLength(arp.hw_len));
+    }
+
+    if arp.proto_len != 4 {
+        return Err(RxError::BadProtocolLength(arp.proto_len));
+    }
+
     let sender_addr = Ipv4Addr::from(arp.sender_proto_addr);
     let target_addr = Ipv4Addr::from(arp.target_proto_addr);
 
