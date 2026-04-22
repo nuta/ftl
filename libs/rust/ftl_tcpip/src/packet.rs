@@ -114,6 +114,26 @@ impl Packet {
         Ok(unsafe { &*ptr })
     }
 
+    pub fn write_front<T: WriteableToPacket>(&mut self, value: T) -> Result<(), ReserveError> {
+        let len = size_of::<T>();
+        debug_assert!(len <= u16::MAX as usize);
+
+        if len > self.head() {
+            return Err(ReserveError::BufferTooShort);
+        }
+
+        let new_head = self.head() - len;
+        let ptr = unsafe { self.buf_mut_ptr().add(new_head) as *mut T };
+        if !ptr.is_aligned() {
+            return Err(ReserveError::NotAligned);
+        }
+
+        unsafe { ptr.write(value) };
+
+        self.head = new_head as u16;
+        Ok(())
+    }
+
     pub fn write_back<T: WriteableToPacket>(&mut self, value: T) -> Result<(), ReserveError> {
         let len = size_of::<T>();
         debug_assert!(len <= u16::MAX as usize);

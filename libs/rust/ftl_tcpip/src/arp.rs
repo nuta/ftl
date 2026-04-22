@@ -3,6 +3,7 @@ use alloc::vec::Vec;
 use crate::Device;
 use crate::Io;
 use crate::endian::Ne;
+use crate::ethernet;
 use crate::ethernet::MacAddr;
 use crate::ip::ipv4::Ipv4Addr;
 use crate::packet::Packet;
@@ -73,7 +74,7 @@ fn transmit_arp_reply<I: Io>(
     let mut pkt = Packet::new(1024).map_err(TxError::PacketAlloc)?;
     pkt.write_back(arp_pkt).map_err(TxError::PacketWrite)?;
 
-    route.device().transmit(&mut pkt);
+    ethernet::transmit::<I::Device>(&route, &mut pkt);
     Ok(())
 }
 
