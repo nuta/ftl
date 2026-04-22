@@ -54,7 +54,11 @@ impl Packet {
     }
 
     fn head_ptr(&self) -> *const u8 {
-        unsafe { self.buf.as_ptr().add(self.head()) }
+        unsafe { self.buf_ptr().add(self.head()) }
+    }
+
+    fn buf_ptr(&self) -> *const u8 {
+        unsafe { self.buf.as_ptr().add(HEAD_PAD) }
     }
 
     fn buf_mut_ptr(&self) -> *mut u8 {
