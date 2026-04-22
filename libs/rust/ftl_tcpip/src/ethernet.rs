@@ -2,6 +2,7 @@ use core::fmt;
 
 use crate::endian::Ne;
 use crate::packet::Packet;
+use crate::route::RouteTable;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 #[repr(transparent)]
@@ -31,7 +32,7 @@ struct EthernetHeader {
     ether_type: Ne<u16>,
 }
 
-pub(crate) fn handle_rx(pkt: &mut Packet) {
+pub(crate) fn handle_rx(routes: &mut RouteTable, pkt: &mut Packet) {
     let header = pkt.read::<EthernetHeader>().unwrap();
     info!("Ethernet header: {:#?}", header);
     let ether_type: u16 = header.ether_type.into();
@@ -40,7 +41,7 @@ pub(crate) fn handle_rx(pkt: &mut Packet) {
             crate::ip::ipv4::handle_rx(pkt);
         }
         0x0806 => {
-            crate::arp::handle_rx(pkt);
+            crate::arp::handle_rx(routes, pkt);
         }
         _ => {
             warn!("unsupported Ethernet type: {:#x}", ether_type);

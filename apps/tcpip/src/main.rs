@@ -134,7 +134,7 @@ fn main(supervisor_ch: Channel) {
                         match reply.recv(&mut buf[..len]) {
                             Ok(slice) => {
                                 pkt.set_len(len);
-                                ftl_tcpip::receive_packet::<TcpIpIo>(&sockets, &routes, &mut pkt);
+                                ftl_tcpip::receive_packet::<TcpIpIo>(&mut sockets, &mut routes, &mut pkt);
                             }
                             Err(error) => {
                                 panic!("failed to recv with error: {:?}", error);

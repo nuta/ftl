@@ -1,6 +1,10 @@
 use alloc::vec::Vec;
 
-pub struct Route {}
+use crate::arp::ArpTable;
+
+pub struct Route {
+    arp_table: ArpTable,
+}
 
 pub struct RouteTable {
     routes: Vec<Route>,
