@@ -28,8 +28,8 @@ impl fmt::Debug for MacAddr {
 #[derive(Debug)]
 #[repr(C)]
 struct EthernetHeader {
-    dst_addr: MacAddr,
-    src_addr: MacAddr,
+    dst: MacAddr,
+    src: MacAddr,
     ether_type: Ne<u16>,
 }
 
@@ -47,10 +47,10 @@ pub enum TxError {
     PacketWrite(packet::ReserveError),
 }
 
-pub(crate) fn transmit<D: Device>(route: &Route<D>, ether_type: EtherType, pkt: &mut Packet) -> Result<(), TxError> {
+pub(crate) fn transmit<D: Device>(route: &Route<D>, ether_type: EtherType, dest_mac: MacAddr, pkt: &mut Packet) -> Result<(), TxError> {
     let header = EthernetHeader {
-        dst_addr: route.mac_addr(),
-        src_addr: route.mac_addr(),
+        dst: dest_mac,
+        src: route.mac_addr(),
         ether_type: (ether_type as u16).into(),
     };
 

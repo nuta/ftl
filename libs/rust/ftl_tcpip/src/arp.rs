@@ -75,7 +75,7 @@ fn transmit_arp_reply<I: Io>(
     let mut pkt = Packet::new(1024).map_err(TxError::PacketAlloc)?;
     pkt.write_back(arp_pkt).map_err(TxError::PacketWrite)?;
 
-    ethernet::transmit::<I::Device>(&route, EtherType::Arp, &mut pkt);
+    ethernet::transmit::<I::Device>(&route, EtherType::Arp, remote_mac, &mut pkt)?;
     Ok(())
 }
 
