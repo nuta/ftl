@@ -28,8 +28,12 @@ pub struct Packet {
 }
 
 impl Packet {
-    pub fn new(capacity: usize) -> Result<Self, AllocError> {
-        let layout = Layout::from_size_align(capacity + HEAD_PAD, BUF_MIN_ALIGN)
+    pub fn new(len: usize, head_room: usize) -> Result<Self, AllocError> {
+        debug_assert!(head_room <= u16::MAX as usize);
+        debug_assert!(len <= u16::MAX as usize);
+
+        let capacity = len + head_room + HEAD_PAD;
+        let layout = Layout::from_size_align(capacity, BUF_MIN_ALIGN)
             .map_err(|e| AllocError::InvalidLayout(e))?;
 
         let buf = unsafe {
@@ -44,8 +48,8 @@ impl Packet {
         Ok(Self {
             buf,
             capacity,
-            head: 0,
-            tail: 0,
+            head: head_room as u16,
+            tail: head_room as u16,
         })
     }
 

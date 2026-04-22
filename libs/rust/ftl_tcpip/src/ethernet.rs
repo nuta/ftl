@@ -27,8 +27,8 @@ impl fmt::Debug for MacAddr {
 
 #[derive(Debug)]
 #[repr(C)]
-struct EthernetHeader {
-    dst: MacAddr,
+pub(crate) struct EthernetHeader {
+dst: MacAddr,
     src: MacAddr,
     ether_type: Ne<u16>,
 }

@@ -157,7 +157,7 @@ fn main(supervisor_ch: Channel) {
         ))
         .unwrap();
 
-    let mut pkt = Packet::new(RECV_BUFFER_SIZE).unwrap();
+    let mut pkt = Packet::new(RECV_BUFFER_SIZE, 0).unwrap();
     let mut sockets = SocketMap::new();
     loop {
         let (id, event) = sink.wait().unwrap();

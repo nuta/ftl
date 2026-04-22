@@ -5,6 +5,7 @@ use crate::Io;
 use crate::endian::Ne;
 use crate::ethernet;
 use crate::ethernet::EtherType;
+use crate::ethernet::EthernetHeader;
 use crate::ethernet::MacAddr;
 use crate::ip::ipv4::Ipv4Addr;
 use crate::packet::Packet;
@@ -73,7 +74,7 @@ fn transmit_arp_reply<I: Io>(
         target_proto_addr: remote_addr.into(),
     };
 
-    let mut pkt = Packet::new(1024).map_err(TxError::PacketAlloc)?;
+    let mut pkt = Packet::new(size_of::<ArpPacket>(), size_of::<EthernetHeader>()).map_err(TxError::PacketAlloc)?;
     pkt.write_back(arp_pkt).map_err(TxError::PacketWrite)?;
 
     ethernet::transmit::<I::Device>(&route, EtherType::Arp, remote_mac, &mut pkt).map_err(TxError::EthernetTx)?;
