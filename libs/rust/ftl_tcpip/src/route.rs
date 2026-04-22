@@ -12,6 +12,12 @@ pub struct Route {
     mac_addr: MacAddr,
 }
 
+impl Route {
+     fn should_receive(&self, dest_addr: Ipv4Addr) -> bool {
+        self.ipv4_addr == dest_addr || self.net_mask.contains(&self.ipv4_addr, &dest_addr)
+    }
+}
+
 pub struct RouteTable {
     routes: Vec<Route>,
 }
@@ -21,17 +27,7 @@ impl RouteTable {
         Self { routes: Vec::new() }
     }
 
-    pub fn lookup(&self, dest_addr: Ipv4Addr) -> Option<&Route> {
-        for route in &self.routes {
-            if route.ipv4_addr == dest_addr {
-                return Some(route);
-            }
-
-            if route.net_mask.contains(&route.ipv4_addr, &dest_addr) {
-                return Some(route);
-            }
-        }
-
-        None
+    pub fn lookup_by_dest(&self, dest_addr: Ipv4Addr) -> Option<&Route> {
+        self.routes.iter().find(|route| route.should_receive(dest_addr))
     }
 }
