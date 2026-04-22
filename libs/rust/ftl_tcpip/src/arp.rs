@@ -69,7 +69,7 @@ fn transmit_arp_reply<I: Io>(
         proto_len: 4.into(), // 4 bytes for IPv4 address
         opcode: OPCODE_REPLY.into(),
         sender_hw_addr: route.mac_addr(),
-        sender_proto_addr: remote_addr.into(),
+        sender_proto_addr: route.ipv4_addr().into(),
         target_hw_addr: remote_mac,
         target_proto_addr: remote_addr.into(),
     };

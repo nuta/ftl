@@ -34,6 +34,10 @@ impl<D: Device> Route<D> {
         self.mac_addr
     }
 
+    pub fn ipv4_addr(&self) -> Ipv4Addr {
+        self.ipv4_addr
+    }
+
     fn should_receive_exact(&self, dest_addr: Ipv4Addr) -> bool {
         self.ipv4_addr == dest_addr
     }
