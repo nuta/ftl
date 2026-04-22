@@ -5,8 +5,8 @@ use core::fmt;
 #[repr(transparent)]
 pub struct Ne<T>(T);
 
-impl Ne<u16> {
-    const fn new(value: u16) -> Self {
+impl From<u16> for Ne<u16> {
+    fn from(value: u16) -> Self {
         Ne(u16::from_be(value))
     }
 }
@@ -23,8 +23,8 @@ impl fmt::Debug for Ne<u16> {
     }
 }
 
-impl Ne<u32> {
-    const fn new(value: u32) -> Self {
+impl From<u32> for Ne<u32> {
+    fn from(value: u32) -> Self {
         Ne(u32::from_be(value))
     }
 }

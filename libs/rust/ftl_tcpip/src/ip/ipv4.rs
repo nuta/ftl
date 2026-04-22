@@ -22,6 +22,12 @@ impl From<Ne<u32>> for Ipv4Addr {
     }
 }
 
+impl From<Ipv4Addr> for Ne<u32> {
+    fn from(addr: Ipv4Addr) -> Self {
+        addr.0.into()
+    }
+}
+
 impl fmt::Debug for Ipv4Addr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self)

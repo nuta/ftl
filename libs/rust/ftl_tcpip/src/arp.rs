@@ -5,7 +5,7 @@ use crate::ethernet::MacAddr;
 use crate::ip::ipv4::Ipv4Addr;
 use crate::packet::Packet;
 use crate::packet::{self};
-use crate::route::RouteTable;
+use crate::route::{Route, RouteTable};
 
 enum ArpEntry {}
 
@@ -32,13 +32,36 @@ const OPCODE_REQUEST: u16 = 1;
 const OPCODE_REPLY: u16 = 2;
 
 #[derive(Debug)]
-pub enum Error {
+pub enum TxError {
+    PacketAlloc(packet::AllocError),
+}
+
+fn transmit_tx(route: &Route, remote_addr: Ipv4Addr, remote_mac: MacAddr) -> Result<(), TxError> {
+    let mut pkt = Packet::new(1024).map_err(TxError::PacketAlloc)?;
+    let header = ArpPacket {
+        hw_type: 1.into(),
+        proto_type: 0x0800.into(),
+        hw_len: 6.into(),
+        proto_len: 4.into(),
+        opcode: OPCODE_REPLY.into(),
+        sender_hw_addr: route.mac_addr(),
+        sender_proto_addr: remote_addr.into(),
+        target_hw_addr: remote_mac,
+        target_proto_addr: remote_addr.into(),
+    };
+
+    Ok(())
+}
+
+
+#[derive(Debug)]
+pub enum RxError {
     PacketRead(packet::ReserveError),
     BadOpcode(u16),
 }
 
-pub(crate) fn handle_rx(routes: &mut RouteTable, pkt: &mut Packet) -> Result<(), Error> {
-    let arp = pkt.read::<ArpPacket>().map_err(Error::PacketRead)?;
+pub(crate) fn handle_rx(routes: &mut RouteTable, pkt: &mut Packet) -> Result<(), RxError> {
+    let arp = pkt.read::<ArpPacket>().map_err(RxError::PacketRead)?;
     let sender_addr = Ipv4Addr::from(arp.sender_proto_addr);
     let target_addr = Ipv4Addr::from(arp.target_proto_addr);
 
@@ -49,6 +72,11 @@ pub(crate) fn handle_rx(routes: &mut RouteTable, pkt: &mut Packet) -> Result<(),
                 "ARP request: sender: {}, target: {}",
                 sender_addr, target_addr
             );
+
+            let route = routes.lookup_by_dest_exact(sender_addr);
+            if let Some(route) = route {
+                //
+            }
         }
         OPCODE_REPLY => {
             // Reply
@@ -58,7 +86,7 @@ pub(crate) fn handle_rx(routes: &mut RouteTable, pkt: &mut Packet) -> Result<(),
             );
         }
         opcode => {
-            return Err(Error::BadOpcode(opcode));
+            return Err(RxError::BadOpcode(opcode));
         }
     }
 
