@@ -19,7 +19,7 @@ impl From<Ne<u16>> for u16 {
 
 impl fmt::Debug for Ne<u16> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:x}", Into::<u16>::into(*self))
+        write!(f, "{:#x}", Into::<u16>::into(*self))
     }
 }
 
@@ -37,6 +37,6 @@ impl From<Ne<u32>> for u32 {
 
 impl fmt::Debug for Ne<u32> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:x}", Into::<u32>::into(*self))
+        write!(f, "{:#x}", Into::<u32>::into(*self))
     }
 }
