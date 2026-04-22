@@ -33,6 +33,13 @@ struct EthernetHeader {
     ether_type: Ne<u16>,
 }
 
+#[derive(Debug)]
+#[repr(u16)]
+pub(crate) enum EtherType {
+    Ipv4 = 0x0800,
+    Arp = 0x0806,
+}
+
 impl WriteableToPacket for EthernetHeader {}
 
 #[derive(Debug)]
@@ -40,11 +47,11 @@ pub enum TxError {
     PacketWrite(packet::ReserveError),
 }
 
-pub(crate) fn transmit<D: Device>(route: &Route<D>, pkt: &mut Packet) -> Result<(), TxError> {
+pub(crate) fn transmit<D: Device>(route: &Route<D>, ether_type: EtherType, pkt: &mut Packet) -> Result<(), TxError> {
     let header = EthernetHeader {
         dst_addr: route.mac_addr(),
         src_addr: route.mac_addr(),
-        ether_type: 0x0800.into(),
+        ether_type: (ether_type as u16).into(),
     };
 
     pkt.write_front(header).map_err(TxError::PacketWrite)?;
