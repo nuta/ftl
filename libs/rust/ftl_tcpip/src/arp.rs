@@ -53,7 +53,7 @@ pub enum TxError {
     PacketWrite(packet::ReserveError),
 }
 
-fn transmit_tx<I: Io>(
+fn transmit_arp_reply<I: Io>(
     route: &Route<I::Device>,
     remote_addr: Ipv4Addr,
     remote_mac: MacAddr,
@@ -85,6 +85,7 @@ pub enum RxError {
     BadProtocolType(u16),
     BadHardwareLength(u8),
     BadProtocolLength(u8),
+    ReplyFailed(TxError),
 }
 
 pub(crate) fn handle_rx<I: Io>(
@@ -124,7 +125,7 @@ pub(crate) fn handle_rx<I: Io>(
 
             let route = routes.lookup_by_dest_exact(sender_addr);
             if let Some(route) = route {
-                //
+                transmit_arp_reply::<I>(route, sender_addr, arp.sender_hw_addr).map_err(RxError::ReplyFailed)?;
             }
         }
         OPCODE_REPLY => {
