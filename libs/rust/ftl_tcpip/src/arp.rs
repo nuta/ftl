@@ -5,7 +5,8 @@ use crate::ethernet::MacAddr;
 use crate::ip::ipv4::Ipv4Addr;
 use crate::packet::Packet;
 use crate::packet::{self};
-use crate::route::{Route, RouteTable};
+use crate::route::Route;
+use crate::route::RouteTable;
 
 enum ArpEntry {}
 
@@ -52,7 +53,6 @@ fn transmit_tx(route: &Route, remote_addr: Ipv4Addr, remote_mac: MacAddr) -> Res
 
     Ok(())
 }
-
 
 #[derive(Debug)]
 pub enum RxError {
