@@ -50,7 +50,7 @@ impl Packet {
         self.tail as usize
     }
 
-    pub fn head_ptr(&self) -> *const u8 {
+    fn head_ptr(&self) -> *const u8 {
         unsafe { self.buf.as_ptr().add(self.head()) }
     }
 
