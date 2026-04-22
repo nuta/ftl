@@ -36,6 +36,9 @@ pub(crate) fn handle_rx(pkt: &mut Packet) {
     info!("Ethernet header: {:#?}", header);
     let ether_type: u16 = header.ether_type.into();
     match ether_type {
+        0x0800 => {
+            crate::ip::ipv4::handle_rx(pkt);
+        }
         0x0806 => {
             crate::arp::handle_rx(pkt);
         }
