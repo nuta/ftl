@@ -11,6 +11,9 @@ use crate::transport::tcp::TcpListener;
 
 extern crate alloc;
 
+#[macro_use]
+extern crate log;
+
 pub mod arp;
 pub mod ip;
 pub mod route;
@@ -28,6 +31,7 @@ pub trait Io: 'static {
 }
 
 pub fn receive_packet<I: Io>(sockets: &SocketMap, routes: &RouteTable, packet: &[u8]) {
-    let key = todo!();
-    let listener = sockets.get_listener::<TcpListener<I>>(key);
+    trace!("received packet: {:02x?}", packet);
+    // let key = todo!();
+    // let listener = sockets.get_listener::<TcpListener<I>>(key);
 }

@@ -9,4 +9,5 @@ default = ["std"]
 std = []
 
 [dependencies]
+log = { workspace = true }
 hashbrown = { workspace = true }
