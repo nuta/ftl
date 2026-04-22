@@ -38,10 +38,14 @@ pub(crate) fn handle_rx(routes: &mut RouteTable, pkt: &mut Packet) {
     let ether_type: u16 = header.ether_type.into();
     match ether_type {
         0x0800 => {
-            crate::ip::ipv4::handle_rx(pkt);
+            if let Err(err) = crate::ip::ipv4::handle_rx(pkt) {
+                warn!("bad IPv4 packet: {:?}", err);
+            }
         }
         0x0806 => {
-            crate::arp::handle_rx(routes, pkt);
+            if let Err(err) = crate::arp::handle_rx(routes, pkt) {
+                warn!("bad ARP packet: {:?}", err);
+            }
         }
         _ => {
             warn!("unsupported Ethernet type: {:#x}", ether_type);

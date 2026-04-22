@@ -13,7 +13,7 @@ pub struct Route {
 }
 
 impl Route {
-     fn should_receive(&self, dest_addr: Ipv4Addr) -> bool {
+    fn should_receive(&self, dest_addr: Ipv4Addr) -> bool {
         self.ipv4_addr == dest_addr || self.net_mask.contains(&self.ipv4_addr, &dest_addr)
     }
 }
@@ -28,6 +28,8 @@ impl RouteTable {
     }
 
     pub fn lookup_by_dest(&self, dest_addr: Ipv4Addr) -> Option<&Route> {
-        self.routes.iter().find(|route| route.should_receive(dest_addr))
+        self.routes
+            .iter()
+            .find(|route| route.should_receive(dest_addr))
     }
 }

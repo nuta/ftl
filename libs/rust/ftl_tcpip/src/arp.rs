@@ -27,12 +27,38 @@ struct ArpPacket {
     target_proto_addr: Ne<u32>,
 }
 
-pub(crate) fn handle_rx(routes: &mut RouteTable, pkt: &mut Packet) {
+const OPCODE_REQUEST: u16 = 1;
+const OPCODE_REPLY: u16 = 2;
+
+#[derive(Debug)]
+pub enum Error {
+    BadOpcode(u16),
+}
+
+pub(crate) fn handle_rx(routes: &mut RouteTable, pkt: &mut Packet) -> Result<(), Error> {
     let arp = pkt.read::<ArpPacket>().unwrap();
     let sender_addr = Ipv4Addr::from(arp.sender_proto_addr);
     let target_addr = Ipv4Addr::from(arp.target_proto_addr);
-    info!(
-        "ARP packet: sender: {}, target: {}",
-        sender_addr, target_addr
-    );
+
+    match arp.opcode.into() {
+        OPCODE_REQUEST => {
+            // Request
+            trace!(
+                "ARP request: sender: {}, target: {}",
+                sender_addr, target_addr
+            );
+        }
+        OPCODE_REPLY => {
+            // Reply
+            trace!(
+                "ARP reply: sender: {}, target: {}",
+                sender_addr, target_addr
+            );
+        }
+        opcode => {
+            return Err(Error::BadOpcode(opcode));
+        }
+    }
+
+    Ok(())
 }
