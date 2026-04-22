@@ -1,13 +1,21 @@
 use alloc::alloc::Layout;
 use core::ptr::NonNull;
 
+#[derive(Debug)]
 pub enum AllocError {
     OutOfMemory,
     InvalidLayout(alloc::alloc::LayoutError),
 }
 
+#[derive(Debug)]
+pub enum ReserveError {
+    NotAligned,
+    BufferTooShort,
+}
+
 pub struct Packet {
     buf: NonNull<u8>,
+    capacity: usize,
     head: u16,
     tail: u16,
 }
@@ -25,6 +33,46 @@ impl Packet {
             NonNull::new_unchecked(ptr)
         };
 
-        Ok(Self { buf, head: 0, tail: 0 })
+        Ok(Self { buf, capacity, head: 0, tail: 0 })
+    }
+
+    fn head(&self) -> usize {
+        self.head as usize
+    }
+
+    fn tail(&self) -> usize {
+        self.tail as usize
+    }
+
+    pub fn head_ptr(&self) -> *const u8 {
+        unsafe {
+            self.buf.as_ptr().add(self.head())
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        self.tail() - self.head()
+    }
+
+    pub fn read<T>(&mut self) -> Result<&T, ReserveError> {
+        assert!(align_of::<T>() < size_of::<u16>());
+        
+        let len = size_of::<T>();
+        if len > self.len() {
+            return Err(ReserveError::BufferTooShort);
+        }
+
+        let ptr = self.head_ptr() as *const T;
+        if !ptr.is_aligned() {
+            return Err(ReserveError::NotAligned);
+        }
+
+        // SAFETY: The assertion above guarantees that the length
+        //         is in the range of u16.
+        self.head += len as u16;
+
+        // SAFETY: The pointer is aligned and the length is checked,
+        //         and is alive as long as the `self` is alive.
+        Ok(unsafe { &*ptr })
     }
 }
