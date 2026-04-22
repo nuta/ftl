@@ -1,10 +1,10 @@
+use alloc::vec::Vec;
+
 use crate::endian::Ne;
 use crate::ethernet::MacAddr;
 use crate::ip::ipv4::Ipv4Addr;
 use crate::packet::Packet;
 use crate::route::RouteTable;
-
-use alloc::vec::Vec;
 
 enum ArpEntry {}
 

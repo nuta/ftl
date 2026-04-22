@@ -1,6 +1,8 @@
 use core::fmt;
 
-use crate::{endian::Ne, packet::{self, Packet}};
+use crate::endian::Ne;
+use crate::packet::Packet;
+use crate::packet::{self};
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Ipv4Addr(u32);
