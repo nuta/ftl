@@ -5,6 +5,7 @@ use crate::endian::Ne;
 use crate::packet::Packet;
 use crate::packet::{self};
 use crate::route::RouteTable;
+use crate::socket::SocketMap;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Ipv4Addr(u32);
@@ -113,7 +114,11 @@ pub enum Error {
     UnsupportedProtocol(u8),
 }
 
-pub(crate) fn handle_rx<I: Io>(routes: &mut RouteTable<I::Device>, pkt: &mut Packet) -> Result<(), Error> {
+pub(crate) fn handle_rx<I: Io>(
+    routes: &mut RouteTable<I::Device>,
+    sockets: &mut SocketMap,
+    pkt: &mut Packet,
+) -> Result<(), Error> {
     let header = pkt.read::<Ipv4Header>().map_err(Error::PacketRead)?;
     if header.version() != 4 {
         return Err(Error::BadVersion(header.version()));
@@ -127,10 +132,9 @@ pub(crate) fn handle_rx<I: Io>(routes: &mut RouteTable<I::Device>, pkt: &mut Pac
     let dst = Ipv4Addr::from(header.dst_addr);
     info!("IPv4 packet: src: {}, dst: {}", src, dst);
 
-
     match header.protocol {
         0x06 => {
-            if let Err(err) = crate::transport::tcp::handle_rx::<I>(routes, pkt) {
+            if let Err(err) = crate::transport::tcp::handle_rx::<I>(routes, sockets, pkt) {
                 warn!("bad TCP packet: {:?}", err);
             }
         }

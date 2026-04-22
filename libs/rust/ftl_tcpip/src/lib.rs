@@ -40,12 +40,12 @@ pub trait Io: 'static {
 }
 
 pub fn receive_packet<I: Io>(
-    sockets: &mut SocketMap,
     routes: &mut RouteTable<I::Device>,
+    sockets: &mut SocketMap,
     pkt: &mut Packet,
 ) {
     trace!("received packet: {:02x?}", pkt.len());
-    ethernet::handle_rx::<I>(routes, pkt);
+    ethernet::handle_rx::<I>(routes, sockets, pkt);
     // let key = todo!();
     // let listener = sockets.get_listener::<TcpListener<I>>(key);
 }

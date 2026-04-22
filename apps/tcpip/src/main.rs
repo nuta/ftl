@@ -171,17 +171,19 @@ fn main(supervisor_ch: Channel) {
                             Ok(slice) => {
                                 pkt.set_len(len);
                                 ftl_tcpip::receive_packet::<TcpIpIo>(
-                                    &mut sockets,
                                     &mut routes,
+                                    &mut sockets,
                                     &mut pkt,
                                 );
 
                                 // Pull the next packet
-                                driver_ch.send(Message::Read {
-                                    mid: MessageId::new(1),
-                                    offset: 0,
-                                    len: RECV_BUFFER_SIZE,
-                                }).unwrap();
+                                driver_ch
+                                    .send(Message::Read {
+                                        mid: MessageId::new(1),
+                                        offset: 0,
+                                        len: RECV_BUFFER_SIZE,
+                                    })
+                                    .unwrap();
                             }
                             Err(error) => {
                                 panic!("failed to recv with error: {:?}", error);

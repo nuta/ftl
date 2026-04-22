@@ -5,6 +5,7 @@ use crate::OutOfMemoryError;
 use crate::packet::Packet;
 use crate::route::RouteTable;
 use crate::socket::AnySocket;
+use crate::socket::SocketMap;
 use crate::utils::TryPushBack;
 
 #[derive(Debug)]
@@ -60,9 +61,12 @@ impl<I: Io> TcpListener<I> {
 impl<I: Io> AnySocket for TcpListener<I> {}
 
 #[derive(Debug)]
-pub (crate) enum RxError {
-}
+pub(crate) enum RxError {}
 
-pub(crate) fn handle_rx<I: Io>(routes: &mut RouteTable<I::Device>, pkt: &mut Packet) -> Result<(), RxError> {
+pub(crate) fn handle_rx<I: Io>(
+    routes: &mut RouteTable<I::Device>,
+    sockets: &mut SocketMap,
+    pkt: &mut Packet,
+) -> Result<(), RxError> {
     todo!()
 }

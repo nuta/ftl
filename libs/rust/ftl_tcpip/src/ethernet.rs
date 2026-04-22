@@ -8,6 +8,7 @@ use crate::packet::Packet;
 use crate::packet::WriteableToPacket;
 use crate::route::Route;
 use crate::route::RouteTable;
+use crate::socket::SocketMap;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 #[repr(transparent)]
@@ -68,13 +69,17 @@ pub(crate) fn transmit<D: Device>(
     Ok(())
 }
 
-pub(crate) fn handle_rx<I: Io>(routes: &mut RouteTable<I::Device>, pkt: &mut Packet) {
+pub(crate) fn handle_rx<I: Io>(
+    routes: &mut RouteTable<I::Device>,
+    sockets: &mut SocketMap,
+    pkt: &mut Packet,
+) {
     let header = pkt.read::<EthernetHeader>().unwrap();
     info!("Ethernet header: {:#?}", header);
     let ether_type: u16 = header.ether_type.into();
     match ether_type {
         0x0800 => {
-            if let Err(err) = crate::ip::ipv4::handle_rx::<I>(routes, pkt) {
+            if let Err(err) = crate::ip::ipv4::handle_rx::<I>(routes, sockets, pkt) {
                 warn!("bad IPv4 packet: {:?}", err);
             }
         }
