@@ -1,5 +1,6 @@
 use alloc::alloc::Layout;
-use core::{ptr::NonNull, slice};
+use core::ptr::NonNull;
+use core::slice;
 
 #[derive(Debug)]
 pub enum AllocError {
@@ -62,9 +63,7 @@ impl Packet {
     }
 
     fn buf_mut_ptr(&self) -> *mut u8 {
-        unsafe {
-            self.buf.as_ptr().add(HEAD_PAD)
-        }
+        unsafe { self.buf.as_ptr().add(HEAD_PAD) }
     }
 
     pub fn uninit_buf(&self) -> &mut [u8] {
@@ -81,7 +80,11 @@ impl Packet {
     }
 
     pub fn read<T>(&mut self) -> Result<&T, ReserveError> {
-        info!("reading type: {:?}, align: {:?}", core::any::type_name::<T>(), align_of::<T>());
+        info!(
+            "reading type: {:?}, align: {:?}",
+            core::any::type_name::<T>(),
+            align_of::<T>()
+        );
         assert!(align_of::<T>() <= BUF_MIN_ALIGN);
 
         let len = size_of::<T>();
@@ -107,10 +110,9 @@ impl Packet {
 impl Drop for Packet {
     fn drop(&mut self) {
         // SAFETY: The layout is already validated in the constructor.
-        let layout = unsafe {
-            Layout::from_size_align_unchecked(self.capacity + HEAD_PAD, BUF_MIN_ALIGN)
-        };
-        
+        let layout =
+            unsafe { Layout::from_size_align_unchecked(self.capacity + HEAD_PAD, BUF_MIN_ALIGN) };
+
         unsafe {
             alloc::alloc::dealloc(self.buf.as_ptr() as *mut u8, layout);
         }

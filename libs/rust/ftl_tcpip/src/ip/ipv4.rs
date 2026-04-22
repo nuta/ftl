@@ -28,6 +28,13 @@ impl fmt::Debug for Ipv4Addr {
 
 impl fmt::Display for Ipv4Addr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}.{}.{}.{}", self.0 >> 24, (self.0 >> 16) & 0xFF, (self.0 >> 8) & 0xFF, self.0 & 0xFF)
+        write!(
+            f,
+            "{}.{}.{}.{}",
+            self.0 >> 24,
+            (self.0 >> 16) & 0xff,
+            (self.0 >> 8) & 0xff,
+            self.0 & 0xff
+        )
     }
 }

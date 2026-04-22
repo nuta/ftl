@@ -1,6 +1,7 @@
 use core::fmt;
 
-use crate::{endian::Ne, packet::Packet};
+use crate::endian::Ne;
+use crate::packet::Packet;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 #[repr(transparent)]
@@ -14,7 +15,11 @@ impl MacAddr {
 
 impl fmt::Debug for MacAddr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}", self.0[0], self.0[1], self.0[2], self.0[3], self.0[4], self.0[5])
+        write!(
+            f,
+            "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
+            self.0[0], self.0[1], self.0[2], self.0[3], self.0[4], self.0[5]
+        )
     }
 }
 

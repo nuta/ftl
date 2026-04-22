@@ -1,7 +1,11 @@
-use crate::{endian::Ne, ethernet::MacAddr, ip::ipv4::Ipv4Addr, packet::Packet};
+use crate::endian::Ne;
+use crate::ethernet::MacAddr;
+use crate::ip::ipv4::Ipv4Addr;
+use crate::packet::Packet;
 
-#[derive(Debug)]
-#[repr(C)]
+// Wire layout has no padding after (hw_len, proto_len); `repr(C)` alone would insert a byte
+// before `opcode` and shift every field after it.
+#[repr(C, packed)]
 struct ArpPacket {
     hw_type: Ne<u16>,
     proto_type: Ne<u16>,
@@ -16,8 +20,10 @@ struct ArpPacket {
 
 pub(crate) fn handle_rx(pkt: &mut Packet) {
     let arp = pkt.read::<ArpPacket>().unwrap();
-    info!("ARP packet: {:#?}", arp);
-    let sender_addr =Ipv4Addr::from(arp.sender_proto_addr);
-    let target_addr =Ipv4Addr::from(arp.target_proto_addr);
-    info!("ARP packet: sender: {}, target: {}", sender_addr, target_addr);
+    let sender_addr = Ipv4Addr::from(arp.sender_proto_addr);
+    let target_addr = Ipv4Addr::from(arp.target_proto_addr);
+    info!(
+        "ARP packet: sender: {}, target: {}",
+        sender_addr, target_addr
+    );
 }
