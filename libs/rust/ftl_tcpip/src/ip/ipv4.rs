@@ -41,8 +41,40 @@ impl fmt::Display for Ipv4Addr {
     }
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct NetMask(u32);
+
+impl NetMask {
+    pub const fn new(mask: u32) -> Self {
+        Self(mask)
+    }
+
+    pub fn contains(&self, our_addr: &Ipv4Addr, dest_addr: &Ipv4Addr) -> bool {
+        (dest_addr.0 & self.0) == (our_addr.0 & self.0)
+    }
+}
+
+impl fmt::Debug for NetMask {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self)
+    }
+}
+
+impl fmt::Display for NetMask {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}.{}.{}.{}",
+            self.0 >> 24,
+            (self.0 >> 16) & 0xff,
+            (self.0 >> 8) & 0xff,
+            self.0 & 0xff
+        )
+    }
+}
+
 #[repr(C, packed)]
-pub struct Ipv4Header {
+struct Ipv4Header {
     version: u8,
     ihl: u8,
     tos: u8,
