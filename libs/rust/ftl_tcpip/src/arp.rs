@@ -4,6 +4,7 @@ use crate::endian::Ne;
 use crate::ethernet::MacAddr;
 use crate::ip::ipv4::Ipv4Addr;
 use crate::packet::Packet;
+use crate::packet::{self};
 use crate::route::RouteTable;
 
 enum ArpEntry {}
@@ -32,11 +33,12 @@ const OPCODE_REPLY: u16 = 2;
 
 #[derive(Debug)]
 pub enum Error {
+    PacketRead(packet::ReserveError),
     BadOpcode(u16),
 }
 
 pub(crate) fn handle_rx(routes: &mut RouteTable, pkt: &mut Packet) -> Result<(), Error> {
-    let arp = pkt.read::<ArpPacket>().unwrap();
+    let arp = pkt.read::<ArpPacket>().map_err(Error::PacketRead)?;
     let sender_addr = Ipv4Addr::from(arp.sender_proto_addr);
     let target_addr = Ipv4Addr::from(arp.target_proto_addr);
 
