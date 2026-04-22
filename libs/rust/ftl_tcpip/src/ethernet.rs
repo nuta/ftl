@@ -1,9 +1,13 @@
 use core::fmt;
 
-use crate::{Device, Io, packet};
+use crate::Device;
+use crate::Io;
 use crate::endian::Ne;
-use crate::packet::{Packet, WriteableToPacket};
-use crate::route::{Route, RouteTable};
+use crate::packet;
+use crate::packet::Packet;
+use crate::packet::WriteableToPacket;
+use crate::route::Route;
+use crate::route::RouteTable;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 #[repr(transparent)]
@@ -28,7 +32,7 @@ impl fmt::Debug for MacAddr {
 #[derive(Debug)]
 #[repr(C)]
 pub(crate) struct EthernetHeader {
-dst: MacAddr,
+    dst: MacAddr,
     src: MacAddr,
     ether_type: Ne<u16>,
 }
@@ -47,7 +51,12 @@ pub enum TxError {
     PacketWrite(packet::ReserveError),
 }
 
-pub(crate) fn transmit<D: Device>(route: &Route<D>, ether_type: EtherType, dest_mac: MacAddr, pkt: &mut Packet) -> Result<(), TxError> {
+pub(crate) fn transmit<D: Device>(
+    route: &Route<D>,
+    ether_type: EtherType,
+    dest_mac: MacAddr,
+    pkt: &mut Packet,
+) -> Result<(), TxError> {
     let header = EthernetHeader {
         dst: dest_mac,
         src: route.mac_addr(),

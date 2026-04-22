@@ -74,10 +74,12 @@ fn transmit_arp_reply<I: Io>(
         target_proto_addr: remote_addr.into(),
     };
 
-    let mut pkt = Packet::new(size_of::<ArpPacket>(), size_of::<EthernetHeader>()).map_err(TxError::PacketAlloc)?;
+    let mut pkt = Packet::new(size_of::<ArpPacket>(), size_of::<EthernetHeader>())
+        .map_err(TxError::PacketAlloc)?;
     pkt.write_back(arp_pkt).map_err(TxError::PacketWrite)?;
 
-    ethernet::transmit::<I::Device>(&route, EtherType::Arp, remote_mac, &mut pkt).map_err(TxError::EthernetTx)?;
+    ethernet::transmit::<I::Device>(&route, EtherType::Arp, remote_mac, &mut pkt)
+        .map_err(TxError::EthernetTx)?;
     Ok(())
 }
 
@@ -129,7 +131,8 @@ pub(crate) fn handle_rx<I: Io>(
 
             let route = routes.lookup_by_dest_exact(sender_addr);
             if let Some(route) = route {
-                transmit_arp_reply::<I>(route, sender_addr, arp.sender_hw_addr).map_err(RxError::ReplyFailed)?;
+                transmit_arp_reply::<I>(route, sender_addr, arp.sender_hw_addr)
+                    .map_err(RxError::ReplyFailed)?;
             }
         }
         OPCODE_REPLY => {
