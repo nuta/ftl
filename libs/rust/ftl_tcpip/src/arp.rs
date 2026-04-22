@@ -1,10 +1,12 @@
 use alloc::vec::Vec;
 
-use crate::{Device, Io};
+use crate::Device;
+use crate::Io;
 use crate::endian::Ne;
 use crate::ethernet::MacAddr;
 use crate::ip::ipv4::Ipv4Addr;
-use crate::packet::{Packet, WriteableToPacket};
+use crate::packet::Packet;
+use crate::packet::WriteableToPacket;
 use crate::packet::{self};
 use crate::route::Route;
 use crate::route::RouteTable;
@@ -17,7 +19,9 @@ pub(crate) struct ArpTable {
 
 impl ArpTable {
     pub fn new() -> Self {
-        Self { entries: Vec::new() }
+        Self {
+            entries: Vec::new(),
+        }
     }
 }
 
@@ -49,7 +53,11 @@ pub enum TxError {
     PacketWrite(packet::ReserveError),
 }
 
-fn transmit_tx<I: Io>(route: &Route<I::Device>, remote_addr: Ipv4Addr, remote_mac: MacAddr) -> Result<(), TxError> {
+fn transmit_tx<I: Io>(
+    route: &Route<I::Device>,
+    remote_addr: Ipv4Addr,
+    remote_mac: MacAddr,
+) -> Result<(), TxError> {
     let arp_pkt = ArpPacket {
         hw_type: HWTYPE_ETHERNET.into(),
         proto_type: PROTOTYPE_IPV4.into(),
@@ -79,7 +87,10 @@ pub enum RxError {
     BadProtocolLength(u8),
 }
 
-pub(crate) fn handle_rx<I: Io>(routes: &mut RouteTable<I::Device>, pkt: &mut Packet) -> Result<(), RxError> {
+pub(crate) fn handle_rx<I: Io>(
+    routes: &mut RouteTable<I::Device>,
+    pkt: &mut Packet,
+) -> Result<(), RxError> {
     let arp = pkt.read::<ArpPacket>().map_err(RxError::PacketRead)?;
 
     let hw_type = arp.hw_type.into();

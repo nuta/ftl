@@ -1,11 +1,11 @@
 use alloc::vec::Vec;
 
+use crate::Device;
+use crate::OutOfMemoryError;
 use crate::arp::ArpTable;
 use crate::ethernet::MacAddr;
 use crate::ip::ipv4::Ipv4Addr;
 use crate::ip::ipv4::NetMask;
-use crate::Device;
-use crate::OutOfMemoryError;
 
 pub struct Route<D: Device> {
     device: D,

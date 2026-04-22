@@ -146,7 +146,16 @@ fn main(supervisor_ch: Channel) {
         .unwrap();
 
     let mut routes = RouteTable::new();
-    routes.add(Route::new(MyDevice { driver_ch: driver_ch.clone() }, Ipv4Addr::new(10, 0, 0, 1), NetMask::new(255, 255, 255, 0), MacAddr::new([0x02, 0x00, 0x00, 0x00, 0x00, 0x00]))).unwrap();
+    routes
+        .add(Route::new(
+            MyDevice {
+                driver_ch: driver_ch.clone(),
+            },
+            Ipv4Addr::new(10, 0, 0, 1),
+            NetMask::new(255, 255, 255, 0),
+            MacAddr::new([0x02, 0x00, 0x00, 0x00, 0x00, 0x00]),
+        ))
+        .unwrap();
 
     let mut pkt = Packet::new(RECV_BUFFER_SIZE).unwrap();
     let mut sockets = SocketMap::new();
