@@ -15,13 +15,14 @@ extern crate alloc;
 extern crate log;
 
 mod arp;
+mod endian;
+mod ethernet;
 pub mod ip;
+mod packet;
 pub mod route;
 pub mod socket;
 pub mod transport;
 mod utils;
-mod ethernet;
-mod packet;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct OutOfMemoryError;

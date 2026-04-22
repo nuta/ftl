@@ -22,7 +22,8 @@ pub struct Packet {
 
 impl Packet {
     pub fn new(capacity: usize) -> Result<Self, AllocError> {
-        let layout = Layout::from_size_align(capacity, size_of::<u32>()).map_err(|e| AllocError::InvalidLayout(e))?;
+        let layout = Layout::from_size_align(capacity, size_of::<u32>())
+            .map_err(|e| AllocError::InvalidLayout(e))?;
 
         let buf = unsafe {
             let ptr = alloc::alloc::alloc(layout);
@@ -33,7 +34,12 @@ impl Packet {
             NonNull::new_unchecked(ptr)
         };
 
-        Ok(Self { buf, capacity, head: 0, tail: 0 })
+        Ok(Self {
+            buf,
+            capacity,
+            head: 0,
+            tail: 0,
+        })
     }
 
     fn head(&self) -> usize {
@@ -45,9 +51,7 @@ impl Packet {
     }
 
     pub fn head_ptr(&self) -> *const u8 {
-        unsafe {
-            self.buf.as_ptr().add(self.head())
-        }
+        unsafe { self.buf.as_ptr().add(self.head()) }
     }
 
     pub fn len(&self) -> usize {
@@ -56,7 +60,7 @@ impl Packet {
 
     pub fn read<T>(&mut self) -> Result<&T, ReserveError> {
         assert!(align_of::<T>() < size_of::<u16>());
-        
+
         let len = size_of::<T>();
         if len > self.len() {
             return Err(ReserveError::BufferTooShort);
