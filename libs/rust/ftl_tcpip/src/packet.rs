@@ -32,8 +32,8 @@ impl Packet {
         debug_assert!(head_room <= u16::MAX as usize);
         debug_assert!(len <= u16::MAX as usize);
 
-        let capacity = len + head_room + HEAD_PAD;
-        let layout = Layout::from_size_align(capacity, BUF_MIN_ALIGN)
+        let capacity = len + head_room;
+        let layout = Layout::from_size_align(capacity + HEAD_PAD, BUF_MIN_ALIGN)
             .map_err(|e| AllocError::InvalidLayout(e))?;
 
         let buf = unsafe {
