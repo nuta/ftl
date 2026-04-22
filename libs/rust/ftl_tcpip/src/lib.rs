@@ -17,7 +17,7 @@ extern crate log;
 
 mod arp;
 mod endian;
-mod ethernet;
+pub mod ethernet;
 pub mod ip;
 pub mod packet;
 pub mod route;

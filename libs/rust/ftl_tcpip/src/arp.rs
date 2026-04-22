@@ -15,6 +15,12 @@ pub(crate) struct ArpTable {
     entries: Vec<ArpEntry>,
 }
 
+impl ArpTable {
+    pub fn new() -> Self {
+        Self { entries: Vec::new() }
+    }
+}
+
 // Wire layout has no padding after (hw_len, proto_len); `repr(C)` alone would insert a byte
 // before `opcode` and shift every field after it.
 #[repr(C, packed)]

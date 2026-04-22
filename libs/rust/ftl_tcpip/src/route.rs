@@ -5,6 +5,7 @@ use crate::ethernet::MacAddr;
 use crate::ip::ipv4::Ipv4Addr;
 use crate::ip::ipv4::NetMask;
 use crate::Device;
+use crate::OutOfMemoryError;
 
 pub struct Route<D: Device> {
     device: D,
@@ -15,6 +16,16 @@ pub struct Route<D: Device> {
 }
 
 impl<D: Device> Route<D> {
+    pub fn new(device: D, ipv4_addr: Ipv4Addr, net_mask: NetMask, mac_addr: MacAddr) -> Self {
+        Self {
+            device,
+            arp_table: ArpTable::new(),
+            ipv4_addr,
+            net_mask,
+            mac_addr,
+        }
+    }
+
     pub fn device(&self) -> &D {
         &self.device
     }
@@ -39,6 +50,12 @@ pub struct RouteTable<D: Device> {
 impl<D: Device> RouteTable<D> {
     pub const fn new() -> Self {
         Self { routes: Vec::new() }
+    }
+
+    pub fn add(&mut self, route: Route<D>) -> Result<(), OutOfMemoryError> {
+        self.routes.try_reserve(1).map_err(|_| OutOfMemoryError)?;
+        self.routes.push(route);
+        Ok(())
     }
 
     pub fn lookup_by_dest_exact(&self, dest_addr: Ipv4Addr) -> Option<&Route<D>> {

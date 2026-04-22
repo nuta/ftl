@@ -10,8 +10,8 @@ pub struct Ipv4Addr(u32);
 impl Ipv4Addr {
     pub const UNSPECIFIED: Self = Self(0);
 
-    pub const fn new(addr: u32) -> Self {
-        Self(addr)
+    pub const fn new(a: u8, b: u8, c: u8, d: u8) -> Self {
+        Self((a as u32) << 24 | (b as u32) << 16 | (c as u32) << 8 | d as u32)
     }
 }
 
@@ -51,8 +51,8 @@ impl fmt::Display for Ipv4Addr {
 pub struct NetMask(u32);
 
 impl NetMask {
-    pub const fn new(mask: u32) -> Self {
-        Self(mask)
+    pub const fn new(a: u8, b: u8, c: u8, d: u8) -> Self {
+        Self((a as u32) << 24 | (b as u32) << 16 | (c as u32) << 8 | d as u32)
     }
 
     pub fn contains(&self, our_addr: &Ipv4Addr, dest_addr: &Ipv4Addr) -> bool {

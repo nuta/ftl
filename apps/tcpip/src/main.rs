@@ -11,7 +11,11 @@ use ftl::prelude::*;
 use ftl::sink::Event;
 use ftl::sink::Sink;
 use ftl::sync::Arc;
+use ftl_tcpip::ethernet::MacAddr;
+use ftl_tcpip::ip::ipv4::Ipv4Addr;
+use ftl_tcpip::ip::ipv4::NetMask;
 use ftl_tcpip::packet::Packet;
+use ftl_tcpip::route::Route;
 use ftl_tcpip::route::RouteTable;
 use ftl_tcpip::socket::SocketMap;
 use ftl_tcpip::transport::tcp;
@@ -132,6 +136,7 @@ fn main(supervisor_ch: Channel) {
     let sink = Sink::new().unwrap();
     sink.add(&driver_ch).unwrap();
 
+    let driver_ch = Arc::new(driver_ch);
     driver_ch
         .send(Message::Read {
             mid: MessageId::new(1),
@@ -140,9 +145,11 @@ fn main(supervisor_ch: Channel) {
         })
         .unwrap();
 
+    let mut routes = RouteTable::new();
+    routes.add(Route::new(MyDevice { driver_ch: driver_ch.clone() }, Ipv4Addr::new(10, 0, 0, 1), NetMask::new(255, 255, 255, 0), MacAddr::new([0x02, 0x00, 0x00, 0x00, 0x00, 0x00]))).unwrap();
+
     let mut pkt = Packet::new(RECV_BUFFER_SIZE).unwrap();
     let mut sockets = SocketMap::new();
-    let mut routes = RouteTable::new();
     loop {
         let (id, event) = sink.wait().unwrap();
         match event {
