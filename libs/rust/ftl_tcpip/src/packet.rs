@@ -73,6 +73,11 @@ impl Packet {
         unsafe { slice::from_raw_parts_mut(self.buf_mut_ptr(), self.capacity) }
     }
 
+    pub fn slice(&self) -> &[u8] {
+        unsafe { slice::from_raw_parts(self.buf_ptr(), self.len()) }
+    }
+
+    // TODO: remove this
     pub fn set_len(&mut self, len: usize) {
         self.head = 0;
         self.tail = len as u16;

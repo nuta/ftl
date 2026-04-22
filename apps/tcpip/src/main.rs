@@ -10,6 +10,7 @@ use ftl::handle::Handleable;
 use ftl::prelude::*;
 use ftl::sink::Event;
 use ftl::sink::Sink;
+use ftl::sync::Arc;
 use ftl_tcpip::packet::Packet;
 use ftl_tcpip::route::RouteTable;
 use ftl_tcpip::socket::SocketMap;
@@ -65,17 +66,28 @@ const RECV_BUFFER_SIZE: usize = 1514;
 pub struct TcpIpIo;
 
 impl ftl_tcpip::Io for TcpIpIo {
-    type Device = TcpIpDevice;
+    type Device = MyDevice;
     type TcpWrite = TcpWrite;
     type TcpRead = TcpRead;
     type TcpAccept = TcpAccept;
 }
 
-pub struct TcpIpDevice {}
+pub struct MyDevice {
+    driver_ch: Arc<Channel>,
+}
 
-impl ftl_tcpip::Device for TcpIpDevice {
+impl ftl_tcpip::Device for MyDevice {
     fn transmit(&self, pkt: &mut Packet) {
-        todo!()
+        info!("transmitting packet: {:?}", pkt.len());
+        let m = Message::Write {
+            mid: MessageId::new(1),
+            offset: 0,
+            buf: pkt.slice(),
+        };
+
+        if let Err(e) = self.driver_ch.send(m) {
+            warn!("failed to send message: {:?}", e);
+        }
     }
 }
 
