@@ -2,9 +2,12 @@ use alloc::collections::VecDeque;
 
 use crate::Io;
 use crate::OutOfMemoryError;
+use crate::packet::Packet;
+use crate::route::RouteTable;
 use crate::socket::AnySocket;
 use crate::utils::TryPushBack;
 
+#[derive(Debug)]
 pub enum Error {}
 
 pub trait Read: Send + Sync {
@@ -55,3 +58,11 @@ impl<I: Io> TcpListener<I> {
 }
 
 impl<I: Io> AnySocket for TcpListener<I> {}
+
+#[derive(Debug)]
+pub (crate) enum RxError {
+}
+
+pub(crate) fn handle_rx<I: Io>(routes: &mut RouteTable<I::Device>, pkt: &mut Packet) -> Result<(), RxError> {
+    todo!()
+}

@@ -74,7 +74,7 @@ pub(crate) fn handle_rx<I: Io>(routes: &mut RouteTable<I::Device>, pkt: &mut Pac
     let ether_type: u16 = header.ether_type.into();
     match ether_type {
         0x0800 => {
-            if let Err(err) = crate::ip::ipv4::handle_rx(pkt) {
+            if let Err(err) = crate::ip::ipv4::handle_rx::<I>(routes, pkt) {
                 warn!("bad IPv4 packet: {:?}", err);
             }
         }
