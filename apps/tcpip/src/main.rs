@@ -151,9 +151,9 @@ fn main(supervisor_ch: Channel) {
             MyDevice {
                 driver_ch: driver_ch.clone(),
             },
-            Ipv4Addr::new(10, 0, 0, 1),
+            Ipv4Addr::new(10, 0, 2, 15),
             NetMask::new(255, 255, 255, 0),
-            MacAddr::new([0x02, 0x00, 0x00, 0x00, 0x00, 0x00]),
+            MacAddr::new([0x52, 0x54, 0x00, 0x12, 0x34, 0x56]),
         ))
         .unwrap();
 
