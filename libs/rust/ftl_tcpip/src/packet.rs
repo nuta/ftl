@@ -92,12 +92,7 @@ impl Packet {
     }
 
     pub fn read<T>(&mut self) -> Result<&T, ReserveError> {
-        info!(
-            "reading type: {:?}, align: {:?}",
-            core::any::type_name::<T>(),
-            align_of::<T>()
-        );
-        assert!(align_of::<T>() <= BUF_MIN_ALIGN);
+        debug_assert!(align_of::<T>() <= BUF_MIN_ALIGN);
 
         let len = size_of::<T>();
         if len > self.len() {
