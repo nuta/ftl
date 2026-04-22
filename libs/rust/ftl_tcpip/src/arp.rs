@@ -53,6 +53,7 @@ const OPCODE_REPLY: u16 = 2;
 pub enum TxError {
     PacketAlloc(packet::AllocError),
     PacketWrite(packet::ReserveError),
+    EthernetTx(ethernet::TxError),
 }
 
 fn transmit_arp_reply<I: Io>(
@@ -75,7 +76,7 @@ fn transmit_arp_reply<I: Io>(
     let mut pkt = Packet::new(1024).map_err(TxError::PacketAlloc)?;
     pkt.write_back(arp_pkt).map_err(TxError::PacketWrite)?;
 
-    ethernet::transmit::<I::Device>(&route, EtherType::Arp, remote_mac, &mut pkt)?;
+    ethernet::transmit::<I::Device>(&route, EtherType::Arp, remote_mac, &mut pkt).map_err(TxError::EthernetTx)?;
     Ok(())
 }
 
