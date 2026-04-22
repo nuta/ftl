@@ -1,5 +1,5 @@
 use alloc::alloc::Layout;
-use core::ptr::NonNull;
+use core::{ptr::NonNull, slice};
 
 #[derive(Debug)]
 pub enum AllocError {
@@ -13,6 +13,8 @@ pub enum ReserveError {
     BufferTooShort,
 }
 
+const BUF_MIN_ALIGN: usize = size_of::<u32>();
+
 pub struct Packet {
     buf: NonNull<u8>,
     capacity: usize,
@@ -22,7 +24,7 @@ pub struct Packet {
 
 impl Packet {
     pub fn new(capacity: usize) -> Result<Self, AllocError> {
-        let layout = Layout::from_size_align(capacity, size_of::<u32>())
+        let layout = Layout::from_size_align(capacity, BUF_MIN_ALIGN)
             .map_err(|e| AllocError::InvalidLayout(e))?;
 
         let buf = unsafe {
@@ -54,12 +56,21 @@ impl Packet {
         unsafe { self.buf.as_ptr().add(self.head()) }
     }
 
+    pub fn uninit_buf(&self) -> &mut [u8] {
+        unsafe { slice::from_raw_parts_mut(self.buf.as_ptr(), self.capacity) }
+    }
+
+    pub fn set_len(&mut self, len: usize) {
+        self.head = 0;
+        self.tail = len as u16;
+    }
+
     pub fn len(&self) -> usize {
         self.tail() - self.head()
     }
 
     pub fn read<T>(&mut self) -> Result<&T, ReserveError> {
-        assert!(align_of::<T>() < size_of::<u16>());
+        assert!(align_of::<T>() <= BUF_MIN_ALIGN);
 
         let len = size_of::<T>();
         if len > self.len() {

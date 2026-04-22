@@ -4,6 +4,7 @@
 use core::ops::Deref;
 use core::ops::DerefMut;
 
+use crate::packet::Packet;
 use crate::route::RouteTable;
 use crate::socket::SocketMap;
 use crate::transport::tcp;
@@ -18,7 +19,7 @@ mod arp;
 mod endian;
 mod ethernet;
 pub mod ip;
-mod packet;
+pub mod packet;
 pub mod route;
 pub mod socket;
 pub mod transport;
@@ -33,8 +34,9 @@ pub trait Io: 'static {
     type TcpAccept: tcp::Accept;
 }
 
-pub fn receive_packet<I: Io>(sockets: &SocketMap, routes: &RouteTable, packet: &[u8]) {
-    trace!("received packet: {:02x?}", packet);
+pub fn receive_packet<I: Io>(sockets: &SocketMap, routes: &RouteTable, pkt: &mut Packet) {
+    trace!("received packet: {:02x?}", pkt.len());
+    ethernet::handle_rx(pkt);
     // let key = todo!();
     // let listener = sockets.get_listener::<TcpListener<I>>(key);
 }

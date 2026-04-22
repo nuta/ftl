@@ -11,6 +11,7 @@ use ftl::prelude::*;
 use ftl::sink::Event;
 use ftl::sink::Sink;
 use ftl::sync::Arc;
+use ftl_tcpip::packet::Packet;
 use ftl_tcpip::route::RouteTable;
 use ftl_tcpip::socket::SocketMap;
 use ftl_tcpip::transport::tcp;
@@ -119,7 +120,7 @@ fn main(supervisor_ch: Channel) {
         })
         .unwrap();
 
-    let mut buf = [0; RECV_BUFFER_SIZE];
+    let mut pkt = Packet::new(RECV_BUFFER_SIZE).unwrap();
     let mut sockets = SocketMap::new();
     let mut routes = RouteTable::new();
     loop {
@@ -129,9 +130,11 @@ fn main(supervisor_ch: Channel) {
                 match Incoming::parse(&driver_ch, peek) {
                     Incoming::ReadReply(reply) => {
                         let len = reply.read_len();
+                        let buf = pkt.uninit_buf();
                         match reply.recv(&mut buf[..len]) {
                             Ok(slice) => {
-                                ftl_tcpip::receive_packet::<TcpIpIo>(&sockets, &routes, &slice);
+                                pkt.set_len(len);
+                                ftl_tcpip::receive_packet::<TcpIpIo>(&sockets, &routes, &mut pkt);
                             }
                             Err(error) => {
                                 panic!("failed to recv with error: {:?}", error);
