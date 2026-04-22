@@ -4,15 +4,21 @@ use crate::arp::ArpTable;
 use crate::ethernet::MacAddr;
 use crate::ip::ipv4::Ipv4Addr;
 use crate::ip::ipv4::NetMask;
+use crate::Device;
 
-pub struct Route {
+pub struct Route<D: Device> {
+    device: D,
     arp_table: ArpTable,
     ipv4_addr: Ipv4Addr,
     net_mask: NetMask,
     mac_addr: MacAddr,
 }
 
-impl Route {
+impl<D: Device> Route<D> {
+    pub fn device(&self) -> &D {
+        &self.device
+    }
+
     pub fn mac_addr(&self) -> MacAddr {
         self.mac_addr
     }
@@ -26,22 +32,22 @@ impl Route {
     }
 }
 
-pub struct RouteTable {
-    routes: Vec<Route>,
+pub struct RouteTable<D: Device> {
+    routes: Vec<Route<D>>,
 }
 
-impl RouteTable {
+impl<D: Device> RouteTable<D> {
     pub const fn new() -> Self {
         Self { routes: Vec::new() }
     }
 
-    pub fn lookup_by_dest_exact(&self, dest_addr: Ipv4Addr) -> Option<&Route> {
+    pub fn lookup_by_dest_exact(&self, dest_addr: Ipv4Addr) -> Option<&Route<D>> {
         self.routes
             .iter()
             .find(|route| route.should_receive(dest_addr))
     }
 
-    pub fn lookup_by_dest(&self, dest_addr: Ipv4Addr) -> Option<&Route> {
+    pub fn lookup_by_dest(&self, dest_addr: Ipv4Addr) -> Option<&Route<D>> {
         self.routes
             .iter()
             .find(|route| route.should_receive(dest_addr))

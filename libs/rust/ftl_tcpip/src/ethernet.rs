@@ -1,5 +1,6 @@
 use core::fmt;
 
+use crate::Io;
 use crate::endian::Ne;
 use crate::packet::Packet;
 use crate::route::RouteTable;
@@ -32,7 +33,7 @@ struct EthernetHeader {
     ether_type: Ne<u16>,
 }
 
-pub(crate) fn handle_rx(routes: &mut RouteTable, pkt: &mut Packet) {
+pub(crate) fn handle_rx<I: Io>(routes: &mut RouteTable<I::Device>, pkt: &mut Packet) {
     let header = pkt.read::<EthernetHeader>().unwrap();
     info!("Ethernet header: {:#?}", header);
     let ether_type: u16 = header.ether_type.into();
@@ -43,7 +44,7 @@ pub(crate) fn handle_rx(routes: &mut RouteTable, pkt: &mut Packet) {
             }
         }
         0x0806 => {
-            if let Err(err) = crate::arp::handle_rx(routes, pkt) {
+            if let Err(err) = crate::arp::handle_rx::<I>(routes, pkt) {
                 warn!("bad ARP packet: {:?}", err);
             }
         }

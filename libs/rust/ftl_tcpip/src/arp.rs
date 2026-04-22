@@ -1,9 +1,10 @@
 use alloc::vec::Vec;
 
+use crate::{Device, Io};
 use crate::endian::Ne;
 use crate::ethernet::MacAddr;
 use crate::ip::ipv4::Ipv4Addr;
-use crate::packet::Packet;
+use crate::packet::{Packet, WriteableToPacket};
 use crate::packet::{self};
 use crate::route::Route;
 use crate::route::RouteTable;
@@ -29,6 +30,8 @@ struct ArpPacket {
     target_proto_addr: Ne<u32>,
 }
 
+impl WriteableToPacket for ArpPacket {}
+
 const HWTYPE_ETHERNET: u16 = 1;
 const PROTOTYPE_IPV4: u16 = 0x0800;
 const OPCODE_REQUEST: u16 = 1;
@@ -37,11 +40,11 @@ const OPCODE_REPLY: u16 = 2;
 #[derive(Debug)]
 pub enum TxError {
     PacketAlloc(packet::AllocError),
+    PacketWrite(packet::ReserveError),
 }
 
-fn transmit_tx(route: &Route, remote_addr: Ipv4Addr, remote_mac: MacAddr) -> Result<(), TxError> {
-    let mut pkt = Packet::new(1024).map_err(TxError::PacketAlloc)?;
-    let header = ArpPacket {
+fn transmit_tx<I: Io>(route: &Route<I::Device>, remote_addr: Ipv4Addr, remote_mac: MacAddr) -> Result<(), TxError> {
+    let arp_pkt = ArpPacket {
         hw_type: HWTYPE_ETHERNET.into(),
         proto_type: PROTOTYPE_IPV4.into(),
         hw_len: 6.into(),    // 6 bytes for Ethernet address
@@ -53,6 +56,10 @@ fn transmit_tx(route: &Route, remote_addr: Ipv4Addr, remote_mac: MacAddr) -> Res
         target_proto_addr: remote_addr.into(),
     };
 
+    let mut pkt = Packet::new(1024).map_err(TxError::PacketAlloc)?;
+    pkt.write_back(arp_pkt).map_err(TxError::PacketWrite)?;
+
+    route.device().transmit(&mut pkt);
     Ok(())
 }
 
@@ -66,7 +73,7 @@ pub enum RxError {
     BadProtocolLength(u8),
 }
 
-pub(crate) fn handle_rx(routes: &mut RouteTable, pkt: &mut Packet) -> Result<(), RxError> {
+pub(crate) fn handle_rx<I: Io>(routes: &mut RouteTable<I::Device>, pkt: &mut Packet) -> Result<(), RxError> {
     let arp = pkt.read::<ArpPacket>().map_err(RxError::PacketRead)?;
 
     let hw_type = arp.hw_type.into();

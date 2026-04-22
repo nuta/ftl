@@ -28,15 +28,20 @@ mod utils;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct OutOfMemoryError;
 
+pub trait Device {
+    fn transmit(&self, pkt: &mut Packet);
+}
+
 pub trait Io: 'static {
+    type Device: Device;
     type TcpWrite: tcp::Write;
     type TcpRead: tcp::Read;
     type TcpAccept: tcp::Accept;
 }
 
-pub fn receive_packet<I: Io>(sockets: &mut SocketMap, routes: &mut RouteTable, pkt: &mut Packet) {
+pub fn receive_packet<I: Io>(sockets: &mut SocketMap, routes: &mut RouteTable<I::Device>    , pkt: &mut Packet) {
     trace!("received packet: {:02x?}", pkt.len());
-    ethernet::handle_rx(routes, pkt);
+    ethernet::handle_rx::<I>(routes, pkt);
     // let key = todo!();
     // let listener = sockets.get_listener::<TcpListener<I>>(key);
 }

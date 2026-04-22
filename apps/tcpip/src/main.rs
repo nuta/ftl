@@ -10,7 +10,6 @@ use ftl::handle::Handleable;
 use ftl::prelude::*;
 use ftl::sink::Event;
 use ftl::sink::Sink;
-use ftl::sync::Arc;
 use ftl_tcpip::packet::Packet;
 use ftl_tcpip::route::RouteTable;
 use ftl_tcpip::socket::SocketMap;
@@ -66,9 +65,18 @@ const RECV_BUFFER_SIZE: usize = 1514;
 pub struct TcpIpIo;
 
 impl ftl_tcpip::Io for TcpIpIo {
+    type Device = TcpIpDevice;
     type TcpWrite = TcpWrite;
     type TcpRead = TcpRead;
     type TcpAccept = TcpAccept;
+}
+
+pub struct TcpIpDevice {}
+
+impl ftl_tcpip::Device for TcpIpDevice {
+    fn transmit(&self, pkt: &mut Packet) {
+        todo!()
+    }
 }
 
 pub struct TcpWrite {}

@@ -14,6 +14,9 @@ pub enum ReserveError {
     BufferTooShort,
 }
 
+// TODO: Rename
+pub trait WriteableToPacket {}
+
 const HEAD_PAD: usize = 2; // eth frame is 14 bytes
 const BUF_MIN_ALIGN: usize = size_of::<u32>();
 
@@ -104,6 +107,25 @@ impl Packet {
         // SAFETY: The pointer is aligned and the length is checked,
         //         and is alive as long as the `self` is alive.
         Ok(unsafe { &*ptr })
+    }
+
+    pub fn write_back<T: WriteableToPacket>(&mut self, value: T) -> Result<(), ReserveError> {
+        let len = size_of::<T>();
+        debug_assert!(len <= u16::MAX as usize);
+
+        if self.tail() + len > self.capacity {
+            return Err(ReserveError::BufferTooShort);
+        }
+
+        let ptr = unsafe { self.buf_mut_ptr().add(self.tail()) as *mut T };
+        if !ptr.is_aligned() {
+            return Err(ReserveError::NotAligned);
+        }
+
+        unsafe { ptr.write(value) };
+
+        self.tail += len as u16;
+        Ok(())
     }
 }
 
