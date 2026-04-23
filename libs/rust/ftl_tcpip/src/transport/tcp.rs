@@ -123,7 +123,7 @@ struct TcpHeader {
     seq: Ne<u32>,
     ack: Ne<u32>,
     header_len: u8,
-    flags: u8,
+    flags: TcpFlags,
     window_size: Ne<u16>,
     checksum: Ne<u16>,
     urgent_pointer: Ne<u16>,
