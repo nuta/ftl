@@ -3,35 +3,30 @@ use alloc::vec::Vec;
 use crate::Device;
 use crate::OutOfMemoryError;
 use crate::arp::ArpTable;
+use crate::device::DeviceId;
 use crate::ethernet::MacAddr;
 use crate::ip::ipv4::Ipv4Addr;
 use crate::ip::ipv4::NetMask;
 
-pub struct Route<D: Device> {
-    device: D,
+pub struct Route {
+    device_id: DeviceId,
     arp_table: ArpTable,
     ipv4_addr: Ipv4Addr,
     net_mask: NetMask,
-    mac_addr: MacAddr,
 }
 
-impl<D: Device> Route<D> {
-    pub fn new(device: D, ipv4_addr: Ipv4Addr, net_mask: NetMask, mac_addr: MacAddr) -> Self {
+impl Route {
+    pub fn new(device_id: DeviceId, ipv4_addr: Ipv4Addr, net_mask: NetMask) -> Self {
         Self {
-            device,
+            device_id,
             arp_table: ArpTable::new(),
             ipv4_addr,
             net_mask,
-            mac_addr,
         }
     }
 
-    pub fn device(&self) -> &D {
-        &self.device
-    }
-
-    pub fn mac_addr(&self) -> MacAddr {
-        self.mac_addr
+    pub fn device_id(&self) -> DeviceId {
+        self.device_id
     }
 
     pub fn ipv4_addr(&self) -> Ipv4Addr {
@@ -47,28 +42,28 @@ impl<D: Device> Route<D> {
     }
 }
 
-pub struct RouteTable<D: Device> {
-    routes: Vec<Route<D>>,
+pub struct RouteTable {
+    routes: Vec<Route>,
 }
 
-impl<D: Device> RouteTable<D> {
+impl RouteTable {
     pub const fn new() -> Self {
         Self { routes: Vec::new() }
     }
 
-    pub fn add(&mut self, route: Route<D>) -> Result<(), OutOfMemoryError> {
+    pub fn add(&mut self, route: Route) -> Result<(), OutOfMemoryError> {
         self.routes.try_reserve(1).map_err(|_| OutOfMemoryError)?;
         self.routes.push(route);
         Ok(())
     }
 
-    pub fn lookup_by_dest_exact(&self, dest_addr: Ipv4Addr) -> Option<&Route<D>> {
+    pub fn lookup_by_dest_exact(&self, dest_addr: Ipv4Addr) -> Option<&Route> {
         self.routes
             .iter()
             .find(|route| route.should_receive(dest_addr))
     }
 
-    pub fn lookup_by_dest(&self, dest_addr: Ipv4Addr) -> Option<&Route<D>> {
+    pub fn lookup_by_dest(&self, dest_addr: Ipv4Addr) -> Option<&Route> {
         self.routes
             .iter()
             .find(|route| route.should_receive(dest_addr))

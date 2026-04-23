@@ -11,6 +11,7 @@ use ftl::prelude::*;
 use ftl::sink::Event;
 use ftl::sink::Sink;
 use ftl::sync::Arc;
+use ftl_tcpip::device::DeviceMap;
 use ftl_tcpip::ethernet::MacAddr;
 use ftl_tcpip::ip::ipv4::Ipv4Addr;
 use ftl_tcpip::ip::ipv4::NetMask;
@@ -77,11 +78,16 @@ impl ftl_tcpip::Io for TcpIpIo {
 }
 
 pub struct MyDevice {
+    mac_addr: MacAddr,
     driver_ch: Arc<Channel>,
 }
 
-impl ftl_tcpip::Device for MyDevice {
-    fn transmit(&self, pkt: &mut Packet) {
+impl ftl_tcpip::device::Device for MyDevice {
+    fn mac_addr(&self) -> &MacAddr {
+        &self.mac_addr
+    }
+
+    fn transmit(&mut self, pkt: &mut Packet) {
         info!("transmitting packet: {:?}", pkt.len());
         let m = Message::Write {
             mid: MessageId::new(1),
@@ -145,15 +151,18 @@ fn main(supervisor_ch: Channel) {
         })
         .unwrap();
 
+    let mut devices = DeviceMap::new();
+    let device_id = devices.add(MyDevice {
+        mac_addr: MacAddr::new([0x52, 0x54, 0x00, 0x12, 0x34, 0x56]),
+        driver_ch: driver_ch.clone(),
+    }).unwrap();
+
     let mut routes = RouteTable::new();
     routes
         .add(Route::new(
-            MyDevice {
-                driver_ch: driver_ch.clone(),
-            },
+            device_id,
             Ipv4Addr::new(10, 0, 2, 15),
             NetMask::new(255, 255, 255, 0),
-            MacAddr::new([0x52, 0x54, 0x00, 0x12, 0x34, 0x56]),
         ))
         .unwrap();
 
@@ -171,6 +180,7 @@ fn main(supervisor_ch: Channel) {
                             Ok(slice) => {
                                 pkt.set_len(len);
                                 ftl_tcpip::ethernet::handle_rx::<TcpIpIo>(
+                                    &mut devices,
                                     &mut routes,
                                     &mut sockets,
                                     &mut pkt,

@@ -2,6 +2,7 @@ use alloc::collections::VecDeque;
 
 use crate::Io;
 use crate::OutOfMemoryError;
+use crate::device::DeviceMap;
 use crate::endian::Ne;
 use crate::ip::ipv4::Ipv4Addr;
 use crate::packet;
@@ -83,7 +84,8 @@ pub(crate) enum RxError {
 }
 
 pub(crate) fn handle_rx<I: Io>(
-    routes: &mut RouteTable<I::Device>,
+    devices: &mut DeviceMap<I::Device>,
+    routes: &mut RouteTable,
     sockets: &mut SocketMap,
     pkt: &mut Packet,
 ) -> Result<(), RxError> {

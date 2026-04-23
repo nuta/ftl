@@ -1,6 +1,7 @@
 use core::fmt;
 
 use crate::Io;
+use crate::device::DeviceMap;
 use crate::endian::Ne;
 use crate::packet::Packet;
 use crate::packet::{self};
@@ -115,7 +116,8 @@ pub enum Error {
 }
 
 pub(crate) fn handle_rx<I: Io>(
-    routes: &mut RouteTable<I::Device>,
+    devices: &mut DeviceMap<I::Device>,
+    routes: &mut RouteTable,
     sockets: &mut SocketMap,
     pkt: &mut Packet,
 ) -> Result<(), Error> {
@@ -134,7 +136,7 @@ pub(crate) fn handle_rx<I: Io>(
 
     match header.protocol {
         0x06 => {
-            if let Err(err) = crate::transport::tcp::handle_rx::<I>(routes, sockets, pkt) {
+            if let Err(err) = crate::transport::tcp::handle_rx::<I>(devices, routes, sockets, pkt) {
                 warn!("bad TCP packet: {:?}", err);
             }
         }

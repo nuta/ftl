@@ -2,6 +2,7 @@ use core::fmt;
 
 use crate::Device;
 use crate::Io;
+use crate::device::DeviceMap;
 use crate::endian::Ne;
 use crate::packet;
 use crate::packet::Packet;
@@ -53,24 +54,25 @@ pub enum TxError {
 }
 
 pub(crate) fn transmit<D: Device>(
-    route: &Route<D>,
+    device: &mut D,
     ether_type: EtherType,
     dest_mac: MacAddr,
     pkt: &mut Packet,
 ) -> Result<(), TxError> {
     let header = EthernetHeader {
         dst: dest_mac,
-        src: route.mac_addr(),
+        src: *device.mac_addr(),
         ether_type: (ether_type as u16).into(),
     };
 
     pkt.write_front(header).map_err(TxError::PacketWrite)?;
-    route.device().transmit(pkt);
+    device.transmit(pkt);
     Ok(())
 }
 
 pub fn handle_rx<I: Io>(
-    routes: &mut RouteTable<I::Device>,
+    devices: &mut DeviceMap<I::Device>,
+    routes: &mut RouteTable,
     sockets: &mut SocketMap,
     pkt: &mut Packet,
 ) {
@@ -79,12 +81,12 @@ pub fn handle_rx<I: Io>(
     let ether_type: u16 = header.ether_type.into();
     match ether_type {
         0x0800 => {
-            if let Err(err) = crate::ip::ipv4::handle_rx::<I>(routes, sockets, pkt) {
+            if let Err(err) = crate::ip::ipv4::handle_rx::<I>(devices, routes, sockets, pkt) {
                 warn!("bad IPv4 packet: {:?}", err);
             }
         }
         0x0806 => {
-            if let Err(err) = crate::arp::handle_rx::<I>(routes, pkt) {
+            if let Err(err) = crate::arp::handle_rx::<I>(devices, routes, pkt) {
                 warn!("bad ARP packet: {:?}", err);
             }
         }

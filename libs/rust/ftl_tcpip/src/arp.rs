@@ -2,6 +2,8 @@ use alloc::vec::Vec;
 
 use crate::Device;
 use crate::Io;
+use crate::device::DeviceId;
+use crate::device::DeviceMap;
 use crate::endian::Ne;
 use crate::ethernet;
 use crate::ethernet::EtherType;
@@ -57,8 +59,9 @@ pub enum TxError {
     EthernetTx(ethernet::TxError),
 }
 
-fn transmit_arp_reply<I: Io>(
-    route: &Route<I::Device>,
+fn transmit_arp_reply<D: Device>(
+    route: &Route,
+    device: &mut D,
     remote_addr: Ipv4Addr,
     remote_mac: MacAddr,
 ) -> Result<(), TxError> {
@@ -68,7 +71,7 @@ fn transmit_arp_reply<I: Io>(
         hw_len: 6.into(),    // 6 bytes for Ethernet address
         proto_len: 4.into(), // 4 bytes for IPv4 address
         opcode: OPCODE_REPLY.into(),
-        sender_hw_addr: route.mac_addr(),
+        sender_hw_addr: *device.mac_addr(),
         sender_proto_addr: route.ipv4_addr().into(),
         target_hw_addr: remote_mac,
         target_proto_addr: remote_addr.into(),
@@ -78,7 +81,7 @@ fn transmit_arp_reply<I: Io>(
         .map_err(TxError::PacketAlloc)?;
     pkt.write_back(arp_pkt).map_err(TxError::PacketWrite)?;
 
-    ethernet::transmit::<I::Device>(&route, EtherType::Arp, remote_mac, &mut pkt)
+    ethernet::transmit(device, EtherType::Arp, remote_mac, &mut pkt)
         .map_err(TxError::EthernetTx)?;
     Ok(())
 }
@@ -92,10 +95,12 @@ pub enum RxError {
     BadHardwareLength(u8),
     BadProtocolLength(u8),
     ReplyFailed(TxError),
+    DeviceNotFound(DeviceId),
 }
 
 pub(crate) fn handle_rx<I: Io>(
-    routes: &mut RouteTable<I::Device>,
+    devices: &mut DeviceMap<I::Device>,
+    routes: &mut RouteTable,
     pkt: &mut Packet,
 ) -> Result<(), RxError> {
     let arp = pkt.read::<ArpPacket>().map_err(RxError::PacketRead)?;
@@ -131,9 +136,12 @@ pub(crate) fn handle_rx<I: Io>(
 
             let route = routes.lookup_by_dest_exact(sender_addr);
             if let Some(route) = route {
-                transmit_arp_reply::<I>(route, sender_addr, arp.sender_hw_addr)
+                let device_id = route.device_id();
+                let device = devices.get_mut(device_id).ok_or(RxError::DeviceNotFound(device_id))?;
+                transmit_arp_reply(route, device, sender_addr, arp.sender_hw_addr)
                     .map_err(RxError::ReplyFailed)?;
             }
+
         }
         OPCODE_REPLY => {
             // Reply

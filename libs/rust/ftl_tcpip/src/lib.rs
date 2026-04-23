@@ -4,6 +4,7 @@
 use core::ops::Deref;
 use core::ops::DerefMut;
 
+use crate::device::Device;
 use crate::packet::Packet;
 use crate::route::RouteTable;
 use crate::socket::SocketMap;
@@ -23,14 +24,11 @@ pub mod packet;
 pub mod route;
 pub mod socket;
 pub mod transport;
+pub mod device;
 mod utils;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct OutOfMemoryError;
-
-pub trait Device {
-    fn transmit(&self, pkt: &mut Packet);
-}
 
 pub trait Io: 'static {
     type Device: Device;
