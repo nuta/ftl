@@ -1,3 +1,7 @@
+use core::fmt;
+use core::ops::BitOr;
+use core::ops::BitOrAssign;
+
 use alloc::collections::VecDeque;
 
 use crate::Io;
@@ -69,6 +73,49 @@ impl<I: Io> TcpListener<I> {
 
 impl<I: Io> AnySocket for TcpListener<I> {}
 
+#[derive(Clone, Copy)]
+#[repr(transparent)]
+struct TcpFlags(u8);
+
+impl TcpFlags {
+    pub const FIN: Self = Self(1 << 0);
+    pub const SYN: Self = Self(1 << 1);
+    pub const RST: Self = Self(1 << 2);
+    pub const PSH: Self = Self(1 << 3);
+    pub const ACK: Self = Self(1 << 4);
+}
+
+impl BitOr<TcpFlags> for TcpFlags {
+    type Output = TcpFlags;
+
+    fn bitor(self, rhs: TcpFlags) -> Self::Output {
+        Self(self.0 | rhs.0)
+    }
+}
+
+impl BitOrAssign<TcpFlags> for TcpFlags {
+    fn bitor_assign(&mut self, rhs: TcpFlags) {
+        self.0 |= rhs.0;
+    }
+}
+
+impl fmt::Debug for TcpFlags {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut first = true;
+        for flag in [TcpFlags::FIN, TcpFlags::SYN, TcpFlags::RST, TcpFlags::PSH, TcpFlags::ACK] {
+            if self.0 & flag.0 != 0 {
+                if !first {
+                    write!(f, "|")?;
+                }
+
+                write!(f, "{:?}", flag)?;
+            }
+        }
+
+        Ok(())
+    }
+}
+
 #[repr(C, packed)]
 struct TcpHeader {
     src_port: Ne<u16>,
@@ -105,7 +152,7 @@ pub(crate) fn handle_rx<I: Io>(
         protocol: Protocol::Tcp,
     };
 
-    trace!("TCP packet: src_port: {}, dst_port: {}", src_port, dst_port);
+    trace!("TCP packet [flags: {:?}] src_port: {}, dst_port: {}", header.flags, src_port, dst_port);
     let Some(listener) = sockets.get_listener::<TcpListener<I>>(&key) else {
         // TODO Send an RST packet.
         warn!("TCP packet: listener not found");
