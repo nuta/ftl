@@ -5,8 +5,9 @@ use crate::endian::Ne;
 pub mod tcp;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(u8)]
 pub enum Protocol {
-    Tcp,
+    Tcp = 0x06,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]

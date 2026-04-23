@@ -56,9 +56,10 @@ pub enum TxError {
 pub(crate) fn transmit<D: Device>(
     device: &mut D,
     ether_type: EtherType,
-    dest_mac: MacAddr,
     pkt: &mut Packet,
 ) -> Result<(), TxError> {
+    let dest_mac = todo!(); // ARP
+
     let header = EthernetHeader {
         dst: dest_mac,
         src: *device.mac_addr(),

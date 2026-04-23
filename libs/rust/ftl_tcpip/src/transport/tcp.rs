@@ -13,7 +13,9 @@ use crate::device::DeviceMap;
 use crate::endian::Ne;
 use crate::ethernet::EthernetHeader;
 use crate::ip::IpAddr;
+use crate::ip::ipv4;
 use crate::ip::ipv4::Ipv4Addr;
+use crate::ip::ipv4::Ipv4Header;
 use crate::packet;
 use crate::packet::Packet;
 use crate::packet::WriteableToPacket;
@@ -77,6 +79,7 @@ struct TcpListenerInner<I: Io> {
 enum TxError {
     PacketAlloc(packet::AllocError),
     PacketWrite(packet::ReserveError),
+    Ipv4Tx(ipv4::TxError),
 }
 
 pub struct TcpListener<I: Io> {
@@ -102,19 +105,7 @@ impl<I: Io> TcpListener<I> {
 
     fn transmit_locked(self: &Arc<Self>, inner: &mut TcpListenerInner<I>, devices: &mut DeviceMap<I::Device>, routes: &mut RouteTable) -> Result<(), TxError> {
         for syn in &inner.syn_received {
-            let Some(route) = routes.lookup_by_dest(syn.remote_ip) else {
-                // TODO: remove the entry
-                warn!("TCP: no route found for remote port: {}", syn.remote_port);
-                continue;
-            };
-
-            let Some(device) = devices.get_mut(route.device_id()) else {
-                // TODO: remove the entry
-                warn!("TCP: no device found for route: {:?}", route.device_id());
-                continue;
-            };
-
-            let mut pkt = Packet::new(size_of::<TcpHeader>(), size_of::<EthernetHeader>()).map_err(TxError::PacketAlloc)?;
+            let mut pkt = Packet::new( 0, size_of::<EthernetHeader>() + size_of::<Ipv4Header>() + size_of::<TcpHeader>()).map_err(TxError::PacketAlloc)?;
             let header = TcpHeader {
                 src_port: syn.remote_port.into(),
                 dst_port: self.local_port.into(),
@@ -129,7 +120,11 @@ impl<I: Io> TcpListener<I> {
 
             trace!("TCP: replying to SYN: src_port: {}, dst_port: {}, seq: {}, ack: {}, window_size: {}", syn.remote_port, self.local_port, syn.init_seq, syn.init_ack, syn.window_size);
             pkt.write_front(header).map_err(TxError::PacketWrite)?;
-            device.transmit(&mut pkt);
+            match syn.remote_ip {
+                IpAddr::V4(ip) => {
+                    ipv4::transmit::<I>(devices, routes, &mut pkt, ip, Protocol::Tcp).map_err(TxError::Ipv4Tx)?;
+                }
+            }
         }
 
         Ok(())

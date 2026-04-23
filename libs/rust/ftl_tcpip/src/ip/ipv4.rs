@@ -1,10 +1,11 @@
 use core::fmt;
 
-use crate::Io;
-use crate::device::DeviceMap;
+use crate::ethernet::EtherType;
+use crate::{Io, ethernet, transport};
+use crate::device::{Device, DeviceMap};
 use crate::endian::Ne;
 use crate::ip::IpAddr;
-use crate::packet::Packet;
+use crate::packet::{Packet, WriteableToPacket};
 use crate::packet::{self};
 use crate::route::RouteTable;
 use crate::socket::SocketMap;
@@ -85,7 +86,7 @@ impl fmt::Display for NetMask {
 }
 
 #[repr(C, packed)]
-struct Ipv4Header {
+pub(crate) struct Ipv4Header {
     version_and_ihl: u8,
     tos: u8,
     len: Ne<u16>,
@@ -98,6 +99,8 @@ struct Ipv4Header {
     dst_addr: Ne<u32>,
 }
 
+impl WriteableToPacket for Ipv4Header {}
+
 impl Ipv4Header {
     fn version(&self) -> u8 {
         self.version_and_ihl >> 4
@@ -109,7 +112,48 @@ impl Ipv4Header {
 }
 
 #[derive(Debug)]
-pub enum Error {
+pub enum TxError {
+    NoRoute,
+    NoDevice,
+    PacketWrite(packet::ReserveError),
+    EthernetTx(ethernet::TxError),
+}
+
+pub(crate) fn transmit<I: Io>(
+    devices: &mut DeviceMap<I::Device>,
+    routes: &mut RouteTable,
+    pkt: &mut Packet,
+    dest_ip: Ipv4Addr,
+    protocol: transport::Protocol,
+) -> Result<(), TxError> {
+    let Some(route) = routes.lookup_by_dest(IpAddr::V4(dest_ip)) else {
+        return Err(TxError::NoRoute);
+    };
+
+    let Some(device) = devices.get_mut(route.device_id()) else {
+        return Err(TxError::NoDevice);
+    };
+
+    let header = Ipv4Header {
+        version_and_ihl: 4 << 4 | 5,
+        tos: 0,
+        len: (pkt.len() as u16).into(),
+        id: 0.into(),
+        flags_and_frag_offset: 0.into(),
+        ttl: 64,
+        protocol: protocol as u8,
+        checksum: 0.into(),
+        src_addr: route.ipv4_addr().into(),
+        dst_addr: dest_ip.into(),
+    };
+
+    pkt.write_front(header).map_err(TxError::PacketWrite)?;
+    ethernet::transmit(device, EtherType::Ipv4, pkt).map_err(TxError::EthernetTx)?;
+    Ok(())
+}
+
+#[derive(Debug)]
+pub enum RxError {
     PacketRead(packet::ReserveError),
     BadVersion(u8),
     BadHeaderLength(u8),
@@ -121,14 +165,14 @@ pub(crate) fn handle_rx<I: Io>(
     routes: &mut RouteTable,
     sockets: &mut SocketMap,
     pkt: &mut Packet,
-) -> Result<(), Error> {
-    let header = pkt.read::<Ipv4Header>().map_err(Error::PacketRead)?;
+) -> Result<(), RxError> {
+    let header = pkt.read::<Ipv4Header>().map_err(RxError::PacketRead)?;
     if header.version() != 4 {
-        return Err(Error::BadVersion(header.version()));
+        return Err(RxError::BadVersion(header.version()));
     }
 
     if header.ihl() != 5 {
-        return Err(Error::BadHeaderLength(header.ihl()));
+        return Err(RxError::BadHeaderLength(header.ihl()));
     }
 
     let src = Ipv4Addr::from(header.src_addr);
@@ -147,7 +191,7 @@ pub(crate) fn handle_rx<I: Io>(
             }
         }
         protocol => {
-            return Err(Error::UnsupportedProtocol(protocol));
+            return Err(RxError::UnsupportedProtocol(protocol));
         }
     }
 
