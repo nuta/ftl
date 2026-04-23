@@ -120,7 +120,7 @@ impl<I: Io> TcpListener<I> {
                 seq: syn.init_seq.into(),
                 ack: syn.init_ack.into(),
                 window_size: syn.window_size.into(),
-                header_len: 20.into(),
+                header_len: (5 << 4).into(),
                 flags: TcpFlags::SYN | TcpFlags::ACK,
                 checksum: 0.into(),
                 urgent_pointer: 0.into(),
@@ -246,6 +246,14 @@ struct TcpHeader {
 }
 
 impl WriteableToPacket for TcpHeader {}
+
+impl TcpHeader {
+    fn encode_header_len(header_len_bytes: usize) -> u8 {
+        debug_assert_eq!(header_len_bytes % 4, 0);
+        debug_assert!(header_len_bytes / 4 <= 0x0f);
+        ((header_len_bytes / 4) as u8) << 4
+    }
+}
 
 #[derive(Debug)]
 pub(crate) enum RxError {
