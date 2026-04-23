@@ -5,6 +5,7 @@ use crate::OutOfMemoryError;
 use crate::arp::ArpTable;
 use crate::device::DeviceId;
 use crate::ethernet::MacAddr;
+use crate::ip::IpAddr;
 use crate::ip::ipv4::Ipv4Addr;
 use crate::ip::ipv4::NetMask;
 
@@ -33,11 +34,15 @@ impl Route {
         self.ipv4_addr
     }
 
-    fn should_receive_exact(&self, dest_addr: Ipv4Addr) -> bool {
+    fn should_receive_exact(&self, dest_addr: IpAddr) -> bool {
+        let IpAddr::V4(dest_addr) = dest_addr; // TODO:
+
         self.ipv4_addr == dest_addr
     }
 
-    fn should_receive(&self, dest_addr: Ipv4Addr) -> bool {
+    fn should_receive(&self, dest_addr: IpAddr) -> bool {
+        let IpAddr::V4(dest_addr) = dest_addr; // TODO:
+
         self.ipv4_addr == dest_addr || self.net_mask.contains(&self.ipv4_addr, &dest_addr)
     }
 }
@@ -64,7 +69,7 @@ impl RouteTable {
             .find(|route| route.should_receive_exact(dest_addr))
     }
 
-    pub fn lookup_by_dest(&self, dest_addr: Ipv4Addr) -> Option<&Route> {
+    pub fn lookup_by_dest(&self, dest_addr: IpAddr) -> Option<&Route> {
         self.routes
             .iter()
             .find(|route| route.should_receive(dest_addr))

@@ -10,6 +10,7 @@ use crate::Io;
 use crate::OutOfMemoryError;
 use crate::device::DeviceMap;
 use crate::endian::Ne;
+use crate::ethernet::EthernetHeader;
 use crate::ip::IpAddr;
 use crate::ip::ipv4::Ipv4Addr;
 use crate::packet;
@@ -58,6 +59,7 @@ impl<I: Io> TcpConn<I> {
 impl<I: Io> AnySocket for TcpConn<I> {}
 
 struct SynReceived {
+    remote_ip: IpAddr,
     remote_port: Port,
     init_seq: u32,
     init_ack: u32,
@@ -86,6 +88,36 @@ impl<I: Io> TcpListener<I> {
     pub fn accept(&mut self, req: I::TcpAccept) -> Result<(), OutOfMemoryError> {
         self.inner.lock().pending_accepts.try_push_back(req)?;
         Ok(())
+    }
+
+    fn transmit(self: &Arc<Self>, devices: &mut DeviceMap<I::Device>, routes: &mut RouteTable) {
+        let mut inner = self.inner.lock();
+        for syn in &inner.syn_received {
+            let route = routes.lookup_by_dest(syn.remote_ip);
+            if let Some(route) = route {
+                let device_id = route.device_id();
+                let device = devices.get_mut(device_id).unwrap();
+            } else {
+                // TODO: remove the entry
+                warn!("TCP: no route found for remote port: {}", syn.remote_port);
+                continue;
+            };
+
+            let pkt = Packet::new(size_of::<TcpHeader>(), size_of::<EthernetHeader>());
+            let header = TcpHeader {
+                src_port: syn.remote_port.into(),
+                dst_port: syn.local_port.into(),
+                seq: syn.init_seq.into(),
+                ack: syn.init_ack.into(),
+                window_size: syn.window_size.into(),
+                header_len: 5.into(),
+                flags: TcpFlags::SYN | TcpFlags::ACK,
+                checksum: 0.into(),
+                urgent_pointer: 0.into(),
+            };
+            pkt.write_front(header).map_err(TxError::PacketWrite)?;
+            device.transmit(pkt);
+        }
     }
 
     fn handle_rx(
