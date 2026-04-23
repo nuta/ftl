@@ -3,6 +3,7 @@ use core::fmt;
 use crate::Io;
 use crate::device::DeviceMap;
 use crate::endian::Ne;
+use crate::ip::IpAddr;
 use crate::packet::Packet;
 use crate::packet::{self};
 use crate::route::RouteTable;
@@ -131,12 +132,15 @@ pub(crate) fn handle_rx<I: Io>(
     }
 
     let src = Ipv4Addr::from(header.src_addr);
+    let remote = IpAddr::V4(src);
     let dst = Ipv4Addr::from(header.dst_addr);
     info!("IPv4 packet: src: {}, dst: {}", src, dst);
 
     match header.protocol {
         0x06 => {
-            if let Err(err) = crate::transport::tcp::handle_rx::<I>(devices, routes, sockets, pkt) {
+            if let Err(err) =
+                crate::transport::tcp::handle_rx::<I>(devices, routes, sockets, pkt, remote)
+            {
                 warn!("bad TCP packet: {:?}", err);
             }
         }

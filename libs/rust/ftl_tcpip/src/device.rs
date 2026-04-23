@@ -1,6 +1,8 @@
-use crate::{OutOfMemoryError, packet::Packet, ethernet::MacAddr};
-
 use alloc::vec::Vec;
+
+use crate::OutOfMemoryError;
+use crate::ethernet::MacAddr;
+use crate::packet::Packet;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct DeviceId(u8);
@@ -22,7 +24,10 @@ pub struct DeviceMap<D: Device> {
 
 impl<D: Device> DeviceMap<D> {
     pub fn new() -> Self {
-        Self { next_id: 1, devices: Vec::new() }
+        Self {
+            next_id: 1,
+            devices: Vec::new(),
+        }
     }
 
     pub fn add(&mut self, device: D) -> Result<DeviceId, OutOfMemoryError> {

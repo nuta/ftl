@@ -26,8 +26,8 @@ pub struct ActiveKey {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ListenerKey {
-pub    local: Endpoint,
-    pub    protocol: transport::Protocol,
+    pub local: Endpoint,
+    pub protocol: transport::Protocol,
 }
 
 pub trait AnySocket: Any + Send + Sync {}

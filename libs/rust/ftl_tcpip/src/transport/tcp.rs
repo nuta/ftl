@@ -1,8 +1,7 @@
+use alloc::collections::VecDeque;
 use core::fmt;
 use core::ops::BitOr;
 use core::ops::BitOrAssign;
-
-use alloc::collections::VecDeque;
 
 use crate::Io;
 use crate::OutOfMemoryError;
@@ -13,6 +12,7 @@ use crate::ip::ipv4::Ipv4Addr;
 use crate::packet;
 use crate::packet::Packet;
 use crate::route::RouteTable;
+use crate::socket::ActiveKey;
 use crate::socket::AnySocket;
 use crate::socket::Endpoint;
 use crate::socket::ListenerKey;
@@ -83,6 +83,10 @@ impl TcpFlags {
     pub const RST: Self = Self(1 << 2);
     pub const PSH: Self = Self(1 << 3);
     pub const ACK: Self = Self(1 << 4);
+
+    pub fn contains(&self, flag: TcpFlags) -> bool {
+        self.0 & flag.0 != 0
+    }
 }
 
 impl BitOr<TcpFlags> for TcpFlags {
@@ -102,12 +106,18 @@ impl BitOrAssign<TcpFlags> for TcpFlags {
 impl fmt::Debug for TcpFlags {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut first = true;
-        for (value, name) in [(TcpFlags::FIN, "FIN"), (TcpFlags::SYN, "SYN"), (TcpFlags::RST, "RST"), (TcpFlags::PSH, "PSH"), (TcpFlags::ACK, "ACK")] {
+        for (value, name) in [
+            (TcpFlags::FIN, "FIN"),
+            (TcpFlags::SYN, "SYN"),
+            (TcpFlags::RST, "RST"),
+            (TcpFlags::PSH, "PSH"),
+            (TcpFlags::ACK, "ACK"),
+        ] {
             if self.0 & value.0 != 0 {
                 if !first {
                     write!(f, "|")?;
                 }
-                
+
                 write!(f, "{name}")?;
                 first = false;
             }
@@ -140,25 +150,54 @@ pub(crate) fn handle_rx<I: Io>(
     routes: &mut RouteTable,
     sockets: &mut SocketMap,
     pkt: &mut Packet,
+    remote_ip: IpAddr,
 ) -> Result<(), RxError> {
     let header = pkt.read::<TcpHeader>().map_err(RxError::PacketRead)?;
     let src_port = Port::from(header.src_port);
     let dst_port = Port::from(header.dst_port);
 
-    let key = ListenerKey {
+    trace!(
+        "TCP packet [flags: {:?}] src_port: {}, dst_port: {}",
+        header.flags, src_port, dst_port
+    );
+
+    let key = ActiveKey {
         local: Endpoint {
             addr: IpAddr::V4(Ipv4Addr::UNSPECIFIED),
             port: dst_port,
         },
         protocol: Protocol::Tcp,
+        remote: Endpoint {
+            addr: remote_ip,
+            port: src_port,
+        },
     };
 
-    trace!("TCP packet [flags: {:?}] src_port: {}, dst_port: {}", header.flags, src_port, dst_port);
-    let Some(listener) = sockets.get_listener::<TcpListener<I>>(&key) else {
-        // TODO Send an RST packet.
-        warn!("TCP packet: listener not found");
-        return Ok(());
-    };
+    match sockets.get_active::<TcpConn<I>>(&key) {
+        Some(conn) => {
+            // TODO Handle the TCP connection.
+            todo!("handle established connection");
+        }
+        None => {
+            let key = ListenerKey {
+                local: Endpoint {
+                    addr: IpAddr::V4(Ipv4Addr::UNSPECIFIED),
+                    port: dst_port,
+                },
+                protocol: Protocol::Tcp,
+            };
+
+            match sockets.get_listener::<TcpListener<I>>(&key) {
+                Some(listener) => {
+                    // TODO Send an RST packet.
+                    warn!("TCP packet: listener not found");
+                }
+                None => {
+                    trace!("TCP: no connection or listener found");
+                }
+            }
+        }
+    }
 
     Ok(())
 }

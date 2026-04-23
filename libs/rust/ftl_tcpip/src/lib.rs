@@ -17,6 +17,7 @@ extern crate alloc;
 extern crate log;
 
 mod arp;
+pub mod device;
 mod endian;
 pub mod ethernet;
 pub mod ip;
@@ -24,7 +25,6 @@ pub mod packet;
 pub mod route;
 pub mod socket;
 pub mod transport;
-pub mod device;
 mod utils;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

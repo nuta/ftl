@@ -155,10 +155,12 @@ fn main(supervisor_ch: Channel) {
         .unwrap();
 
     let mut devices = DeviceMap::new();
-    let device_id = devices.add(MyDevice {
-        mac_addr: MacAddr::new([0x52, 0x54, 0x00, 0x12, 0x34, 0x56]),
-        driver_ch: driver_ch.clone(),
-    }).unwrap();
+    let device_id = devices
+        .add(MyDevice {
+            mac_addr: MacAddr::new([0x52, 0x54, 0x00, 0x12, 0x34, 0x56]),
+            driver_ch: driver_ch.clone(),
+        })
+        .unwrap();
 
     let mut routes = RouteTable::new();
     routes
@@ -171,10 +173,12 @@ fn main(supervisor_ch: Channel) {
 
     let mut sockets = SocketMap::new();
 
-    let listener = sockets.tcp_listen::<TcpIpIo>(Endpoint {
-        addr: IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
-        port: Port::new(80),
-    }).unwrap();
+    let listener = sockets
+        .tcp_listen::<TcpIpIo>(Endpoint {
+            addr: IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
+            port: Port::new(80),
+        })
+        .unwrap();
 
     let mut pkt = Packet::new(RECV_BUFFER_SIZE, 0).unwrap();
     loop {
