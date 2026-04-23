@@ -87,6 +87,32 @@ impl<I: Io> TcpListener<I> {
         self.inner.lock().pending_accepts.try_push_back(req)?;
         Ok(())
     }
+
+    fn handle_rx(
+        &self,
+        pkt: &mut Packet,
+        remote_ip: IpAddr,
+        remote_port: Port,
+        flags: TcpFlags,
+        seq: u32,   
+        ack: u32,
+        window_size: u16,
+    ) -> Result<(), RxError> {
+        let mut inner = self.inner.lock();
+    
+        if flags.contains(TcpFlags::SYN) {
+            trace!("TCP: SYN received");
+            inner.syn_received.push(SynReceived {
+                remote_port,
+                init_seq: seq,
+                init_ack: ack,
+                window_size: window_size,
+            });
+        }
+    
+        Ok(())
+    }
+    
 }
 
 impl<I: Io> AnySocket for TcpListener<I> {}
@@ -163,30 +189,6 @@ pub(crate) enum RxError {
     PacketRead(packet::ReserveError),
 }
 
-fn handle_listener_rx<I: Io>(
-    listener: Arc<TcpListener<I>>,
-    header: &TcpHeader,
-    remote_ip: IpAddr,
-    remote_port: Port,
-    seq: u32,
-    ack: u32,
-    window_size: u16,
-) -> Result<(), RxError> {
-    let mut inner = listener.inner.lock();
-
-    if header.flags.contains(TcpFlags::SYN) {
-        trace!("TCP: SYN received");
-        inner.syn_received.push(SynReceived {
-            remote_port,
-            init_seq: seq,
-            init_ack: ack,
-            window_size: window_size,
-        });
-    }
-
-    Ok(())
-}
-
 pub(crate) fn handle_rx<I: Io>(
     devices: &mut DeviceMap<I::Device>,
     routes: &mut RouteTable,
@@ -197,13 +199,14 @@ pub(crate) fn handle_rx<I: Io>(
     let header = pkt.read::<TcpHeader>().map_err(RxError::PacketRead)?;
     let src_port = Port::from(header.src_port);
     let dst_port = Port::from(header.dst_port);
+    let flags = header.flags;
     let seq = header.seq.into();
     let ack = header.ack.into();
     let window_size = header.window_size.into();
 
     trace!(
         "TCP packet [flags: {:?}] src_port: {}, dst_port: {}",
-        header.flags, src_port, dst_port
+        flags, src_port, dst_port
     );
 
     let key = ActiveKey {
@@ -234,7 +237,7 @@ pub(crate) fn handle_rx<I: Io>(
 
             match sockets.get_listener::<TcpListener<I>>(&key) {
                 Some(listener) => {
-                    handle_listener_rx(listener, &header, remote_ip, src_port, seq, ack, window_size);
+                    listener.handle_rx(pkt, remote_ip, src_port, flags, seq, ack, window_size);
                 }
                 None => {
                     trace!("TCP: no connection or listener found");
