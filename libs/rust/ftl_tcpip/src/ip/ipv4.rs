@@ -142,7 +142,7 @@ pub(crate) fn transmit<I: Io>(
     let header = Ipv4Header {
         version_and_ihl: 4 << 4 | 5,
         tos: 0,
-        len: (pkt.len() as u16).into(),
+        len: ((size_of::<Ipv4Header>() + pkt.len()) as u16).into(),
         id: 0.into(),
         flags_and_frag_offset: 0.into(),
         ttl: 64,

@@ -115,12 +115,12 @@ impl<I: Io> TcpListener<I> {
             let mut pkt = Packet::new(0, head_room).map_err(TxError::PacketAlloc)?;
 
             let header = TcpHeader {
-                src_port: syn.remote_port.into(),
-                dst_port: self.local_port.into(),
+                src_port: self.local_port.into(),
+                dst_port: syn.remote_port.into(),
                 seq: syn.init_seq.into(),
                 ack: syn.init_ack.into(),
                 window_size: syn.window_size.into(),
-                header_len: 5.into(),
+                header_len: 20.into(),
                 flags: TcpFlags::SYN | TcpFlags::ACK,
                 checksum: 0.into(),
                 urgent_pointer: 0.into(),
