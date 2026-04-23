@@ -1,10 +1,10 @@
 use alloc::collections::VecDeque;
+use alloc::sync::Arc;
+use alloc::vec::Drain;
+use alloc::vec::Vec;
 use core::fmt;
 use core::ops::BitOr;
 use core::ops::BitOrAssign;
-use alloc::sync::Arc;
-use alloc::vec::Vec;
-use alloc::vec::Drain;
 
 use crate::Io;
 use crate::OutOfMemoryError;
@@ -103,9 +103,18 @@ impl<I: Io> TcpListener<I> {
         Ok(())
     }
 
-    fn transmit_locked(self: &Arc<Self>, inner: &mut TcpListenerInner<I>, devices: &mut DeviceMap<I::Device>, routes: &mut RouteTable) -> Result<(), TxError> {
+    fn transmit_locked(
+        self: &Arc<Self>,
+        inner: &mut TcpListenerInner<I>,
+        devices: &mut DeviceMap<I::Device>,
+        routes: &mut RouteTable,
+    ) -> Result<(), TxError> {
         for syn in &inner.syn_received {
-            let mut pkt = Packet::new( 0, size_of::<EthernetHeader>() + size_of::<Ipv4Header>() + size_of::<TcpHeader>()).map_err(TxError::PacketAlloc)?;
+            let mut pkt = Packet::new(
+                0,
+                size_of::<EthernetHeader>() + size_of::<Ipv4Header>() + size_of::<TcpHeader>(),
+            )
+            .map_err(TxError::PacketAlloc)?;
             let header = TcpHeader {
                 src_port: syn.remote_port.into(),
                 dst_port: self.local_port.into(),
@@ -118,11 +127,15 @@ impl<I: Io> TcpListener<I> {
                 urgent_pointer: 0.into(),
             };
 
-            trace!("TCP: replying to SYN: src_port: {}, dst_port: {}, seq: {}, ack: {}, window_size: {}", syn.remote_port, self.local_port, syn.init_seq, syn.init_ack, syn.window_size);
+            trace!(
+                "TCP: replying to SYN: src_port: {}, dst_port: {}, seq: {}, ack: {}, window_size: {}",
+                syn.remote_port, self.local_port, syn.init_seq, syn.init_ack, syn.window_size
+            );
             pkt.write_front(header).map_err(TxError::PacketWrite)?;
             match syn.remote_ip {
                 IpAddr::V4(ip) => {
-                    ipv4::transmit::<I>(devices, routes, &mut pkt, ip, Protocol::Tcp).map_err(TxError::Ipv4Tx)?;
+                    ipv4::transmit::<I>(devices, routes, &mut pkt, ip, Protocol::Tcp)
+                        .map_err(TxError::Ipv4Tx)?;
                 }
             }
         }
@@ -138,12 +151,12 @@ impl<I: Io> TcpListener<I> {
         remote_ip: IpAddr,
         remote_port: Port,
         flags: TcpFlags,
-        seq: u32,   
+        seq: u32,
         ack: u32,
         window_size: u16,
     ) -> Result<(), RxError> {
         let mut inner = self.inner.lock();
-    
+
         if flags.contains(TcpFlags::SYN) {
             trace!("TCP: SYN received");
             inner.syn_received.push(SynReceived {
@@ -159,10 +172,9 @@ impl<I: Io> TcpListener<I> {
                 return Ok(());
             }
         }
-    
+
         Ok(())
     }
-    
 }
 
 impl<I: Io> AnySocket for TcpListener<I> {}
@@ -289,7 +301,17 @@ pub(crate) fn handle_rx<I: Io>(
 
             match sockets.get_listener::<TcpListener<I>>(&key) {
                 Some(listener) => {
-                    listener.handle_rx(devices, routes, pkt, remote_ip, src_port, flags, seq, ack, window_size);
+                    listener.handle_rx(
+                        devices,
+                        routes,
+                        pkt,
+                        remote_ip,
+                        src_port,
+                        flags,
+                        seq,
+                        ack,
+                        window_size,
+                    );
                 }
                 None => {
                     trace!("TCP: no connection or listener found");

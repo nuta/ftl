@@ -1,14 +1,18 @@
 use core::fmt;
 
-use crate::ethernet::EtherType;
-use crate::{Io, ethernet, transport};
-use crate::device::{Device, DeviceMap};
+use crate::Io;
+use crate::device::Device;
+use crate::device::DeviceMap;
 use crate::endian::Ne;
+use crate::ethernet;
+use crate::ethernet::EtherType;
 use crate::ip::IpAddr;
-use crate::packet::{Packet, WriteableToPacket};
+use crate::packet::Packet;
+use crate::packet::WriteableToPacket;
 use crate::packet::{self};
 use crate::route::RouteTable;
 use crate::socket::SocketMap;
+use crate::transport;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Ipv4Addr(u32);

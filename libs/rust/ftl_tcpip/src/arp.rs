@@ -82,8 +82,7 @@ fn transmit_arp_reply<D: Device>(
         .map_err(TxError::PacketAlloc)?;
     pkt.write_back(arp_pkt).map_err(TxError::PacketWrite)?;
 
-    ethernet::transmit(device, EtherType::Arp,  &mut pkt)
-        .map_err(TxError::EthernetTx)?;
+    ethernet::transmit(device, EtherType::Arp, &mut pkt).map_err(TxError::EthernetTx)?;
     Ok(())
 }
 
