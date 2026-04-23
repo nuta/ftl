@@ -110,11 +110,10 @@ impl<I: Io> TcpListener<I> {
         routes: &mut RouteTable,
     ) -> Result<(), TxError> {
         for syn in &inner.syn_received {
-            let mut pkt = Packet::new(
-                0,
-                size_of::<EthernetHeader>() + size_of::<Ipv4Header>() + size_of::<TcpHeader>(),
-            )
-            .map_err(TxError::PacketAlloc)?;
+            let head_room =
+                size_of::<EthernetHeader>() + size_of::<Ipv4Header>() + size_of::<TcpHeader>();
+            let mut pkt = Packet::new(0, head_room).map_err(TxError::PacketAlloc)?;
+
             let header = TcpHeader {
                 src_port: syn.remote_port.into(),
                 dst_port: self.local_port.into(),
