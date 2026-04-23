@@ -136,6 +136,8 @@ pub(crate) fn handle_rx<I: Io>(
     let dst = Ipv4Addr::from(header.dst_addr);
     info!("IPv4 packet: src: {}, dst: {}", src, dst);
 
+    // TODO: check dst address
+
     match header.protocol {
         0x06 => {
             if let Err(err) =
