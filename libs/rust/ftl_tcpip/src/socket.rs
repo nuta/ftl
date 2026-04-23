@@ -13,21 +13,21 @@ use crate::transport::{self};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Endpoint {
-    addr: IpAddr,
-    port: Port,
+    pub addr: IpAddr,
+    pub port: Port,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ActiveKey {
-    remote: Endpoint,
-    local: Endpoint,
-    protocol: transport::Protocol,
+    pub remote: Endpoint,
+    pub local: Endpoint,
+    pub protocol: transport::Protocol,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ListenerKey {
-    local: Endpoint,
-    protocol: transport::Protocol,
+pub    local: Endpoint,
+    pub    protocol: transport::Protocol,
 }
 
 pub trait AnySocket: Any + Send + Sync {}
@@ -51,14 +51,14 @@ impl SocketMap {
         }
     }
 
-    pub(crate) fn get_active<T: AnySocket>(&self, key: ActiveKey) -> Option<Arc<T>> {
-        let any_socket = self.actives.get(&key)?.clone() as Arc<dyn Any + Send + Sync>;
+    pub(crate) fn get_active<T: AnySocket>(&self, key: &ActiveKey) -> Option<Arc<T>> {
+        let any_socket = self.actives.get(key)?.clone() as Arc<dyn Any + Send + Sync>;
         let socket = any_socket.downcast::<T>().ok()?;
         Some(socket)
     }
 
-    pub(crate) fn get_listener<T: AnySocket>(&self, key: ListenerKey) -> Option<Arc<T>> {
-        let any_socket = self.listeners.get(&key)?.clone() as Arc<dyn Any + Send + Sync>;
+    pub(crate) fn get_listener<T: AnySocket>(&self, key: &ListenerKey) -> Option<Arc<T>> {
+        let any_socket = self.listeners.get(key)?.clone() as Arc<dyn Any + Send + Sync>;
         let socket = any_socket.downcast::<T>().ok()?;
         Some(socket)
     }

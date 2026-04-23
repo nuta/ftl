@@ -4,13 +4,17 @@ use crate::Io;
 use crate::OutOfMemoryError;
 use crate::device::DeviceMap;
 use crate::endian::Ne;
+use crate::ip::IpAddr;
 use crate::ip::ipv4::Ipv4Addr;
 use crate::packet;
 use crate::packet::Packet;
 use crate::route::RouteTable;
 use crate::socket::AnySocket;
+use crate::socket::Endpoint;
+use crate::socket::ListenerKey;
 use crate::socket::SocketMap;
 use crate::transport::Port;
+use crate::transport::Protocol;
 use crate::utils::TryPushBack;
 
 #[derive(Debug)]
@@ -93,7 +97,20 @@ pub(crate) fn handle_rx<I: Io>(
     let src_port = Port::from(header.src_port);
     let dst_port = Port::from(header.dst_port);
 
+    let key = ListenerKey {
+        local: Endpoint {
+            addr: IpAddr::V4(Ipv4Addr::UNSPECIFIED),
+            port: dst_port,
+        },
+        protocol: Protocol::Tcp,
+    };
+
     trace!("TCP packet: src_port: {}, dst_port: {}", src_port, dst_port);
+    let Some(listener) = sockets.get_listener::<TcpListener<I>>(&key) else {
+        // TODO Send an RST packet.
+        warn!("TCP packet: listener not found");
+        return Ok(());
+    };
 
     Ok(())
 }
