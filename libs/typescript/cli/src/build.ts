@@ -45,7 +45,7 @@ export async function runCmd(argv: string[], options?: Parameters<typeof Bun.spa
     }
 }
 
-async function runCmd(argv: string[]): Promise<string> {
+async function runCmdWithOutput(argv: string[]): Promise<string> {
     const proc = Bun.spawn(argv, {
         stdout: 'pipe',
         stderr: 'pipe',
@@ -74,7 +74,7 @@ async function pathExists(filePath: string): Promise<boolean> {
 }
 
 async function findRustLlvmTool(tool: string): Promise<string> {
-    const sysroot = await runCmd(['rustc', '--print', 'sysroot']);
+    const sysroot = await runCmdWithOutput(['rustc', '--print', 'sysroot']);
     const rustlib = path.join(sysroot, 'lib', 'rustlib');
     const entries = await fs.readdir(rustlib, { withFileTypes: true });
 
