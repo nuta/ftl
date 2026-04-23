@@ -73,6 +73,7 @@ struct TcpListenerInner<I: Io> {
     syn_received: Vec<SynReceived>,
 }
 
+#[derive(Debug)]
 enum TxError {
     PacketAlloc(packet::AllocError),
     PacketWrite(packet::ReserveError),
@@ -99,8 +100,7 @@ impl<I: Io> TcpListener<I> {
         Ok(())
     }
 
-    fn transmit(self: &Arc<Self>, devices: &mut DeviceMap<I::Device>, routes: &mut RouteTable) -> Result<(), TxError> {
-        let mut inner = self.inner.lock();
+    fn transmit_locked(self: &Arc<Self>, inner: &mut TcpListenerInner<I>, devices: &mut DeviceMap<I::Device>, routes: &mut RouteTable) -> Result<(), TxError> {
         for syn in &inner.syn_received {
             let Some(route) = routes.lookup_by_dest(syn.remote_ip) else {
                 // TODO: remove the entry
@@ -127,6 +127,7 @@ impl<I: Io> TcpListener<I> {
                 urgent_pointer: 0.into(),
             };
 
+            trace!("TCP: replying to SYN: src_port: {}, dst_port: {}, seq: {}, ack: {}, window_size: {}", syn.remote_port, self.local_port, syn.init_seq, syn.init_ack, syn.window_size);
             pkt.write_front(header).map_err(TxError::PacketWrite)?;
             device.transmit(&mut pkt);
         }
@@ -135,7 +136,9 @@ impl<I: Io> TcpListener<I> {
     }
 
     fn handle_rx(
-        &self,
+        self: &Arc<Self>,
+        devices: &mut DeviceMap<I::Device>,
+        routes: &mut RouteTable,
         pkt: &mut Packet,
         remote_ip: IpAddr,
         remote_port: Port,
@@ -155,6 +158,11 @@ impl<I: Io> TcpListener<I> {
                 init_ack: ack,
                 window_size: window_size,
             });
+
+            if let Err(err) = self.transmit_locked(&mut inner, devices, routes) {
+                warn!("TCP: failed to reply to SYN: {:?}", err);
+                return Ok(());
+            }
         }
     
         Ok(())
@@ -286,7 +294,7 @@ pub(crate) fn handle_rx<I: Io>(
 
             match sockets.get_listener::<TcpListener<I>>(&key) {
                 Some(listener) => {
-                    listener.handle_rx(pkt, remote_ip, src_port, flags, seq, ack, window_size);
+                    listener.handle_rx(devices, routes, pkt, remote_ip, src_port, flags, seq, ack, window_size);
                 }
                 None => {
                     trace!("TCP: no connection or listener found");
