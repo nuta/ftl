@@ -12,16 +12,6 @@ const SOURCE_EXTENSIONS = new Set([
     '.html',
 ]);
 
-const QEMU_START_RETRY_DELAYS_MS = [100, 250, 500, 1000, 2000, 5000, 10000];
-const QEMU_START_SETTLE_MS = 250;
-const QEMU_STOP_TIMEOUT_MS = 1000;
-
-type QemuProcess = ReturnType<typeof Bun.spawn>;
-
-function sleep(ms: number) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 function createDebouncer(ms: number, fn: (filename?: string) => Promise<void>) {
     let timeout: NodeJS.Timeout | null = null;
     let promise = Promise.resolve();
@@ -44,48 +34,8 @@ function createDebouncer(ms: number, fn: (filename?: string) => Promise<void>) {
     };
 }
 
-async function stopQemu(qemu: QemuProcess) {
-    qemu.kill('SIGTERM');
-
-    const exited = await Promise.race([
-        qemu.exited.then(() => true),
-        sleep(QEMU_STOP_TIMEOUT_MS).then(() => false),
-    ]);
-
-    if (exited) {
-        return;
-    }
-
-    qemu.kill('SIGKILL');
-    await qemu.exited;
-}
-
-async function startQemuWithRetry(params: Parameters<typeof startQemu>[0]) {
-    for (let attempt = 0; attempt <= QEMU_START_RETRY_DELAYS_MS.length; attempt++) {
-        const qemu = await startQemu(params);
-        const stillRunning = await Promise.race([
-            qemu.exited.then(() => false),
-            sleep(QEMU_START_SETTLE_MS).then(() => true),
-        ]);
-
-        if (stillRunning) {
-            return qemu;
-        }
-
-        const delay = QEMU_START_RETRY_DELAYS_MS[attempt];
-        if (delay === undefined) {
-            throw new Error(`QEMU exited immediately with ${qemu.exitCode}`);
-        }
-
-        console.log(`QEMU exited immediately; retrying in ${delay}ms...`);
-        await sleep(delay);
-    }
-
-    throw new Error('QEMU failed to start');
-}
-
 export async function main(args: string[]) {
-    let qemu: QemuProcess | null = null;
+    let qemu: ReturnType<typeof Bun.spawn> | null = null;
 
     process.on('exit', () => {
         if (qemu) {
@@ -93,12 +43,10 @@ export async function main(args: string[]) {
         }
     });
 
-    process.on('SIGINT', async () => {
+    process.on('SIGINT', () => {
         console.log('exiting...');
         if (qemu) {
-            const oldQemu = qemu;
-            qemu = null;
-            await stopQemu(oldQemu);
+            qemu.kill('SIGTERM');
         }
 
         process.exit(0);
@@ -106,9 +54,7 @@ export async function main(args: string[]) {
 
     const rebuild = async (filename?: string) => {
         if (qemu) {
-            const oldQemu = qemu;
-            qemu = null;
-            await stopQemu(oldQemu);
+            qemu.kill('SIGTERM');
         }
 
         // Clear the screen.
@@ -122,7 +68,10 @@ export async function main(args: string[]) {
 
         try {
             await buildCommand.main([]);
-            qemu = await startQemuWithRetry({
+            if (qemu) {
+                await qemu.exited;
+            }
+            qemu = await startQemu({
                 portForwarding: [
                     // HTTP server
                     {
