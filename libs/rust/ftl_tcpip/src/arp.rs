@@ -134,7 +134,7 @@ pub(crate) fn handle_rx<I: Io>(
                 sender_addr, target_addr
             );
 
-            let route = routes.lookup_by_dest_exact(sender_addr);
+            let route = routes.lookup_by_dest_exact(target_addr);
             if let Some(route) = route {
                 let device_id = route.device_id();
                 let device = devices.get_mut(device_id).ok_or(RxError::DeviceNotFound(device_id))?;
