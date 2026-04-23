@@ -38,14 +38,3 @@ pub trait Io: 'static {
     type TcpRead: tcp::Read;
     type TcpAccept: tcp::Accept;
 }
-
-pub fn receive_packet<I: Io>(
-    routes: &mut RouteTable<I::Device>,
-    sockets: &mut SocketMap,
-    pkt: &mut Packet,
-) {
-    trace!("received packet: {:02x?}", pkt.len());
-    ethernet::handle_rx::<I>(routes, sockets, pkt);
-    // let key = todo!();
-    // let listener = sockets.get_listener::<TcpListener<I>>(key);
-}

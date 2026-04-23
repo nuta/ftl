@@ -170,7 +170,7 @@ fn main(supervisor_ch: Channel) {
                         match reply.recv(&mut buf[..len]) {
                             Ok(slice) => {
                                 pkt.set_len(len);
-                                ftl_tcpip::receive_packet::<TcpIpIo>(
+                                ftl_tcpip::ethernet::handle_rx::<TcpIpIo>(
                                     &mut routes,
                                     &mut sockets,
                                     &mut pkt,

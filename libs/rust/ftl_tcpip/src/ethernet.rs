@@ -69,7 +69,7 @@ pub(crate) fn transmit<D: Device>(
     Ok(())
 }
 
-pub(crate) fn handle_rx<I: Io>(
+pub fn handle_rx<I: Io>(
     routes: &mut RouteTable<I::Device>,
     sockets: &mut SocketMap,
     pkt: &mut Packet,
