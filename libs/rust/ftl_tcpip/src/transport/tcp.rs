@@ -3,6 +3,8 @@ use core::fmt;
 use core::ops::BitOr;
 use core::ops::BitOrAssign;
 use alloc::sync::Arc;
+use alloc::vec::Vec;
+use alloc::vec::Drain;
 
 use crate::Io;
 use crate::OutOfMemoryError;
@@ -55,8 +57,16 @@ impl<I: Io> TcpConn<I> {
 
 impl<I: Io> AnySocket for TcpConn<I> {}
 
+struct SynReceived {
+    remote_port: Port,
+    init_seq: u32,
+    init_ack: u32,
+    window_size: u16,
+}
+
 struct TcpListenerInner<I: Io> {
     pending_accepts: VecDeque<I::TcpAccept>,
+    syn_received: Vec<SynReceived>,
 }
 
 pub struct TcpListener<I: Io> {
@@ -68,6 +78,7 @@ impl<I: Io> TcpListener<I> {
         Self {
             inner: spin::Mutex::new(TcpListenerInner {
                 pending_accepts: VecDeque::new(),
+                syn_received: Vec::new(),
             }),
         }
     }
@@ -154,9 +165,25 @@ pub(crate) enum RxError {
 
 fn handle_listener_rx<I: Io>(
     listener: Arc<TcpListener<I>>,
-    pkt: &mut Packet,
+    header: &TcpHeader,
+    remote_ip: IpAddr,
+    remote_port: Port,
+    seq: u32,
+    ack: u32,
+    window_size: u16,
 ) -> Result<(), RxError> {
-    todo!("handle listener TCP packet");
+    let mut inner = listener.inner.lock();
+
+    if header.flags.contains(TcpFlags::SYN) {
+        trace!("TCP: SYN received");
+        inner.syn_received.push(SynReceived {
+            remote_port,
+            init_seq: seq,
+            init_ack: ack,
+            window_size: window_size,
+        });
+    }
+
     Ok(())
 }
 
@@ -170,6 +197,9 @@ pub(crate) fn handle_rx<I: Io>(
     let header = pkt.read::<TcpHeader>().map_err(RxError::PacketRead)?;
     let src_port = Port::from(header.src_port);
     let dst_port = Port::from(header.dst_port);
+    let seq = header.seq.into();
+    let ack = header.ack.into();
+    let window_size = header.window_size.into();
 
     trace!(
         "TCP packet [flags: {:?}] src_port: {}, dst_port: {}",
@@ -204,7 +234,7 @@ pub(crate) fn handle_rx<I: Io>(
 
             match sockets.get_listener::<TcpListener<I>>(&key) {
                 Some(listener) => {
-                    handle_listener_rx(listener, pkt);
+                    handle_listener_rx(listener, &header, remote_ip, src_port, seq, ack, window_size);
                 }
                 None => {
                     trace!("TCP: no connection or listener found");
