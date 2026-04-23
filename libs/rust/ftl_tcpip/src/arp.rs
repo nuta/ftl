@@ -9,6 +9,7 @@ use crate::ethernet;
 use crate::ethernet::EtherType;
 use crate::ethernet::EthernetHeader;
 use crate::ethernet::MacAddr;
+use crate::ip::IpAddr;
 use crate::ip::ipv4::Ipv4Addr;
 use crate::packet::Packet;
 use crate::packet::WriteableToPacket;
@@ -128,7 +129,7 @@ pub(crate) fn handle_rx<I: Io>(
 
     match arp.opcode.into() {
         OPCODE_REQUEST => {
-            let route = routes.lookup_by_dest_exact(target_addr);
+            let route = routes.lookup_by_dest_exact(IpAddr::V4(target_addr));
             if let Some(route) = route {
                 let device_id = route.device_id();
                 let device = devices

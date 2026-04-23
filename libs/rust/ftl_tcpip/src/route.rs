@@ -63,7 +63,7 @@ impl RouteTable {
     }
 
     // TODO: rename
-    pub fn lookup_by_dest_exact(&self, dest_addr: Ipv4Addr) -> Option<&Route> {
+    pub fn lookup_by_dest_exact(&self, dest_addr: IpAddr) -> Option<&Route> {
         self.routes
             .iter()
             .find(|route| route.should_receive_exact(dest_addr))

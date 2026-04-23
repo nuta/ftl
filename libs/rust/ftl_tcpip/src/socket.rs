@@ -11,7 +11,7 @@ use crate::tcp::{self};
 use crate::transport::Port;
 use crate::transport::{self};
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Endpoint {
     pub addr: IpAddr,
     pub port: Port,
@@ -72,7 +72,7 @@ impl SocketMap {
             protocol: transport::Protocol::Tcp,
         };
 
-        let socket = Arc::new(TcpListener::<I>::new());
+        let socket = Arc::new(TcpListener::<I>::new(local.port));
 
         self.listeners
             .try_reserve(1)

@@ -8,6 +8,7 @@ use alloc::vec::Drain;
 
 use crate::Io;
 use crate::OutOfMemoryError;
+use crate::device::Device;
 use crate::device::DeviceMap;
 use crate::endian::Ne;
 use crate::ethernet::EthernetHeader;
@@ -15,6 +16,7 @@ use crate::ip::IpAddr;
 use crate::ip::ipv4::Ipv4Addr;
 use crate::packet;
 use crate::packet::Packet;
+use crate::packet::WriteableToPacket;
 use crate::route::RouteTable;
 use crate::socket::ActiveKey;
 use crate::socket::AnySocket;
@@ -71,13 +73,20 @@ struct TcpListenerInner<I: Io> {
     syn_received: Vec<SynReceived>,
 }
 
+enum TxError {
+    PacketAlloc(packet::AllocError),
+    PacketWrite(packet::ReserveError),
+}
+
 pub struct TcpListener<I: Io> {
+    local_port: Port,
     inner: spin::Mutex<TcpListenerInner<I>>,
 }
 
 impl<I: Io> TcpListener<I> {
-    pub(crate) fn new() -> Self {
+    pub(crate) fn new(local_port: Port) -> Self {
         Self {
+            local_port,
             inner: spin::Mutex::new(TcpListenerInner {
                 pending_accepts: VecDeque::new(),
                 syn_received: Vec::new(),
@@ -90,23 +99,25 @@ impl<I: Io> TcpListener<I> {
         Ok(())
     }
 
-    fn transmit(self: &Arc<Self>, devices: &mut DeviceMap<I::Device>, routes: &mut RouteTable) {
+    fn transmit(self: &Arc<Self>, devices: &mut DeviceMap<I::Device>, routes: &mut RouteTable) -> Result<(), TxError> {
         let mut inner = self.inner.lock();
         for syn in &inner.syn_received {
-            let route = routes.lookup_by_dest(syn.remote_ip);
-            if let Some(route) = route {
-                let device_id = route.device_id();
-                let device = devices.get_mut(device_id).unwrap();
-            } else {
+            let Some(route) = routes.lookup_by_dest(syn.remote_ip) else {
                 // TODO: remove the entry
                 warn!("TCP: no route found for remote port: {}", syn.remote_port);
                 continue;
             };
 
-            let pkt = Packet::new(size_of::<TcpHeader>(), size_of::<EthernetHeader>());
+            let Some(device) = devices.get_mut(route.device_id()) else {
+                // TODO: remove the entry
+                warn!("TCP: no device found for route: {:?}", route.device_id());
+                continue;
+            };
+
+            let mut pkt = Packet::new(size_of::<TcpHeader>(), size_of::<EthernetHeader>()).map_err(TxError::PacketAlloc)?;
             let header = TcpHeader {
                 src_port: syn.remote_port.into(),
-                dst_port: syn.local_port.into(),
+                dst_port: self.local_port.into(),
                 seq: syn.init_seq.into(),
                 ack: syn.init_ack.into(),
                 window_size: syn.window_size.into(),
@@ -115,9 +126,12 @@ impl<I: Io> TcpListener<I> {
                 checksum: 0.into(),
                 urgent_pointer: 0.into(),
             };
+
             pkt.write_front(header).map_err(TxError::PacketWrite)?;
-            device.transmit(pkt);
+            device.transmit(&mut pkt);
         }
+
+        Ok(())
     }
 
     fn handle_rx(
@@ -135,6 +149,7 @@ impl<I: Io> TcpListener<I> {
         if flags.contains(TcpFlags::SYN) {
             trace!("TCP: SYN received");
             inner.syn_received.push(SynReceived {
+                remote_ip,
                 remote_port,
                 init_seq: seq,
                 init_ack: ack,
@@ -215,6 +230,8 @@ struct TcpHeader {
     checksum: Ne<u16>,
     urgent_pointer: Ne<u16>,
 }
+
+impl WriteableToPacket for TcpHeader {}
 
 #[derive(Debug)]
 pub(crate) enum RxError {
