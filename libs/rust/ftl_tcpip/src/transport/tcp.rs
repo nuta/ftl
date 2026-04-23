@@ -2,6 +2,7 @@ use alloc::collections::VecDeque;
 use core::fmt;
 use core::ops::BitOr;
 use core::ops::BitOrAssign;
+use alloc::sync::Arc;
 
 use crate::Io;
 use crate::OutOfMemoryError;
@@ -145,6 +146,14 @@ pub(crate) enum RxError {
     PacketRead(packet::ReserveError),
 }
 
+fn handle_listener_rx<I: Io>(
+    listener: Arc<TcpListener<I>>,
+    pkt: &mut Packet,
+) -> Result<(), RxError> {
+    todo!("handle listener TCP packet");
+    Ok(())
+}
+
 pub(crate) fn handle_rx<I: Io>(
     devices: &mut DeviceMap<I::Device>,
     routes: &mut RouteTable,
@@ -189,11 +198,11 @@ pub(crate) fn handle_rx<I: Io>(
 
             match sockets.get_listener::<TcpListener<I>>(&key) {
                 Some(listener) => {
-                    // TODO Send an RST packet.
-                    warn!("TCP packet: listener not found");
+                    handle_listener_rx(listener, pkt);
                 }
                 None => {
                     trace!("TCP: no connection or listener found");
+                    // TODO: Send an RST packet.
                 }
             }
         }
