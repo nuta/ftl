@@ -102,13 +102,14 @@ impl BitOrAssign<TcpFlags> for TcpFlags {
 impl fmt::Debug for TcpFlags {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut first = true;
-        for flag in [TcpFlags::FIN, TcpFlags::SYN, TcpFlags::RST, TcpFlags::PSH, TcpFlags::ACK] {
-            if self.0 & flag.0 != 0 {
+        for (value, name) in [(TcpFlags::FIN, "FIN"), (TcpFlags::SYN, "SYN"), (TcpFlags::RST, "RST"), (TcpFlags::PSH, "PSH"), (TcpFlags::ACK, "ACK")] {
+            if self.0 & value.0 != 0 {
                 if !first {
                     write!(f, "|")?;
                 }
-
-                write!(f, "{:?}", flag)?;
+                
+                write!(f, "{name}")?;
+                first = false;
             }
         }
 
