@@ -76,22 +76,29 @@ pub fn handle_rx<I: Io>(
     sockets: &mut SocketMap,
     pkt: &mut Packet,
 ) {
-    let header = pkt.read::<EthernetHeader>().unwrap();
+    let header = match pkt.read::<EthernetHeader>() {
+        Ok(header) => header,
+        Err(err) => {
+            debug!("bad Ethernet packet: {:?}", err);
+            return;
+        }
+    };
+
     info!("Ethernet header: {:#?}", header);
     let ether_type: u16 = header.ether_type.into();
     match ether_type {
         0x0800 => {
             if let Err(err) = crate::ip::ipv4::handle_rx::<I>(devices, routes, sockets, pkt) {
-                warn!("bad IPv4 packet: {:?}", err);
+                debug!("bad IPv4 packet: {:?}", err);
             }
         }
         0x0806 => {
             if let Err(err) = crate::arp::handle_rx::<I>(devices, routes, pkt) {
-                warn!("bad ARP packet: {:?}", err);
+                debug!("bad ARP packet: {:?}", err);
             }
         }
         _ => {
-            warn!("unsupported Ethernet type: {:#x}", ether_type);
+            debug!("unsupported Ethernet type: {:#x}", ether_type);
         }
     }
 }

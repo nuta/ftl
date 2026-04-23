@@ -55,19 +55,25 @@ impl<I: Io> TcpConn<I> {
 
 impl<I: Io> AnySocket for TcpConn<I> {}
 
-pub struct TcpListener<I: Io> {
+struct TcpListenerInner<I: Io> {
     pending_accepts: VecDeque<I::TcpAccept>,
+}
+
+pub struct TcpListener<I: Io> {
+    inner: spin::Mutex<TcpListenerInner<I>>,
 }
 
 impl<I: Io> TcpListener<I> {
     pub(crate) fn new() -> Self {
         Self {
-            pending_accepts: VecDeque::new(),
+            inner: spin::Mutex::new(TcpListenerInner {
+                pending_accepts: VecDeque::new(),
+            }),
         }
     }
 
     pub fn accept(&mut self, req: I::TcpAccept) -> Result<(), OutOfMemoryError> {
-        self.pending_accepts.try_push_back(req)?;
+        self.inner.lock().pending_accepts.try_push_back(req)?;
         Ok(())
     }
 }

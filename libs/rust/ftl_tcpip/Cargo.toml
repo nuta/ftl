@@ -11,3 +11,5 @@ std = []
 [dependencies]
 log = { workspace = true }
 hashbrown = { workspace = true }
+spin = { workspace = true }
+

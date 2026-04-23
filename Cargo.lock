@@ -130,6 +130,7 @@ version = "0.0.0"
 dependencies = [
  "hashbrown",
  "log",
+ "spin",
 ]
 
 [[package]]

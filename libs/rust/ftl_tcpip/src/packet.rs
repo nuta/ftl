@@ -78,7 +78,7 @@ impl Packet {
     }
 
     pub fn slice(&self) -> &[u8] {
-        unsafe { slice::from_raw_parts(self.buf_ptr(), self.len()) }
+        unsafe { slice::from_raw_parts(self.head_ptr(), self.len()) }
     }
 
     // TODO: remove this
