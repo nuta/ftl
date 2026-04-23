@@ -127,10 +127,11 @@ pub(crate) fn transmit<I: Io>(
     devices: &mut DeviceMap<I::Device>,
     routes: &mut RouteTable,
     pkt: &mut Packet,
-    dest_ip: Ipv4Addr,
+    dest_ipv4: Ipv4Addr,
     protocol: transport::Protocol,
 ) -> Result<(), TxError> {
-    let Some(route) = routes.lookup_by_dest(IpAddr::V4(dest_ip)) else {
+    let dest_ip = IpAddr::V4(dest_ipv4);
+    let Some(route) = routes.lookup_by_dest(dest_ip) else {
         return Err(TxError::NoRoute);
     };
 
@@ -148,11 +149,12 @@ pub(crate) fn transmit<I: Io>(
         protocol: protocol as u8,
         checksum: 0.into(),
         src_addr: route.ipv4_addr().into(),
-        dst_addr: dest_ip.into(),
+        dst_addr: dest_ipv4.into(),
     };
 
     pkt.write_front(header).map_err(TxError::PacketWrite)?;
-    ethernet::transmit(device, EtherType::Ipv4, pkt).map_err(TxError::EthernetTx)?;
+    ethernet::transmit(device, route, EtherType::Ipv4, pkt, dest_ip)
+        .map_err(TxError::EthernetTx)?;
     Ok(())
 }
 

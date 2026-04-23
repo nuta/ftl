@@ -34,6 +34,14 @@ impl Route {
         self.ipv4_addr
     }
 
+    pub fn arp_table(&self) -> &ArpTable {
+        &self.arp_table
+    }
+
+    pub fn arp_table_mut(&mut self) -> &mut ArpTable {
+        &mut self.arp_table
+    }
+
     fn should_receive_exact(&self, dest_addr: IpAddr) -> bool {
         let IpAddr::V4(dest_addr) = dest_addr; // TODO:
 
@@ -63,9 +71,9 @@ impl RouteTable {
     }
 
     // TODO: rename
-    pub fn lookup_by_dest_exact(&self, dest_addr: IpAddr) -> Option<&Route> {
+    pub fn lookup_by_dest_exact_mut(&mut self, dest_addr: IpAddr) -> Option<&mut Route> {
         self.routes
-            .iter()
+            .iter_mut()
             .find(|route| route.should_receive_exact(dest_addr))
     }
 

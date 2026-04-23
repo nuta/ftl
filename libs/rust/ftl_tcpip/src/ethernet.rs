@@ -4,6 +4,7 @@ use crate::Device;
 use crate::Io;
 use crate::device::DeviceMap;
 use crate::endian::Ne;
+use crate::ip::IpAddr;
 use crate::packet;
 use crate::packet::Packet;
 use crate::packet::WriteableToPacket;
@@ -55,10 +56,22 @@ pub enum TxError {
 
 pub(crate) fn transmit<D: Device>(
     device: &mut D,
+    route: &Route,
     ether_type: EtherType,
     pkt: &mut Packet,
+    dst_addr: IpAddr,
 ) -> Result<(), TxError> {
-    let dest_mac = todo!(); // ARP
+    let dest_mac = match dst_addr {
+        IpAddr::V4(addr) => {
+            match route.arp_table().lookup(addr) {
+                Some(mac) => *mac,
+                None => {
+                    // TODO: should we enqueue the packet to the ARP table?
+                    todo!();
+                }
+            }
+        }
+    };
 
     let header = EthernetHeader {
         dst: dest_mac,

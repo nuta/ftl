@@ -1,5 +1,7 @@
 use alloc::vec::Vec;
 
+use hashbrown::HashMap;
+
 use crate::Device;
 use crate::Io;
 use crate::device::DeviceId;
@@ -17,16 +19,29 @@ use crate::packet::{self};
 use crate::route::Route;
 use crate::route::RouteTable;
 
-enum ArpEntry {}
+enum ArpEntry {
+    Resolved(MacAddr),
+}
 
 pub(crate) struct ArpTable {
-    entries: Vec<ArpEntry>,
+    entries: HashMap<Ipv4Addr, ArpEntry>,
 }
 
 impl ArpTable {
     pub fn new() -> Self {
         Self {
-            entries: Vec::new(),
+            entries: HashMap::new(),
+        }
+    }
+
+    pub fn add(&mut self, addr: Ipv4Addr, mac: MacAddr) {
+        self.entries.insert(addr, ArpEntry::Resolved(mac));
+    }
+
+    pub fn lookup(&self, addr: Ipv4Addr) -> Option<&MacAddr> {
+        match self.entries.get(&addr) {
+            Some(ArpEntry::Resolved(mac)) => Some(mac),
+            _ => None,
         }
     }
 }
@@ -82,7 +97,14 @@ fn transmit_arp_reply<D: Device>(
         .map_err(TxError::PacketAlloc)?;
     pkt.write_back(arp_pkt).map_err(TxError::PacketWrite)?;
 
-    ethernet::transmit(device, EtherType::Arp, &mut pkt).map_err(TxError::EthernetTx)?;
+    ethernet::transmit(
+        device,
+        route,
+        EtherType::Arp,
+        &mut pkt,
+        IpAddr::V4(remote_addr),
+    )
+    .map_err(TxError::EthernetTx)?;
     Ok(())
 }
 
@@ -128,12 +150,16 @@ pub(crate) fn handle_rx<I: Io>(
 
     match arp.opcode.into() {
         OPCODE_REQUEST => {
-            let route = routes.lookup_by_dest_exact(IpAddr::V4(target_addr));
+            let route = routes.lookup_by_dest_exact_mut(IpAddr::V4(target_addr));
             if let Some(route) = route {
                 let device_id = route.device_id();
                 let device = devices
                     .get_mut(device_id)
                     .ok_or(RxError::DeviceNotFound(device_id))?;
+
+                // Register the sender's MAC address so that we can reply to it.
+                route.arp_table_mut().add(sender_addr, arp.sender_hw_addr);
+
                 trace!("replying to ARP request for {}", target_addr);
                 transmit_arp_reply(route, device, sender_addr, arp.sender_hw_addr)
                     .map_err(RxError::ReplyFailed)?;
