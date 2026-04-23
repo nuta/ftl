@@ -128,20 +128,14 @@ pub(crate) fn handle_rx<I: Io>(
 
     match arp.opcode.into() {
         OPCODE_REQUEST => {
-            // Request
-            trace!(
-                "ARP request: sender: {}, target: {}",
-                sender_addr, target_addr
-            );
-
             let route = routes.lookup_by_dest_exact(target_addr);
             if let Some(route) = route {
                 let device_id = route.device_id();
                 let device = devices.get_mut(device_id).ok_or(RxError::DeviceNotFound(device_id))?;
+                trace!("replying to ARP request for {}", target_addr);
                 transmit_arp_reply(route, device, sender_addr, arp.sender_hw_addr)
                     .map_err(RxError::ReplyFailed)?;
             }
-
         }
         OPCODE_REPLY => {
             // Reply
