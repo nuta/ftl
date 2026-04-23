@@ -13,12 +13,15 @@ use ftl::sink::Sink;
 use ftl::sync::Arc;
 use ftl_tcpip::device::DeviceMap;
 use ftl_tcpip::ethernet::MacAddr;
+use ftl_tcpip::ip::IpAddr;
 use ftl_tcpip::ip::ipv4::Ipv4Addr;
 use ftl_tcpip::ip::ipv4::NetMask;
 use ftl_tcpip::packet::Packet;
 use ftl_tcpip::route::Route;
 use ftl_tcpip::route::RouteTable;
+use ftl_tcpip::socket::Endpoint;
 use ftl_tcpip::socket::SocketMap;
+use ftl_tcpip::transport::Port;
 use ftl_tcpip::transport::tcp;
 
 fn conenct_to_driver(supervisor_ch: &Channel) -> Channel {
@@ -166,8 +169,14 @@ fn main(supervisor_ch: Channel) {
         ))
         .unwrap();
 
-    let mut pkt = Packet::new(RECV_BUFFER_SIZE, 0).unwrap();
     let mut sockets = SocketMap::new();
+
+    let listener = sockets.tcp_listen::<TcpIpIo>(Endpoint {
+        addr: IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
+        port: Port::new(80),
+    }).unwrap();
+
+    let mut pkt = Packet::new(RECV_BUFFER_SIZE, 0).unwrap();
     loop {
         let (id, event) = sink.wait().unwrap();
         match event {

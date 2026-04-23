@@ -12,6 +12,12 @@ pub enum Protocol {
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Port(u16);
 
+impl Port {
+    pub const fn new(port: u16) -> Self {
+        Self(port)
+    }
+}
+
 impl fmt::Debug for Port {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)
