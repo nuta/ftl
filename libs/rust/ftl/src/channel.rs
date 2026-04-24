@@ -157,7 +157,6 @@ impl Channel {
 
     pub(crate) fn recv_body(&self, info: MessageInfo, body: &mut [u8]) -> Result<(), ErrorCode> {
         debug_assert!(info.has_body() && !info.has_handle());
-        assert_eq!(body.len(), info.body_len());
 
         sys_channel_recv(self.handle.id(), info, body.as_mut_ptr())?;
         Ok(())
