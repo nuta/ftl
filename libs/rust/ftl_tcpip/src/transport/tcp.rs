@@ -50,9 +50,7 @@ pub trait Accept: Send + Sync {
 }
 
 enum State {
-    Established {
-        should_ack: bool,
-    },
+    Established,
 }
 
 struct TcpConnMutable<I: Io> {
@@ -81,7 +79,6 @@ impl<I: Io> TcpConnMutable<I> {
     }
 }
 
-
 pub struct TcpConn<I: Io> {
     remote: Endpoint,
     mutable: spin::Mutex<TcpConnMutable<I>>,
@@ -104,7 +101,7 @@ impl<I: Io> TcpConn<I> {
         }
     }
 
-    fn receive_bytes(&self, buf: &[u8])  {
+    fn receive_bytes(&self, buf: &[u8]) {
         let mut mutable = self.mutable.lock();
         mutable.receive_bytes(buf);
     }
@@ -113,8 +110,7 @@ impl<I: Io> TcpConn<I> {
         let mut mutable = self.mutable.lock();
 
         match &mut mutable.state {
-            State::Established { should_ack } => {
-                *should_ack = true;
+            State::Established => {
                 mutable.receive_bytes(pkt.slice());
             }
         }
@@ -250,16 +246,27 @@ impl<I: Io> TcpListener<I> {
             }
         } else if flags.contains(TcpFlags::ACK) {
             trace!("TCP: ACK received");
-            let Some((syn_index, syn)) = inner.syn_received.iter().enumerate().find(|(_, syn)| remote_ip == syn.remote_ip && remote_port == syn.remote_port) else {
+            let Some((syn_index, syn)) = inner
+                .syn_received
+                .iter()
+                .enumerate()
+                .find(|(_, syn)| remote_ip == syn.remote_ip && remote_port == syn.remote_port)
+            else {
                 return Err(RxError::BadAckToListener);
             };
-                    
+
             let syn = inner.syn_received.remove(syn_index);
             let remote = Endpoint {
                 addr: remote_ip,
                 port: remote_port,
             };
-            let conn = TcpConn::<I>::new(remote, syn.init_seq, syn.init_ack, syn.window_size, State::Established);
+            let conn = TcpConn::<I>::new(
+                remote,
+                syn.init_seq,
+                syn.init_ack,
+                syn.window_size,
+                State::Established,
+            );
 
             let key = ActiveKey {
                 remote,
@@ -275,7 +282,9 @@ impl<I: Io> TcpListener<I> {
                 conn.receive_bytes(payload);
             }
 
-            sockets.insert_active(key, Arc::new(conn)).map_err(RxError::InsertActive)?;
+            sockets
+                .insert_active(key, Arc::new(conn))
+                .map_err(RxError::InsertActive)?;
         } else {
             trace!("TCP: unknown flags: {:?}", flags);
         }
@@ -387,7 +396,7 @@ impl TcpHeader {
 #[derive(Debug)]
 pub(crate) enum RxError {
     PacketRead(packet::ReserveError),
-    BadAckToListener,   
+    BadAckToListener,
     InsertActive(TryInsertError),
 }
 

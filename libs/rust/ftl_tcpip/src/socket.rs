@@ -63,8 +63,14 @@ impl SocketMap {
         Some(socket)
     }
 
-    pub(crate) fn insert_active<T: AnySocket>(&mut self, key: ActiveKey, socket: Arc<T>) -> Result<(), TryInsertError> {
-        self.actives.try_reserve(1).map_err(TryInsertError::Reserve)?;
+    pub(crate) fn insert_active<T: AnySocket>(
+        &mut self,
+        key: ActiveKey,
+        socket: Arc<T>,
+    ) -> Result<(), TryInsertError> {
+        self.actives
+            .try_reserve(1)
+            .map_err(TryInsertError::Reserve)?;
         self.actives
             .try_insert(key, socket.clone())
             .map_err(|_| TryInsertError::AlreadyExists)?;
