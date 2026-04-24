@@ -64,6 +64,22 @@ struct TcpConnMutable<I: Io> {
     pending_reads: VecDeque<I::TcpRead>,
 }
 
+impl<I: Io> TcpConnMutable<I> {
+    fn receive_bytes(&mut self, buf: &[u8]) {
+        // TODO: buffer size
+        self.rx.extend_from_slice(buf);
+
+        info!("TCP: received {} bytes", buf.len());
+
+        if let Some(mut req) = self.pending_reads.pop_front() {
+            let len = req.write(self.rx.as_slice());
+            req.complete(Ok(len));
+            self.rx.drain(..len);
+        }
+    }
+}
+
+
 pub struct TcpConn<I: Io> {
     remote: Endpoint,
     mutable: spin::Mutex<TcpConnMutable<I>>,
@@ -88,16 +104,16 @@ impl<I: Io> TcpConn<I> {
 
     fn receive_bytes(&self, buf: &[u8])  {
         let mut mutable = self.mutable.lock();
+        mutable.receive_bytes(buf);
+    }
 
-        // TODO: buffer size
-        mutable.rx.extend_from_slice(buf);
+    fn handle_rx(&self, pkt: &mut Packet) {
+        let mut mutable = self.mutable.lock();
 
-        info!("TCP: received {} bytes", buf.len());
-
-        if let Some(mut req) = mutable.pending_reads.pop_front() {
-            let len = req.write(mutable.rx.as_slice());
-            req.complete(Ok(len));
-            mutable.rx.drain(..len);
+        match mutable.state {
+            State::Established => {
+                mutable.receive_bytes(pkt.slice());
+            }
         }
     }
 }
@@ -410,8 +426,7 @@ pub(crate) fn handle_rx<I: Io>(
 
     match sockets.get_active::<TcpConn<I>>(&key) {
         Some(conn) => {
-            // TODO Handle the TCP connection.
-            todo!("handle established connection");
+            conn.handle_rx(pkt);
         }
         None => {
             let key = ListenerKey {
