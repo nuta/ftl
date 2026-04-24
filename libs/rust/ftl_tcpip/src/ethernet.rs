@@ -98,7 +98,6 @@ pub fn handle_rx<I: Io>(
         }
     };
 
-    info!("Ethernet header: {:#?}", header);
     let ether_type: u16 = header.ether_type.into();
     match ether_type {
         0x0800 => {
