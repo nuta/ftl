@@ -17,6 +17,7 @@ extern crate alloc;
 extern crate log;
 
 mod arp;
+mod checksum;
 pub mod device;
 mod endian;
 pub mod ethernet;

@@ -1,6 +1,7 @@
 use core::fmt;
 
 use crate::Io;
+use crate::checksum::Checksum;
 use crate::device::Device;
 use crate::device::DeviceMap;
 use crate::endian::Ne;
@@ -10,6 +11,7 @@ use crate::ip::IpAddr;
 use crate::packet::Packet;
 use crate::packet::WriteableToPacket;
 use crate::packet::{self};
+use crate::route::Route;
 use crate::route::RouteTable;
 use crate::socket::SocketMap;
 use crate::transport;
@@ -22,6 +24,10 @@ impl Ipv4Addr {
 
     pub const fn new(a: u8, b: u8, c: u8, d: u8) -> Self {
         Self((a as u32) << 24 | (b as u32) << 16 | (c as u32) << 8 | d as u32)
+    }
+
+    pub(crate) fn as_u32(self) -> u32 {
+        self.0
     }
 }
 
@@ -113,6 +119,19 @@ impl Ipv4Header {
     fn ihl(&self) -> u8 {
         self.version_and_ihl & 0x0f
     }
+
+    fn compute_checksum(&self) -> u16 {
+        let mut checksum = Checksum::new();
+        checksum.supply_u16(((self.version_and_ihl as u16) << 8) | self.tos as u16);
+        checksum.supply_u16(self.len.into());
+        checksum.supply_u16(self.id.into());
+        checksum.supply_u16(self.flags_and_frag_offset.into());
+        checksum.supply_u16(((self.ttl as u16) << 8) | self.protocol as u16);
+        checksum.supply_u16(0);
+        checksum.supply_u32(self.src_addr.into());
+        checksum.supply_u32(self.dst_addr.into());
+        checksum.finish()
+    }
 }
 
 #[derive(Debug)]
@@ -124,22 +143,14 @@ pub enum TxError {
 }
 
 pub(crate) fn transmit<I: Io>(
-    devices: &mut DeviceMap<I::Device>,
-    routes: &mut RouteTable,
+    device: &mut I::Device,
+    route: &Route,
     pkt: &mut Packet,
-    dest_ipv4: Ipv4Addr,
+    src_ip: Ipv4Addr,
+    dest_ip: Ipv4Addr,
     protocol: transport::Protocol,
 ) -> Result<(), TxError> {
-    let dest_ip = IpAddr::V4(dest_ipv4);
-    let Some(route) = routes.lookup_by_dest(dest_ip) else {
-        return Err(TxError::NoRoute);
-    };
-
-    let Some(device) = devices.get_mut(route.device_id()) else {
-        return Err(TxError::NoDevice);
-    };
-
-    let header = Ipv4Header {
+    let mut header = Ipv4Header {
         version_and_ihl: 4 << 4 | 5,
         tos: 0,
         len: ((size_of::<Ipv4Header>() + pkt.len()) as u16).into(),
@@ -148,12 +159,13 @@ pub(crate) fn transmit<I: Io>(
         ttl: 64,
         protocol: protocol as u8,
         checksum: 0.into(),
-        src_addr: route.ipv4_addr().into(),
-        dst_addr: dest_ipv4.into(),
+        src_addr: src_ip.into(),
+        dst_addr: dest_ip.into(),
     };
+    header.checksum = header.compute_checksum().into();
 
     pkt.write_front(header).map_err(TxError::PacketWrite)?;
-    ethernet::transmit(device, route, EtherType::Ipv4, pkt, dest_ip)
+    ethernet::transmit(device, route, EtherType::Ipv4, pkt, IpAddr::V4(dest_ip))
         .map_err(TxError::EthernetTx)?;
     Ok(())
 }

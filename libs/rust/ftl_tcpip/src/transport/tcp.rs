@@ -8,6 +8,7 @@ use core::ops::BitOrAssign;
 
 use crate::Io;
 use crate::OutOfMemoryError;
+use crate::checksum::Checksum;
 use crate::device::Device;
 use crate::device::DeviceMap;
 use crate::endian::Ne;
@@ -81,6 +82,8 @@ enum TxError {
     PacketAlloc(packet::AllocError),
     PacketWrite(packet::ReserveError),
     Ipv4Tx(ipv4::TxError),
+    NoRoute,
+    NoDevice,
 }
 
 pub struct TcpListener<I: Io> {
@@ -121,21 +124,43 @@ impl<I: Io> TcpListener<I> {
                 seq: syn.init_seq.into(),
                 ack: syn.init_ack.into(),
                 window_size: syn.window_size.into(),
-                header_len: (5 << 4).into(),
+                header_len: encode_header_len(size_of::<TcpHeader>()),
                 flags: TcpFlags::SYN | TcpFlags::ACK,
                 checksum: 0.into(),
                 urgent_pointer: 0.into(),
             };
-
-            trace!(
-                "TCP: replying to SYN: src_port: {}, dst_port: {}, seq: {}, ack: {}, window_size: {}",
-                syn.remote_port, self.local_port, syn.init_seq, syn.init_ack, syn.window_size
-            );
-            pkt.write_front(header).map_err(TxError::PacketWrite)?;
             match syn.remote_ip {
-                IpAddr::V4(ip) => {
-                    ipv4::transmit::<I>(devices, routes, &mut pkt, ip, Protocol::Tcp)
-                        .map_err(TxError::Ipv4Tx)?;
+                IpAddr::V4(remote_ipv4) => {
+                    let Some(route) = routes.lookup_by_dest(syn.remote_ip) else {
+                        return Err(TxError::NoRoute);
+                    };
+
+                    let Some(device) = devices.get_mut(route.device_id()) else {
+                        return Err(TxError::NoDevice);
+                    };
+
+                    header.checksum = header
+                        .compute_checksum(route.ipv4_addr(), remote_ipv4, pkt.slice())
+                        .into();
+
+                    trace!(
+                        "TCP: replying to SYN: src_port: {}, dst_port: {}, seq: {}, ack: {}, window_size: {}",
+                        syn.remote_port,
+                        self.local_port,
+                        syn.init_seq,
+                        syn.init_ack,
+                        syn.window_size
+                    );
+                    pkt.write_front(header).map_err(TxError::PacketWrite)?;
+                    ipv4::transmit::<I>(
+                        device,
+                        route,
+                        &mut pkt,
+                        route.ipv4_addr(),
+                        remote_ipv4,
+                        Protocol::Tcp,
+                    )
+                    .map_err(TxError::Ipv4Tx)?;
                 }
             }
         }
@@ -248,11 +273,32 @@ struct TcpHeader {
 
 impl WriteableToPacket for TcpHeader {}
 
+fn encode_header_len(len: usize) -> u8 {
+    debug_assert_eq!(len % 4, 0);
+    debug_assert!(len / 4 <= 0x0f);
+    ((len / 4) as u8) << 4
+}
+
 impl TcpHeader {
-    fn encode_header_len(header_len_bytes: usize) -> u8 {
-        debug_assert_eq!(header_len_bytes % 4, 0);
-        debug_assert!(header_len_bytes / 4 <= 0x0f);
-        ((header_len_bytes / 4) as u8) << 4
+    fn compute_checksum(&self, src_ip: Ipv4Addr, dst_ip: Ipv4Addr, payload: &[u8]) -> u16 {
+        let tcp_len = size_of::<Self>() + payload.len();
+        debug_assert!(tcp_len <= u16::MAX as usize);
+
+        let mut checksum = Checksum::new();
+        checksum.supply_u32(src_ip.as_u32());
+        checksum.supply_u32(dst_ip.as_u32());
+        checksum.supply_u16(Protocol::Tcp as u16);
+        checksum.supply_u16(tcp_len as u16);
+        checksum.supply_u16(self.src_port.into());
+        checksum.supply_u16(self.dst_port.into());
+        checksum.supply_u32(self.seq.into());
+        checksum.supply_u32(self.ack.into());
+        checksum.supply_u16(((self.header_len as u16) << 8) | self.flags.0 as u16);
+        checksum.supply_u16(self.window_size.into());
+        checksum.supply_u16(0);
+        checksum.supply_u16(self.urgent_pointer.into());
+        checksum.supply_bytes(payload);
+        checksum.finish()
     }
 }
 
@@ -277,8 +323,11 @@ pub(crate) fn handle_rx<I: Io>(
     let window_size = header.window_size.into();
 
     trace!(
-        "TCP packet [flags: {:?}] src_port: {}, dst_port: {}",
-        flags, src_port, dst_port
+        "TCP packet [flags: {:?}] src_port: {}, dst_port: {}, {:?}",
+        flags,
+        src_port,
+        dst_port,
+        core::str::from_utf8(pkt.slice()).unwrap_or("(invalid UTF-8)"),
     );
 
     let key = ActiveKey {
