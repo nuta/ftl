@@ -41,6 +41,7 @@ pub trait Read: Send + Sync {
 }
 
 pub trait Write: Send + Sync {
+    fn len(&self) -> usize;
     fn read(&mut self, buf: &mut [u8]) -> usize;
     fn complete(self, result: Result<usize, Error>);
 }
@@ -149,6 +150,30 @@ impl<I: Io> TcpConn<I> {
                     warn!("TCP: failed to send ACK: {:?}", err);
                 }
             }
+        }
+    }
+
+    pub fn write(&self, devices: &mut DeviceMap<I::Device>, routes: &mut RouteTable, mut req: I::TcpWrite) {
+        let mut mutable = self.mutable.lock();
+        let mut tmp = vec![0; req.len()];
+        let read_len = req.read(&mut tmp);
+        mutable.tx.extend_from_slice(&tmp[..read_len]);
+
+        let header = TcpHeader {
+            src_port: self.local_port.into(),
+            dst_port: self.remote.port.into(),
+            seq: mutable.snd_nxt.into(),
+            ack: mutable.rcv_nxt.into(),
+            window_size: mutable.rcv_wnd.into(),
+            header_len: encode_header_len(size_of::<TcpHeader>()),
+            flags: TcpFlags::PSH,
+            checksum: 0.into(),
+            urgent_pointer: 0.into(),
+        };
+
+        // Send the data to peer.
+        if let Err(err) = transmit_segment::<I>(devices, routes, header, self.remote.addr) {
+            warn!("TCP: failed to send data: {:?}", err);
         }
     }
 }
