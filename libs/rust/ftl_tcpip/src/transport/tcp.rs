@@ -110,6 +110,7 @@ fn transmit<I: Io>(
                 .into();
 
             pkt.write_front(header).map_err(TxError::PacketWrite)?;
+
             ipv4::transmit::<I>(
                 device,
                 route,
@@ -146,31 +147,6 @@ impl<I: Io> TcpListener<I> {
         Ok(())
     }
 
-    fn transmit_locked(
-        self: &Arc<Self>,
-        inner: &mut TcpListenerInner<I>,
-        devices: &mut DeviceMap<I::Device>,
-        routes: &mut RouteTable,
-    ) {
-        for syn in &inner.syn_received {
-            let mut header = TcpHeader {
-                src_port: self.local_port.into(),
-                dst_port: syn.remote_port.into(),
-                seq: syn.init_seq.into(),
-                ack: syn.init_ack.into(),
-                window_size: syn.window_size.into(),
-                header_len: encode_header_len(size_of::<TcpHeader>()),
-                flags: TcpFlags::SYN | TcpFlags::ACK,
-                checksum: 0.into(),
-                urgent_pointer: 0.into(),
-            };
-
-            if let Err(err) = transmit::<I>(devices, routes, header, syn.remote_ip) {
-                warn!("TCP: failed to reply to SYN: {:?}", err);
-            }
-        }
-    }
-
     fn handle_rx(
         self: &Arc<Self>,
         devices: &mut DeviceMap<I::Device>,
@@ -195,7 +171,23 @@ impl<I: Io> TcpListener<I> {
                 window_size: window_size,
             });
 
-            self.transmit_locked(&mut inner, devices, routes);
+            for syn in &inner.syn_received {
+                let mut header = TcpHeader {
+                    src_port: self.local_port.into(),
+                    dst_port: syn.remote_port.into(),
+                    seq: syn.init_seq.into(),
+                    ack: syn.init_ack.into(),
+                    window_size: syn.window_size.into(),
+                    header_len: encode_header_len(size_of::<TcpHeader>()),
+                    flags: TcpFlags::SYN | TcpFlags::ACK,
+                    checksum: 0.into(),
+                    urgent_pointer: 0.into(),
+                };
+    
+                if let Err(err) = transmit::<I>(devices, routes, header, syn.remote_ip) {
+                    warn!("TCP: failed to reply to SYN: {:?}", err);
+                }
+            }
         }
 
         Ok(())
