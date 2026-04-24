@@ -212,11 +212,12 @@ impl<I: Io> TcpConn<I> {
                         ack: mutable.rcv_nxt.into(),
                         window_size: mutable.rcv_wnd.into(),
                         header_len: encode_header_len(size_of::<TcpHeader>()),
-                        flags: TcpFlags::PSH,
+                        flags: TcpFlags::ACK | TcpFlags::PSH,
                         checksum: 0.into(),
                         urgent_pointer: 0.into(),
                     };
 
+                    trace!("TCP: sending {} bytes", payload.len());
                     if let Err(err) =
                         transmit_segment::<I>(devices, routes, header, self.remote.addr)
                     {
