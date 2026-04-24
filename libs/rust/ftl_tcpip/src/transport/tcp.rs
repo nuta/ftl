@@ -231,9 +231,7 @@ impl<I: Io> TcpConn<I> {
             }
         }
 
-        if matches!(mutable.state, State::Established) {
-            self.poll_locked(devices, routes, &mut mutable);
-        }
+        self.poll_locked(devices, routes, &mut mutable);
     }
 
     pub fn write(
@@ -285,8 +283,15 @@ impl<I: Io> TcpConn<I> {
     ) {
         match &mut mutable.state {
             State::Established => {
+                // Bytes between snd_una and snd_nxt have already been sent but
+                // are still waiting for an ACK, so they still consume the peer
+                // receive window.
                 let in_flight = mutable.snd_nxt.wrapping_sub(mutable.snd_una);
                 let usable_window = (mutable.snd_wnd as u32).saturating_sub(in_flight);
+
+                // The TX buffer starts at snd_una. Skip bytes that are already
+                // in flight and limit new payload to the remaining usable
+                // window.
                 let unsent_offset = min(in_flight as usize, mutable.tx.len());
                 let unsent_bytes = mutable.tx.len() - unsent_offset;
                 let sendable_bytes = min(usable_window as usize, unsent_bytes);
