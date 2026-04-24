@@ -86,6 +86,45 @@ enum TxError {
     NoDevice,
 }
 
+fn transmit<I: Io>(
+    devices: &mut DeviceMap<I::Device>,
+    routes: &mut RouteTable,
+    mut header: TcpHeader,
+    remote_ip: IpAddr,
+) -> Result<(), TxError> {
+    let head_room = size_of::<EthernetHeader>() + size_of::<Ipv4Header>() + size_of::<TcpHeader>();
+    let mut pkt = Packet::new(0, head_room).map_err(TxError::PacketAlloc)?;
+
+    match remote_ip {
+        IpAddr::V4(remote_ipv4) => {
+            let Some(route) = routes.lookup_by_dest(remote_ip) else {
+                return Err(TxError::NoRoute);
+            };
+
+            let Some(device) = devices.get_mut(route.device_id()) else {
+                return Err(TxError::NoDevice);
+            };
+
+            header.checksum = header
+                .compute_checksum(route.ipv4_addr(), remote_ipv4, pkt.slice())
+                .into();
+
+            pkt.write_front(header).map_err(TxError::PacketWrite)?;
+            ipv4::transmit::<I>(
+                device,
+                route,
+                &mut pkt,
+                route.ipv4_addr(),
+                remote_ipv4,
+                Protocol::Tcp,
+            )
+            .map_err(TxError::Ipv4Tx)?;
+        }
+    }
+
+    Ok(())
+}
+
 pub struct TcpListener<I: Io> {
     local_port: Port,
     inner: spin::Mutex<TcpListenerInner<I>>,
@@ -112,12 +151,8 @@ impl<I: Io> TcpListener<I> {
         inner: &mut TcpListenerInner<I>,
         devices: &mut DeviceMap<I::Device>,
         routes: &mut RouteTable,
-    ) -> Result<(), TxError> {
+    ) {
         for syn in &inner.syn_received {
-            let head_room =
-                size_of::<EthernetHeader>() + size_of::<Ipv4Header>() + size_of::<TcpHeader>();
-            let mut pkt = Packet::new(0, head_room).map_err(TxError::PacketAlloc)?;
-
             let mut header = TcpHeader {
                 src_port: self.local_port.into(),
                 dst_port: syn.remote_port.into(),
@@ -129,43 +164,11 @@ impl<I: Io> TcpListener<I> {
                 checksum: 0.into(),
                 urgent_pointer: 0.into(),
             };
-            match syn.remote_ip {
-                IpAddr::V4(remote_ipv4) => {
-                    let Some(route) = routes.lookup_by_dest(syn.remote_ip) else {
-                        return Err(TxError::NoRoute);
-                    };
 
-                    let Some(device) = devices.get_mut(route.device_id()) else {
-                        return Err(TxError::NoDevice);
-                    };
-
-                    header.checksum = header
-                        .compute_checksum(route.ipv4_addr(), remote_ipv4, pkt.slice())
-                        .into();
-
-                    trace!(
-                        "TCP: replying to SYN: src_port: {}, dst_port: {}, seq: {}, ack: {}, window_size: {}",
-                        syn.remote_port,
-                        self.local_port,
-                        syn.init_seq,
-                        syn.init_ack,
-                        syn.window_size
-                    );
-                    pkt.write_front(header).map_err(TxError::PacketWrite)?;
-                    ipv4::transmit::<I>(
-                        device,
-                        route,
-                        &mut pkt,
-                        route.ipv4_addr(),
-                        remote_ipv4,
-                        Protocol::Tcp,
-                    )
-                    .map_err(TxError::Ipv4Tx)?;
-                }
+            if let Err(err) = transmit::<I>(devices, routes, header, syn.remote_ip) {
+                warn!("TCP: failed to reply to SYN: {:?}", err);
             }
         }
-
-        Ok(())
     }
 
     fn handle_rx(
@@ -192,10 +195,7 @@ impl<I: Io> TcpListener<I> {
                 window_size: window_size,
             });
 
-            if let Err(err) = self.transmit_locked(&mut inner, devices, routes) {
-                warn!("TCP: failed to reply to SYN: {:?}", err);
-                return Ok(());
-            }
+            self.transmit_locked(&mut inner, devices, routes);
         }
 
         Ok(())
