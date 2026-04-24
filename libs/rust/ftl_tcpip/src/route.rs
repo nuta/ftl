@@ -34,11 +34,11 @@ impl Route {
         self.ipv4_addr
     }
 
-    pub fn arp_table(&self) -> &ArpTable {
+    pub(crate) fn arp_table(&self) -> &ArpTable {
         &self.arp_table
     }
 
-    pub fn arp_table_mut(&mut self) -> &mut ArpTable {
+    pub(crate) fn arp_table_mut(&mut self) -> &mut ArpTable {
         &mut self.arp_table
     }
 

@@ -152,7 +152,7 @@ impl<I: Io> TcpListener<I> {
         remote_port: Port,
         flags: TcpFlags,
         seq: u32,
-        ack: u32,
+        _ack: u32,
         window_size: u16,
     ) -> Result<(), RxError> {
         let mut inner = self.inner.lock();
@@ -162,8 +162,8 @@ impl<I: Io> TcpListener<I> {
             inner.syn_received.push(SynReceived {
                 remote_ip,
                 remote_port,
-                init_seq: seq,
-                init_ack: ack,
+                init_seq: 0,
+                init_ack: seq.wrapping_add(1),
                 window_size: window_size,
             });
 
