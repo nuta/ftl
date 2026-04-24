@@ -89,14 +89,21 @@ pub struct TcpConn<I: Io> {
 }
 
 impl<I: Io> TcpConn<I> {
-    fn new(local_port: Port, remote: Endpoint, iss: u32, irs: u32, window_size: u16, state: State) -> Self {
+    fn new(
+        local_port: Port,
+        remote: Endpoint,
+        iss: u32,
+        irs: u32,
+        window_size: u16,
+        state: State,
+    ) -> Self {
         Self {
             local_port,
             remote,
             mutable: spin::Mutex::new(TcpConnMutable {
                 state,
-                snd_una: 0,
-                snd_nxt: iss,
+                snd_una: iss,
+                snd_nxt: iss.wrapping_add(1), // +1 for the SYN packet
                 snd_wnd: 0,
                 rcv_nxt: irs,
                 rcv_wnd: window_size,
@@ -113,14 +120,19 @@ impl<I: Io> TcpConn<I> {
         mutable.receive_bytes(buf);
     }
 
-    fn handle_rx(&self, devices: &mut DeviceMap<I::Device>, routes: &mut RouteTable, pkt: &mut Packet) {
+    fn handle_rx(
+        &self,
+        devices: &mut DeviceMap<I::Device>,
+        routes: &mut RouteTable,
+        pkt: &mut Packet,
+    ) {
         let mut mutable = self.mutable.lock();
 
         match &mut mutable.state {
             State::Established => {
                 mutable.receive_bytes(pkt.slice());
 
-                // Send an ACK.        
+                // Send an ACK.
                 let header = TcpHeader {
                     src_port: self.local_port.into(),
                     dst_port: self.remote.port.into(),
@@ -132,7 +144,7 @@ impl<I: Io> TcpConn<I> {
                     checksum: 0.into(),
                     urgent_pointer: 0.into(),
                 };
-                
+
                 if let Err(err) = transmit_segment::<I>(devices, routes, header, self.remote.addr) {
                     warn!("TCP: failed to send ACK: {:?}", err);
                 }
