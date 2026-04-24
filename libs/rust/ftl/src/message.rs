@@ -1,4 +1,3 @@
-
 use ftl_types::channel::Attr;
 use ftl_types::channel::MessageId;
 use ftl_types::channel::OpenOptions;

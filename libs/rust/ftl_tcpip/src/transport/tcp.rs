@@ -163,31 +163,34 @@ impl<I: Io> TcpListener<I> {
 
         if flags.contains(TcpFlags::SYN) {
             trace!("TCP: SYN received");
-            inner.syn_received.push(SynReceived {
+            let syn = SynReceived {
                 remote_ip,
                 remote_port,
-                init_seq: 0,
+                init_seq: seq,
                 init_ack: seq.wrapping_add(1),
-                window_size: window_size,
-            });
+                window_size,
+            };
 
-            for syn in &inner.syn_received {
-                let mut header = TcpHeader {
-                    src_port: self.local_port.into(),
-                    dst_port: syn.remote_port.into(),
-                    seq: syn.init_seq.into(),
-                    ack: syn.init_ack.into(),
-                    window_size: syn.window_size.into(),
-                    header_len: encode_header_len(size_of::<TcpHeader>()),
-                    flags: TcpFlags::SYN | TcpFlags::ACK,
-                    checksum: 0.into(),
-                    urgent_pointer: 0.into(),
-                };
-    
-                if let Err(err) = transmit::<I>(devices, routes, header, syn.remote_ip) {
-                    warn!("TCP: failed to reply to SYN: {:?}", err);
-                }
+            let mut header = TcpHeader {
+                src_port: self.local_port.into(),
+                dst_port: syn.remote_port.into(),
+                seq: syn.init_seq.into(),
+                ack: syn.init_ack.into(),
+                window_size: syn.window_size.into(),
+                header_len: encode_header_len(size_of::<TcpHeader>()),
+                flags: TcpFlags::SYN | TcpFlags::ACK,
+                checksum: 0.into(),
+                urgent_pointer: 0.into(),
+            };
+
+            inner.syn_received.push(syn);
+            if let Err(err) = transmit::<I>(devices, routes, header, remote_ip) {
+                warn!("TCP: failed to reply to SYN: {:?}", err);
             }
+        } else if flags.contains(TcpFlags::ACK) {
+            trace!("TCP: ACK received");
+        } else {
+            trace!("TCP: unknown flags: {:?}", flags);
         }
 
         Ok(())
