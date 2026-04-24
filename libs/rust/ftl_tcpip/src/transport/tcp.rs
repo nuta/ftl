@@ -2,10 +2,10 @@ use alloc::collections::VecDeque;
 use alloc::sync::Arc;
 use alloc::vec::Drain;
 use alloc::vec::Vec;
+use core::cmp::min;
 use core::fmt;
 use core::ops::BitOr;
 use core::ops::BitOrAssign;
-use core::cmp::min;
 
 use crate::Io;
 use crate::OutOfMemoryError;
@@ -66,7 +66,7 @@ struct TcpConnMutable<I: Io> {
     snd_wnd: u16,
     /// Sequence number of the next byte we expect to receive.
     rcv_nxt: u32,
-    /// Our receive window size. How much RX buffer space we have. 
+    /// Our receive window size. How much RX buffer space we have.
     rcv_wnd: u16,
     /// The receive buffer.
     rx: Vec<u8>,
@@ -175,15 +175,25 @@ impl<I: Io> TcpConn<I> {
         self.poll_locked(devices, routes, &mut mutable);
     }
 
-    fn poll_locked(&self, devices: &mut DeviceMap<I::Device>, routes: &mut RouteTable, mutable: &mut TcpConnMutable<I>) {
+    fn poll_locked(
+        &self,
+        devices: &mut DeviceMap<I::Device>,
+        routes: &mut RouteTable,
+        mutable: &mut TcpConnMutable<I>,
+    ) {
         match &mut mutable.state {
             State::Established => {
                 let unacknowledged_bytes = mutable.snd_nxt.wrapping_sub(mutable.snd_una);
-                let sendable_bytes = min(min(unacknowledged_bytes, mutable.snd_wnd as u32), mutable.tx.len() as u32);
-                
+                let sendable_bytes = min(
+                    min(unacknowledged_bytes, mutable.snd_wnd as u32),
+                    mutable.tx.len() as u32,
+                );
+
                 if sendable_bytes > 0 {
                     let payload = &mutable.tx[..sendable_bytes as usize];
-                    let headroom = size_of::<EthernetHeader>() + size_of::<Ipv4Header>() + size_of::<TcpHeader>();
+                    let headroom = size_of::<EthernetHeader>()
+                        + size_of::<Ipv4Header>()
+                        + size_of::<TcpHeader>();
                     let Ok(pkt) = Packet::new(payload.len(), headroom) else {
                         warn!("TCP: failed to allocate packet");
                         return;
@@ -200,8 +210,10 @@ impl<I: Io> TcpConn<I> {
                         checksum: 0.into(),
                         urgent_pointer: 0.into(),
                     };
-                    
-                    if let Err(err) = transmit_segment::<I>(devices, routes, header, self.remote.addr) {
+
+                    if let Err(err) =
+                        transmit_segment::<I>(devices, routes, header, self.remote.addr)
+                    {
                         warn!("TCP: failed to send data: {:?}", err);
                     }
                 }
