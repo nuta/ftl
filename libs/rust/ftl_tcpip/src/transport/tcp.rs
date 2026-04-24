@@ -1,6 +1,5 @@
 use alloc::collections::VecDeque;
 use alloc::sync::Arc;
-use alloc::vec::Drain;
 use alloc::vec::Vec;
 use core::cmp::min;
 use core::fmt;
@@ -30,8 +29,14 @@ use crate::socket::SocketMap;
 use crate::socket::TryInsertError;
 use crate::transport::Port;
 use crate::transport::Protocol;
-use crate::utils;
 use crate::utils::TryPushBack;
+
+const INITIAL_SEND_SEQ: u32 = 0;
+const DEFAULT_RCV_WND: u16 = u16::MAX;
+
+fn saturating_usize_to_u16(value: usize) -> u16 {
+    min(value, u16::MAX as usize) as u16
+}
 
 #[derive(Debug)]
 pub enum Error {}
@@ -85,6 +90,9 @@ impl<I: Io> TcpConnMutable<I> {
         // TODO: buffer size
         self.rx.extend_from_slice(buf);
         self.rcv_nxt = self.rcv_nxt.wrapping_add(buf.len() as u32);
+        self.rcv_wnd = self
+            .rcv_wnd
+            .saturating_sub(saturating_usize_to_u16(buf.len()));
 
         info!("TCP: received {} bytes", buf.len());
 
@@ -92,7 +100,22 @@ impl<I: Io> TcpConnMutable<I> {
             let len = req.write(self.rx.as_slice());
             req.complete(Ok(len));
             self.rx.drain(..len);
+            self.rcv_wnd = self.rcv_wnd.saturating_add(saturating_usize_to_u16(len));
         }
+    }
+
+    fn update_send_window(&mut self, ack: u32, window_size: u16) {
+        self.snd_wnd = window_size;
+
+        let acked_bytes = ack.wrapping_sub(self.snd_una);
+        let in_flight = self.snd_nxt.wrapping_sub(self.snd_una);
+        if acked_bytes == 0 || acked_bytes > in_flight {
+            return;
+        }
+
+        self.snd_una = ack;
+        let drain_len = min(acked_bytes as usize, self.tx.len());
+        self.tx.drain(..drain_len);
     }
 }
 
@@ -107,20 +130,22 @@ impl<I: Io> TcpConn<I> {
         local_port: Port,
         remote: Endpoint,
         iss: u32,
-        irs: u32,
-        window_size: u16,
+        rcv_nxt: u32,
+        snd_wnd: u16,
+        rcv_wnd: u16,
         state: State,
     ) -> Self {
+        let snd_nxt = iss.wrapping_add(1); // +1 for the SYN packet
         Self {
             local_port,
             remote,
             mutable: spin::Mutex::new(TcpConnMutable {
                 state,
-                snd_una: iss,
-                snd_nxt: iss.wrapping_add(1), // +1 for the SYN packet
-                snd_wnd: 0,
-                rcv_nxt: irs,
-                rcv_wnd: window_size,
+                snd_una: snd_nxt,
+                snd_nxt,
+                snd_wnd,
+                rcv_nxt,
+                rcv_wnd,
                 rx: Vec::new(),
                 tx: Vec::new(),
                 pending_writes: VecDeque::new(),
@@ -139,35 +164,75 @@ impl<I: Io> TcpConn<I> {
         devices: &mut DeviceMap<I::Device>,
         routes: &mut RouteTable,
         pkt: &mut Packet,
+        flags: TcpFlags,
+        seq: u32,
+        ack: u32,
+        window_size: u16,
     ) {
         let mut mutable = self.mutable.lock();
+        if flags.contains(TcpFlags::ACK) {
+            mutable.update_send_window(ack, window_size);
+        } else {
+            mutable.snd_wnd = window_size;
+        }
 
-        match &mut mutable.state {
-            State::Established => {
-                mutable.receive_bytes(pkt.slice());
-
-                // Send an ACK.
-                let header = TcpHeader {
-                    src_port: self.local_port.into(),
-                    dst_port: self.remote.port.into(),
-                    seq: mutable.snd_nxt.into(),
-                    ack: mutable.rcv_nxt.into(),
-                    window_size: mutable.rcv_wnd.into(),
-                    header_len: encode_header_len(size_of::<TcpHeader>()),
-                    flags: TcpFlags::ACK,
-                    checksum: 0.into(),
-                    urgent_pointer: 0.into(),
-                };
-
-                if let Err(err) = transmit_segment::<I>(devices, routes, header, self.remote.addr) {
-                    warn!("TCP: failed to send ACK: {:?}", err);
-                }
-
-                self.poll_locked(devices, routes, &mut mutable);
+        let payload = pkt.slice();
+        let mut should_ack = false;
+        if !payload.is_empty() {
+            if seq == mutable.rcv_nxt {
+                mutable.receive_bytes(payload);
+            } else {
+                trace!(
+                    "TCP: out-of-order data: seq={}, rcv_nxt={}",
+                    seq, mutable.rcv_nxt
+                );
             }
-            state => {
-                todo!("TCP: unimplemented state: {:?}", state);
+
+            should_ack = true;
+        }
+
+        let mut received_fin = false;
+        if flags.contains(TcpFlags::FIN) {
+            let fin_seq = seq.wrapping_add(payload.len() as u32);
+            if fin_seq == mutable.rcv_nxt {
+                mutable.rcv_nxt = mutable.rcv_nxt.wrapping_add(1);
+                received_fin = true;
             }
+
+            should_ack = true;
+        }
+
+        if matches!(mutable.state, State::FinWait1) && mutable.snd_una == mutable.snd_nxt {
+            trace!("TCP: FIN acknowledged");
+            mutable.state = State::FinWait2;
+        }
+
+        if received_fin && matches!(mutable.state, State::FinWait1 | State::FinWait2) {
+            trace!("TCP: FIN received");
+            mutable.state = State::Closing;
+        }
+
+        if should_ack {
+            let header = TcpHeader {
+                src_port: self.local_port.into(),
+                dst_port: self.remote.port.into(),
+                seq: mutable.snd_nxt.into(),
+                ack: mutable.rcv_nxt.into(),
+                window_size: mutable.rcv_wnd.into(),
+                header_len: encode_header_len(size_of::<TcpHeader>()),
+                flags: TcpFlags::ACK,
+                checksum: 0.into(),
+                urgent_pointer: 0.into(),
+            };
+
+            if let Err(err) = transmit_segment::<I>(devices, routes, header, self.remote.addr, &[])
+            {
+                warn!("TCP: failed to send ACK: {:?}", err);
+            }
+        }
+
+        if matches!(mutable.state, State::Established) {
+            self.poll_locked(devices, routes, &mut mutable);
         }
     }
 
@@ -181,6 +246,7 @@ impl<I: Io> TcpConn<I> {
         let mut tmp = alloc::vec![0; req.len()];
         let read_len = req.read(&mut tmp);
         mutable.tx.extend_from_slice(&tmp[..read_len]);
+        req.complete(Ok(read_len));
         self.poll_locked(devices, routes, &mut mutable);
     }
 
@@ -196,13 +262,18 @@ impl<I: Io> TcpConn<I> {
             ack: mutable.rcv_nxt.into(),
             window_size: mutable.rcv_wnd.into(),
             header_len: encode_header_len(size_of::<TcpHeader>()),
-            flags: TcpFlags::FIN,
+            flags: TcpFlags::FIN | TcpFlags::ACK,
             checksum: 0.into(),
             urgent_pointer: 0.into(),
         };
 
-        if let Err(err) = transmit_segment::<I>(devices, routes, header, self.remote.addr) {
-            warn!("TCP: failed to send FIN: {:?}", err);
+        match transmit_segment::<I>(devices, routes, header, self.remote.addr, &[]) {
+            Ok(()) => {
+                mutable.snd_nxt = mutable.snd_nxt.wrapping_add(1);
+            }
+            Err(err) => {
+                warn!("TCP: failed to send FIN: {:?}", err);
+            }
         }
     }
 
@@ -214,28 +285,14 @@ impl<I: Io> TcpConn<I> {
     ) {
         match &mut mutable.state {
             State::Established => {
-                let unacknowledged_bytes = mutable.snd_nxt.wrapping_sub(mutable.snd_una);
-                let sendable_bytes = min(
-                    min(unacknowledged_bytes, mutable.snd_wnd as u32),
-                    mutable.tx.len() as u32,
-                );
+                let in_flight = mutable.snd_nxt.wrapping_sub(mutable.snd_una);
+                let usable_window = (mutable.snd_wnd as u32).saturating_sub(in_flight);
+                let unsent_offset = min(in_flight as usize, mutable.tx.len());
+                let unsent_bytes = mutable.tx.len() - unsent_offset;
+                let sendable_bytes = min(usable_window as usize, unsent_bytes);
 
                 if sendable_bytes > 0 {
-                    let payload = &mutable.tx[..sendable_bytes as usize];
-                    let headroom = size_of::<EthernetHeader>()
-                        + size_of::<Ipv4Header>()
-                        + size_of::<TcpHeader>();
-                    
-                    let Ok(mut pkt) = Packet::new(payload.len(), headroom) else {
-                        warn!("TCP: failed to allocate packet");
-                        return;
-                    };
-
-                    if let Err(err) = pkt.write_back_bytes(payload) {
-                        warn!("TCP: failed to write payload: {:?}", err);
-                        return;
-                    }
-
+                    let payload = &mutable.tx[unsent_offset..unsent_offset + sendable_bytes];
                     let header = TcpHeader {
                         src_port: self.local_port.into(),
                         dst_port: self.remote.port.into(),
@@ -250,19 +307,15 @@ impl<I: Io> TcpConn<I> {
 
                     trace!("TCP: sending {} bytes", payload.len());
                     if let Err(err) =
-                        transmit_segment::<I>(devices, routes, header, self.remote.addr)
+                        transmit_segment::<I>(devices, routes, header, self.remote.addr, payload)
                     {
                         warn!("TCP: failed to send data: {:?}", err);
+                    } else {
+                        mutable.snd_nxt = mutable.snd_nxt.wrapping_add(sendable_bytes as u32);
                     }
                 }
             }
-            State::FinWait1 => {
-                trace!("TCP: receiving FIN");
-                mutable.state = State::FinWait2;
-            }
-            state => {
-                todo!("TCP: unimplemented state: {:?}", state);
-            }
+            State::FinWait1 | State::FinWait2 | State::Closing => {}
         }
     }
 }
@@ -272,9 +325,8 @@ impl<I: Io> AnySocket for TcpConn<I> {}
 struct SynReceived {
     remote_ip: IpAddr,
     remote_port: Port,
-    init_seq: u32,
-    init_ack: u32,
-    window_size: u16,
+    local_iss: u32,
+    remote_rcv_nxt: u32,
 }
 
 struct TcpListenerInner<I: Io> {
@@ -296,9 +348,12 @@ fn transmit_segment<I: Io>(
     routes: &mut RouteTable,
     mut header: TcpHeader,
     remote_ip: IpAddr,
+    payload: &[u8],
 ) -> Result<(), TxError> {
     let head_room = size_of::<EthernetHeader>() + size_of::<Ipv4Header>() + size_of::<TcpHeader>();
-    let mut pkt = Packet::new(0, head_room).map_err(TxError::PacketAlloc)?;
+    let mut pkt = Packet::new(payload.len(), head_room).map_err(TxError::PacketAlloc)?;
+    pkt.write_back_bytes(payload)
+        .map_err(TxError::PacketWrite)?;
 
     match remote_ip {
         IpAddr::V4(remote_ipv4) => {
@@ -363,7 +418,7 @@ impl<I: Io> TcpListener<I> {
         local_ip: IpAddr,
         flags: TcpFlags,
         seq: u32,
-        _ack: u32,
+        ack: u32,
         window_size: u16,
     ) -> Result<(), RxError> {
         let mut inner = self.inner.lock();
@@ -373,17 +428,16 @@ impl<I: Io> TcpListener<I> {
             let syn = SynReceived {
                 remote_ip,
                 remote_port,
-                init_seq: seq,
-                init_ack: seq.wrapping_add(1),
-                window_size,
+                local_iss: INITIAL_SEND_SEQ,
+                remote_rcv_nxt: seq.wrapping_add(1),
             };
 
-            let mut header = TcpHeader {
+            let header = TcpHeader {
                 src_port: self.local_port.into(),
                 dst_port: syn.remote_port.into(),
-                seq: syn.init_seq.into(),
-                ack: syn.init_ack.into(),
-                window_size: syn.window_size.into(),
+                seq: syn.local_iss.into(),
+                ack: syn.remote_rcv_nxt.into(),
+                window_size: DEFAULT_RCV_WND.into(),
                 header_len: encode_header_len(size_of::<TcpHeader>()),
                 flags: TcpFlags::SYN | TcpFlags::ACK,
                 checksum: 0.into(),
@@ -391,7 +445,7 @@ impl<I: Io> TcpListener<I> {
             };
 
             inner.syn_received.push(syn);
-            if let Err(err) = transmit_segment::<I>(devices, routes, header, remote_ip) {
+            if let Err(err) = transmit_segment::<I>(devices, routes, header, remote_ip, &[]) {
                 warn!("TCP: failed to reply to SYN: {:?}", err);
             }
         } else if flags.contains(TcpFlags::ACK) {
@@ -405,6 +459,14 @@ impl<I: Io> TcpListener<I> {
                 return Err(RxError::BadAckToListener);
             };
 
+            let expected_ack = syn.local_iss.wrapping_add(1);
+            if ack != expected_ack {
+                return Err(RxError::BadAckNumber {
+                    expected: expected_ack,
+                    actual: ack,
+                });
+            }
+
             let syn = inner.syn_received.remove(syn_index);
             let remote = Endpoint {
                 addr: remote_ip,
@@ -413,9 +475,10 @@ impl<I: Io> TcpListener<I> {
             let conn = TcpConn::<I>::new(
                 self.local_port,
                 remote,
-                syn.init_seq,
-                syn.init_ack,
-                syn.window_size,
+                syn.local_iss,
+                syn.remote_rcv_nxt,
+                window_size,
+                DEFAULT_RCV_WND,
                 State::Established,
             );
 
@@ -548,6 +611,7 @@ impl TcpHeader {
 pub(crate) enum RxError {
     PacketRead(packet::ReserveError),
     BadAckToListener,
+    BadAckNumber { expected: u32, actual: u32 },
     InsertActive(TryInsertError),
 }
 
@@ -589,7 +653,7 @@ pub(crate) fn handle_rx<I: Io>(
 
     match sockets.get_active::<TcpConn<I>>(&key) {
         Some(conn) => {
-            conn.handle_rx(devices, routes, pkt);
+            conn.handle_rx(devices, routes, pkt, flags, seq, ack, window_size);
         }
         None => {
             let key = ListenerKey {
