@@ -188,8 +188,7 @@ fn client_main(ch: &Channel) -> Result<(), ErrorCode> {
             }
         }
         Event::Message(Peek { info, .. }) => {
-            // The server replied to an unknown request.
-            panic!("unexpected mid: {:?}", info.mid());
+            panic!("unexpected message: {:?}", peek);
         }
         Event::PeerClosed => {
             // The server has died. The client should retry or cleanup.
