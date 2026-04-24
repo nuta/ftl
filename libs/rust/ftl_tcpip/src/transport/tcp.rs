@@ -64,6 +64,10 @@ enum State {
     Closing,
 }
 
+//           snd_una        snd_nxt
+//             |               |
+// --[ACKed] --+---[inflight]--+---[max_bytes]--+---[cannot send]------
+//             |<-- snd_wnd ------------------->|
 struct TcpConnMutable<I: Io> {
     state: State,
     /// Sequence number of the first byte not yet acknowledged by the peer.
@@ -283,21 +287,18 @@ impl<I: Io> TcpConn<I> {
     ) {
         match &mut mutable.state {
             State::Established => {
-                // Bytes between snd_una and snd_nxt have already been sent but
-                // are still waiting for an ACK, so they still consume the peer
-                // receive window.
-                let in_flight = mutable.snd_nxt.wrapping_sub(mutable.snd_una);
-                let usable_window = (mutable.snd_wnd as u32).saturating_sub(in_flight);
+                // Calculate the maximum length that the peer accepts.
+                let inflight = mutable.snd_nxt.wrapping_sub(mutable.snd_una);
+                let max_bytes = (mutable.snd_wnd as u32).saturating_sub(inflight) as usize;
 
-                // The TX buffer starts at snd_una. Skip bytes that are already
-                // in flight and limit new payload to the remaining usable
-                // window.
-                let unsent_offset = min(in_flight as usize, mutable.tx.len());
-                let unsent_bytes = mutable.tx.len() - unsent_offset;
-                let sendable_bytes = min(usable_window as usize, unsent_bytes);
+                // Calculate the length of the buffered data, after the
+                // in-flight data.
+                let buffered_bytes = mutable.tx.len().saturating_sub(inflight as usize);
+                let len = min(max_bytes, buffered_bytes);
 
-                if sendable_bytes > 0 {
-                    let payload = &mutable.tx[unsent_offset..unsent_offset + sendable_bytes];
+                if len > 0 {
+                    let offset = inflight as usize;
+                    let payload = &mutable.tx[offset..offset + len];
                     let header = TcpHeader {
                         src_port: self.local_port.into(),
                         dst_port: self.remote.port.into(),
@@ -316,7 +317,7 @@ impl<I: Io> TcpConn<I> {
                     {
                         warn!("TCP: failed to send data: {:?}", err);
                     } else {
-                        mutable.snd_nxt = mutable.snd_nxt.wrapping_add(sendable_bytes as u32);
+                        mutable.snd_nxt = mutable.snd_nxt.wrapping_add(len as u32);
                     }
                 }
             }

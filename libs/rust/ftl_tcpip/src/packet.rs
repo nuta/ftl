@@ -165,7 +165,10 @@ impl Packet {
             return Err(ReserveError::BufferTooShort);
         }
 
-        unsafe { self.buf_mut_ptr().copy_from_nonoverlapping(bytes.as_ptr(), len) };
+        unsafe {
+            self.buf_mut_ptr()
+                .copy_from_nonoverlapping(bytes.as_ptr(), len)
+        };
         self.tail += len as u16;
         Ok(())
     }
