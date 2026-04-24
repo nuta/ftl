@@ -161,6 +161,7 @@ impl Channel {
         // Copy the body to the isolation.
         if let Some(body) = message.body {
             debug_assert!(info.has_body());
+            // TODO: Make sure the body is large enough.
             isolation.write_bytes(&body_slice, &body)?;
         }
 
