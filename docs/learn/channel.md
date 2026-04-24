@@ -159,6 +159,8 @@ In client side (i.e. receive a specific message) is a RPC-like operation: send a
 
 ```rs
 fn client_main(ch: &Channel) -> Result<(), ErrorCode> {
+    // Send a request to the server. The server will handle this request
+    // asynchronously.
     let mid = MessageId::new(1);
     ch.send(Message::Write { mid, offset: 0, buf: b"Hello, world!" });
 
