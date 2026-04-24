@@ -51,8 +51,12 @@ pub trait Accept: Send + Sync {
     fn complete(self, result: Result<(), Error>);
 }
 
+#[derive(Debug)]
 enum State {
     Established,
+    FinWait1,
+    FinWait2,
+    Closing,
 }
 
 struct TcpConnMutable<I: Io> {
@@ -161,6 +165,9 @@ impl<I: Io> TcpConn<I> {
 
                 self.poll_locked(devices, routes, &mut mutable);
             }
+            state => {
+                todo!("TCP: unimplemented state: {:?}", state);
+            }
         }
     }
 
@@ -175,6 +182,28 @@ impl<I: Io> TcpConn<I> {
         let read_len = req.read(&mut tmp);
         mutable.tx.extend_from_slice(&tmp[..read_len]);
         self.poll_locked(devices, routes, &mut mutable);
+    }
+
+    pub fn close(&self, devices: &mut DeviceMap<I::Device>, routes: &mut RouteTable) {
+        let mut mutable = self.mutable.lock();
+        mutable.state = State::FinWait1;
+
+        trace!("TCP: sending FIN");
+        let header = TcpHeader {
+            src_port: self.local_port.into(),
+            dst_port: self.remote.port.into(),
+            seq: mutable.snd_nxt.into(),
+            ack: mutable.rcv_nxt.into(),
+            window_size: mutable.rcv_wnd.into(),
+            header_len: encode_header_len(size_of::<TcpHeader>()),
+            flags: TcpFlags::FIN,
+            checksum: 0.into(),
+            urgent_pointer: 0.into(),
+        };
+
+        if let Err(err) = transmit_segment::<I>(devices, routes, header, self.remote.addr) {
+            warn!("TCP: failed to send FIN: {:?}", err);
+        }
     }
 
     fn poll_locked(
@@ -226,6 +255,13 @@ impl<I: Io> TcpConn<I> {
                         warn!("TCP: failed to send data: {:?}", err);
                     }
                 }
+            }
+            State::FinWait1 => {
+                trace!("TCP: receiving FIN");
+                mutable.state = State::FinWait2;
+            }
+            state => {
+                todo!("TCP: unimplemented state: {:?}", state);
             }
         }
     }
