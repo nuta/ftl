@@ -27,6 +27,7 @@ use crate::socket::ListenerKey;
 use crate::socket::SocketMap;
 use crate::transport::Port;
 use crate::transport::Protocol;
+use crate::utils;
 use crate::utils::TryPushBack;
 
 #[derive(Debug)]
@@ -114,7 +115,7 @@ impl<I: Io> TcpListener<I> {
                 size_of::<EthernetHeader>() + size_of::<Ipv4Header>() + size_of::<TcpHeader>();
             let mut pkt = Packet::new(0, head_room).map_err(TxError::PacketAlloc)?;
 
-            let header = TcpHeader {
+            let mut header = TcpHeader {
                 src_port: self.local_port.into(),
                 dst_port: syn.remote_port.into(),
                 seq: syn.init_seq.into(),
