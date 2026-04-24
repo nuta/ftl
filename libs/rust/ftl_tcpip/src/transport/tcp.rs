@@ -153,7 +153,12 @@ impl<I: Io> TcpConn<I> {
         }
     }
 
-    pub fn write(&self, devices: &mut DeviceMap<I::Device>, routes: &mut RouteTable, mut req: I::TcpWrite) {
+    pub fn write(
+        &self,
+        devices: &mut DeviceMap<I::Device>,
+        routes: &mut RouteTable,
+        mut req: I::TcpWrite,
+    ) {
     }
 }
 

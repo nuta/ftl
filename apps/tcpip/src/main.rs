@@ -107,6 +107,10 @@ impl ftl_tcpip::device::Device for MyDevice {
 pub struct TcpWrite {}
 
 impl tcp::Write for TcpWrite {
+    fn len(&self) -> usize {
+        todo!()
+    }
+
     fn read(&mut self, buf: &mut [u8]) -> usize {
         todo!()
     }
