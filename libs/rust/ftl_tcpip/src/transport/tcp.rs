@@ -50,7 +50,9 @@ pub trait Accept: Send + Sync {
 }
 
 enum State {
-    Established,
+    Established {
+        should_ack: bool,
+    },
 }
 
 struct TcpConnMutable<I: Io> {
@@ -110,8 +112,9 @@ impl<I: Io> TcpConn<I> {
     fn handle_rx(&self, pkt: &mut Packet) {
         let mut mutable = self.mutable.lock();
 
-        match mutable.state {
-            State::Established => {
+        match &mut mutable.state {
+            State::Established { should_ack } => {
+                *should_ack = true;
                 mutable.receive_bytes(pkt.slice());
             }
         }
