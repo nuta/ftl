@@ -119,11 +119,11 @@
             Ok(())
         }
 
-        fn recv_body<'a>(&self, body: &'a mut [u8]) -> Result<&'a mut [u8], ErrorCode> {
+        fn recv_body<'a>(&self, body: &'a mut [u8]) -> Result<&'a [u8], ErrorCode> {
             self.ch.as_ref().recv_body(self.info, body)?;
 
             // SAFETY: If body is not large enough, the syscall will fail.
-            Ok(&mut body[..self.info.body_len()])
+            Ok(&body[..self.info.body_len()])
         }
 
         /// Sends a reply message to the channel.
@@ -226,12 +226,12 @@
             self.ch.as_ref().recv_handle(self.info)
         }
 
-        fn recv_body<'a>(mut self, body: &'a mut [u8]) -> Result<&'a mut [u8], ErrorCode> {
+        fn recv_body<'a>(mut self, body: &'a mut [u8]) -> Result<&'a [u8], ErrorCode> {
             self.received = true;
             self.ch.as_ref().recv_body(self.info, body)?;
 
             // SAFETY: If body is not large enough, the syscall will fail.
-            Ok(&mut body[..self.info.body_len()])
+            Ok(&body[..self.info.body_len()])
         }
     }
 
@@ -401,7 +401,7 @@
             self.inner.body_len()
         }
 
-        pub fn recv<'a>(self, buf: &'a mut [u8]) -> Result<&'a mut [u8], ErrorCode> {
+        pub fn recv<'a>(self, buf: &'a mut [u8]) -> Result<&'a  [u8], ErrorCode> {
             self.inner.recv_body(buf)
         }
     }
@@ -569,7 +569,7 @@
             self.inner.body_len()
         }
 
-        pub fn recv<'a>(self, buf: &'a mut [u8]) -> Result<&'a mut [u8], ErrorCode> {
+        pub fn recv<'a>(self, buf: &'a mut [u8]) -> Result<&'a [u8], ErrorCode> {
             self.inner.recv_body(buf)
         }
     }
