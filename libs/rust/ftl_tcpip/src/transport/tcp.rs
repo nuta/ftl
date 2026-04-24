@@ -158,6 +158,8 @@ impl<I: Io> TcpConn<I> {
                 if let Err(err) = transmit_segment::<I>(devices, routes, header, self.remote.addr) {
                     warn!("TCP: failed to send ACK: {:?}", err);
                 }
+
+                self.poll_locked(devices, routes, &mut mutable);
             }
         }
     }
