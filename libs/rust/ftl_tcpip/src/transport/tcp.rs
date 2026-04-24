@@ -194,10 +194,16 @@ impl<I: Io> TcpConn<I> {
                     let headroom = size_of::<EthernetHeader>()
                         + size_of::<Ipv4Header>()
                         + size_of::<TcpHeader>();
-                    let Ok(pkt) = Packet::new(payload.len(), headroom) else {
+                    
+                    let Ok(mut pkt) = Packet::new(payload.len(), headroom) else {
                         warn!("TCP: failed to allocate packet");
                         return;
                     };
+
+                    if let Err(err) = pkt.write_back_bytes(payload) {
+                        warn!("TCP: failed to write payload: {:?}", err);
+                        return;
+                    }
 
                     let header = TcpHeader {
                         src_port: self.local_port.into(),

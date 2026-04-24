@@ -156,6 +156,19 @@ impl Packet {
         self.tail += len as u16;
         Ok(())
     }
+
+    pub fn write_back_bytes(&mut self, bytes: &[u8]) -> Result<(), ReserveError> {
+        let len = bytes.len();
+        debug_assert!(len <= u16::MAX as usize);
+
+        if self.tail() + len > self.capacity {
+            return Err(ReserveError::BufferTooShort);
+        }
+
+        unsafe { self.buf_mut_ptr().copy_from_nonoverlapping(bytes.as_ptr(), len) };
+        self.tail += len as u16;
+        Ok(())
+    }
 }
 
 impl Drop for Packet {
