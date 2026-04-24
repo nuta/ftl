@@ -26,6 +26,7 @@ use crate::socket::AnySocket;
 use crate::socket::Endpoint;
 use crate::socket::ListenerKey;
 use crate::socket::SocketMap;
+use crate::socket::TryInsertError;
 use crate::transport::Port;
 use crate::transport::Protocol;
 use crate::utils;
@@ -48,16 +49,55 @@ pub trait Accept: Send + Sync {
     fn complete(self, result: Result<(), Error>);
 }
 
-pub struct TcpConn<I: Io> {
+enum State {
+    Established,
+}
+
+struct TcpConnMutable<I: Io> {
+    state: State,
+    seq: u32,
+    ack: u32,
+    window_size: u16,
+    rx: Vec<u8>,
+    tx: Vec<u8>,
     pending_writes: VecDeque<I::TcpWrite>,
     pending_reads: VecDeque<I::TcpRead>,
 }
 
+pub struct TcpConn<I: Io> {
+    remote: Endpoint,
+    mutable: spin::Mutex<TcpConnMutable<I>>,
+}
+
 impl<I: Io> TcpConn<I> {
-    pub(crate) fn new() -> Self {
+    fn new(remote: Endpoint, seq: u32, ack: u32, window_size: u16, state: State) -> Self {
         Self {
-            pending_writes: VecDeque::new(),
-            pending_reads: VecDeque::new(),
+            remote,
+            mutable: spin::Mutex::new(TcpConnMutable {
+                state,
+                seq,
+                ack,
+                window_size,
+                rx: Vec::new(),
+                tx: Vec::new(),
+                pending_writes: VecDeque::new(),
+                pending_reads: VecDeque::new(),
+            }),
+        }
+    }
+
+    fn receive_bytes(&self, buf: &[u8])  {
+        let mut mutable = self.mutable.lock();
+
+        // TODO: buffer size
+        mutable.rx.extend_from_slice(buf);
+
+        info!("TCP: received {} bytes", buf.len());
+
+        if let Some(mut req) = mutable.pending_reads.pop_front() {
+            let len = req.write(mutable.rx.as_slice());
+            req.complete(Ok(len));
+            mutable.rx.drain(..len);
         }
     }
 }
@@ -151,9 +191,11 @@ impl<I: Io> TcpListener<I> {
         self: &Arc<Self>,
         devices: &mut DeviceMap<I::Device>,
         routes: &mut RouteTable,
+        sockets: &mut SocketMap,
         pkt: &mut Packet,
         remote_ip: IpAddr,
         remote_port: Port,
+        local_ip: IpAddr,
         flags: TcpFlags,
         seq: u32,
         _ack: u32,
@@ -189,6 +231,32 @@ impl<I: Io> TcpListener<I> {
             }
         } else if flags.contains(TcpFlags::ACK) {
             trace!("TCP: ACK received");
+            let Some((syn_index, syn)) = inner.syn_received.iter().enumerate().find(|(_, syn)| remote_ip == syn.remote_ip && remote_port == syn.remote_port) else {
+                return Err(RxError::BadAckToListener);
+            };
+                    
+            let syn = inner.syn_received.remove(syn_index);
+            let remote = Endpoint {
+                addr: remote_ip,
+                port: remote_port,
+            };
+            let conn = TcpConn::<I>::new(remote, syn.init_seq, syn.init_ack, syn.window_size, State::Established);
+
+            let key = ActiveKey {
+                remote,
+                local: Endpoint {
+                    addr: IpAddr::V4(Ipv4Addr::UNSPECIFIED),
+                    port: self.local_port,
+                },
+                protocol: Protocol::Tcp,
+            };
+
+            let payload = pkt.slice();
+            if !payload.is_empty() {
+                conn.receive_bytes(payload);
+            }
+
+            sockets.insert_active(key, Arc::new(conn)).map_err(RxError::InsertActive)?;
         } else {
             trace!("TCP: unknown flags: {:?}", flags);
         }
@@ -300,6 +368,8 @@ impl TcpHeader {
 #[derive(Debug)]
 pub(crate) enum RxError {
     PacketRead(packet::ReserveError),
+    BadAckToListener,   
+    InsertActive(TryInsertError),
 }
 
 pub(crate) fn handle_rx<I: Io>(
@@ -308,6 +378,7 @@ pub(crate) fn handle_rx<I: Io>(
     sockets: &mut SocketMap,
     pkt: &mut Packet,
     remote_ip: IpAddr,
+    local_ip: IpAddr,
 ) -> Result<(), RxError> {
     let header = pkt.read::<TcpHeader>().map_err(RxError::PacketRead)?;
     let src_port = Port::from(header.src_port);
@@ -356,9 +427,11 @@ pub(crate) fn handle_rx<I: Io>(
                     listener.handle_rx(
                         devices,
                         routes,
+                        sockets,
                         pkt,
                         remote_ip,
                         src_port,
+                        local_ip,
                         flags,
                         seq,
                         ack,

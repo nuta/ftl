@@ -189,21 +189,30 @@ pub(crate) fn handle_rx<I: Io>(
         return Err(RxError::BadVersion(header.version()));
     }
 
-    if header.ihl() != 5 {
+    let header_len = header.ihl() as usize * 4;
+    if header_len != size_of::<Ipv4Header>() {
+        // TODO:
         return Err(RxError::BadHeaderLength(header.ihl()));
     }
 
     let src = Ipv4Addr::from(header.src_addr);
     let remote = IpAddr::V4(src);
     let dst = Ipv4Addr::from(header.dst_addr);
+    let protocol = header.protocol;
     info!("IPv4 packet: src: {}, dst: {}", src, dst);
 
     // TODO: check dst address
 
-    match header.protocol {
+    // truncate the packet to the IPv4 payload length. Ethernet may have added
+    // padding for its minimum frame size.
+    let ipv4_len: u16 = header.len.into();
+    let payload_len = (ipv4_len as usize).saturating_sub(header_len);
+    pkt.truncate(payload_len);
+
+    match protocol {
         0x06 => {
             if let Err(err) =
-                crate::transport::tcp::handle_rx::<I>(devices, routes, sockets, pkt, remote)
+                crate::transport::tcp::handle_rx::<I>(devices, routes, sockets, pkt, remote, IpAddr::V4(dst))
             {
                 warn!("bad TCP packet: {:?}", err);
             }

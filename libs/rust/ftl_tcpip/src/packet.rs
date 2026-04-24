@@ -91,6 +91,11 @@ impl Packet {
         self.tail() - self.head()
     }
 
+    pub fn truncate(&mut self, len: usize) {
+        assert!(len <= self.len());
+        self.tail = (self.head() + len) as u16;
+    }
+
     pub fn read<T>(&mut self) -> Result<&T, ReserveError> {
         debug_assert!(align_of::<T>() <= BUF_MIN_ALIGN);
 
