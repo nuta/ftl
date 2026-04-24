@@ -5,6 +5,7 @@ use alloc::vec::Vec;
 use core::fmt;
 use core::ops::BitOr;
 use core::ops::BitOrAssign;
+use core::cmp::min;
 
 use crate::Io;
 use crate::OutOfMemoryError;
@@ -56,12 +57,20 @@ enum State {
 
 struct TcpConnMutable<I: Io> {
     state: State,
+    /// Sequence number of the first byte not yet acknowledged by the peer.
     snd_una: u32,
+    /// Sequence number of the next byte to send.
     snd_nxt: u32,
+    /// Peer's receive window size: how much we can send. Fullfilled when the
+    /// peer sends an ACK.
     snd_wnd: u16,
+    /// Sequence number of the next byte we expect to receive.
     rcv_nxt: u32,
+    /// Our receive window size. How much RX buffer space we have. 
     rcv_wnd: u16,
+    /// The receive buffer.
     rx: Vec<u8>,
+    /// The send buffer.
     tx: Vec<u8>,
     pending_writes: VecDeque<I::TcpWrite>,
     pending_reads: VecDeque<I::TcpRead>,
@@ -159,6 +168,45 @@ impl<I: Io> TcpConn<I> {
         routes: &mut RouteTable,
         mut req: I::TcpWrite,
     ) {
+        let mut mutable = self.mutable.lock();
+        let mut tmp = alloc::vec![0; req.len()];
+        let read_len = req.read(&mut tmp);
+        mutable.tx.extend_from_slice(&tmp[..read_len]);
+        self.poll_locked(devices, routes, &mut mutable);
+    }
+
+    fn poll_locked(&self, devices: &mut DeviceMap<I::Device>, routes: &mut RouteTable, mutable: &mut TcpConnMutable<I>) {
+        match &mut mutable.state {
+            State::Established => {
+                let unacknowledged_bytes = mutable.snd_nxt.wrapping_sub(mutable.snd_una);
+                let sendable_bytes = min(min(unacknowledged_bytes, mutable.snd_wnd as u32), mutable.tx.len() as u32);
+                
+                if sendable_bytes > 0 {
+                    let payload = &mutable.tx[..sendable_bytes as usize];
+                    let headroom = size_of::<EthernetHeader>() + size_of::<Ipv4Header>() + size_of::<TcpHeader>();
+                    let Ok(pkt) = Packet::new(payload.len(), headroom) else {
+                        warn!("TCP: failed to allocate packet");
+                        return;
+                    };
+
+                    let header = TcpHeader {
+                        src_port: self.local_port.into(),
+                        dst_port: self.remote.port.into(),
+                        seq: mutable.snd_nxt.into(),
+                        ack: mutable.rcv_nxt.into(),
+                        window_size: mutable.rcv_wnd.into(),
+                        header_len: encode_header_len(size_of::<TcpHeader>()),
+                        flags: TcpFlags::PSH,
+                        checksum: 0.into(),
+                        urgent_pointer: 0.into(),
+                    };
+                    
+                    if let Err(err) = transmit_segment::<I>(devices, routes, header, self.remote.addr) {
+                        warn!("TCP: failed to send data: {:?}", err);
+                    }
+                }
+            }
+        }
     }
 }
 
