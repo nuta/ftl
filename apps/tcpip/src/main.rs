@@ -11,6 +11,7 @@ use ftl::channel::OpenRequest;
 use ftl::channel::ReadRequest;
 use ftl::channel::WriteCompleter;
 use ftl::channel::WriteRequest;
+use ftl::collections::HashMap;
 use ftl::error::ErrorCode;
 use ftl::handle::Handleable;
 use ftl::prelude::*;
@@ -199,6 +200,13 @@ impl tcp::Accept for TcpAccept {
     }
 }
 
+#[derive(Debug)]
+enum Context {
+    Supervisor { ch: Channel },
+    Driver { ch: Arc<Channel> },
+    Client { ch: Channel },
+}
+
 #[ftl::main]
 fn main(supervisor_ch: Channel) {
     info!("Hello from tcpip");
@@ -243,12 +251,17 @@ fn main(supervisor_ch: Channel) {
         })
         .unwrap();
 
+    let mut contexts = HashMap::new();
+    contexts.insert(driver_ch.handle().id(), Context::Driver { ch: driver_ch });
+    // contexts.insert(supervisor_ch.handle().id(), Context::Supervisor { ch: supervisor_ch });
+
     let mut pkt = Packet::new(RECV_BUFFER_SIZE, 0).unwrap();
     loop {
         let (id, event) = sink.wait().unwrap();
-        match event {
-            Event::Message(peek) if id == driver_ch.handle().id() => {
-                match Incoming::parse(&driver_ch, peek) {
+        let ctx = contexts.get(&id).unwrap();
+        match (ctx, event) {
+            (Context::Driver { ch }, Event::Message(peek)) => {
+                match Incoming::parse(ch, peek) {
                     Incoming::ReadReply(reply) => {
                         let len = reply.read_len();
                         let buf = pkt.uninit_buf();
@@ -263,7 +276,7 @@ fn main(supervisor_ch: Channel) {
                                 );
 
                                 // Pull the next packet
-                                driver_ch
+                                ch
                                     .send(Message::Read {
                                         mid: MessageId::new(1),
                                         offset: 0,
@@ -281,8 +294,8 @@ fn main(supervisor_ch: Channel) {
                     }
                 }
             }
-            _ => {
-                warn!("unhandled event: {:?}", event);
+            (ctx, event) => {
+                warn!("unhandled event for {:?}: {:?}", ctx, event);
             }
         }
     }

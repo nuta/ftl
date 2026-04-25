@@ -63,7 +63,16 @@ impl PageAllocator {
         let mut regions = self.regions.lock();
         for region in regions.iter_mut() {
             if let Some(addr) = region.alloc(len, MIN_PAGE_SIZE) {
-                return Some(PAddr::new(addr));
+                let paddr = PAddr::new(addr);
+
+                // Zero clear the allocated memory.
+                // TODO: Add a flag to skip this if the caller fills the memory later.
+                let vaddr = arch::paddr2vaddr(paddr);
+                unsafe {
+                    core::ptr::write_bytes(vaddr.as_usize() as *mut u8, 0, len);
+                }
+
+                return Some(paddr);
             }
         }
 
