@@ -108,8 +108,6 @@ impl<I: Io> TcpConnMutable<I> {
     }
 
     fn update_send_window(&mut self, ack: u32, window_size: u16) {
-        self.snd_wnd = window_size;
-
         let acked_bytes = ack.wrapping_sub(self.snd_una);
         let in_flight = self.snd_nxt.wrapping_sub(self.snd_una);
         if acked_bytes == 0 || acked_bytes > in_flight {
@@ -173,10 +171,10 @@ impl<I: Io> TcpConn<I> {
         window_size: u16,
     ) {
         let mut mutable = self.mutable.lock();
+
+        mutable.snd_wnd = window_size;
         if flags.contains(TcpFlags::ACK) {
             mutable.update_send_window(ack, window_size);
-        } else {
-            mutable.snd_wnd = window_size;
         }
 
         let payload = pkt.slice();
