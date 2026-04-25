@@ -323,6 +323,15 @@ impl<I: Io> TcpConn<I> {
     }
 }
 
+impl<I: Io> fmt::Debug for TcpConn<I> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TcpConn")
+            .field("local_port", &self.local_port)
+            .field("remote", &self.remote)
+            .finish()
+    }
+}
+
 impl<I: Io> AnySocket for TcpConn<I> {}
 
 struct SynReceived {

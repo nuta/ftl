@@ -29,6 +29,7 @@ use ftl_tcpip::socket::Endpoint;
 use ftl_tcpip::socket::SocketMap;
 use ftl_tcpip::transport::Port;
 use ftl_tcpip::transport::tcp;
+use ftl_tcpip::transport::tcp::TcpConn;
 use ftl_tcpip::transport::tcp::TcpListener;
 
 fn conenct_to_driver(supervisor_ch: &Channel) -> Channel {
@@ -204,7 +205,7 @@ impl tcp::Accept for TcpAccept {
 enum Context {
     Supervisor { ch: Channel },
     Driver { ch: Arc<Channel> },
-    Client { ch: Channel },
+    Client { ch: Channel, conn: Arc<TcpConn<TcpIpIo>> },
     TcpListener { ch: Arc<Channel>, listener: Arc<TcpListener<TcpIpIo>> },
 }
 
@@ -309,9 +310,17 @@ fn main(supervisor_ch: Channel) {
                         };
 
                         let (their_ch, our_ch) = Channel::new().unwrap();
-                        listener.accept(TcpAccept { completer, their_ch });
+                        let conn = match listener.accept(TcpAccept { completer, their_ch }) {
+                            Ok(conn) => conn,
+                            Err(e) => {
+                                warn!("failed to accept tcp sock: {:?}", e);
+                                completer.reply_error(ErrorCode::InternalError);
+                                continue;
+                            }
+                        };
+
                         sink.add(&our_ch).unwrap();
-                        contexts.insert(our_ch.handle().id(), Context::Client { ch: our_ch });
+                        contexts.insert(our_ch.handle().id(), Context::Client { ch: our_ch, conn });
                     }
                     _ => {
                         warn!("unhandled message: {:?}", peek);
