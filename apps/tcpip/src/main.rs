@@ -5,7 +5,13 @@ use ftl::channel::Channel;
 use ftl::channel::Incoming;
 use ftl::channel::Message;
 use ftl::channel::MessageId;
+use ftl::channel::OpenCompleter;
 use ftl::channel::OpenOptions;
+use ftl::channel::OpenRequest;
+use ftl::channel::ReadRequest;
+use ftl::channel::WriteCompleter;
+use ftl::channel::WriteRequest;
+use ftl::error::ErrorCode;
 use ftl::handle::Handleable;
 use ftl::prelude::*;
 use ftl::sink::Event;
@@ -104,39 +110,92 @@ impl ftl_tcpip::device::Device for MyDevice {
     }
 }
 
-pub struct TcpWrite {}
+pub enum TcpWrite {
+    Init(Option<WriteRequest<Arc<Channel>>>),
+    Recved(WriteCompleter<Arc<Channel>>),
+}
 
 impl tcp::Write for TcpWrite {
     fn len(&self) -> usize {
-        todo!()
+        match self {
+            Self::Init(Some(request)) => request.len(),
+            Self::Init(None) => unreachable!(), // FIXME:
+            Self::Recved(_completer) => unreachable!(), // FIXME:
+        }
     }
 
     fn read(&mut self, buf: &mut [u8]) -> usize {
-        todo!()
+        match self {
+            Self::Init(request) => {
+                let request = request.take().unwrap();
+                assert_eq!(buf.len(), request.len());
+                match request.recv(buf) {
+                    Ok((_, completer)) => {
+                        *self = Self::Recved(completer);
+                        buf.len()
+                    }
+                    Err(e) => {
+                        warn!("failed to recv write body: {:?}", e.error());
+                        0
+                    }
+                }
+            }
+            Self::Recved(_completer) => {
+                warn!("failed to read tcp sock: already read");
+                0
+            }
+        }
     }
 
     fn complete(self, result: Result<usize, tcp::Error>) {
-        todo!()
+        match (self, result) {
+            (Self::Init(Some(request)), Ok(len)) => {
+                request.reply(len);
+            }
+            (Self::Init(Some(request)), Err(e)) => {
+                warn!("failed to write tcp sock: {:?}", e);
+                request.reply_error(ErrorCode::InternalError) // FIXME:
+            }
+            (Self::Init(None), _) => unreachable!(), // FIXME:
+            (Self::Recved(completer), Ok(len)) => {
+                completer.reply(len);
+            }
+            (Self::Recved(completer), Err(e)) => {
+                warn!("failed to write tcp sock: {:?}", e);
+                completer.reply_error(ErrorCode::InternalError) // FIXME:
+            }
+        }
     }
 }
 
-pub struct TcpRead {}
+pub struct TcpRead(ReadRequest<Arc<Channel>>);
 
 impl tcp::Read for TcpRead {
-    fn write(&mut self, buf: &[u8]) -> usize {
-        todo!()
-    }
-
-    fn complete(self, result: Result<usize, tcp::Error>) {
-        todo!()
+    fn complete(self, result: Result<&[u8], tcp::Error>) {
+        match result {
+            Ok(buf) => self.0.reply(buf),
+            Err(e) => {
+                warn!("failed to read tcp sock: {:?}", e);
+                self.0.reply_error(ErrorCode::InternalError) // FIXME:
+            }
+        }
     }
 }
 
-pub struct TcpAccept {}
+pub struct TcpAccept { 
+    completer: OpenCompleter<Arc<Channel>>,
+    their_ch: Channel,
+}
 
 impl tcp::Accept for TcpAccept {
     fn complete(self, result: Result<(), tcp::Error>) {
-        todo!()
+        match result {
+            Ok(_) => self.completer.reply(self.their_ch.into_handle()),
+            Err(e) => {
+                warn!("failed to accept tcp sock: {:?}", e);
+                self.completer.reply_error(ErrorCode::InternalError) // FIXME:
+            }
+        }
     }
 }
 
@@ -194,7 +253,7 @@ fn main(supervisor_ch: Channel) {
                         let len = reply.read_len();
                         let buf = pkt.uninit_buf();
                         match reply.recv(&mut buf[..len]) {
-                            Ok(slice) => {
+                            Ok(_slice) => {
                                 pkt.set_len(len);
                                 ftl_tcpip::ethernet::handle_rx::<TcpIpIo>(
                                     &mut devices,

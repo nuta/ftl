@@ -42,8 +42,7 @@ fn saturating_usize_to_u16(value: usize) -> u16 {
 pub enum Error {}
 
 pub trait Read: Send + Sync {
-    fn write(&mut self, buf: &[u8]) -> usize;
-    fn complete(self, result: Result<usize, Error>);
+    fn complete(self, result: Result<&[u8], Error>);
 }
 
 pub trait Write: Send + Sync {
@@ -101,8 +100,8 @@ impl<I: Io> TcpConnMutable<I> {
         info!("TCP: received {} bytes", buf.len());
 
         if let Some(mut req) = self.pending_reads.pop_front() {
-            let len = req.write(self.rx.as_slice());
-            req.complete(Ok(len));
+            let len = self.rx.as_slice().len();
+            req.complete(Ok(&self.rx[..len]));
             self.rx.drain(..len);
             self.rcv_wnd = self.rcv_wnd.saturating_add(saturating_usize_to_u16(len));
         }
