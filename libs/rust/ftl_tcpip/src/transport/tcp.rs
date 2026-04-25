@@ -405,7 +405,7 @@ impl<I: Io> TcpListener<I> {
         }
     }
 
-    pub fn accept(&mut self, req: I::TcpAccept) -> Result<(), OutOfMemoryError> {
+    pub fn accept(&self, req: I::TcpAccept) -> Result<(), OutOfMemoryError> {
         self.inner.lock().pending_accepts.try_push_back(req)?;
         Ok(())
     }
@@ -507,6 +507,14 @@ impl<I: Io> TcpListener<I> {
         }
 
         Ok(())
+    }
+}
+
+impl<I: Io> fmt::Debug for TcpListener<I> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TcpListener")
+            .field("local_port", &self.local_port)
+            .finish()
     }
 }
 

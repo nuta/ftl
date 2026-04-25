@@ -7,7 +7,6 @@ use ftl::channel::Message;
 use ftl::channel::MessageId;
 use ftl::channel::OpenCompleter;
 use ftl::channel::OpenOptions;
-use ftl::channel::OpenRequest;
 use ftl::channel::ReadRequest;
 use ftl::channel::WriteCompleter;
 use ftl::channel::WriteRequest;
@@ -30,6 +29,7 @@ use ftl_tcpip::socket::Endpoint;
 use ftl_tcpip::socket::SocketMap;
 use ftl_tcpip::transport::Port;
 use ftl_tcpip::transport::tcp;
+use ftl_tcpip::transport::tcp::TcpListener;
 
 fn conenct_to_driver(supervisor_ch: &Channel) -> Channel {
     let sink = Sink::new().unwrap();
@@ -205,6 +205,7 @@ enum Context {
     Supervisor { ch: Channel },
     Driver { ch: Arc<Channel> },
     Client { ch: Channel },
+    TcpListener { ch: Arc<Channel>, listener: Arc<TcpListener<TcpIpIo>> },
 }
 
 #[ftl::main]
@@ -294,9 +295,32 @@ fn main(supervisor_ch: Channel) {
                     }
                 }
             }
+            (Context::TcpListener { ch, listener }, Event::Message(peek)) => {
+                match Incoming::parse(ch.clone(), peek) {
+                    Incoming::Open(request) => {
+                        let mut buf = vec![0; request.path_len()];
+                        let completer = match request.recv(&mut buf) {
+                            Ok((_, completer)) => completer,
+                            Err(e) => {
+                                warn!("failed to recv open request: {:?}", e.error());
+                                e.reply_error(ErrorCode::InternalError);
+                                continue;
+                            }
+                        };
+
+                        let (their_ch, our_ch) = Channel::new().unwrap();
+                        listener.accept(TcpAccept { completer, their_ch });
+                        sink.add(&our_ch).unwrap();
+                        contexts.insert(our_ch.handle().id(), Context::Client { ch: our_ch });
+                    }
+                    _ => {
+                        warn!("unhandled message: {:?}", peek);
+                    }
+                }
+            },
             (ctx, event) => {
                 warn!("unhandled event for {:?}: {:?}", ctx, event);
-            }
+            },
         }
     }
 }
