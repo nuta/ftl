@@ -24,7 +24,7 @@ pub struct TcpConn<I: Io> {
 }
 
 impl<I: Io> TcpConn<I> {
-    pub(crate) fn new_listen(req: I::TcpAccept) -> Self {
+    pub(crate) fn new_listen() -> Self {
         Self {
             mutable: spin::Mutex::new(Mutable {
                 state: State::Listen,
