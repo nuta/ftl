@@ -20,13 +20,17 @@ use crate::transport::Port;
 pub(super) const DEFAULT_RCV_WND: u16 = 1024;
 const MAX_SEGMENT_DATA_LEN: usize = 1460;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 enum State {
     Listen,
     Established,
+    CloseWait,
+    LastAck,
     FinWait1,
     FinWait2,
     Closing,
+    TimeWait,
+    Closed,
 }
 
 //           snd_una        snd_nxt
@@ -195,10 +199,17 @@ impl<I: Io> TcpConn<I> {
             }
         }
 
-        // FIN_WAIT1 -> FIN_WAIT2: We have sent all data, and are waiting for the remote to
-        // send its FIN.
-        if matches!(mutable.state, State::FinWait1) && mutable.snd_una == mutable.snd_nxt {
-            mutable.state = State::FinWait2;
+        if mutable.snd_una == mutable.snd_nxt {
+            // The remote has acknowledged all data we have sent so far.
+            match mutable.state {
+                // Our FIN was acknowledged. Now wait for the remote FIN.
+                State::FinWait1 => mutable.state = State::FinWait2,
+                // Simultaneous close is complete once the remote ACKs our FIN.
+                State::Closing => mutable.state = State::TimeWait,
+                // Passive close is complete once the remote ACKs our FIN.
+                State::LastAck => mutable.state = State::Closed,
+                _ => {}
+            }
         }
 
         // Handle FIN: remote wants to close the connection.
@@ -206,13 +217,18 @@ impl<I: Io> TcpConn<I> {
             mutable.rcv_nxt = mutable.rcv_nxt.wrapping_add(1);
             should_ack = true;
 
-            // FIN_WAIT* -> CLOSING: We have received the FIN, and are waiting for the
-            // remote to acknowledge our FIN.
-            if matches!(mutable.state, State::FinWait1 | State::FinWait2) {
-                mutable.state = State::Closing;
+            match mutable.state {
+                // The remote closed first. Keep the send side open until we
+                // close the connection (passive close).
+                State::Established => mutable.state = State::CloseWait,
+                // Simultaneous close; wait for the remote to ACK our FIN.
+                State::FinWait1 => mutable.state = State::Closing,
+                // Our FIN was already ACKed. So ACK the remote FIN and wait
+                // before fully closing.
+                State::FinWait2 => mutable.state = State::Closing,
+                _ => {}
             }
         }
-
 
         if should_ack {
             let remote = mutable.remote.as_ref().unwrap();
@@ -242,17 +258,23 @@ impl<I: Io> TcpConn<I> {
         routes: &mut RouteTable,
         mutable: &mut Mutable<I>,
     ) {
-        match &mut mutable.state {
-            State::Established => {
+        match mutable.state {
+            State::Established | State::CloseWait => {
                 let remote = mutable.remote.as_ref().unwrap();
                 let seq = mutable.snd_nxt.into();
 
                 let mut flags = TcpFlags::empty();
                 let payload = if mutable.close_requested && mutable.tx_buffer.readable_len() == 0 {
                     trace!("TCP: sending FIN");
-                    flags |= TcpFlags::FIN;
+                    flags |= TcpFlags::FIN | TcpFlags::ACK;
                     mutable.snd_nxt = mutable.snd_nxt.wrapping_add(1);
-                    mutable.state = State::FinWait1;
+                    mutable.state = match mutable.state {
+                        // Active close.
+                        State::Established => State::FinWait1,
+                        // Passive close after the local user closes its send side.
+                        State::CloseWait => State::LastAck,
+                        _ => unreachable!(),
+                    };
                     &[]
                 } else {
                     let inflight_len = mutable.snd_nxt.wrapping_sub(mutable.snd_una) as usize;
@@ -296,7 +318,12 @@ impl<I: Io> TcpConn<I> {
             State::Listen => {
                 unreachable!();
             }
-            State::FinWait1 | State::FinWait2 | State::Closing => {}
+            State::LastAck
+            | State::FinWait1
+            | State::FinWait2
+            | State::Closing
+            | State::TimeWait
+            | State::Closed => {}
         }
     }
 }
