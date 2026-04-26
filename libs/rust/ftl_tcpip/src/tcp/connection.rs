@@ -213,7 +213,6 @@ impl<I: Io> TcpConn<I> {
 
         // Handle FIN: remote wants to close the connection.
         if rx.flags.contains(TcpFlags::FIN) {
-            trace!("@@@@ FIN received");
             mutable.rcv_nxt = mutable.rcv_nxt.wrapping_add(1);
             should_ack = true;
 
