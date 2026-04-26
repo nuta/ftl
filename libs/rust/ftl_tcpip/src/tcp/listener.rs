@@ -14,6 +14,7 @@ use crate::socket::AnySocket;
 use crate::socket::Endpoint;
 use crate::socket::SocketMap;
 use crate::tcp::Accept;
+use crate::tcp::RingBuffer;
 use crate::tcp::TcpConn;
 use crate::tcp::connection::DEFAULT_RCV_WND;
 use crate::tcp::header::TcpFlags;
@@ -29,6 +30,7 @@ struct Handshake {
     local_iss: u32,
     remote_rcv_nxt: u32,
     remote_rcv_wnd: u16,
+    rx_buffer: RingBuffer,
 }
 
 struct PendingAccept<I: Io> {
@@ -69,7 +71,7 @@ impl<I: Io> TcpListener<I> {
         sockets: &mut SocketMap,
         request: I::TcpAccept,
     ) -> Result<Arc<TcpConn<I>>, AcceptError> {
-        let conn = Arc::new(TcpConn::new_listen());
+        let conn = Arc::new(TcpConn::new_listen(self.local_port));
         let pending_accept = PendingAccept {
             request,
             conn: conn.clone(),
@@ -77,7 +79,7 @@ impl<I: Io> TcpListener<I> {
 
         let mut mutable = self.mutable.lock();
         if let Some(h) = mutable.finished_handshakes.pop_front() {
-            self.accept_handshake(sockets, pending_accept, &h);
+            self.accept_handshake(sockets, pending_accept, h);
         } else {
             mutable.pending_accepts.push_back(pending_accept);
         }
@@ -106,6 +108,7 @@ impl<I: Io> TcpListener<I> {
             local_iss: our_iss,
             remote_rcv_nxt: rx.seq.wrapping_add(1),
             remote_rcv_wnd: rx.window_size,
+            rx_buffer: RingBuffer::new(),
         };
 
         let header = TcpHeader {
@@ -135,6 +138,7 @@ impl<I: Io> TcpListener<I> {
         routes: &mut RouteTable,
         sockets: &mut SocketMap,
         rx: RxHeader,
+        payload: &mut Packet,
     ) {
         let mut mutable = self.mutable.lock();
 
@@ -149,10 +153,14 @@ impl<I: Io> TcpListener<I> {
             return;
         };
 
-        let h = mutable.inflight_handshakes.remove(index);
+        let mut h = mutable.inflight_handshakes.remove(index);
+        if !payload.is_empty() {
+            h.rx_buffer.write_bytes(payload.slice());
+        }
+
         if let Some(pending_accept) = mutable.pending_accepts.pop_front() {
             // Register the connection immediately.
-            self.accept_handshake(sockets, pending_accept, &h);
+            self.accept_handshake(sockets, pending_accept, h);
         } else {
             // Queue this established connection for later completion.
             mutable.finished_handshakes.push_back(h);
@@ -163,8 +171,10 @@ impl<I: Io> TcpListener<I> {
         &self,
         sockets: &mut SocketMap,
         pending_accept: PendingAccept<I>,
-        h: &Handshake,
+        h: Handshake,
     ) -> Result<(), ()> {
+        let PendingAccept { request, conn } = pending_accept;
+
         let key = ActiveKey {
             remote: h.remote,
             local: Endpoint {
@@ -174,14 +184,15 @@ impl<I: Io> TcpListener<I> {
             protocol: Protocol::Tcp,
         };
 
-        pending_accept.conn.open_passively(
+        conn.open_passively(
             h.remote,
             h.local_iss,
             h.remote_rcv_nxt,
             h.remote_rcv_wnd,
+            h.rx_buffer,
         );
-        sockets.insert_active(key, pending_accept.conn);
-        pending_accept.request.complete(Ok(()));
+        sockets.insert_active(key, conn.clone());
+        request.complete(Ok(()));
         Ok(())
     }
 
@@ -198,7 +209,7 @@ impl<I: Io> TcpListener<I> {
                 self.start_handshake(devices, routes, sockets, rx);
             }
             TcpFlags::ACK | (TcpFlags::ACK | TcpFlags::PSH) => {
-                self.finish_handshake(devices, routes, sockets, rx);
+                self.finish_handshake(devices, routes, sockets, rx, payload);
             }
             _ => {
                 debug!("TCP: unexpected flags: {:?}", rx.flags);

@@ -56,12 +56,12 @@ pub struct TcpConn<I: Io> {
 }
 
 impl<I: Io> TcpConn<I> {
-    pub(crate) fn new_listen() -> Self {
+    pub(crate) fn new_listen(local_port: Port) -> Self {
         Self {
             mutable: spin::Mutex::new(Mutable {
                 state: State::Listen,
                 remote: None,
-                local_port: Port::new(0), // FIXME:
+                local_port,
                 snd_una: 0,
                 snd_nxt: 0,
                 snd_wnd: 0,
@@ -74,7 +74,14 @@ impl<I: Io> TcpConn<I> {
         }
     }
 
-    pub(crate) fn open_passively(&self, remote: Endpoint, iss: u32, rcv_nxt: u32, snd_wnd: u16) {
+    pub(crate) fn open_passively(
+        &self,
+        remote: Endpoint,
+        iss: u32,
+        rcv_nxt: u32,
+        snd_wnd: u16,
+        rx_buffer: RingBuffer,
+    ) {
         let snd_nxt = iss.wrapping_add(1); // +1 for the SYN packet
         let mut mutable = self.mutable.lock();
         mutable.state = State::Established;
@@ -83,6 +90,7 @@ impl<I: Io> TcpConn<I> {
         mutable.snd_nxt = snd_nxt;
         mutable.snd_wnd = snd_wnd;
         mutable.rcv_nxt = rcv_nxt;
+        mutable.rx_buffer = rx_buffer;
     }
 
     pub fn write(
@@ -248,7 +256,6 @@ impl<I: Io> TcpConn<I> {
 
                     let payload_len = payload.len();
                     mutable.snd_nxt = mutable.snd_nxt.wrapping_add(payload_len as u32);
-                    mutable.tx_buffer.consume_bytes(payload_len);
                 }
             }
             State::Listen => {

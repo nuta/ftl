@@ -91,6 +91,10 @@ impl Packet {
         self.tail() - self.head()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     pub fn truncate(&mut self, len: usize) {
         assert!(len <= self.len());
         self.tail = (self.head() + len) as u16;
