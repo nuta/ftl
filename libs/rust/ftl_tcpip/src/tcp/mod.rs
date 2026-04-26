@@ -24,11 +24,11 @@ pub(crate) use rx::handle_rx;
 pub enum Error {}
 
 pub trait Read: Send + Sync {
-    fn complete(self, buffer: &mut RingBuffer);
+    fn complete(self, rx_buffer: &mut RingBuffer);
 }
 
 pub trait Write: Send + Sync {
-    fn complete(self, buffer: &mut RingBuffer);
+    fn complete(self, tx_buffer: &mut RingBuffer);
 }
 
 pub trait Accept: Send + Sync {

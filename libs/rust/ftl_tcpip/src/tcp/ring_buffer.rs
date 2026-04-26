@@ -28,6 +28,16 @@ impl RingBuffer {
         buf.len()
     }
 
+    pub fn write_bytes_with<F>(&mut self, f: F) -> usize
+    where
+        F: FnOnce(&mut [u8]) -> usize,
+    {
+        let mut tmp = [0; 4096];
+        let len = f(&mut tmp);
+        self.write_bytes(&tmp[..len]);
+        len
+    }
+
     pub fn peek_bytes(&mut self, max_len: usize) -> Option<&[u8]> {
         if self.readable_len() == 0 {
             return None;

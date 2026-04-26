@@ -7,8 +7,8 @@ use ftl::channel::Message;
 use ftl::channel::MessageId;
 use ftl::channel::OpenCompleter;
 use ftl::channel::OpenOptions;
+use core::cmp::min;
 use ftl::channel::ReadRequest;
-use ftl::channel::WriteCompleter;
 use ftl::channel::WriteRequest;
 use ftl::collections::HashMap;
 use ftl::error::ErrorCode;
@@ -111,14 +111,23 @@ impl ftl_tcpip::device::Device for MyDevice {
     }
 }
 
-pub enum TcpWrite {
-    Init(Option<WriteRequest<Arc<Channel>>>),
-    Recved(WriteCompleter<Arc<Channel>>),
-}
+pub struct TcpWrite(WriteRequest<Arc<Channel>>);
 
 impl ftl_tcpip::tcp::Write for TcpWrite {
-    fn complete(self, buffer: &mut ftl_tcpip::tcp::RingBuffer) {
-        todo!()
+    fn complete(self, tx_buffer: &mut ftl_tcpip::tcp::RingBuffer) {
+        tx_buffer.write_bytes_with(|buf| {
+            let len = min(buf.len(), self.0.len());
+            match self.0.recv(buf) {
+                Ok((_, completer)) => {
+                    completer.reply(len);
+                    len
+                }
+                Err(e) => {
+                    warn!("failed to recv with error: {:?}", e.error());
+                    0
+                }
+            }
+        });
     }
 }
 
