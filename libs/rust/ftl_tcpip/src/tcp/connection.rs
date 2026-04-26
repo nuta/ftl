@@ -85,14 +85,14 @@ impl<I: Io> TcpConn<I> {
         mutable.rcv_nxt = rcv_nxt;
     }
 
-    pub fn write(&self, req: I::TcpWrite) {
+    pub fn write(&self, devices: &mut DeviceMap<I::Device>, routes: &mut RouteTable, req: I::TcpWrite) {
         let mut mutable = self.mutable.lock();
         if mutable.tx_buffer.writeable_len() == 0 {
             mutable.pending_writes.push_back(req);
         } else {
             req.complete(&mut mutable.tx_buffer);
             if mutable.tx_buffer.readable_len() > 0 {
-                todo!("send data from buffer");
+                self.flush(devices, routes, &mut mutable);
             }
         }
     }
@@ -196,6 +196,8 @@ impl<I: Io> TcpConn<I> {
                 warn!("TCP: failed to send ACK: {:?}", err);
             }
         }
+
+        self.flush(devices, routes, &mut mutable);
     }
 
     fn flush(
