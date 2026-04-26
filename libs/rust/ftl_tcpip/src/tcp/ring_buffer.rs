@@ -29,6 +29,10 @@ impl RingBuffer {
     }
 
     pub fn peek_bytes(&mut self, max_len: usize) -> Option<&[u8]> {
+        if self.readable_len() == 0 {
+            return None;
+        }
+
         Some(&self.buf[..min(max_len, self.readable_len())])
     }
 
