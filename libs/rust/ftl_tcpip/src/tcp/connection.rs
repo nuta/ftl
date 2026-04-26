@@ -4,6 +4,9 @@ use core::fmt;
 use crate::Io;
 use crate::socket::AnySocket;
 use crate::socket::Endpoint;
+use crate::tcp::Read;
+use crate::tcp::Write;
+use super::ring_buffer::RingBuffer;
 
 pub(super) const DEFAULT_RCV_WND: u16 = 1024;
 
@@ -34,6 +37,8 @@ struct Mutable<I: Io> {
     rcv_nxt: u32,
     /// Our receive window size. How much RX buffer space we have.
     rcv_wnd: u16,
+    tx_buffer: RingBuffer,
+    rx_buffer: RingBuffer,
     pending_writes: VecDeque<I::TcpWrite>,
     pending_reads: VecDeque<I::TcpRead>,
 }
@@ -53,6 +58,8 @@ impl<I: Io> TcpConn<I> {
                 snd_wnd: 0,
                 rcv_nxt: 0,
                 rcv_wnd: 0,
+                tx_buffer: RingBuffer::new(),
+                rx_buffer: RingBuffer::new(),
                 pending_writes: VecDeque::new(),
                 pending_reads: VecDeque::new(),
             }),
@@ -69,6 +76,24 @@ impl<I: Io> TcpConn<I> {
         mutable.snd_wnd = snd_wnd;
         mutable.rcv_nxt = rcv_nxt;
         mutable.rcv_wnd = DEFAULT_RCV_WND;
+    }
+
+    pub fn write(&self, req: I::TcpWrite) {
+        let mut mutable = self.mutable.lock();
+        if mutable.tx_buffer.writeable_len() == 0 {
+            mutable.pending_writes.push_back(req);
+        } else {
+            req.complete(&mut mutable.tx_buffer);
+        }
+    }
+
+    pub fn read(&self, req: I::TcpRead) {
+        let mut mutable = self.mutable.lock();
+        if mutable.rx_buffer.is_empty() {
+            mutable.pending_reads.push_back(req);
+        } else {
+            req.complete(&mut mutable.rx_buffer);
+        }
     }
 }
 

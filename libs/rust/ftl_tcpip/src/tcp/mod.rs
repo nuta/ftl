@@ -16,6 +16,7 @@ mod tx;
 
 pub use connection::TcpConn;
 pub use listener::TcpListener;
+pub use ring_buffer::RingBuffer;
 pub(crate) use rx::RxError;
 pub(crate) use rx::handle_rx;
 
@@ -23,13 +24,11 @@ pub(crate) use rx::handle_rx;
 pub enum Error {}
 
 pub trait Read: Send + Sync {
-    fn complete(self, result: Result<&[u8], Error>);
+    fn complete(self, buffer: &mut RingBuffer);
 }
 
 pub trait Write: Send + Sync {
-    fn len(&self) -> usize;
-    fn read(&mut self, buf: &mut [u8]) -> usize;
-    fn complete(self, result: Result<usize, Error>);
+    fn complete(self, buffer: &mut RingBuffer);
 }
 
 pub trait Accept: Send + Sync {

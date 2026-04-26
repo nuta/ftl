@@ -117,69 +117,16 @@ pub enum TcpWrite {
 }
 
 impl ftl_tcpip::tcp::Write for TcpWrite {
-    fn len(&self) -> usize {
-        match self {
-            Self::Init(Some(request)) => request.len(),
-            Self::Init(None) => unreachable!(),         // FIXME:
-            Self::Recved(_completer) => unreachable!(), // FIXME:
-        }
-    }
-
-    fn read(&mut self, buf: &mut [u8]) -> usize {
-        match self {
-            Self::Init(request) => {
-                let request = request.take().unwrap();
-                assert_eq!(buf.len(), request.len());
-                match request.recv(buf) {
-                    Ok((_, completer)) => {
-                        *self = Self::Recved(completer);
-                        buf.len()
-                    }
-                    Err(e) => {
-                        warn!("failed to recv write body: {:?}", e.error());
-                        0
-                    }
-                }
-            }
-            Self::Recved(_completer) => {
-                warn!("failed to read tcp sock: already read");
-                0
-            }
-        }
-    }
-
-    fn complete(self, result: Result<usize, ftl_tcpip::tcp::Error>) {
-        match (self, result) {
-            (Self::Init(Some(request)), Ok(len)) => {
-                request.reply(len);
-            }
-            (Self::Init(Some(request)), Err(e)) => {
-                warn!("failed to write tcp sock: {:?}", e);
-                request.reply_error(ErrorCode::InternalError) // FIXME:
-            }
-            (Self::Init(None), _) => unreachable!(), // FIXME:
-            (Self::Recved(completer), Ok(len)) => {
-                completer.reply(len);
-            }
-            (Self::Recved(completer), Err(e)) => {
-                warn!("failed to write tcp sock: {:?}", e);
-                completer.reply_error(ErrorCode::InternalError) // FIXME:
-            }
-        }
+    fn complete(self, buffer: &mut ftl_tcpip::tcp::RingBuffer) {
+        todo!()
     }
 }
 
 pub struct TcpRead(ReadRequest<Arc<Channel>>);
 
 impl ftl_tcpip::tcp::Read for TcpRead {
-    fn complete(self, result: Result<&[u8], ftl_tcpip::tcp::Error>) {
-        match result {
-            Ok(buf) => self.0.reply(buf),
-            Err(e) => {
-                warn!("failed to read tcp sock: {:?}", e);
-                self.0.reply_error(ErrorCode::InternalError) // FIXME:
-            }
-        }
+    fn complete(self, buffer: &mut ftl_tcpip::tcp::RingBuffer) {
+        todo!()
     }
 }
 
