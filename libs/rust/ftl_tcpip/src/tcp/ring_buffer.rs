@@ -38,7 +38,7 @@ impl RingBuffer {
         len
     }
 
-    pub fn read_bytes_with<F>(&mut self, max_len: usize, f: F) 
+    pub fn read_bytes_with<F>(&mut self, max_len: usize, f: F)
     where
         F: FnOnce(Option<&[u8]>) -> usize,
     {

@@ -1,13 +1,14 @@
 #![no_std]
 #![no_main]
 
+use core::cmp::min;
+
 use ftl::channel::Channel;
 use ftl::channel::Incoming;
 use ftl::channel::Message;
 use ftl::channel::MessageId;
 use ftl::channel::OpenCompleter;
 use ftl::channel::OpenOptions;
-use core::cmp::min;
 use ftl::channel::ReadRequest;
 use ftl::channel::WriteRequest;
 use ftl::collections::HashMap;
