@@ -31,6 +31,10 @@ impl TcpFlags {
     pub const PSH: Self = Self(1 << 3);
     pub const ACK: Self = Self(1 << 4);
 
+    pub const fn empty() -> Self {
+        Self(0)
+    }
+
     pub fn as_u8(self) -> u8 {
         self.0
     }

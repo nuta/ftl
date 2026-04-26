@@ -18,6 +18,7 @@ use crate::tcp::tx::transmit_segment;
 use crate::transport::Port;
 
 pub(super) const DEFAULT_RCV_WND: u16 = 1024;
+const MAX_SEGMENT_DATA_LEN: usize = 1460;
 
 #[derive(Debug)]
 enum State {
@@ -36,6 +37,7 @@ struct Mutable<I: Io> {
     state: State,
     remote: Option<Endpoint>,
     local_port: Port,
+    close_requested: bool,
     /// Sequence number of the first byte not yet acknowledged by the peer.
     snd_una: u32,
     /// Sequence number of the next byte to send.
@@ -62,6 +64,7 @@ impl<I: Io> TcpConn<I> {
                 state: State::Listen,
                 remote: None,
                 local_port,
+                close_requested: false,
                 snd_una: 0,
                 snd_nxt: 0,
                 snd_wnd: 0,
@@ -117,6 +120,12 @@ impl<I: Io> TcpConn<I> {
         } else {
             req.complete(&mut mutable.rx_buffer);
         }
+    }
+
+    pub fn close(&self, devices: &mut DeviceMap<I::Device>, routes: &mut RouteTable) {
+        let mut mutable = self.mutable.lock();
+        mutable.close_requested = true;
+        self.flush(devices, routes, &mut mutable);
     }
 
     pub(super) fn handle_rx(
@@ -230,35 +239,52 @@ impl<I: Io> TcpConn<I> {
     ) {
         match &mut mutable.state {
             State::Established => {
-                let inflight_len = mutable.snd_nxt.wrapping_sub(mutable.snd_una) as usize;
-                let sendable_len = (mutable.snd_wnd as usize).saturating_sub(inflight_len);
                 let remote = mutable.remote.as_ref().unwrap();
-                if let Some(payload) = mutable
-                    .tx_buffer
-                    .peek_bytes_from(inflight_len, sendable_len)
-                {
-                    let header = TcpHeader {
-                        src_port: mutable.local_port.into(),
-                        dst_port: remote.port.into(),
-                        seq: mutable.snd_nxt.into(),
-                        ack: mutable.rcv_nxt.into(),
-                        window_size: (mutable.rx_buffer.writeable_len() as u16).into(),
-                        flags: TcpFlags::ACK | TcpFlags::PSH,
-                        header_len: 0,
-                        checksum: 0.into(),
-                        urgent_pointer: 0.into(),
+
+                let mut flags = TcpFlags::empty();
+                let payload = if mutable.close_requested && mutable.tx_buffer.readable_len() == 0 {
+                    trace!("TCP: sending FIN");
+                    flags |= TcpFlags::FIN;
+                    mutable.snd_nxt = mutable.snd_nxt.wrapping_add(1);
+                    mutable.state = State::FinWait1;
+                    &[]
+                } else {
+                    let inflight_len = mutable.snd_nxt.wrapping_sub(mutable.snd_una) as usize;
+                    let sendable_len = min(
+                        (mutable.snd_wnd as usize).saturating_sub(inflight_len),
+                        MAX_SEGMENT_DATA_LEN,
+                    );
+                    let Some(payload) = mutable
+                        .tx_buffer
+                        .peek_bytes_from(inflight_len, sendable_len)
+                    else {
+                        // No data to send.
+                        return;
                     };
 
-                    trace!("TCP: sending {} bytes", payload.len());
-                    if let Err(err) =
-                        transmit_segment::<I>(devices, routes, header, remote.addr, payload)
-                    {
-                        warn!("TCP: failed to send data: {:?}", err);
-                        return;
-                    }
+                    trace!("TCP: sending data: len={}", payload.len());
+                    flags |= TcpFlags::ACK | TcpFlags::PSH;
+                    mutable.snd_nxt = mutable.snd_nxt.wrapping_add(payload.len() as u32);
+                    payload
+                };
 
-                    let payload_len = payload.len();
-                    mutable.snd_nxt = mutable.snd_nxt.wrapping_add(payload_len as u32);
+                let header = TcpHeader {
+                    src_port: mutable.local_port.into(),
+                    dst_port: remote.port.into(),
+                    seq: mutable.snd_nxt.into(),
+                    ack: mutable.rcv_nxt.into(),
+                    window_size: (mutable.rx_buffer.writeable_len() as u16).into(),
+                    flags,
+                    header_len: 0,
+                    checksum: 0.into(),
+                    urgent_pointer: 0.into(),
+                };
+
+                if let Err(err) =
+                    transmit_segment::<I>(devices, routes, header, remote.addr, payload)
+                {
+                    warn!("TCP: failed to send data: {:?}", err);
+                    return;
                 }
             }
             State::Listen => {

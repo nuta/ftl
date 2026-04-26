@@ -171,6 +171,7 @@ impl Packet {
 
         unsafe {
             self.buf_mut_ptr()
+                .add(self.tail())
                 .copy_from_nonoverlapping(bytes.as_ptr(), len)
         };
         self.tail += len as u16;
