@@ -137,7 +137,18 @@ impl<I: Io> TcpConn<I> {
     ) {
         let mut mutable = self.mutable.lock();
 
+        if rx.seq != mutable.rcv_nxt {
+            // TODO:
+            trace!(
+                "TCP: out-of-order data: seq={}, rcv_nxt={}",
+                rx.seq, mutable.rcv_nxt
+            );
+            return;
+        }
+
         mutable.snd_wnd = rx.window_size;
+
+        // Handle ACK: remote have received data from us.
         if rx.flags.contains(TcpFlags::ACK) {
             let acked_bytes = rx.ack.wrapping_sub(mutable.snd_una) as usize;
             let inflight_bytes = mutable.snd_nxt.wrapping_sub(mutable.snd_una) as usize;
@@ -150,6 +161,9 @@ impl<I: Io> TcpConn<I> {
             }
 
             if acked_bytes > 0 {
+                // The remote has acknowledged some bytes. Consume them from
+                // the write buffer, and read more data from the pending
+                // writes.
                 mutable.snd_una = rx.ack;
                 mutable.tx_buffer.consume_bytes(acked_bytes);
                 while mutable.tx_buffer.writeable_len() > 0 {
@@ -162,45 +176,35 @@ impl<I: Io> TcpConn<I> {
             }
         }
 
+        // Handle payload: remote have sent data to us.
         let payload = payload.slice();
         let mut should_ack = false;
         if !payload.is_empty() {
-            if rx.seq != mutable.rcv_nxt {
-                // TODO:
-                trace!(
-                    "TCP: out-of-order data: seq={}, rcv_nxt={}",
-                    rx.seq, mutable.rcv_nxt
-                );
-                return;
-            }
-
+            // Receive data from the remote.
+            should_ack = true;
             let written_len = mutable.rx_buffer.write_bytes(payload);
             mutable.rcv_nxt = mutable.rcv_nxt.wrapping_add(written_len as u32);
 
             while mutable.rx_buffer.readable_len() > 0 {
+                // We have data in the receive buffer. Try consuming them.
                 if let Some(req) = mutable.pending_reads.pop_front() {
                     req.complete(&mut mutable.rx_buffer);
                 } else {
                     break;
                 }
             }
-
-            should_ack = true;
         }
 
+        // Handle FIN: remote wants to close the connection.
         let mut received_fin = false;
         if rx.flags.contains(TcpFlags::FIN) {
-            let fin_seq = rx.seq.wrapping_add(payload.len() as u32);
-            if fin_seq == mutable.rcv_nxt {
-                mutable.rcv_nxt = mutable.rcv_nxt.wrapping_add(1);
-                received_fin = true;
-            }
-
+            mutable.rcv_nxt = mutable.rcv_nxt.wrapping_add(1);
+            received_fin = true;
             should_ack = true;
         }
 
         if matches!(mutable.state, State::FinWait1) && mutable.snd_una == mutable.snd_nxt {
-            trace!("TCP: FIN acknowledged");
+            trace!("TCP: remote acknowledged our FIN");
             mutable.state = State::FinWait2;
         }
 
