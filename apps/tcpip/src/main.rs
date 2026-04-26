@@ -32,49 +32,71 @@ use ftl_tcpip::tcp::TcpConn;
 use ftl_tcpip::tcp::TcpListener;
 use ftl_tcpip::transport::Port;
 
-fn conenct_to_driver(supervisor_ch: &Channel) -> Channel {
+fn open_supervisor_channel(
+    supervisor_ch: &Channel,
+    path: &[u8],
+    options: OpenOptions,
+    description: &str,
+) -> Channel {
     let sink = Sink::new().unwrap();
     sink.add(supervisor_ch).unwrap();
 
-    // Ask the supervisor process to connect to the driver.
     let mid = MessageId::new(1);
-    let path = b"service/ethernet";
-    let options = OpenOptions::CONNECT;
     supervisor_ch
-        .send(Message::Open {
-            mid,
-            path: path.as_slice(),
-            options,
-        })
+        .send(Message::Open { mid, path, options })
         .unwrap();
 
-    let driver_ch = loop {
+    loop {
         let (id, event) = sink.wait().unwrap();
         match event {
             Event::Message(peek) if id == supervisor_ch.handle().id() => {
                 match Incoming::parse(&supervisor_ch, peek) {
-                    Incoming::OpenReply(reply) => {
+                    Incoming::OpenReply(reply) if reply.mid() == mid => {
                         match reply.recv() {
                             Ok(handle) => {
                                 break Channel::from_handle(handle);
                             }
                             Err(error) => {
-                                panic!("failed to recv with handle: {:?}", error);
+                                panic!("failed to open {description}: {:?}", error);
                             }
                         }
                     }
+                    Incoming::OpenReply(reply) => {
+                        warn!(
+                            "unexpected open reply while opening {}: mid={:?}",
+                            description,
+                            reply.mid()
+                        );
+                    }
                     _ => {
-                        warn!("unhandled message: {:?}", peek);
+                        warn!(
+                            "unhandled message while opening {}: {:?}",
+                            description, peek
+                        );
                     }
                 }
             }
             _ => {
-                warn!("unhandled event: {:?}", event);
+                warn!("unhandled event while opening {}: {:?}", description, event);
             }
         }
-    };
+    }
+}
 
-    driver_ch
+
+fn parse_tcp_listen_endpoint(path: &[u8]) -> Result<Endpoint, ErrorCode> {
+    let path = core::str::from_utf8(path).map_err(|_| ErrorCode::InvalidArgument)?;
+    let port_str = path
+        .strip_prefix("tcp-listen:0.0.0.0:")
+        .ok_or(ErrorCode::InvalidArgument)?;
+    let port = port_str
+        .parse::<u16>()
+        .map_err(|_| ErrorCode::InvalidArgument)?;
+
+    Ok(Endpoint {
+        addr: IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), // TODO:
+        port: Port::new(port),
+    })
 }
 
 const RECV_BUFFER_SIZE: usize = 1514;
@@ -118,7 +140,7 @@ impl ftl_tcpip::tcp::Write for TcpWrite {
     fn complete(self, tx_buffer: &mut ftl_tcpip::tcp::RingBuffer) {
         tx_buffer.write_bytes_with(|buf| {
             let len = min(buf.len(), self.0.len());
-            match self.0.recv(buf) {
+            match self.0.recv(&mut buf[..len]) {
                 Ok((_, completer)) => {
                     completer.reply(len);
                     len
@@ -167,16 +189,19 @@ impl ftl_tcpip::tcp::Accept for TcpAccept {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum Context {
-    Supervisor {
-        ch: Channel,
-    },
     Driver {
         ch: Arc<Channel>,
     },
+    Server {
+        ch: Arc<Channel>,
+    },
     Client {
-        ch: Channel,
+        ch: Arc<Channel>,
+    },
+    TcpConn {
+        ch: Arc<Channel>,
         conn: Arc<TcpConn<TcpIpIo>>,
     },
     TcpListener {
@@ -188,13 +213,29 @@ enum Context {
 #[ftl::main]
 fn main(supervisor_ch: Channel) {
     info!("Hello from tcpip");
-    let driver_ch = conenct_to_driver(&supervisor_ch);
+    let server_ch = open_supervisor_channel(
+        &supervisor_ch,
+        b"service/tcpip",
+        OpenOptions::LISTEN,
+        "tcpip service",
+    );
+    info!("registered tcpip service: {:?}", server_ch.handle().id());
+
+    let driver_ch = open_supervisor_channel(
+        &supervisor_ch,
+        b"service/ethernet",
+        OpenOptions::CONNECT,
+        "ethernet service",
+    );
     info!("connected to driver: {:?}", driver_ch.handle().id());
 
     let sink = Sink::new().unwrap();
-    sink.add(&driver_ch).unwrap();
 
+    sink.add(&server_ch).unwrap();
+    sink.add(&driver_ch).unwrap();
+    let server_ch = Arc::new(server_ch);
     let driver_ch = Arc::new(driver_ch);
+
     driver_ch
         .send(Message::Read {
             mid: MessageId::new(1),
@@ -222,24 +263,28 @@ fn main(supervisor_ch: Channel) {
 
     let mut sockets = SocketMap::new();
 
-    let listener = sockets
-        .tcp_listen::<TcpIpIo>(Endpoint {
-            addr: IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
-            port: Port::new(80),
-        })
-        .unwrap();
-
     let mut contexts = HashMap::new();
+    contexts.insert(
+        server_ch.handle().id(),
+        Context::Server {
+            ch: server_ch.clone(),
+        },
+    );
     contexts.insert(driver_ch.handle().id(), Context::Driver { ch: driver_ch });
-    // contexts.insert(supervisor_ch.handle().id(), Context::Supervisor { ch: supervisor_ch });
+
+    info!("tcpip server is ready");
 
     let mut pkt = Packet::new(RECV_BUFFER_SIZE, 0).unwrap();
     loop {
         let (id, event) = sink.wait().unwrap();
-        let ctx = contexts.get(&id).unwrap();
+        let Some(ctx) = contexts.get(&id).cloned() else {
+            warn!("event for unknown handle {:?}: {:?}", id, event);
+            continue;
+        };
+
         match (ctx, event) {
             (Context::Driver { ch }, Event::Message(peek)) => {
-                match Incoming::parse(ch, peek) {
+                match Incoming::parse(ch.clone(), peek) {
                     Incoming::ReadReply(reply) => {
                         let len = reply.read_len();
                         let buf = pkt.uninit_buf();
@@ -266,25 +311,159 @@ fn main(supervisor_ch: Channel) {
                             }
                         }
                     }
+                    Incoming::WriteReply(reply) => {
+                        trace!("ethernet driver wrote {} bytes", reply.written_len());
+                    }
                     _ => {
                         warn!("unhandled message: {:?}", peek);
+                    }
+                }
+            }
+            (Context::Server { ch }, Event::Message(peek)) => {
+                match Incoming::parse(ch.clone(), peek) {
+                    Incoming::Open(request) => {
+                        if request.options() != OpenOptions::CONNECT {
+                            request.reply_error(ErrorCode::InvalidArgument);
+                            continue;
+                        }
+
+                        let mut buf = vec![0; request.path_len()];
+                        let completer = match request.recv(&mut buf) {
+                            Ok((path, completer)) => {
+                                if path != b"service/tcpip" {
+                                    completer.reply_error(ErrorCode::InvalidArgument);
+                                    continue;
+                                }
+                                completer
+                            }
+                            Err(e) => {
+                                warn!("failed to recv service open request: {:?}", e.error());
+                                e.reply_error(ErrorCode::Overloaded);
+                                continue;
+                            }
+                        };
+
+                        let (our_ch, their_ch) = match Channel::new() {
+                            Ok(pair) => pair,
+                            Err(error) => {
+                                completer.reply_error(error);
+                                continue;
+                            }
+                        };
+
+                        if let Err(error) = sink.add(&our_ch) {
+                            warn!("failed to add tcpip client channel to sink: {:?}", error);
+                            completer.reply_error(ErrorCode::OutOfResources);
+                            continue;
+                        }
+
+                        let our_ch = Arc::new(our_ch);
+                        contexts.insert(our_ch.handle().id(), Context::Client { ch: our_ch });
+                        completer.reply(their_ch.into_handle());
+                    }
+                    _ => {
+                        warn!("unhandled service message: {:?}", peek);
+                    }
+                }
+            }
+            (Context::Client { ch }, Event::Message(peek)) => {
+                match Incoming::parse(ch.clone(), peek) {
+                    Incoming::Open(request) => {
+                        if request.options() != OpenOptions::LISTEN {
+                            request.reply_error(ErrorCode::InvalidArgument);
+                            continue;
+                        }
+
+                        let mut buf = vec![0; request.path_len()];
+                        let completer = match request.recv(&mut buf) {
+                            Ok((path, completer)) => {
+                                let endpoint = match parse_tcp_listen_endpoint(path) {
+                                    Ok(endpoint) => endpoint,
+                                    Err(error) => {
+                                        completer.reply_error(error);
+                                        continue;
+                                    }
+                                };
+                                (endpoint, completer)
+                            }
+                            Err(e) => {
+                                warn!("failed to recv listen request: {:?}", e.error());
+                                e.reply_error(ErrorCode::Overloaded);
+                                continue;
+                            }
+                        };
+
+                        let (endpoint, completer) = completer;
+                        let (our_ch, their_ch) = match Channel::new() {
+                            Ok(pair) => pair,
+                            Err(error) => {
+                                completer.reply_error(error);
+                                continue;
+                            }
+                        };
+
+                        if let Err(error) = sink.add(&our_ch) {
+                            warn!("failed to add listener channel to sink: {:?}", error);
+                            completer.reply_error(ErrorCode::OutOfResources);
+                            continue;
+                        }
+
+                        let listener = match sockets.tcp_listen::<TcpIpIo>(endpoint) {
+                            Ok(listener) => listener,
+                            Err(error) => {
+                                let _ = sink.remove(our_ch.handle().id());
+                                completer.reply_error(ErrorCode::OutOfResources);
+                                continue;
+                            }
+                        };
+
+                        let our_ch = Arc::new(our_ch);
+                        info!("listening on TCP {}:{}", endpoint.addr, endpoint.port);
+                        contexts.insert(
+                            our_ch.handle().id(),
+                            Context::TcpListener {
+                                ch: our_ch,
+                                listener,
+                            },
+                        );
+                        completer.reply(their_ch.into_handle());
+                    }
+                    _ => {
+                        warn!("unhandled tcpip client message: {:?}", peek);
                     }
                 }
             }
             (Context::TcpListener { ch, listener }, Event::Message(peek)) => {
                 match Incoming::parse(ch.clone(), peek) {
                     Incoming::Open(request) => {
+                        if request.options() != OpenOptions::CONNECT {
+                            request.reply_error(ErrorCode::InvalidArgument);
+                            continue;
+                        }
+
                         let mut buf = vec![0; request.path_len()];
                         let completer = match request.recv(&mut buf) {
                             Ok((_, completer)) => completer,
                             Err(e) => {
                                 warn!("failed to recv open request: {:?}", e.error());
-                                e.reply_error(ErrorCode::InternalError);
+                                e.reply_error(ErrorCode::Overloaded);
                                 continue;
                             }
                         };
 
-                        let (their_ch, our_ch) = Channel::new().unwrap();
+                        let (our_ch, their_ch) = match Channel::new() {
+                            Ok(pair) => pair,
+                            Err(error) => {
+                                completer.reply_error(error);
+                                continue;
+                            }
+                        };
+                        if let Err(error) = sink.add(&our_ch) {
+                            warn!("failed to add accepted connection to sink: {:?}", error);
+                            completer.reply_error(ErrorCode::OutOfResources);
+                            continue;
+                        }
+
                         let conn = match listener.accept(
                             &mut sockets,
                             TcpAccept {
@@ -295,17 +474,47 @@ fn main(supervisor_ch: Channel) {
                             Ok(conn) => conn,
                             Err(e) => {
                                 warn!("failed to accept tcp sock: {:?}", e);
+                                let _ = sink.remove(our_ch.handle().id());
                                 continue;
                             }
                         };
 
-                        sink.add(&our_ch).unwrap();
-                        contexts.insert(our_ch.handle().id(), Context::Client { ch: our_ch, conn });
+                        let our_ch = Arc::new(our_ch);
+                        contexts
+                            .insert(our_ch.handle().id(), Context::TcpConn { ch: our_ch, conn });
                     }
                     _ => {
                         warn!("unhandled message: {:?}", peek);
                     }
                 }
+            }
+            (Context::TcpConn { ch, conn }, Event::Message(peek)) => {
+                match Incoming::parse(ch.clone(), peek) {
+                    Incoming::Read(request) => {
+                        conn.read(TcpRead(request));
+                    }
+                    Incoming::Write(request) => {
+                        conn.write(&mut devices, &mut routes, TcpWrite(request));
+                    }
+                    _ => {
+                        warn!("unhandled tcp connection message: {:?}", peek);
+                    }
+                }
+            }
+            (Context::TcpConn { conn, .. }, Event::PeerClosed) => {
+                trace!("tcp connection peer closed: {:?}", id);
+                conn.close(&mut devices, &mut routes);
+                if let Err(error) = sink.remove(id) {
+                    warn!("failed to remove handle from sink: {:?}", error);
+                }
+                contexts.remove(&id);
+            }
+            (_, Event::PeerClosed) => {
+                trace!("peer closed: {:?}", id);
+                if let Err(error) = sink.remove(id) {
+                    warn!("failed to remove handle from sink: {:?}", error);
+                }
+                contexts.remove(&id);
             }
             (ctx, event) => {
                 warn!("unhandled event for {:?}: {:?}", ctx, event);
