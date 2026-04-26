@@ -1,12 +1,12 @@
 use alloc::collections::VecDeque;
 use core::fmt;
 
+use super::ring_buffer::RingBuffer;
 use crate::Io;
 use crate::socket::AnySocket;
 use crate::socket::Endpoint;
 use crate::tcp::Read;
 use crate::tcp::Write;
-use super::ring_buffer::RingBuffer;
 
 pub(super) const DEFAULT_RCV_WND: u16 = 1024;
 

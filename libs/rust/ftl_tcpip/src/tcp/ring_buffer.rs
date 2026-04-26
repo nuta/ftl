@@ -22,9 +22,9 @@ impl RingBuffer {
         self.buf.extend_from_slice(buf);
     }
 
-    pub fn read_bytes<F>(&mut self, max_len: usize,  f: F)
-    where 
-    F: FnOnce(&[u8]) -> usize,
+    pub fn read_bytes<F>(&mut self, max_len: usize, f: F)
+    where
+        F: FnOnce(&[u8]) -> usize,
     {
         let read_len = f(&self.buf[..min(max_len, self.buf.len())]);
         self.buf.drain(..read_len);
