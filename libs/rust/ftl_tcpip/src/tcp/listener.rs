@@ -133,24 +133,36 @@ impl<I: Io> TcpListener<I> {
 
         let h = mutable.handshakes.remove(index);
 
-        if let Some(PendingAccept { conn, request }) = mutable.pending_accepts.pop_front() {
-            let remote = Endpoint {
-                addr: rx.remote_ip,
-                port: rx.src_port,
-            };
-            let key = ActiveKey {
-                remote,
-                local: Endpoint {
-                    addr: rx.local_ip,
-                    port: self.local_port,
-                },
-                protocol: Protocol::Tcp,
-            };
+        if let Some(pending_accept) = mutable.pending_accepts.pop_front() {
+            self.accept_handshake(sockets, pending_accept, &h, rx);
+        };
 
-            conn.open_passively(remote, h.local_iss, h.remote_rcv_nxt, rx.window_size);
-            sockets.insert_active(key, conn);
-            request.complete(Ok(()));
-        }
+    }
+
+    fn accept_handshake(
+        &self,
+        sockets: &mut SocketMap,
+        pending_accept: PendingAccept<I>,
+        h: &Handshake,
+        rx: RxHeader,
+    ) -> Result<(), ()> {
+        let remote = Endpoint {
+            addr: rx.remote_ip,
+            port: rx.src_port,
+        };
+        let key = ActiveKey {
+            remote,
+            local: Endpoint {
+                addr: rx.local_ip,
+                port: self.local_port,
+            },
+            protocol: Protocol::Tcp,
+        };
+
+        pending_accept.conn.open_passively(remote, h.local_iss, h.remote_rcv_nxt, rx.window_size);
+        sockets.insert_active(key, pending_accept.conn);
+        pending_accept.request.complete(Ok(()));
+        Ok(())
     }
 
     pub(super) fn handle_rx(
