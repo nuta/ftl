@@ -62,7 +62,7 @@ pub(crate) fn handle_rx<I: Io>(
 
     let key = ActiveKey {
         local: Endpoint {
-            addr: IpAddr::V4(Ipv4Addr::UNSPECIFIED),
+            addr: local_ip,
             port: rx.dst_port,
         },
         protocol: Protocol::Tcp,
@@ -80,7 +80,7 @@ pub(crate) fn handle_rx<I: Io>(
             let key = ListenerKey {
                 local: Endpoint {
                     addr: IpAddr::V4(Ipv4Addr::UNSPECIFIED),
-                    port: rx.src_port,
+                    port: rx.dst_port,
                 },
                 protocol: Protocol::Tcp,
             };
