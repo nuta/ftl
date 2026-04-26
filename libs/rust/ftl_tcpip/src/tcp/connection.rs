@@ -178,6 +178,17 @@ impl<I: Io> TcpConn<I> {
                     }
                 }
             }
+
+            // Is the remote has acknowledged all data we have sent so far?
+            if mutable.snd_una == mutable.snd_nxt {
+                // FIN state transitions: the remote acknowledged our FIN.
+                match mutable.state {
+                    State::FinWait1 => mutable.state = State::FinWait2,
+                    State::Closing => mutable.state = State::TimeWait,
+                    State::LastAck => mutable.state = State::Closed,
+                    _ => {}
+                }
+            }
         }
 
         // Handle payload: remote have sent data to us.
@@ -199,19 +210,6 @@ impl<I: Io> TcpConn<I> {
             }
         }
 
-        if mutable.snd_una == mutable.snd_nxt {
-            // The remote has acknowledged all data we have sent so far.
-            match mutable.state {
-                // Our FIN was acknowledged. Now wait for the remote FIN.
-                State::FinWait1 => mutable.state = State::FinWait2,
-                // Simultaneous close is complete once the remote ACKs our FIN.
-                State::Closing => mutable.state = State::TimeWait,
-                // Passive close is complete once the remote ACKs our FIN.
-                State::LastAck => mutable.state = State::Closed,
-                _ => {}
-            }
-        }
-
         // Handle FIN: remote wants to close the connection.
         if rx.flags.contains(TcpFlags::FIN) {
             mutable.rcv_nxt = mutable.rcv_nxt.wrapping_add(1);
@@ -223,9 +221,9 @@ impl<I: Io> TcpConn<I> {
                 State::Established => mutable.state = State::CloseWait,
                 // Simultaneous close; wait for the remote to ACK our FIN.
                 State::FinWait1 => mutable.state = State::Closing,
-                // Our FIN was already ACKed. So ACK the remote FIN and wait
-                // before fully closing.
-                State::FinWait2 => mutable.state = State::Closing,
+                // The remote acknowledged our FIN. Acknowledge their FIN, and
+                // enter TIME_WAIT state.
+                State::FinWait2 => mutable.state = State::TimeWait,
                 _ => {}
             }
         }
