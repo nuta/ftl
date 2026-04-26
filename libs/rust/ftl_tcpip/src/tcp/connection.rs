@@ -23,6 +23,18 @@ pub struct TcpConn<I: Io> {
     mutable: spin::Mutex<Mutable<I>>,
 }
 
+impl<I: Io> TcpConn<I> {
+    pub(crate) fn new_listen(req: I::TcpAccept) -> Self {
+        Self {
+            mutable: spin::Mutex::new(Mutable {
+                state: State::Listen,
+                pending_writes: VecDeque::new(),
+                pending_reads: VecDeque::new(),
+            }),
+        }
+    }
+}
+
 impl<I: Io> AnySocket for TcpConn<I> {}
 
 impl<I: Io> fmt::Debug for TcpConn<I> {

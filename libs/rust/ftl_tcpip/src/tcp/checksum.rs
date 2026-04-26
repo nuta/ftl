@@ -1,6 +1,14 @@
-use crate::{checksum::Checksum, ip::ipv4::Ipv4Addr, tcp::header::TcpHeader, transport::Protocol};
+use crate::checksum::Checksum;
+use crate::ip::ipv4::Ipv4Addr;
+use crate::tcp::header::TcpHeader;
+use crate::transport::Protocol;
 
-pub(super) fn compute_checksum(header: &TcpHeader, src_ip: Ipv4Addr, dst_ip: Ipv4Addr, payload: &[u8]) -> u16 {
+pub(super) fn compute_checksum(
+    header: &TcpHeader,
+    src_ip: Ipv4Addr,
+    dst_ip: Ipv4Addr,
+    payload: &[u8],
+) -> u16 {
     let tcp_len = size_of::<TcpHeader>() + payload.len();
     debug_assert!(tcp_len <= u16::MAX as usize);
 

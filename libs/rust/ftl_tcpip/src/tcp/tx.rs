@@ -1,14 +1,15 @@
-use crate::tcp::checksum::compute_checksum;
-use crate::transport::Protocol;
-use crate::{ip::ipv4, packet};
+use super::header::TcpHeader;
 use crate::Io;
 use crate::device::DeviceMap;
-use crate::route::RouteTable;
-use crate::ip::IpAddr;
-use crate::packet::Packet;
 use crate::ethernet::EthernetHeader;
+use crate::ip::IpAddr;
+use crate::ip::ipv4;
 use crate::ip::ipv4::Ipv4Header;
-use super::header::TcpHeader;
+use crate::packet;
+use crate::packet::Packet;
+use crate::route::RouteTable;
+use crate::tcp::checksum::compute_checksum;
+use crate::transport::Protocol;
 
 #[derive(Debug)]
 enum TxError {
@@ -53,9 +54,8 @@ fn transmit_segment<I: Io>(
 
     match remote_ip {
         IpAddr::V4(remote_ipv4) => {
-            header.checksum = 
-                compute_checksum(&header, route.ipv4_addr(), remote_ipv4, pkt.slice())
-                .into();
+            header.checksum =
+                compute_checksum(&header, route.ipv4_addr(), remote_ipv4, pkt.slice()).into();
 
             pkt.write_front(header).map_err(TxError::PacketWrite)?;
 

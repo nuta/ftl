@@ -1,6 +1,9 @@
-use crate::{endian::Ne, packet::WriteableToPacket};
 use core::fmt;
-use core::ops::{BitOr, BitOrAssign};
+use core::ops::BitOr;
+use core::ops::BitOrAssign;
+
+use crate::endian::Ne;
+use crate::packet::WriteableToPacket;
 
 #[repr(C, packed)]
 pub(super) struct TcpHeader {

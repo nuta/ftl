@@ -3,8 +3,13 @@ use alloc::sync::Arc;
 use core::fmt;
 
 use crate::Io;
+use crate::device::DeviceMap;
+use crate::packet::Packet;
+use crate::route::RouteTable;
 use crate::socket::AnySocket;
+use crate::socket::SocketMap;
 use crate::tcp::TcpConn;
+use crate::tcp::rx::RxHeader;
 use crate::transport::Port;
 
 struct Mutable<I: Io> {
@@ -28,6 +33,18 @@ impl<I: Io> TcpListener<I> {
     }
 
     pub fn accept(&self, req: I::TcpAccept) -> Result<Arc<TcpConn<I>>, AcceptError> {
+        let conn = Arc::new(TcpConn::new_listen(req));
+        Ok(conn)
+    }
+
+    pub(super) fn handle_rx(
+        self: &Arc<Self>,
+        devices: &mut DeviceMap<I::Device>,
+        routes: &mut RouteTable,
+        sockets: &mut SocketMap,
+        pkt: &mut Packet,
+        rx: RxHeader,
+    ) {
         todo!()
     }
 }

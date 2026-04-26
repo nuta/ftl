@@ -6,17 +6,17 @@ use crate::packet::{self};
 use crate::route::RouteTable;
 use crate::socket::SocketMap;
 
-mod connection;
-mod listener;
-mod tx;
-mod rx;
-mod header;
 mod checksum;
+mod connection;
+mod header;
+mod listener;
+mod rx;
+mod tx;
 
 pub use connection::TcpConn;
 pub use listener::TcpListener;
-pub(crate) use rx::handle_rx;
 pub(crate) use rx::RxError;
+pub(crate) use rx::handle_rx;
 
 #[derive(Debug)]
 pub enum Error {}
