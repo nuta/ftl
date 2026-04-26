@@ -47,12 +47,17 @@ impl RingBuffer {
         self.consume_bytes(read_len);
     }
 
-    pub fn peek_bytes(&mut self, max_len: usize) -> Option<&[u8]> {
-        if self.readable_len() == 0 {
+    pub fn peek_bytes(&self, max_len: usize) -> Option<&[u8]> {
+        self.peek_bytes_from(0, max_len)
+    }
+
+    pub fn peek_bytes_from(&self, offset: usize, max_len: usize) -> Option<&[u8]> {
+        if max_len == 0 || offset >= self.readable_len() {
             return None;
         }
 
-        Some(&self.buf[..min(max_len, self.readable_len())])
+        let end = min(offset.saturating_add(max_len), self.readable_len());
+        Some(&self.buf[offset..end])
     }
 
     pub fn consume_bytes(&mut self, len: usize) {

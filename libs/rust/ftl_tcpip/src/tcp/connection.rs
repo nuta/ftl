@@ -231,9 +231,12 @@ impl<I: Io> TcpConn<I> {
         match &mut mutable.state {
             State::Established => {
                 let inflight_len = mutable.snd_nxt.wrapping_sub(mutable.snd_una) as usize;
-                let sendable_len = (mutable.snd_wnd as usize) - inflight_len;
+                let sendable_len = (mutable.snd_wnd as usize).saturating_sub(inflight_len);
                 let remote = mutable.remote.as_ref().unwrap();
-                if let Some(payload) = mutable.tx_buffer.peek_bytes(sendable_len) {
+                if let Some(payload) = mutable
+                    .tx_buffer
+                    .peek_bytes_from(inflight_len, sendable_len)
+                {
                     let header = TcpHeader {
                         src_port: mutable.local_port.into(),
                         dst_port: remote.port.into(),

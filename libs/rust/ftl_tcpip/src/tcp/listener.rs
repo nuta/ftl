@@ -155,7 +155,34 @@ impl<I: Io> TcpListener<I> {
 
         let mut h = mutable.inflight_handshakes.remove(index);
         if !payload.is_empty() {
-            h.rx_buffer.write_bytes(payload.slice());
+            if rx.seq != h.remote_rcv_nxt {
+                trace!(
+                    "TCP: out-of-order data on final ACK: seq={}, rcv_nxt={}",
+                    rx.seq, h.remote_rcv_nxt
+                );
+            } else {
+                // Data on the third leg consumes receive sequence space before TcpConn sees more packets.
+                let written_len = h.rx_buffer.write_bytes(payload.slice());
+                h.remote_rcv_nxt = h.remote_rcv_nxt.wrapping_add(written_len as u32);
+
+                let header = TcpHeader {
+                    src_port: self.local_port.into(),
+                    dst_port: h.remote.port.into(),
+                    seq: h.local_iss.wrapping_add(1).into(),
+                    ack: h.remote_rcv_nxt.into(),
+                    window_size: (h.rx_buffer.writeable_len() as u16).into(),
+                    flags: TcpFlags::ACK,
+                    header_len: 0.into(),
+                    checksum: 0.into(),
+                    urgent_pointer: 0.into(),
+                };
+
+                // ACK to the payload.
+                if let Err(err) = transmit_segment::<I>(devices, routes, header, h.remote.addr, &[])
+                {
+                    warn!("TCP: failed to ACK final ACK payload: {:?}", err);
+                }
+            }
         }
 
         if let Some(pending_accept) = mutable.pending_accepts.pop_front() {
