@@ -45,8 +45,6 @@ struct Mutable<I: Io> {
     snd_wnd: u16,
     /// Sequence number of the next byte we expect to receive.
     rcv_nxt: u32,
-    /// Our receive window size. How much RX buffer space we have.
-    rcv_wnd: u16,
     tx_buffer: RingBuffer,
     rx_buffer: RingBuffer,
     pending_writes: VecDeque<I::TcpWrite>,
@@ -68,7 +66,6 @@ impl<I: Io> TcpConn<I> {
                 snd_nxt: 0,
                 snd_wnd: 0,
                 rcv_nxt: 0,
-                rcv_wnd: 0,
                 tx_buffer: RingBuffer::new(),
                 rx_buffer: RingBuffer::new(),
                 pending_writes: VecDeque::new(),
@@ -86,7 +83,6 @@ impl<I: Io> TcpConn<I> {
         mutable.snd_nxt = snd_nxt;
         mutable.snd_wnd = snd_wnd;
         mutable.rcv_nxt = rcv_nxt;
-        mutable.rcv_wnd = DEFAULT_RCV_WND;
     }
 
     pub fn write(&self, req: I::TcpWrite) {
@@ -158,7 +154,6 @@ impl<I: Io> TcpConn<I> {
                 }
             }
 
-            mutable.rcv_wnd = mutable.rx_buffer.writeable_len() as u16;
             should_ack = true;
         }
 
@@ -190,7 +185,7 @@ impl<I: Io> TcpConn<I> {
                 dst_port: remote.port.into(),
                 seq: mutable.snd_nxt.into(),
                 ack: mutable.rcv_nxt.into(),
-                window_size: mutable.rcv_wnd.into(),
+                window_size: (mutable.rx_buffer.writeable_len() as u16).into(),
                 flags: TcpFlags::ACK,
                 header_len: 0.into(),
                 checksum: 0.into(),
@@ -220,7 +215,7 @@ impl<I: Io> TcpConn<I> {
                         dst_port: remote.port.into(),
                         seq: mutable.snd_nxt.into(),
                         ack: mutable.rcv_nxt.into(),
-                        window_size: mutable.rcv_wnd.into(),
+                        window_size: (mutable.rx_buffer.writeable_len() as u16).into(),
                         flags: TcpFlags::ACK | TcpFlags::PSH,
                         header_len: 0,
                         checksum: 0.into(),
