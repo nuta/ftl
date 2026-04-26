@@ -38,6 +38,15 @@ impl RingBuffer {
         len
     }
 
+    pub fn read_bytes_with<F>(&mut self, max_len: usize, f: F) 
+    where
+        F: FnOnce(Option<&[u8]>) -> usize,
+    {
+        let buf = self.peek_bytes(max_len);
+        let read_len = f(buf);
+        self.consume_bytes(read_len);
+    }
+
     pub fn peek_bytes(&mut self, max_len: usize) -> Option<&[u8]> {
         if self.readable_len() == 0 {
             return None;

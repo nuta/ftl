@@ -134,8 +134,18 @@ impl ftl_tcpip::tcp::Write for TcpWrite {
 pub struct TcpRead(ReadRequest<Arc<Channel>>);
 
 impl ftl_tcpip::tcp::Read for TcpRead {
-    fn complete(self, buffer: &mut ftl_tcpip::tcp::RingBuffer) {
-        todo!()
+    fn complete(self, rx_buffer: &mut ftl_tcpip::tcp::RingBuffer) {
+        rx_buffer.read_bytes_with(self.0.len(), |buf| {
+            let Some(buf) = buf else {
+                // This should not happen.
+                return 0;
+            };
+
+            // FIXME: Consider max body length in IPC?
+
+            self.0.reply(buf);
+            buf.len()
+        });
     }
 }
 
