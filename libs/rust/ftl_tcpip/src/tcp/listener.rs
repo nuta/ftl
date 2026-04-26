@@ -37,7 +37,9 @@ struct PendingAccept<I: Io> {
 }
 
 struct Mutable<I: Io> {
+    /// Handshakes that we have sent SYN+ACK, and are waiting for an ACK.
     inflight_handshakes: Vec<Handshake>,
+    /// Handshakes that we have received an ACK for. Established connections.
     finished_handshakes: VecDeque<Handshake>,
     pending_accepts: VecDeque<PendingAccept<I>>,
 }
