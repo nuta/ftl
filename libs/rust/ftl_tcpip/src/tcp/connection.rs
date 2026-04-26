@@ -206,10 +206,10 @@ impl<I: Io> TcpConn<I> {
     ) {
         match &mut mutable.state {
             State::Established => {
-                let inflight = mutable.snd_nxt.wrapping_sub(mutable.snd_una) as usize;
-                let max_len = (mutable.snd_wnd as usize) - inflight;
+                let inflight_len = mutable.snd_nxt.wrapping_sub(mutable.snd_una) as usize;
+                let sendable_len = (mutable.snd_wnd as usize) - inflight_len;
                 let remote = mutable.remote.as_ref().unwrap();
-                if let Some(payload) = mutable.tx_buffer.peek_bytes(max_len) {
+                if let Some(payload) = mutable.tx_buffer.peek_bytes(sendable_len) {
                     let header = TcpHeader {
                         src_port: mutable.local_port.into(),
                         dst_port: remote.port.into(),
@@ -235,7 +235,9 @@ impl<I: Io> TcpConn<I> {
                     mutable.tx_buffer.consume_bytes(payload_len);
                 }
             }
-            State::Listen => {}
+            State::Listen => {
+                unreachable!();
+            }
             State::FinWait1 | State::FinWait2 | State::Closing => {}
         }
     }
