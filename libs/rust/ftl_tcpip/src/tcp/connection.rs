@@ -142,11 +142,11 @@ impl<I: Io> TcpConn<I> {
         let mut mutable = self.mutable.lock();
 
         if rx.seq != mutable.rcv_nxt {
-            // TODO:
             trace!(
                 "TCP: out-of-order data: seq={}, rcv_nxt={}",
                 rx.seq, mutable.rcv_nxt
             );
+            self.send_ack(devices, routes, &mutable);
             return;
         }
 
@@ -229,25 +229,37 @@ impl<I: Io> TcpConn<I> {
         }
 
         if should_ack {
-            let remote = mutable.remote.as_ref().unwrap();
-            let header = TcpHeader {
-                src_port: mutable.local_port.into(),
-                dst_port: remote.port.into(),
-                seq: mutable.snd_nxt.into(),
-                ack: mutable.rcv_nxt.into(),
-                window_size: (mutable.rx_buffer.writeable_len() as u16).into(),
-                flags: TcpFlags::ACK,
-                header_len: 0.into(),
-                checksum: 0.into(),
-                urgent_pointer: 0.into(),
-            };
-
-            if let Err(err) = transmit_segment::<I>(devices, routes, header, remote.addr, &[]) {
-                warn!("TCP: failed to send ACK: {:?}", err);
-            }
+            self.send_ack(devices, routes, &mutable);
         }
 
         self.flush(devices, routes, &mut mutable);
+    }
+
+    fn send_ack(
+        &self,
+        devices: &mut DeviceMap<I::Device>,
+        routes: &mut RouteTable,
+        mutable: &Mutable<I>,
+    ) {
+        let Some(remote) = mutable.remote.as_ref() else {
+            return;
+        };
+
+        let header = TcpHeader {
+            src_port: mutable.local_port.into(),
+            dst_port: remote.port.into(),
+            seq: mutable.snd_nxt.into(),
+            ack: mutable.rcv_nxt.into(),
+            window_size: (mutable.rx_buffer.writeable_len() as u16).into(),
+            flags: TcpFlags::ACK,
+            header_len: 0.into(),
+            checksum: 0.into(),
+            urgent_pointer: 0.into(),
+        };
+
+        if let Err(err) = transmit_segment::<I>(devices, routes, header, remote.addr, &[]) {
+            warn!("TCP: failed to send ACK: {:?}", err);
+        }
     }
 
     fn flush(
