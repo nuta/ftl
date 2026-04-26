@@ -85,7 +85,12 @@ impl<I: Io> TcpConn<I> {
         mutable.rcv_nxt = rcv_nxt;
     }
 
-    pub fn write(&self, devices: &mut DeviceMap<I::Device>, routes: &mut RouteTable, req: I::TcpWrite) {
+    pub fn write(
+        &self,
+        devices: &mut DeviceMap<I::Device>,
+        routes: &mut RouteTable,
+        req: I::TcpWrite,
+    ) {
         let mut mutable = self.mutable.lock();
         if mutable.tx_buffer.writeable_len() == 0 {
             mutable.pending_writes.push_back(req);
@@ -130,6 +135,13 @@ impl<I: Io> TcpConn<I> {
             if acked_bytes > 0 {
                 mutable.snd_una = rx.ack;
                 mutable.tx_buffer.consume_bytes(acked_bytes);
+                while mutable.tx_buffer.writeable_len() > 0 {
+                    if let Some(req) = mutable.pending_writes.pop_front() {
+                        req.complete(&mut mutable.tx_buffer);
+                    } else {
+                        break;
+                    }
+                }
             }
         }
 
@@ -151,6 +163,8 @@ impl<I: Io> TcpConn<I> {
             while mutable.rx_buffer.readable_len() > 0 {
                 if let Some(req) = mutable.pending_reads.pop_front() {
                     req.complete(&mut mutable.rx_buffer);
+                } else {
+                    break;
                 }
             }
 
