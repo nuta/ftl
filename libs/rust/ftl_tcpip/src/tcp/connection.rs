@@ -275,7 +275,8 @@ impl<I: Io> TcpConn<I> {
                         State::CloseWait => State::LastAck,
                         _ => unreachable!(),
                     };
-                    &[]
+
+                    &[] // No data to send in payload.
                 } else {
                     let inflight_len = mutable.snd_nxt.wrapping_sub(mutable.snd_una) as usize;
                     let sendable_len = min(
