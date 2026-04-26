@@ -12,7 +12,7 @@ use crate::tcp::checksum::compute_checksum;
 use crate::transport::Protocol;
 
 #[derive(Debug)]
-enum TxError {
+pub(super) enum TxError {
     PacketAlloc(packet::AllocError),
     PacketWrite(packet::ReserveError),
     Ipv4Tx(ipv4::TxError),
@@ -26,7 +26,7 @@ fn encode_header_len(len: usize) -> u8 {
     ((len / 4) as u8) << 4
 }
 
-fn transmit_segment<I: Io>(
+pub(super) fn transmit_segment<I: Io>(
     devices: &mut DeviceMap<I::Device>,
     routes: &mut RouteTable,
     mut header: TcpHeader,

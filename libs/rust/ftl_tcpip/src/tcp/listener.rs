@@ -13,22 +13,31 @@ use crate::socket::ActiveKey;
 use crate::socket::AnySocket;
 use crate::socket::Endpoint;
 use crate::socket::SocketMap;
+use crate::tcp::Accept;
 use crate::tcp::TcpConn;
+use crate::tcp::connection::DEFAULT_RCV_WND;
 use crate::tcp::header::TcpFlags;
+use crate::tcp::header::TcpHeader;
 use crate::tcp::rx::RxHeader;
+use crate::tcp::tx::transmit_segment;
 use crate::transport::Port;
 use crate::transport::Protocol;
 
-struct SynReceived {
+struct Handshake {
     remote_ip: IpAddr,
     remote_port: Port,
     local_iss: u32,
     remote_rcv_nxt: u32,
 }
 
+struct PendingAccept<I: Io> {
+    request: I::TcpAccept,
+    conn: Arc<TcpConn<I>>,
+}
+
 struct Mutable<I: Io> {
-    syn_received: Vec<SynReceived>,
-    pending_accepts: VecDeque<I::TcpAccept>,
+    handshakes: Vec<Handshake>,
+    pending_accepts: VecDeque<PendingAccept<I>>,
 }
 
 #[derive(Debug)]
@@ -44,14 +53,20 @@ impl<I: Io> TcpListener<I> {
         Self {
             local_port,
             mutable: spin::Mutex::new(Mutable {
-                syn_received: Vec::new(),
+                handshakes: Vec::new(),
                 pending_accepts: VecDeque::new(),
             }),
         }
     }
 
     pub fn accept(&self, request: I::TcpAccept) -> Result<Arc<TcpConn<I>>, AcceptError> {
-        todo!()
+        let conn = Arc::new(TcpConn::new_listen());
+        let pending_accept = PendingAccept {
+            request,
+            conn: conn.clone(),
+        };
+        self.mutable.lock().pending_accepts.push_back(pending_accept);
+        Ok(conn)
     }
 
     fn start_handshake(
@@ -61,7 +76,36 @@ impl<I: Io> TcpListener<I> {
         sockets: &mut SocketMap,
         rx: RxHeader,
     ) {
-        todo!()
+        let our_iss = 1234; // TODO: generate a random ISS.
+
+        // TODO: Backlog limit
+
+        let handshake = Handshake {
+            remote_ip: rx.remote_ip,
+            remote_port: rx.src_port,
+            local_iss: our_iss,
+            remote_rcv_nxt: rx.seq.wrapping_add(1),
+        };
+
+        let header = TcpHeader {
+            src_port: self.local_port.into(),
+            dst_port: handshake.remote_port.into(),
+            seq: handshake.local_iss.into(),
+            ack: handshake.remote_rcv_nxt.into(),
+            window_size: DEFAULT_RCV_WND.into(),
+            flags: TcpFlags::SYN | TcpFlags::ACK,
+            header_len: 0.into(),
+            checksum: 0.into(),
+            urgent_pointer: 0.into(),
+        };
+
+        let mut mutable = self.mutable.lock();
+        mutable.handshakes.push(handshake);
+        drop(mutable);
+
+        if let Err(err) = transmit_segment::<I>(devices, routes, header, rx.remote_ip, &[]) {
+            warn!("TCP: failed to reply to SYN: {:?}", err);
+        }
     }
 
     fn finish_handshake(
@@ -71,7 +115,38 @@ impl<I: Io> TcpListener<I> {
         sockets: &mut SocketMap,
         rx: RxHeader,
     ) {
-        todo!()
+        let mut mutable = self.mutable.lock();
+
+        // Find the matching handshake.
+        let Some((index, h)) = mutable.handshakes
+            .iter()
+            .enumerate()
+            .find(|(_, h)| rx.remote_ip == h.remote_ip && rx.src_port == h.remote_port)
+        else {
+            debug!("TCP: no SYN found for {}:{}", rx.remote_ip, rx.src_port);
+            return;
+        };
+
+        let h = mutable.handshakes.remove(index);
+
+        if let Some(PendingAccept { conn, request }) = mutable.pending_accepts.pop_front() {
+            let remote = Endpoint {
+                addr: rx.remote_ip,
+                port: rx.src_port,
+            };
+            let key = ActiveKey {
+                remote,
+                local: Endpoint {
+                    addr: rx.local_ip,
+                    port: self.local_port,
+                },
+                protocol: Protocol::Tcp,
+            };
+
+            conn.open_passively(remote, h.local_iss, h.remote_rcv_nxt, rx.window_size);
+            sockets.insert_active(key, conn);
+            request.complete(Ok(()));
+        }
     }
 
     pub(super) fn handle_rx(
