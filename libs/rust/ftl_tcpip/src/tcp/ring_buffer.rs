@@ -15,6 +15,7 @@ impl RingBuffer {
     }
 
     pub fn writeable_len(&self) -> usize {
+        // FIXME: Ensure the writeable len <= u16::MAX to use it as window size.
         4096 // FIXME: capacity
     }
 
