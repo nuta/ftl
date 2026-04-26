@@ -195,23 +195,24 @@ impl<I: Io> TcpConn<I> {
             }
         }
 
-        // Handle FIN: remote wants to close the connection.
-        let mut received_fin = false;
-        if rx.flags.contains(TcpFlags::FIN) {
-            mutable.rcv_nxt = mutable.rcv_nxt.wrapping_add(1);
-            received_fin = true;
-            should_ack = true;
-        }
-
+        // FIN_WAIT1 -> FIN_WAIT2: We have sent all data, and are waiting for the remote to
+        // send its FIN.
         if matches!(mutable.state, State::FinWait1) && mutable.snd_una == mutable.snd_nxt {
-            trace!("TCP: remote acknowledged our FIN");
             mutable.state = State::FinWait2;
         }
 
-        if received_fin && matches!(mutable.state, State::FinWait1 | State::FinWait2) {
-            trace!("TCP: FIN received");
-            mutable.state = State::Closing;
+        // Handle FIN: remote wants to close the connection.
+        if rx.flags.contains(TcpFlags::FIN) {
+            mutable.rcv_nxt = mutable.rcv_nxt.wrapping_add(1);
+            should_ack = true;
+
+            // FIN_WAIT* -> CLOSING: We have received the FIN, and are waiting for the
+            // remote to acknowledge our FIN.
+            if matches!(mutable.state, State::FinWait1 | State::FinWait2) {
+                mutable.state = State::Closing;
+            }
         }
+
 
         if should_ack {
             let remote = mutable.remote.as_ref().unwrap();
