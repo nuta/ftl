@@ -18,15 +18,19 @@ impl RingBuffer {
         4096 // FIXME: capacity
     }
 
+    pub fn readable_len(&self) -> usize {
+        self.buf.len()
+    }
+
     pub fn write_bytes(&mut self, buf: &[u8]) {
         self.buf.extend_from_slice(buf);
     }
 
-    pub fn read_bytes<F>(&mut self, max_len: usize, f: F)
-    where
-        F: FnOnce(&[u8]) -> usize,
-    {
-        let read_len = f(&self.buf[..min(max_len, self.buf.len())]);
-        self.buf.drain(..read_len);
+    pub fn peek_bytes(&mut self, max_len: usize) -> Option<&[u8]> {
+        Some(&self.buf[..min(max_len, self.readable_len())])
+    }
+
+    pub fn consume_bytes(&mut self, len: usize) {
+        self.buf.drain(..min(len, self.readable_len()));
     }
 }

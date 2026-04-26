@@ -1,12 +1,19 @@
 use alloc::collections::VecDeque;
+use core::cmp::min;
 use core::fmt;
 
 use super::ring_buffer::RingBuffer;
 use crate::Io;
+use crate::device::DeviceMap;
+use crate::route::RouteTable;
 use crate::socket::AnySocket;
 use crate::socket::Endpoint;
 use crate::tcp::Read;
 use crate::tcp::Write;
+use crate::tcp::header::TcpFlags;
+use crate::tcp::header::TcpHeader;
+use crate::tcp::tx::transmit_segment;
+use crate::transport::Port;
 
 pub(super) const DEFAULT_RCV_WND: u16 = 1024;
 
@@ -26,6 +33,7 @@ enum State {
 struct Mutable<I: Io> {
     state: State,
     remote: Option<Endpoint>,
+    local_port: Port,
     /// Sequence number of the first byte not yet acknowledged by the peer.
     snd_una: u32,
     /// Sequence number of the next byte to send.
@@ -53,6 +61,7 @@ impl<I: Io> TcpConn<I> {
             mutable: spin::Mutex::new(Mutable {
                 state: State::Listen,
                 remote: None,
+                local_port: Port::new(0), // FIXME:
                 snd_una: 0,
                 snd_nxt: 0,
                 snd_wnd: 0,
@@ -84,6 +93,9 @@ impl<I: Io> TcpConn<I> {
             mutable.pending_writes.push_back(req);
         } else {
             req.complete(&mut mutable.tx_buffer);
+            if mutable.tx_buffer.readable_len() > 0 {
+                todo!("send data from buffer");
+            }
         }
     }
 
@@ -93,6 +105,52 @@ impl<I: Io> TcpConn<I> {
             mutable.pending_reads.push_back(req);
         } else {
             req.complete(&mut mutable.rx_buffer);
+        }
+    }
+
+    fn handle_rx(&self) {
+        let mut mutable = self.mutable.lock();
+    }
+
+    fn flush(
+        &self,
+        devices: &mut DeviceMap<I::Device>,
+        routes: &mut RouteTable,
+        mutable: &mut Mutable<I>,
+    ) {
+        match &mut mutable.state {
+            State::Established => {
+                let inflight = mutable.snd_nxt.wrapping_sub(mutable.snd_una) as usize;
+                let max_len = (mutable.snd_wnd as usize) - inflight;
+                let remote = mutable.remote.as_ref().unwrap();
+                if let Some(payload) = mutable.tx_buffer.peek_bytes(max_len) {
+                    let header = TcpHeader {
+                        src_port: mutable.local_port.into(),
+                        dst_port: remote.port.into(),
+                        seq: mutable.snd_nxt.into(),
+                        ack: mutable.rcv_nxt.into(),
+                        window_size: mutable.rcv_wnd.into(),
+                        flags: TcpFlags::ACK | TcpFlags::PSH,
+                        header_len: 0,
+                        checksum: 0.into(),
+                        urgent_pointer: 0.into(),
+                    };
+
+                    trace!("TCP: sending {} bytes", payload.len());
+                    if let Err(err) =
+                        transmit_segment::<I>(devices, routes, header, remote.addr, payload)
+                    {
+                        warn!("TCP: failed to send data: {:?}", err);
+                        return;
+                    }
+
+                    let payload_len = payload.len();
+                    mutable.snd_nxt = mutable.snd_nxt.wrapping_add(payload_len as u32);
+                    mutable.tx_buffer.consume_bytes(payload_len);
+                }
+            }
+            State::Listen => {}
+            State::FinWait1 | State::FinWait2 | State::Closing => {}
         }
     }
 }
