@@ -24,10 +24,11 @@ use crate::transport::Port;
 use crate::transport::Protocol;
 
 struct Handshake {
-    remote_ip: IpAddr,
-    remote_port: Port,
+    remote: Endpoint,
+    local_ip: IpAddr,
     local_iss: u32,
     remote_rcv_nxt: u32,
+    remote_rcv_wnd: u16,
 }
 
 struct PendingAccept<I: Io> {
@@ -36,7 +37,8 @@ struct PendingAccept<I: Io> {
 }
 
 struct Mutable<I: Io> {
-    handshakes: Vec<Handshake>,
+    inflight_handshakes: Vec<Handshake>,
+    finished_handshakes: VecDeque<Handshake>,
     pending_accepts: VecDeque<PendingAccept<I>>,
 }
 
@@ -53,22 +55,26 @@ impl<I: Io> TcpListener<I> {
         Self {
             local_port,
             mutable: spin::Mutex::new(Mutable {
-                handshakes: Vec::new(),
+                inflight_handshakes: Vec::new(),
+                finished_handshakes: VecDeque::new(),
                 pending_accepts: VecDeque::new(),
             }),
         }
     }
 
-    pub fn accept(&self, request: I::TcpAccept) -> Result<Arc<TcpConn<I>>, AcceptError> {
+    pub fn accept(&self, sockets: &mut SocketMap, request: I::TcpAccept) -> Result<Arc<TcpConn<I>>, AcceptError> {
         let conn = Arc::new(TcpConn::new_listen());
         let pending_accept = PendingAccept {
             request,
             conn: conn.clone(),
         };
-        self.mutable
-            .lock()
-            .pending_accepts
-            .push_back(pending_accept);
+
+        let mut mutable = self.mutable.lock();
+        if let Some(h) = mutable.finished_handshakes.pop_front() {
+            self.accept_handshake(sockets, pending_accept, &h);
+        } else {
+            mutable.pending_accepts.push_back(pending_accept);
+        }
         Ok(conn)
     }
 
@@ -81,18 +87,24 @@ impl<I: Io> TcpListener<I> {
     ) {
         let our_iss = 1234; // TODO: generate a random ISS.
 
-        // TODO: Backlog limit
+        // TODO: Backlog limit: ensure mutable.handshakes.len() + mutable.finished_handshakes.len() <= MAX_BACKLOG.
+
+        let remote = Endpoint {
+            addr: rx.remote_ip,
+            port: rx.src_port,
+        };
 
         let handshake = Handshake {
-            remote_ip: rx.remote_ip,
-            remote_port: rx.src_port,
+            remote,
+            local_ip: rx.local_ip,
             local_iss: our_iss,
             remote_rcv_nxt: rx.seq.wrapping_add(1),
+            remote_rcv_wnd: rx.window_size,
         };
 
         let header = TcpHeader {
             src_port: self.local_port.into(),
-            dst_port: handshake.remote_port.into(),
+            dst_port: handshake.remote.port.into(),
             seq: handshake.local_iss.into(),
             ack: handshake.remote_rcv_nxt.into(),
             window_size: DEFAULT_RCV_WND.into(),
@@ -103,7 +115,7 @@ impl<I: Io> TcpListener<I> {
         };
 
         let mut mutable = self.mutable.lock();
-        mutable.handshakes.push(handshake);
+        mutable.inflight_handshakes.push(handshake);
         drop(mutable);
 
         if let Err(err) = transmit_segment::<I>(devices, routes, header, rx.remote_ip, &[]) {
@@ -122,21 +134,23 @@ impl<I: Io> TcpListener<I> {
 
         // Find the matching handshake.
         let Some((index, h)) = mutable
-            .handshakes
+            .inflight_handshakes
             .iter()
             .enumerate()
-            .find(|(_, h)| rx.remote_ip == h.remote_ip && rx.src_port == h.remote_port)
+            .find(|(_, h)| rx.remote_ip == h.remote.addr && rx.src_port == h.remote.port)
         else {
             debug!("TCP: no SYN found for {}:{}", rx.remote_ip, rx.src_port);
             return;
         };
 
-        let h = mutable.handshakes.remove(index);
-
+        let h = mutable.inflight_handshakes.remove(index);
         if let Some(pending_accept) = mutable.pending_accepts.pop_front() {
-            self.accept_handshake(sockets, pending_accept, &h, rx);
-        };
-
+            // Register the connection immediately.
+            self.accept_handshake(sockets, pending_accept, &h);
+        } else {
+            // Queue this established connection for later completion.
+            mutable.finished_handshakes.push_back(h);
+        }
     }
 
     fn accept_handshake(
@@ -144,22 +158,17 @@ impl<I: Io> TcpListener<I> {
         sockets: &mut SocketMap,
         pending_accept: PendingAccept<I>,
         h: &Handshake,
-        rx: RxHeader,
     ) -> Result<(), ()> {
-        let remote = Endpoint {
-            addr: rx.remote_ip,
-            port: rx.src_port,
-        };
         let key = ActiveKey {
-            remote,
+            remote: h.remote,
             local: Endpoint {
-                addr: rx.local_ip,
+                addr: h.local_ip,
                 port: self.local_port,
             },
             protocol: Protocol::Tcp,
         };
 
-        pending_accept.conn.open_passively(remote, h.local_iss, h.remote_rcv_nxt, rx.window_size);
+        pending_accept.conn.open_passively(h.remote, h.local_iss, h.remote_rcv_nxt, h.remote_rcv_wnd);
         sockets.insert_active(key, pending_accept.conn);
         pending_accept.request.complete(Ok(()));
         Ok(())
