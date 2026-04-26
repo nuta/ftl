@@ -121,7 +121,7 @@ impl tcp::Write for TcpWrite {
     fn len(&self) -> usize {
         match self {
             Self::Init(Some(request)) => request.len(),
-            Self::Init(None) => unreachable!(), // FIXME:
+            Self::Init(None) => unreachable!(),         // FIXME:
             Self::Recved(_completer) => unreachable!(), // FIXME:
         }
     }
@@ -184,7 +184,7 @@ impl tcp::Read for TcpRead {
     }
 }
 
-pub struct TcpAccept { 
+pub struct TcpAccept {
     completer: OpenCompleter<Arc<Channel>>,
     their_ch: Channel,
 }
@@ -203,10 +203,20 @@ impl tcp::Accept for TcpAccept {
 
 #[derive(Debug)]
 enum Context {
-    Supervisor { ch: Channel },
-    Driver { ch: Arc<Channel> },
-    Client { ch: Channel, conn: Arc<TcpConn<TcpIpIo>> },
-    TcpListener { ch: Arc<Channel>, listener: Arc<TcpListener<TcpIpIo>> },
+    Supervisor {
+        ch: Channel,
+    },
+    Driver {
+        ch: Arc<Channel>,
+    },
+    Client {
+        ch: Channel,
+        conn: Arc<TcpConn<TcpIpIo>>,
+    },
+    TcpListener {
+        ch: Arc<Channel>,
+        listener: Arc<TcpListener<TcpIpIo>>,
+    },
 }
 
 #[ftl::main]
@@ -278,13 +288,12 @@ fn main(supervisor_ch: Channel) {
                                 );
 
                                 // Pull the next packet
-                                ch
-                                    .send(Message::Read {
-                                        mid: MessageId::new(1),
-                                        offset: 0,
-                                        len: RECV_BUFFER_SIZE,
-                                    })
-                                    .unwrap();
+                                ch.send(Message::Read {
+                                    mid: MessageId::new(1),
+                                    offset: 0,
+                                    len: RECV_BUFFER_SIZE,
+                                })
+                                .unwrap();
                             }
                             Err(error) => {
                                 panic!("failed to recv with error: {:?}", error);
@@ -310,11 +319,13 @@ fn main(supervisor_ch: Channel) {
                         };
 
                         let (their_ch, our_ch) = Channel::new().unwrap();
-                        let conn = match listener.accept(TcpAccept { completer, their_ch }) {
+                        let conn = match listener.accept(TcpAccept {
+                            completer,
+                            their_ch,
+                        }) {
                             Ok(conn) => conn,
                             Err(e) => {
                                 warn!("failed to accept tcp sock: {:?}", e);
-                                completer.reply_error(ErrorCode::InternalError);
                                 continue;
                             }
                         };
@@ -326,10 +337,10 @@ fn main(supervisor_ch: Channel) {
                         warn!("unhandled message: {:?}", peek);
                     }
                 }
-            },
+            }
             (ctx, event) => {
                 warn!("unhandled event for {:?}: {:?}", ctx, event);
-            },
+            }
         }
     }
 }
