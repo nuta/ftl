@@ -20,7 +20,7 @@ pub(super) struct TcpHeader {
 
 impl WriteableToPacket for TcpHeader {}
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 #[repr(transparent)]
 pub(super) struct TcpFlags(u8);
 

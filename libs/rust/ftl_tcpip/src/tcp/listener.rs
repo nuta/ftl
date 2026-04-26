@@ -9,6 +9,7 @@ use crate::route::RouteTable;
 use crate::socket::AnySocket;
 use crate::socket::SocketMap;
 use crate::tcp::TcpConn;
+use crate::tcp::header::TcpFlags;
 use crate::tcp::rx::RxHeader;
 use crate::transport::Port;
 
@@ -37,15 +38,46 @@ impl<I: Io> TcpListener<I> {
         Ok(conn)
     }
 
+    fn start_handshake(
+        self: &Arc<Self>,
+        devices: &mut DeviceMap<I::Device>,
+        routes: &mut RouteTable,
+        sockets: &mut SocketMap,
+        rx: RxHeader,
+    ) {
+        todo!()
+    }
+
+    fn finish_handshake(
+        self: &Arc<Self>,
+        devices: &mut DeviceMap<I::Device>,
+        routes: &mut RouteTable,
+        sockets: &mut SocketMap,
+        rx: RxHeader,
+    ) {
+        todo!()
+    }
+
     pub(super) fn handle_rx(
         self: &Arc<Self>,
         devices: &mut DeviceMap<I::Device>,
         routes: &mut RouteTable,
         sockets: &mut SocketMap,
-        pkt: &mut Packet,
         rx: RxHeader,
+        payload: &mut Packet,
     ) {
-        todo!()
+        match rx.flags {
+            TcpFlags::SYN => {
+                self.start_handshake(devices, routes, sockets, rx);
+            }
+            TcpFlags::ACK | (TcpFlags::ACK | TcpFlags::PSH) => {
+                self.finish_handshake(devices, routes, sockets, rx);
+            }
+            _ => {
+                debug!("TCP: unexpected flags: {:?}", rx.flags);
+                // TODO: Send an RST packet.
+            }
+        }
     }
 }
 

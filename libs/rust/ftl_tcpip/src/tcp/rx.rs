@@ -87,7 +87,7 @@ pub(crate) fn handle_rx<I: Io>(
 
             match sockets.get_listener::<TcpListener<I>>(&key) {
                 Some(listener) => {
-                    listener.handle_rx(devices, routes, sockets, pkt, rx);
+                    listener.handle_rx(devices, routes, sockets, rx, pkt);
                 }
                 None => {
                     trace!("TCP: no connection or listener found");
