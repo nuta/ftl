@@ -10,6 +10,7 @@ mod checksum;
 mod connection;
 mod header;
 mod listener;
+mod ring_buffer;
 mod rx;
 mod tx;
 

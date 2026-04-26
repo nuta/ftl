@@ -318,10 +318,13 @@ fn main(supervisor_ch: Channel) {
                         };
 
                         let (their_ch, our_ch) = Channel::new().unwrap();
-                        let conn = match listener.accept(&mut sockets, TcpAccept {
-                            completer,
-                            their_ch,
-                        }) {
+                        let conn = match listener.accept(
+                            &mut sockets,
+                            TcpAccept {
+                                completer,
+                                their_ch,
+                            },
+                        ) {
                             Ok(conn) => conn,
                             Err(e) => {
                                 warn!("failed to accept tcp sock: {:?}", e);

@@ -64,7 +64,11 @@ impl<I: Io> TcpListener<I> {
         }
     }
 
-    pub fn accept(&self, sockets: &mut SocketMap, request: I::TcpAccept) -> Result<Arc<TcpConn<I>>, AcceptError> {
+    pub fn accept(
+        &self,
+        sockets: &mut SocketMap,
+        request: I::TcpAccept,
+    ) -> Result<Arc<TcpConn<I>>, AcceptError> {
         let conn = Arc::new(TcpConn::new_listen());
         let pending_accept = PendingAccept {
             request,
@@ -170,7 +174,12 @@ impl<I: Io> TcpListener<I> {
             protocol: Protocol::Tcp,
         };
 
-        pending_accept.conn.open_passively(h.remote, h.local_iss, h.remote_rcv_nxt, h.remote_rcv_wnd);
+        pending_accept.conn.open_passively(
+            h.remote,
+            h.local_iss,
+            h.remote_rcv_nxt,
+            h.remote_rcv_wnd,
+        );
         sockets.insert_active(key, pending_accept.conn);
         pending_accept.request.complete(Ok(()));
         Ok(())
