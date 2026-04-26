@@ -211,14 +211,9 @@ pub(crate) fn handle_rx<I: Io>(
 
     match protocol {
         0x06 => {
-            if let Err(err) = crate::transport::tcp::handle_rx::<I>(
-                devices,
-                routes,
-                sockets,
-                pkt,
-                remote,
-                IpAddr::V4(dst),
-            ) {
+            if let Err(err) =
+                crate::tcp::handle_rx::<I>(devices, routes, sockets, pkt, remote, IpAddr::V4(dst))
+            {
                 warn!("bad TCP packet: {:?}", err);
             }
         }

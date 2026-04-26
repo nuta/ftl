@@ -8,8 +8,7 @@ use crate::device::Device;
 use crate::packet::Packet;
 use crate::route::RouteTable;
 use crate::socket::SocketMap;
-use crate::transport::tcp;
-use crate::transport::tcp::TcpListener;
+use crate::tcp::TcpListener;
 
 extern crate alloc;
 
@@ -25,6 +24,7 @@ pub mod ip;
 pub mod packet;
 pub mod route;
 pub mod socket;
+pub mod tcp;
 pub mod transport;
 mod utils;
 

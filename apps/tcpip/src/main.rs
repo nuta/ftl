@@ -27,10 +27,9 @@ use ftl_tcpip::route::Route;
 use ftl_tcpip::route::RouteTable;
 use ftl_tcpip::socket::Endpoint;
 use ftl_tcpip::socket::SocketMap;
+use ftl_tcpip::tcp::TcpConn;
+use ftl_tcpip::tcp::TcpListener;
 use ftl_tcpip::transport::Port;
-use ftl_tcpip::transport::tcp;
-use ftl_tcpip::transport::tcp::TcpConn;
-use ftl_tcpip::transport::tcp::TcpListener;
 
 fn conenct_to_driver(supervisor_ch: &Channel) -> Channel {
     let sink = Sink::new().unwrap();
@@ -117,7 +116,7 @@ pub enum TcpWrite {
     Recved(WriteCompleter<Arc<Channel>>),
 }
 
-impl tcp::Write for TcpWrite {
+impl ftl_tcpip::tcp::Write for TcpWrite {
     fn len(&self) -> usize {
         match self {
             Self::Init(Some(request)) => request.len(),
@@ -149,7 +148,7 @@ impl tcp::Write for TcpWrite {
         }
     }
 
-    fn complete(self, result: Result<usize, tcp::Error>) {
+    fn complete(self, result: Result<usize, ftl_tcpip::tcp::Error>) {
         match (self, result) {
             (Self::Init(Some(request)), Ok(len)) => {
                 request.reply(len);
@@ -172,8 +171,8 @@ impl tcp::Write for TcpWrite {
 
 pub struct TcpRead(ReadRequest<Arc<Channel>>);
 
-impl tcp::Read for TcpRead {
-    fn complete(self, result: Result<&[u8], tcp::Error>) {
+impl ftl_tcpip::tcp::Read for TcpRead {
+    fn complete(self, result: Result<&[u8], ftl_tcpip::tcp::Error>) {
         match result {
             Ok(buf) => self.0.reply(buf),
             Err(e) => {
@@ -189,8 +188,8 @@ pub struct TcpAccept {
     their_ch: Channel,
 }
 
-impl tcp::Accept for TcpAccept {
-    fn complete(self, result: Result<(), tcp::Error>) {
+impl ftl_tcpip::tcp::Accept for TcpAccept {
+    fn complete(self, result: Result<(), ftl_tcpip::tcp::Error>) {
         match result {
             Ok(_) => self.completer.reply(self.their_ch.into_handle()),
             Err(e) => {
