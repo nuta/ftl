@@ -240,6 +240,7 @@ impl<I: Io> TcpConn<I> {
         match &mut mutable.state {
             State::Established => {
                 let remote = mutable.remote.as_ref().unwrap();
+                let seq = mutable.snd_nxt.into();
 
                 let mut flags = TcpFlags::empty();
                 let payload = if mutable.close_requested && mutable.tx_buffer.readable_len() == 0 {
@@ -271,7 +272,7 @@ impl<I: Io> TcpConn<I> {
                 let header = TcpHeader {
                     src_port: mutable.local_port.into(),
                     dst_port: remote.port.into(),
-                    seq: mutable.snd_nxt.into(),
+                    seq,
                     ack: mutable.rcv_nxt.into(),
                     window_size: (mutable.rx_buffer.writeable_len() as u16).into(),
                     flags,
