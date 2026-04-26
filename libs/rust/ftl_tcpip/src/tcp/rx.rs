@@ -74,7 +74,7 @@ pub(crate) fn handle_rx<I: Io>(
 
     match sockets.get_active::<TcpConn<I>>(&key) {
         Some(conn) => {
-            todo!()
+            conn.handle_rx(devices, routes, rx, pkt);
         }
         None => {
             let key = ListenerKey {

@@ -119,7 +119,7 @@ impl<I: Io> TcpConn<I> {
         }
     }
 
-    fn handle_rx(
+    pub(super) fn handle_rx(
         &self,
         devices: &mut DeviceMap<I::Device>,
         routes: &mut RouteTable,
