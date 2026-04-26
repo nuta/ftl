@@ -5,6 +5,7 @@ use core::fmt;
 use super::ring_buffer::RingBuffer;
 use crate::Io;
 use crate::device::DeviceMap;
+use crate::packet::Packet;
 use crate::route::RouteTable;
 use crate::socket::AnySocket;
 use crate::socket::Endpoint;
@@ -12,6 +13,7 @@ use crate::tcp::Read;
 use crate::tcp::Write;
 use crate::tcp::header::TcpFlags;
 use crate::tcp::header::TcpHeader;
+use crate::tcp::rx::RxHeader;
 use crate::tcp::tx::transmit_segment;
 use crate::transport::Port;
 
@@ -108,8 +110,97 @@ impl<I: Io> TcpConn<I> {
         }
     }
 
-    fn handle_rx(&self) {
+    fn handle_rx(
+        &self,
+        devices: &mut DeviceMap<I::Device>,
+        routes: &mut RouteTable,
+        rx: RxHeader,
+        payload: &mut Packet,
+    ) {
         let mut mutable = self.mutable.lock();
+
+        mutable.snd_wnd = rx.window_size;
+        if rx.flags.contains(TcpFlags::ACK) {
+            let acked_bytes = rx.ack.wrapping_sub(mutable.snd_una) as usize;
+            let inflight_bytes = mutable.snd_nxt.wrapping_sub(mutable.snd_una) as usize;
+            if acked_bytes > inflight_bytes {
+                debug!(
+                    "TCP: ACKed more bytes than in flight: acked={}, inflight={}",
+                    acked_bytes, inflight_bytes
+                );
+                return;
+            }
+
+            if acked_bytes > 0 {
+                mutable.snd_una = rx.ack;
+                mutable.tx_buffer.consume_bytes(acked_bytes);
+            }
+        }
+
+        let payload = payload.slice();
+        let mut should_ack = false;
+        if !payload.is_empty() {
+            if rx.seq != mutable.rcv_nxt {
+                // TODO:
+                trace!(
+                    "TCP: out-of-order data: seq={}, rcv_nxt={}",
+                    rx.seq, mutable.rcv_nxt
+                );
+                return;
+            }
+
+            let written_len = mutable.rx_buffer.write_bytes(payload);
+            mutable.rcv_nxt = mutable.rcv_nxt.wrapping_add(written_len as u32);
+
+            while mutable.rx_buffer.readable_len() > 0 {
+                if let Some(req) = mutable.pending_reads.pop_front() {
+                    req.complete(&mut mutable.rx_buffer);
+                }
+            }
+
+            mutable.rcv_wnd = mutable.rx_buffer.writeable_len() as u16;
+            should_ack = true;
+        }
+
+        let mut received_fin = false;
+        if rx.flags.contains(TcpFlags::FIN) {
+            let fin_seq = rx.seq.wrapping_add(payload.len() as u32);
+            if fin_seq == mutable.rcv_nxt {
+                mutable.rcv_nxt = mutable.rcv_nxt.wrapping_add(1);
+                received_fin = true;
+            }
+
+            should_ack = true;
+        }
+
+        if matches!(mutable.state, State::FinWait1) && mutable.snd_una == mutable.snd_nxt {
+            trace!("TCP: FIN acknowledged");
+            mutable.state = State::FinWait2;
+        }
+
+        if received_fin && matches!(mutable.state, State::FinWait1 | State::FinWait2) {
+            trace!("TCP: FIN received");
+            mutable.state = State::Closing;
+        }
+
+        if should_ack {
+            let remote = mutable.remote.as_ref().unwrap();
+            let header = TcpHeader {
+                src_port: mutable.local_port.into(),
+                dst_port: remote.port.into(),
+                seq: mutable.snd_nxt.into(),
+                ack: mutable.rcv_nxt.into(),
+                window_size: mutable.rcv_wnd.into(),
+                flags: TcpFlags::ACK,
+                header_len: 0.into(),
+                checksum: 0.into(),
+                urgent_pointer: 0.into(),
+            };
+
+            if let Err(err) = transmit_segment::<I>(devices, routes, header, remote.addr, &[]) {
+                warn!("TCP: failed to send ACK: {:?}", err);
+            }
+        }
     }
 
     fn flush(

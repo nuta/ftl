@@ -22,8 +22,9 @@ impl RingBuffer {
         self.buf.len()
     }
 
-    pub fn write_bytes(&mut self, buf: &[u8]) {
+    pub fn write_bytes(&mut self, buf: &[u8]) -> usize {
         self.buf.extend_from_slice(buf);
+        buf.len()
     }
 
     pub fn peek_bytes(&mut self, max_len: usize) -> Option<&[u8]> {
