@@ -276,7 +276,6 @@ impl<I: Io> TcpConn<I> {
 
                 let mut flags = TcpFlags::empty();
                 let payload = if mutable.close_requested && mutable.tx_buffer.readable_len() == 0 {
-                    trace!("TCP: sending FIN");
                     flags |= TcpFlags::FIN | TcpFlags::ACK;
                     mutable.snd_nxt = mutable.snd_nxt.wrapping_add(1);
                     mutable.state = match mutable.state {

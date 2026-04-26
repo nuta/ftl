@@ -212,6 +212,7 @@ fn main(supervisor_ch: Channel) {
                         };
 
                         if let Some((dmabuf, total_len)) = rxq.pop() {
+                            // info!("\x1b[35mREAD IMMEDIATELY: still_can_pop={}, readers={}\x1b[0m", rxq.can_pop(), readers.len());
                             handle_rx(&mut rxq, dmabuf, total_len, completer);
                         } else if readers.len() > READERS_MAX {
                             completer.reply_error(ErrorCode::TryLater);
@@ -286,6 +287,8 @@ fn main(supervisor_ch: Channel) {
                         let completer = readers.pop_front().unwrap();
                         handle_rx(&mut rxq, dmabuf, total_len, completer);
                     }
+
+                    // info!("\x1b[35mcan_pop={}, readers={}\x1b[0m", rxq.can_pop(), readers.len());
                 }
             }
             (_, Event::PeerClosed) => {

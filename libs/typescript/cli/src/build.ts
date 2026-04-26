@@ -114,7 +114,7 @@ export async function build(params: BuildParams) {
     for (const app of params.apps) {
         const manifestPath = `apps/${app}/Cargo.toml`;
         await cargoBuild(manifestPath, targetJSON, params.mode, cargoArgs);
-        initfsFiles[app] = `target/user/debug/${app}`;
+        initfsFiles[app] = `target/user/${params.mode}/${app}`;
     }
 
     const kernelManifestPath = 'kernel/Cargo.toml';

@@ -121,7 +121,6 @@ impl ftl_tcpip::device::Device for MyDevice {
     }
 
     fn transmit(&mut self, pkt: &mut Packet) {
-        info!("transmitting packet: {:?}", pkt.len());
         let m = Message::Write {
             mid: MessageId::new(1),
             offset: 0,
@@ -312,7 +311,6 @@ fn main(supervisor_ch: Channel) {
                         }
                     }
                     Incoming::WriteReply(reply) => {
-                        trace!("ethernet driver wrote {} bytes", reply.written_len());
                     }
                     _ => {
                         warn!("unhandled message: {:?}", peek);

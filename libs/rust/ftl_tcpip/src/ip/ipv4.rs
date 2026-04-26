@@ -199,7 +199,6 @@ pub(crate) fn handle_rx<I: Io>(
     let remote = IpAddr::V4(src);
     let dst = Ipv4Addr::from(header.dst_addr);
     let protocol = header.protocol;
-    info!("IPv4 packet: src: {}, dst: {}", src, dst);
 
     // TODO: check dst address
 
