@@ -141,15 +141,7 @@ impl<I: Io> TcpConn<I> {
     ) {
         let mut mutable = self.mutable.lock();
 
-        if rx.seq != mutable.rcv_nxt {
-            trace!(
-                "TCP: out-of-order data: seq={}, rcv_nxt={}",
-                rx.seq, mutable.rcv_nxt
-            );
-            self.send_ack(devices, routes, &mutable);
-            return;
-        }
-
+        // Update remote's receive window size.
         mutable.snd_wnd = rx.window_size;
 
         // Handle ACK: remote have received data from us.
@@ -191,6 +183,15 @@ impl<I: Io> TcpConn<I> {
             }
         }
 
+        if rx.seq != mutable.rcv_nxt {
+            trace!(
+                "TCP: out-of-order data: seq={}, rcv_nxt={}",
+                rx.seq, mutable.rcv_nxt
+            );
+            self.send_ack(devices, routes, &mutable);
+            return;
+        }
+
         // Handle payload: remote have sent data to us.
         let payload = payload.slice();
         let mut should_ack = false;
@@ -212,6 +213,7 @@ impl<I: Io> TcpConn<I> {
 
         // Handle FIN: remote wants to close the connection.
         if rx.flags.contains(TcpFlags::FIN) {
+            trace!("@@@@ FIN received");
             mutable.rcv_nxt = mutable.rcv_nxt.wrapping_add(1);
             should_ack = true;
 

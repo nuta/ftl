@@ -52,6 +52,7 @@ pub(super) fn transmit_segment<I: Io>(
 
     header.header_len = encode_header_len(size_of::<TcpHeader>());
 
+    trace!("TCP: TX: flags={:?}, seq={}, ack={}", header.flags, Into::<u32>::into(header.seq), Into::<u32>::into(header.ack));
     match remote_ip {
         IpAddr::V4(remote_ipv4) => {
             header.checksum =

@@ -53,11 +53,12 @@ pub(crate) fn handle_rx<I: Io>(
     };
 
     trace!(
-        "TCP packet [flags: {:?}] src_port: {}, dst_port: {}, {:?}",
+        "TCP: RX: flags={:?}, src_port={}, dst_port={}, seq={}, ack={}",
         rx.flags,
         rx.src_port,
         rx.dst_port,
-        core::str::from_utf8(pkt.slice()).unwrap_or("(invalid UTF-8)"),
+        Into::<u32>::into(rx.seq),
+        Into::<u32>::into(rx.ack),
     );
 
     let key = ActiveKey {
