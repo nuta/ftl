@@ -65,7 +65,10 @@ impl<I: Io> TcpListener<I> {
             request,
             conn: conn.clone(),
         };
-        self.mutable.lock().pending_accepts.push_back(pending_accept);
+        self.mutable
+            .lock()
+            .pending_accepts
+            .push_back(pending_accept);
         Ok(conn)
     }
 
@@ -118,7 +121,8 @@ impl<I: Io> TcpListener<I> {
         let mut mutable = self.mutable.lock();
 
         // Find the matching handshake.
-        let Some((index, h)) = mutable.handshakes
+        let Some((index, h)) = mutable
+            .handshakes
             .iter()
             .enumerate()
             .find(|(_, h)| rx.remote_ip == h.remote_ip && rx.src_port == h.remote_port)

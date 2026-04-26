@@ -2,7 +2,8 @@ use alloc::collections::VecDeque;
 use core::fmt;
 
 use crate::Io;
-use crate::socket::{AnySocket, Endpoint};
+use crate::socket::AnySocket;
+use crate::socket::Endpoint;
 
 pub(super) const DEFAULT_RCV_WND: u16 = 1024;
 
@@ -58,12 +59,7 @@ impl<I: Io> TcpConn<I> {
         }
     }
 
-    pub(crate) fn open_passively(&self,
-        remote: Endpoint,
-        iss: u32,
-        rcv_nxt: u32,
-        snd_wnd: u16,
-    ) {
+    pub(crate) fn open_passively(&self, remote: Endpoint, iss: u32, rcv_nxt: u32, snd_wnd: u16) {
         let snd_nxt = iss.wrapping_add(1); // +1 for the SYN packet
         let mut mutable = self.mutable.lock();
         mutable.state = State::Established;
