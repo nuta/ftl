@@ -63,6 +63,10 @@ impl TokenBitmap {
         Self { bitmap: 0 }
     }
 
+    fn is_full(&self) -> bool {
+        self.bitmap == u64::MAX
+    }
+
     fn alloc(&mut self) -> Option<RecvToken> {
         let i = self.bitmap.trailing_ones();
         if i == 64 {
@@ -202,6 +206,12 @@ impl Channel {
                     HandleId::from_raw(0)
                 };
 
+                let was_full = mutable.token_bitmap.is_full();
+                mutable.token_bitmap.free(token);
+                if was_full && let Some(ref emitter) = mutable.emitter {
+                    emitter.notify();
+                }
+
                 return Ok(handle_id);
             }
         }
@@ -213,8 +223,18 @@ impl Channel {
         let mut mutable = self.mutable.lock();
         for (i, entry) in mutable.queue.iter_mut().enumerate() {
             if matches!(entry.state, EntryState::Notified(t) if t == token) {
-                mutable.queue.remove(i).unwrap();
+                let entry = mutable.queue.remove(i).unwrap();
+
+                if let Some(handle) = entry.handle {
+                    handle.bypass_check().close();
+                }
+
+                let was_full = mutable.token_bitmap.is_full();
                 mutable.token_bitmap.free(token);
+                if was_full && let Some(ref emitter) = mutable.emitter {
+                    emitter.notify();
+                }
+
                 return Ok(());
             }
         }
