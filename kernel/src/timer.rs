@@ -131,16 +131,15 @@ impl GlobalTimer {
         let mut earliest = None;
         for timer in &self.actives {
             let mutable = timer.mutable.lock();
-            if let State::Pending(expires_at) = mutable.state {
-                if matches!(earliest, None)
+            if let State::Pending(expires_at) = mutable.state
+                && (earliest.is_none()
                     || matches!(
                         earliest,
                         Some(earliest_at) if expires_at.is_before(&earliest_at)
-                    )
+                    ))
                 {
                     earliest = Some(expires_at);
                 }
-            }
         }
 
         if let Some(deadline) = earliest {

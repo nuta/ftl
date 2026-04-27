@@ -345,7 +345,7 @@ impl Handleable for Channel {
             State::PeerClosed => { /* do nothing */ }
         }
 
-        return Ok(None);
+        Ok(None)
     }
 }
 

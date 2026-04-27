@@ -268,12 +268,11 @@ pub fn init() {
     // Locate the interrupt mapping for PIT (timer).
     let mut timer_int_mapping = None;
     for entry in iter.clone() {
-        if let MpTableEntry::IoInterruptAssignment(entry) = entry {
-            if entry.source_bus_id == isa_bus.bus_id && entry.source_bus_irq == 0 {
+        if let MpTableEntry::IoInterruptAssignment(entry) = entry
+            && entry.source_bus_id == isa_bus.bus_id && entry.source_bus_irq == 0 {
                 assert!(timer_int_mapping.is_none(), "multiple timer IRQs found");
                 timer_int_mapping = Some(entry);
             }
-        }
     }
 
     let timer_int_mapping = timer_int_mapping.expect("timer IRQ not found");

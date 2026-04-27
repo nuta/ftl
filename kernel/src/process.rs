@@ -226,7 +226,7 @@ pub fn sys_process_inject_handle(
         .get::<Process>(process_id)?
         .authorize(HandleRight::WRITE)?;
 
-    if SharedRef::eq(&target_process, &current_process) {
+    if SharedRef::eq(&target_process, current_process) {
         // Cannot inject handle into the current process.
         return Err(ErrorCode::InvalidArgument);
     }
