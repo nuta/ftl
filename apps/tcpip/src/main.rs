@@ -310,7 +310,7 @@ fn main(supervisor_ch: Channel) {
                             }
                         }
                     }
-                    Incoming::WriteReply(reply) => {
+                    Incoming::WriteReply(_reply) => {
                     }
                     _ => {
                         warn!("unhandled message: {:?}", peek);
@@ -408,7 +408,7 @@ fn main(supervisor_ch: Channel) {
 
                         let listener = match sockets.tcp_listen::<TcpIpIo>(endpoint) {
                             Ok(listener) => listener,
-                            Err(error) => {
+                            Err(_error) => {
                                 let _ = sink.remove(our_ch.handle().id());
                                 completer.reply_error(ErrorCode::OutOfResources);
                                 continue;
