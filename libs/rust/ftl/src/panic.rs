@@ -1,7 +1,6 @@
 use core::panic::PanicInfo;
 
 use ftl_types::syscall::SYS_PROCESS_EXIT;
-use log::trace;
 
 use crate::syscall;
 

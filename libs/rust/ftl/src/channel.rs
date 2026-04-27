@@ -1,4 +1,3 @@
-use alloc::rc::Rc;
 use core::fmt;
 use core::mem;
 use core::mem::MaybeUninit;
@@ -10,15 +9,12 @@ pub use ftl_types::channel::MessageId;
 pub use ftl_types::channel::MessageInfo;
 pub use ftl_types::channel::MessageKind;
 pub use ftl_types::channel::OpenOptions;
-use ftl_types::channel::Peek;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use ftl_types::syscall::SYS_CHANNEL_CREATE;
 use ftl_types::syscall::SYS_CHANNEL_DISCARD;
 use ftl_types::syscall::SYS_CHANNEL_RECV;
 use ftl_types::syscall::SYS_CHANNEL_SEND;
-use log::debug;
-use log::warn;
 
 use crate::handle::Handleable;
 use crate::handle::OwnedHandle;

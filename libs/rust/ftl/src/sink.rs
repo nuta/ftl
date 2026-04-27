@@ -1,7 +1,6 @@
 use core::fmt;
 use core::mem::MaybeUninit;
 
-use ftl_types::channel::MessageInfo;
 use ftl_types::channel::Peek;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;

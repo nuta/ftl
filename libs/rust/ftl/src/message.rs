@@ -2,7 +2,6 @@ use ftl_types::channel::Attr;
 use ftl_types::channel::MessageId;
 use ftl_types::channel::OpenOptions;
 use ftl_types::channel::Peek;
-use log::debug;
 
 use crate::channel::Channel;
 use crate::channel::MessageInfo;

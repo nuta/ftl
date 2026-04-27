@@ -1,18 +1,16 @@
 use core::fmt;
 
 use ftl_types::error::ErrorCode;
-// TODO: Make this private
-pub use ftl_types::handle::HandleId;
 use ftl_types::syscall::SYS_HANDLE_CLOSE;
-use log::trace;
+
+pub use ftl_types::handle::HandleId;
 
 use crate::syscall::syscall1;
 
 pub struct OwnedHandle(HandleId);
 
 impl OwnedHandle {
-    // TODO: Make this private
-    pub const fn from_raw(id: HandleId) -> Self {
+    pub(crate) const fn from_raw(id: HandleId) -> Self {
         Self(id)
     }
 

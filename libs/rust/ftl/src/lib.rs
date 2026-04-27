@@ -1,7 +1,9 @@
 #![no_std]
-#![allow(unused)]
 
 extern crate alloc;
+
+#[macro_use]
+extern crate log as log_crate;
 
 pub use alloc::borrow;
 pub use alloc::boxed;
