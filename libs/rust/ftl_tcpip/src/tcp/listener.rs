@@ -235,7 +235,7 @@ impl<I: Io> TcpListener<I> {
             TcpFlags::SYN => {
                 self.start_handshake(devices, routes, sockets, rx);
             }
-            TcpFlags::ACK | (TcpFlags::ACK | TcpFlags::PSH) => {
+            _ if rx.flags.contains(TcpFlags::ACK) => {
                 self.finish_handshake(devices, routes, sockets, rx, payload);
             }
             _ => {
