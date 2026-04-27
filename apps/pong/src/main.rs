@@ -82,10 +82,11 @@ fn main(supervisor_ch: Channel) {
 
                         // Receive the message.
                         let mut buf = vec![0; request.path_len()];
-                        let (path, completer) = match request.recv(&mut buf) {
-                            Ok((path, completer)) => (path, completer),
-                            Err(error) => {
-                                warn!("failed to recv with body: {:?}", error);
+                        let completer = match request.recv(&mut buf) {
+                            Ok((_, completer)) => completer,
+                            Err(err) => {
+                                warn!("failed to recv with body: {:?}", err.error());
+                                err.reply_error(ErrorCode::Overloaded);
                                 continue;
                             }
                         };
@@ -113,7 +114,14 @@ fn main(supervisor_ch: Channel) {
                         }
 
                         let mut buf = vec![0; request.len()];
-                        let (body, completer) = request.recv(&mut buf).unwrap();
+                        let completer = match request.recv(&mut buf) {
+                            Ok((_, completer)) => completer,
+                            Err(err) => {
+                                warn!("failed to recv write body: {:?}", err.error());
+                                err.reply_error(ErrorCode::Overloaded);
+                                continue;
+                            }
+                        };
 
                         info!("received write message: {:?}", core::str::from_utf8(&buf));
                         completer.reply(buf.len());

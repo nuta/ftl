@@ -202,8 +202,9 @@ fn main(supervisor_ch: Channel) {
                     Incoming::Read(request) => {
                         let completer = match request.recv() {
                             Ok(completer) => completer,
-                            Err(error) => {
-                                warn!("failed to recv read: {:?}", error);
+                            Err(err) => {
+                                warn!("failed to recv read: {:?}", err.error());
+                                err.reply_error(ErrorCode::Overloaded);
                                 continue;
                             }
                         };
@@ -228,10 +229,11 @@ fn main(supervisor_ch: Channel) {
                         let payload_len = min(request.len(), PAYLOAD_SIZE_MAX);
                         let payload_slice =
                             &mut dmabuf.as_mut_slice()[HEADER_LEN..HEADER_LEN + payload_len];
-                        let (_body, completer) = match request.recv(payload_slice) {
-                            Ok(v) => v,
-                            Err(error) => {
-                                warn!("failed to recv write body: {:?}", error);
+                        let completer = match request.recv(payload_slice) {
+                            Ok((_, completer)) => completer,
+                            Err(err) => {
+                                warn!("failed to recv write body: {:?}", err.error());
+                                err.reply_error(ErrorCode::Overloaded);
                                 dmabuf_pool.free(dmabuf);
                                 continue;
                             }
