@@ -95,10 +95,12 @@ fn main(supervisor_ch: Channel) {
         match event {
             Event::Message(peek) if id == supervisor_ch.handle().id() => {
                 match Incoming::parse(&supervisor_ch, peek) {
-                    Incoming::OpenReply(reply) => match reply.recv() {
-                        Ok(handle) => break Channel::from_handle(handle),
-                        Err(error) => panic!("failed to recv with handle: {:?}", error),
-                    },
+                    Incoming::OpenReply(reply) => {
+                        match reply.recv() {
+                            Ok(handle) => break Channel::from_handle(handle),
+                            Err(error) => panic!("failed to recv with handle: {:?}", error),
+                        }
+                    }
                     _ => warn!("unhandled supervisor message: {:?}", peek),
                 }
             }
@@ -257,7 +259,6 @@ fn main(supervisor_ch: Channel) {
                     Incoming::GetAttr(request) => {
                         match request.attr() {
                             Attr::MAC => {
-
                                 request.reply(&mac);
                             }
                             _ => {
