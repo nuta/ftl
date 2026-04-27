@@ -170,26 +170,6 @@ impl Channel {
         Ok(())
     }
 
-    fn find_entry<F, R>(
-        &self,
-        mutable: &mut Mutable,
-        token: RecvToken,
-        f: F,
-    ) -> Result<(Entry, R), ErrorCode>
-    where
-        F: FnOnce(&Entry) -> Result<R, ErrorCode>,
-    {
-        for (i, entry) in mutable.queue.iter_mut().enumerate() {
-            if matches!(entry.state, EntryState::Notified(t) if t == token) {
-                let entry = mutable.queue.remove(i).unwrap();
-                let result = f(&entry)?;
-                return Ok((entry, result));
-            }
-        }
-
-        Err(ErrorCode::NotFound)
-    }
-
     fn recv(
         &self,
         isolation: &SharedRef<dyn Isolation>,
