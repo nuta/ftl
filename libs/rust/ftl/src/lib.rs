@@ -30,6 +30,7 @@ pub mod log;
 pub mod prelude;
 pub mod process;
 pub mod sink;
+pub mod sync;
 pub mod syscall;
 pub mod thread;
 pub mod time;
