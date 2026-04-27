@@ -19,7 +19,7 @@ A message is a unit of transfer between channels. It is a packet-like structure 
 | Field | Type | Description |
 |-------|------|-----------|
 | Message info | `u32` | Message type, ID, and body length. |
-| Inlined arguments | `(usize, usize)` | Arbitrary data that is copied as is. |
+| Inlined arguments | `(usize, usize)` | Arbitrary data that is copied as is. Up to two `usize` values only. |
 | Message body | `&mut [u8]` | A pair of pointer and length of a memory region to be copied to the peer process. |
 | Handle | `Handle` | A handle (e.g. channel) to be moved to the peer process. |
 
@@ -27,26 +27,27 @@ A message is a unit of transfer between channels. It is a packet-like structure 
 
 In applications, channel is used a RPC mechanism between processes: opening a TCP socket, reading/writing data, etc.
 
-RPC is built on top of channel. Messages are categorized into request and reply, like `open` and `open_reply`. Here's the complete list of request/reply message types:
+RPC is built on top of channel. Messages are categorized into request and reply, like `open` and `open_reply`. Here's the complete list of RPC methods:
 
 ```rs
 // Opens a resource. Equivalent to: open(2), socket(2), bind(2), listen(2)
-fn open(path: &[u8], options: OpenOptions) -> Channel
+async fn open(path: &[u8], options: OpenOptions) -> Result<Channel, ErrorCode>
 
 // Reads data. Equivalent to: pread(2)
-fn read(offset: usize, len: usize) -> Vec<u8>
+async fn read(offset: usize, buf: &mut [u8]) -> Result<usize, ErrorCode>
 
 // Writes data. Equivalent to: pwrite(2)
-fn write(offset: usize, buf: &[u8]) -> usize /* written bytes */
+async fn write(offset: usize, buf: &[u8]) -> Result<usize, ErrorCode>
 
 // Gets an attribute. Equivalent to: stat(2)
-fn getattr(attr: Attr) -> Vec<u8>
+async fn getattr(attr: Attr, buf: &mut [u8]) -> Result<usize, ErrorCode>
 
 // Sets an attribute. Equivalent to: chmod(2), rename(2), ....
-fn setattr(attr: Attr, buf: &[u8]) -> usize /* written bytes */
+async fn setattr(attr: Attr, buf: &[u8]) -> Result<usize, ErrorCode>
 ```
 
-Any request can be replied with an error (`error_reply` message).
+Any request can be replied with an error (`error_reply` message) containing an 
+error code (`ErrorCode`).
 
 > [!NOTE]
 > **Design decision: Schema-less IPC**
@@ -125,20 +126,24 @@ fn server_main(ch: &Channel) -> Result<(), ErrorCode> {
     // Wait for a message.
     match sink.wait()? {
         // Message is ready. The message is automatically peeked.
-        Event::Message(Peek { info, .. }) => {
-            let mid = info.mid();
-            match info.kind() {
-                MessageKind::WRITE => {
-                    let mut buf = vec![0; info.body_len()];
+        Event::Message(peek) => {
+            // Parse the message.
+            let incoming = Incoming::parse(ch, peek);
+            match incoming {
+                Incoming::Write(request) => {
+                    let mut buf = vec![0; request.len()];
 
-                    // Receive the message.
-                    ch.recv_body(info, &mut buf)?;
+                    // Receive the message body.
+                    let (body, completer) = request.recv(&mut buf)?;
 
-                    info!("received a write message: {:?}", core::str::from_utf8(&buf));
-                    ch.send(Message::WriteReply { mid, len: buf.len() })?;
+                    // `body` is a slice of `buf` filled with received data.
+                    info!("received a write message: {:?}", core::str::from_utf8(&body));
+
+                    // Reply with the written length.
+                    completer.reply(body.len());
                 }
                 _ => {
-                    ch.send(Message::ErrorReply { mid, error: ErrorCode::Unsupported })?;
+                    warn!("unhandled message: {:?}", peek);
                 }
             }
         }
@@ -154,6 +159,8 @@ In client side (i.e. receive a specific message) is a RPC-like operation: send a
 
 ```rs
 fn client_main(ch: &Channel) -> Result<(), ErrorCode> {
+    // Send a request to the server. The server will handle this request
+    // asynchronously.
     let mid = MessageId::new(1);
     ch.send(Message::Write { mid, offset: 0, buf: b"Hello, world!" });
 
@@ -164,30 +171,26 @@ fn client_main(ch: &Channel) -> Result<(), ErrorCode> {
     // Wait for a message.
     let (id, event) = sink.wait()?;
     match event {
-        Event::Message(Peek { info, arg1, .. }) if info.mid() == mid => {
-            match info.kind() {
-                MessageKind::WRITE_REPLY => {
-                    // We already know the written length through the peek, but
-                    // need to consume the reply message.
-                    ch.recv_args(info)?;
+        Event::Message(Peek { info, arg1, .. }) if id == ch.handle().id() => {
+            let incoming = Incoming::parse(ch, peek);
+            match incoming {
+                Incoming::WriteReply(reply) => {
+                    let len = reply.written_len();
+                    info!("received write reply: written_len={}", len);
 
-                    info!("received a write reply: written_len={}", arg1);
+                    // When `reply` is dropped, it automatically receives 
+                    // the reply message.
                 }
-                MessageKind::ERROR_REPLY => {
-                    // We already know the error code through the peek, but
-                    // need to consume the reply message.
-                    ch.recv_args(info)?;
-
-                    panic!("server replied with an error: {:?}", arg1);
+                Incoming::ErrorReply(reply) => {
+                    warn!("server replied with an error: {:?}", reply.error());
                 }
                 _ => {
-                    panic!("unexpected message type: {:?}", info.kind());
+                    warn!("unexpected message type: {:?}", peek);
                 }
             }
         }
         Event::Message(Peek { info, .. }) => {
-            // The server replied to an unknown request.
-            panic!("unexpected mid: {:?}", info.mid());
+            panic!("unexpected message: {:?}", peek);
         }
         Event::PeerClosed => {
             // The server has died. The client should retry or cleanup.
@@ -203,4 +206,4 @@ fn client_main(ch: &Channel) -> Result<(), ErrorCode> {
 
 > ![TIP]
 >
-> `ftl::channel::Incoming` provides a convenient API to handle `Event::Message` elegantly.
+> FTL provides `ftl::channel::Incoming` to handle messages intuitively and more safely.
