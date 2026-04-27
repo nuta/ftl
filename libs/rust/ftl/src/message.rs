@@ -121,7 +121,9 @@ impl<C: AsRef<Channel>> RequestInner<C> {
 
     fn recv_body<'a>(&self, body: &'a mut [u8]) -> Result<&'a [u8], ErrorCode> {
         self.ch.as_ref().recv_body(self.info, body)?;
-        Ok(&body[..])
+
+        // SAFETY: If body is not large enough, the syscall will fail.
+        Ok(&body[..self.info.body_len()])
     }
 
     /// Sends a reply message to the channel.
@@ -227,7 +229,9 @@ impl<C: AsRef<Channel>> ReplyInner<C> {
     fn recv_body<'a>(mut self, body: &'a mut [u8]) -> Result<&'a [u8], ErrorCode> {
         self.received = true;
         self.ch.as_ref().recv_body(self.info, body)?;
-        Ok(&body[..])
+
+        // SAFETY: If body is not large enough, the syscall will fail.
+        Ok(&body[..self.info.body_len()])
     }
 }
 
