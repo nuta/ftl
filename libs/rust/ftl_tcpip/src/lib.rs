@@ -1,14 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
-#![allow(unused)] // TODO:
-
-use core::ops::Deref;
-use core::ops::DerefMut;
+// #![allow(unused)] // TODO:
 
 use crate::device::Device;
-use crate::packet::Packet;
-use crate::route::RouteTable;
-use crate::socket::SocketMap;
-use crate::tcp::TcpListener;
 
 extern crate alloc;
 

@@ -1,6 +1,5 @@
 #![no_std]
 #![no_main]
-#![allow(unused)]
 
 extern crate alloc;
 

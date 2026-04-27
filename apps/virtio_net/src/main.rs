@@ -1,6 +1,5 @@
 #![no_std]
 #![no_main]
-#![allow(unused)]
 
 extern crate alloc;
 
@@ -21,7 +20,6 @@ use ftl::driver::DmaBufPool;
 use ftl::error::ErrorCode;
 use ftl::handle::HandleId;
 use ftl::handle::Handleable;
-use ftl::interrupt::Interrupt;
 use ftl::prelude::*;
 use ftl::rc::Rc;
 use ftl::sink::Event;

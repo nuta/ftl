@@ -1,5 +1,3 @@
-use alloc::vec::Vec;
-
 use hashbrown::HashMap;
 
 use crate::Device;

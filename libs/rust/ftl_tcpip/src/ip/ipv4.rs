@@ -2,7 +2,6 @@ use core::fmt;
 
 use crate::Io;
 use crate::checksum::Checksum;
-use crate::device::Device;
 use crate::device::DeviceMap;
 use crate::endian::Ne;
 use crate::ethernet;
@@ -10,7 +9,7 @@ use crate::ethernet::EtherType;
 use crate::ip::IpAddr;
 use crate::packet::Packet;
 use crate::packet::WriteableToPacket;
-use crate::packet::{self};
+use crate::packet;
 use crate::route::Route;
 use crate::route::RouteTable;
 use crate::socket::SocketMap;

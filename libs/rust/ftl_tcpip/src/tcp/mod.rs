@@ -1,11 +1,3 @@
-use crate::Io;
-use crate::device::DeviceMap;
-use crate::ip::IpAddr;
-use crate::packet::Packet;
-use crate::packet::{self};
-use crate::route::RouteTable;
-use crate::socket::SocketMap;
-
 mod checksum;
 mod connection;
 mod header;

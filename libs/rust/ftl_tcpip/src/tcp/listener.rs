@@ -6,7 +6,6 @@ use core::fmt;
 use crate::Io;
 use crate::device::DeviceMap;
 use crate::ip::IpAddr;
-use crate::ip::ipv4::Ipv4Addr;
 use crate::packet::Packet;
 use crate::route::RouteTable;
 use crate::socket::ActiveKey;
@@ -143,7 +142,7 @@ impl<I: Io> TcpListener<I> {
         let mut mutable = self.mutable.lock();
 
         // Find the matching handshake.
-        let Some((index, h)) = mutable
+        let Some((index, _)) = mutable
             .inflight_handshakes
             .iter()
             .enumerate()

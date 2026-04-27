@@ -2,12 +2,10 @@ use alloc::sync::Arc;
 use core::any::Any;
 
 use hashbrown::HashMap;
-use hashbrown::hash_map::OccupiedError;
 
 use crate::Io;
 use crate::ip::IpAddr;
 use crate::tcp::TcpListener;
-use crate::tcp::{self};
 use crate::transport::Port;
 use crate::transport::{self};
 

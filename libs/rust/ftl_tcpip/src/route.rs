@@ -1,10 +1,8 @@
 use alloc::vec::Vec;
 
-use crate::Device;
 use crate::OutOfMemoryError;
 use crate::arp::ArpTable;
 use crate::device::DeviceId;
-use crate::ethernet::MacAddr;
 use crate::ip::IpAddr;
 use crate::ip::ipv4::Ipv4Addr;
 use crate::ip::ipv4::NetMask;

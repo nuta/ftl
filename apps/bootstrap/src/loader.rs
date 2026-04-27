@@ -3,7 +3,6 @@ use core::slice;
 
 use ftl::arch;
 use ftl::channel::Channel;
-use ftl::prelude::trace;
 use ftl::process::PROCESS_NAME_MAX_LEN;
 use ftl::process::Process;
 use ftl::thread::Thread;
@@ -15,7 +14,6 @@ use ftl_utils::alignment::align_up;
 
 use crate::elf::Elf;
 use crate::initfs;
-use crate::initfs::InitFs;
 
 const STACK_SIZE: usize = 1024 * 1024;
 
