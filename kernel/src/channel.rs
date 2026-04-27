@@ -160,8 +160,7 @@ impl Channel {
 
         let handle_id = if let Some(handle) = message.handle {
             debug_assert!(info.has_handle());
-            // TODO: What if the handle table is full? Should we roll back?
-            handle_table.insert(handle)?
+            handle_table.reserve()?.insert(handle)
         } else {
             HandleId::from_raw(0)
         };
@@ -276,16 +275,16 @@ pub fn sys_channel_create(
 ) -> Result<SyscallResult, ErrorCode> {
     let ids = UserSlice::new(UserPtr::new(a0), size_of::<[HandleId; 2]>())?;
 
+    let process = current.process();
+    let isolation = process.isolation();
+    let mut handle_table = process.handle_table().lock();
+    let reserved = handle_table.reserve()?;
+
     let (ch0, ch1) = Channel::new()?;
     let handle0 = Handle::new(ch0, HandleRight::ALL);
     let handle1 = Handle::new(ch1, HandleRight::ALL);
 
-    let process = current.process();
-    let mut handle_table = process.handle_table().lock();
-    let id0 = handle_table.insert(handle0)?;
-    let id1 = handle_table.insert(handle1)?;
-
-    let isolation = process.isolation();
+    let (id0, id1) = reserved.insert2(handle0, handle1);
     crate::isolation::write(isolation, &ids, 0, [id0, id1])?;
 
     Ok(SyscallResult::Return(0))

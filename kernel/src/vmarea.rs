@@ -238,9 +238,11 @@ pub fn sys_vmarea_create(
 ) -> Result<SyscallResult, ErrorCode> {
     let len = a0;
 
-    let vmarea = VmArea::create_any(len)?;
     let mut handle_table = current.process().handle_table().lock();
-    let id = handle_table.insert(Handle::new(vmarea, HandleRight::ALL))?;
+    let slot = handle_table.reserve()?;
+
+    let vmarea = VmArea::create_any(len)?;
+    let id = slot.insert(Handle::new(vmarea, HandleRight::ALL));
     Ok(SyscallResult::Return(id.as_usize()))
 }
 

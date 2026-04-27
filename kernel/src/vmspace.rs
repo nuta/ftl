@@ -213,12 +213,11 @@ impl fmt::Debug for VmSpace {
 }
 
 pub fn sys_vmspace_create(current: &SharedRef<Thread>) -> Result<SyscallResult, ErrorCode> {
+    let mut handle_table = current.process().handle_table().lock();
+    let slot = handle_table.reserve()?;
+
     let vmspace = VmSpace::new()?;
-    let id = current
-        .process()
-        .handle_table()
-        .lock()
-        .insert(Handle::new(vmspace, HandleRight::ALL))?;
+    let id = slot.insert(Handle::new(vmspace, HandleRight::ALL));
     Ok(SyscallResult::Return(id.as_usize()))
 }
 

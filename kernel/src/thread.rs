@@ -266,9 +266,11 @@ pub fn sys_thread_create(
         .get::<Process>(process_id)?
         .authorize(HandleRight::WRITE)?;
 
+    let slot = handle_table.reserve()?;
+
     let thread = Thread::new(process, entry, sp, start_info)?;
     let handle = Handle::new(thread, HandleRight::ALL);
-    let id = handle_table.insert(handle)?;
+    let id = slot.insert(handle);
     Ok(SyscallResult::Return(id.as_usize()))
 }
 
