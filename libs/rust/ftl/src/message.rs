@@ -230,16 +230,17 @@ impl<C: AsRef<Channel>> ReplyInner<C> {
     }
 
     fn recv_handle(mut self) -> Result<OwnedHandle, ErrorCode> {
+        let handle = self.ch.as_ref().recv_handle(self.token)?;
         self.received = true;
-        self.ch.as_ref().recv_handle(self.token)
+        Ok(handle)
     }
 
     fn recv_body<'a>(mut self, body: &'a mut [u8]) -> Result<&'a [u8], ErrorCode> {
-        self.received = true;
         let recv_len = min(body.len(), self.info.body_len());
         self.ch
             .as_ref()
             .recv_body(self.token, body.as_mut_ptr(), recv_len)?;
+        self.received = true;
         Ok(&body[..recv_len])
     }
 }
