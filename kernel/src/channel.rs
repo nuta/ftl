@@ -198,34 +198,48 @@ impl Channel {
         body_slice: UserSlice,
     ) -> Result<HandleId, ErrorCode> {
         let mut mutable = self.mutable.lock();
-        let (entry, slot) = self.find_entry(&mut mutable, token, |entry| {
-            if entry.handle.is_some() {
-                let slot = handle_table.reserve()?;
-                Ok(Some(slot))
-            } else {
-                Ok(None)
+        for (i, entry) in mutable.queue.iter_mut().enumerate() {
+            if matches!(entry.state, EntryState::Notified(t) if t == token) {
+                let slot = if entry.handle.is_some() {
+                    Some(handle_table.reserve()?)
+                } else {
+                    None
+                };
+
+                // Copy the body first since it may fail.
+                if let Some(ref body) = entry.body {
+                    isolation.write_bytes(&body_slice, body)?;
+                }
+
+                // Point of no return: All operations after this point must
+                // succeed to guarantee that "if sys_channel_recv returns an
+                // error, the message is kept in the queue".
+                let entry = mutable.queue.remove(i).unwrap();
+
+                let handle_id = if let Some(handle) = entry.handle {
+                    slot.unwrap().insert(handle)
+                } else {
+                    HandleId::from_raw(0)
+                };
+
+                return Ok(handle_id);
             }
-        })?;
-
-        let handle_id = if let Some(handle) = entry.handle {
-            slot.unwrap().insert(handle)
-        } else {
-            HandleId::from_raw(0)
-        };
-
-        // Copy the body to the isolation.
-        if let Some(body) = entry.body {
-            isolation.write_bytes(&body_slice, &body)?;
         }
 
-        Ok(handle_id)
+        Err(ErrorCode::NotFound)
     }
 
     fn discard(&self, token: RecvToken) -> Result<(), ErrorCode> {
         let mut mutable = self.mutable.lock();
-        self.find_entry(&mut mutable, token, |_| Ok(()))?;
-        mutable.token_bitmap.free(token);
-        Ok(())
+        for (i, entry) in mutable.queue.iter_mut().enumerate() {
+            if matches!(entry.state, EntryState::Notified(t) if t == token) {
+                mutable.queue.remove(i).unwrap();
+                mutable.token_bitmap.free(token);
+                return Ok(());
+            }
+        }
+
+        Err(ErrorCode::NotFound)
     }
 }
 
