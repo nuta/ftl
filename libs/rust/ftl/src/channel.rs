@@ -9,6 +9,7 @@ pub use ftl_types::channel::MessageId;
 pub use ftl_types::channel::MessageInfo;
 pub use ftl_types::channel::MessageKind;
 pub use ftl_types::channel::OpenOptions;
+use ftl_types::channel::RecvToken;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use ftl_types::syscall::SYS_CHANNEL_CREATE;
@@ -39,7 +40,7 @@ pub use crate::message::WriteReply;
 pub use crate::message::WriteRequest;
 use crate::syscall::syscall1;
 use crate::syscall::syscall2;
-use crate::syscall::syscall3;
+use crate::syscall::syscall4;
 use crate::syscall::syscall5;
 
 pub struct Channel {
@@ -94,8 +95,8 @@ impl Channel {
         }
     }
 
-    pub(crate) fn discard(&self, info: MessageInfo) -> Result<(), ErrorCode> {
-        sys_channel_discard(self.handle.id(), info)?;
+    pub(crate) fn discard(&self, token: RecvToken) -> Result<(), ErrorCode> {
+        sys_channel_discard(self.handle.id(), token)?;
         Ok(())
     }
 
@@ -144,24 +145,23 @@ impl Channel {
         Ok(())
     }
 
-    pub(crate) fn recv_args(&self, info: MessageInfo) -> Result<(), ErrorCode> {
-        debug_assert!(!info.has_body() && !info.has_handle());
-
-        sys_channel_recv(self.handle.id(), info, null_mut())?;
+    pub(crate) fn recv_args(&self, token: RecvToken) -> Result<(), ErrorCode> {
+        sys_channel_recv(self.handle.id(), token, null_mut(), 0)?;
         Ok(())
     }
 
-    pub(crate) fn recv_body(&self, info: MessageInfo, body: &mut [u8]) -> Result<(), ErrorCode> {
-        debug_assert!(info.has_body() && !info.has_handle());
-
-        sys_channel_recv(self.handle.id(), info, body.as_mut_ptr())?;
+    pub(crate) fn recv_body(
+        &self,
+        token: RecvToken,
+        body: *mut u8,
+        body_len: usize,
+    ) -> Result<(), ErrorCode> {
+        sys_channel_recv(self.handle.id(), token, body, body_len)?;
         Ok(())
     }
 
-    pub(crate) fn recv_handle(&self, info: MessageInfo) -> Result<OwnedHandle, ErrorCode> {
-        debug_assert!(!info.has_body() && info.has_handle());
-
-        let handle_id = sys_channel_recv(self.handle.id(), info, null_mut())?;
+    pub(crate) fn recv_handle(&self, token: RecvToken) -> Result<OwnedHandle, ErrorCode> {
+        let handle_id = sys_channel_recv(self.handle.id(), token, null_mut(), 0)?;
         Ok(OwnedHandle::from_raw(handle_id))
     }
 }
@@ -219,19 +219,21 @@ pub fn sys_channel_send(
 
 pub fn sys_channel_recv(
     ch: HandleId,
-    info: MessageInfo,
+    token: RecvToken,
     body: *mut u8,
+    body_len: usize,
 ) -> Result<HandleId, ErrorCode> {
-    let ret = syscall3(
+    let ret = syscall4(
         SYS_CHANNEL_RECV,
         ch.as_usize(),
-        info.as_raw(),
+        token.as_u16() as usize,
         body as usize,
+        body_len,
     )?;
     Ok(HandleId::from_raw(ret))
 }
 
-pub fn sys_channel_discard(ch: HandleId, info: MessageInfo) -> Result<(), ErrorCode> {
-    syscall2(SYS_CHANNEL_DISCARD, ch.as_usize(), info.as_raw())?;
+pub fn sys_channel_discard(ch: HandleId, token: RecvToken) -> Result<(), ErrorCode> {
+    syscall2(SYS_CHANNEL_DISCARD, ch.as_usize(), token.as_u16() as usize)?;
     Ok(())
 }

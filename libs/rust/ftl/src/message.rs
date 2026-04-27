@@ -1,7 +1,10 @@
+use core::cmp::min;
+
 use ftl_types::channel::Attr;
 use ftl_types::channel::MessageId;
 use ftl_types::channel::OpenOptions;
 use ftl_types::channel::Peek;
+use ftl_types::channel::RecvToken;
 
 use crate::channel::Channel;
 use crate::channel::MessageInfo;
@@ -97,14 +100,16 @@ impl<C: AsRef<Channel>> Incoming<C> {
 struct RequestInner<C: AsRef<Channel>> {
     ch: C,
     info: MessageInfo,
+    token: RecvToken,
     handled: bool,
 }
 
 impl<C: AsRef<Channel>> RequestInner<C> {
-    fn new(ch: C, info: MessageInfo) -> Self {
+    fn new(ch: C, info: MessageInfo, token: RecvToken) -> Self {
         Self {
             ch,
             info,
+            token,
             handled: false,
         }
     }
@@ -114,15 +119,16 @@ impl<C: AsRef<Channel>> RequestInner<C> {
     }
 
     fn recv_args(&self) -> Result<(), ErrorCode> {
-        self.ch.as_ref().recv_args(self.info)?;
+        self.ch.as_ref().recv_args(self.token)?;
         Ok(())
     }
 
     fn recv_body<'a>(&self, body: &'a mut [u8]) -> Result<&'a [u8], ErrorCode> {
-        self.ch.as_ref().recv_body(self.info, body)?;
-
-        // SAFETY: If body is not large enough, the syscall will fail.
-        Ok(&body[..self.info.body_len()])
+        let recv_len = min(body.len(), self.info.body_len());
+        self.ch
+            .as_ref()
+            .recv_body(self.token, body.as_mut_ptr(), recv_len)?;
+        Ok(&body[..recv_len])
     }
 
     /// Sends a reply message to the channel.
@@ -152,7 +158,7 @@ impl<C: AsRef<Channel>> RequestInner<C> {
     fn do_discard_and_reply(&mut self, m: Message) {
         self.handled = true;
 
-        if let Err(error) = self.ch.as_ref().discard(self.info) {
+        if let Err(error) = self.ch.as_ref().discard(self.token) {
             debug!("failed to discard before reply: {:?}", error);
         }
 
@@ -200,14 +206,16 @@ impl<C: AsRef<Channel>> RecvError<C> {
 struct ReplyInner<C: AsRef<Channel>> {
     ch: C,
     info: MessageInfo,
+    token: RecvToken,
     received: bool,
 }
 
 impl<C: AsRef<Channel>> ReplyInner<C> {
-    fn new(ch: C, info: MessageInfo) -> Self {
+    fn new(ch: C, info: MessageInfo, token: RecvToken) -> Self {
         Self {
             ch,
             info,
+            token,
             received: false,
         }
     }
@@ -222,15 +230,16 @@ impl<C: AsRef<Channel>> ReplyInner<C> {
 
     fn recv_handle(mut self) -> Result<OwnedHandle, ErrorCode> {
         self.received = true;
-        self.ch.as_ref().recv_handle(self.info)
+        self.ch.as_ref().recv_handle(self.token)
     }
 
     fn recv_body<'a>(mut self, body: &'a mut [u8]) -> Result<&'a [u8], ErrorCode> {
         self.received = true;
-        self.ch.as_ref().recv_body(self.info, body)?;
-
-        // SAFETY: If body is not large enough, the syscall will fail.
-        Ok(&body[..self.info.body_len()])
+        let recv_len = min(body.len(), self.info.body_len());
+        self.ch
+            .as_ref()
+            .recv_body(self.token, body.as_mut_ptr(), recv_len)?;
+        Ok(&body[..recv_len])
     }
 }
 
@@ -240,7 +249,7 @@ impl<C: AsRef<Channel>> Drop for ReplyInner<C> {
             return;
         }
 
-        if let Err(error) = self.ch.as_ref().discard(self.info) {
+        if let Err(error) = self.ch.as_ref().discard(self.token) {
             debug!("failed to discard reply message: {:?}", error);
         }
     }
@@ -254,7 +263,7 @@ pub struct OpenRequest<C: AsRef<Channel>> {
 impl<C: AsRef<Channel>> OpenRequest<C> {
     fn new(ch: C, peek: Peek) -> Self {
         Self {
-            inner: RequestInner::new(ch, peek.info),
+            inner: RequestInner::new(ch, peek.info, peek.token),
             options: OpenOptions::from_usize(peek.arg1),
         }
     }
@@ -310,7 +319,7 @@ pub struct OpenReply<C: AsRef<Channel>>(ReplyInner<C>);
 
 impl<C: AsRef<Channel>> OpenReply<C> {
     fn new(ch: C, peek: Peek) -> Self {
-        Self(ReplyInner::new(ch, peek.info))
+        Self(ReplyInner::new(ch, peek.info, peek.token))
     }
 
     pub fn mid(&self) -> MessageId {
@@ -331,7 +340,7 @@ pub struct ReadRequest<C: AsRef<Channel>> {
 impl<C: AsRef<Channel>> ReadRequest<C> {
     fn new(ch: C, peek: Peek) -> Self {
         Self {
-            inner: RequestInner::new(ch, peek.info),
+            inner: RequestInner::new(ch, peek.info, peek.token),
             offset: peek.arg1,
             len: peek.arg2,
         }
@@ -388,7 +397,7 @@ pub struct ReadReply<C: AsRef<Channel>> {
 impl<C: AsRef<Channel>> ReadReply<C> {
     fn new(ch: C, peek: Peek) -> Self {
         Self {
-            inner: ReplyInner::new(ch, peek.info),
+            inner: ReplyInner::new(ch, peek.info, peek.token),
         }
     }
 
@@ -413,7 +422,7 @@ pub struct WriteRequest<C: AsRef<Channel>> {
 impl<C: AsRef<Channel>> WriteRequest<C> {
     fn new(ch: C, peek: Peek) -> Self {
         Self {
-            inner: RequestInner::new(ch, peek.info),
+            inner: RequestInner::new(ch, peek.info, peek.token),
             offset: peek.arg1,
         }
     }
@@ -482,7 +491,7 @@ pub struct WriteReply<C: AsRef<Channel>> {
 impl<C: AsRef<Channel>> WriteReply<C> {
     fn new(ch: C, peek: Peek) -> Self {
         Self {
-            inner: ReplyInner::new(ch, peek.info),
+            inner: ReplyInner::new(ch, peek.info, peek.token),
             written_len: peek.arg1,
         }
     }
@@ -504,7 +513,7 @@ pub struct GetAttrRequest<C: AsRef<Channel>> {
 impl<C: AsRef<Channel>> GetAttrRequest<C> {
     fn new(ch: C, peek: Peek) -> Self {
         Self {
-            inner: RequestInner::new(ch, peek.info),
+            inner: RequestInner::new(ch, peek.info, peek.token),
             attr: Attr::from_usize(peek.arg1),
         }
     }
@@ -556,7 +565,7 @@ pub struct GetAttrReply<C: AsRef<Channel>> {
 impl<C: AsRef<Channel>> GetAttrReply<C> {
     fn new(ch: C, peek: Peek) -> Self {
         Self {
-            inner: ReplyInner::new(ch, peek.info),
+            inner: ReplyInner::new(ch, peek.info, peek.token),
         }
     }
 
@@ -581,7 +590,7 @@ pub struct SetAttrRequest<C: AsRef<Channel>> {
 impl<C: AsRef<Channel>> SetAttrRequest<C> {
     fn new(ch: C, peek: Peek) -> Self {
         Self {
-            inner: RequestInner::new(ch, peek.info),
+            inner: RequestInner::new(ch, peek.info, peek.token),
             attr: Attr::from_usize(peek.arg1),
         }
     }
@@ -646,7 +655,7 @@ pub struct SetAttrReply<C: AsRef<Channel>> {
 impl<C: AsRef<Channel>> SetAttrReply<C> {
     fn new(ch: C, peek: Peek) -> Self {
         Self {
-            inner: ReplyInner::new(ch, peek.info),
+            inner: ReplyInner::new(ch, peek.info, peek.token),
             written_len: peek.arg1,
         }
     }
@@ -668,7 +677,7 @@ pub struct ErrorReply<C: AsRef<Channel>> {
 impl<C: AsRef<Channel>> ErrorReply<C> {
     fn new(ch: C, peek: Peek) -> Self {
         Self {
-            inner: ReplyInner::new(ch, peek.info),
+            inner: ReplyInner::new(ch, peek.info, peek.token),
             error: todo!(),
         }
     }
@@ -685,6 +694,7 @@ impl<C: AsRef<Channel>> ErrorReply<C> {
 pub struct UnknownMessage<C: AsRef<Channel>> {
     ch: C,
     info: MessageInfo,
+    token: RecvToken,
 }
 
 impl<C: AsRef<Channel>> UnknownMessage<C> {
@@ -692,6 +702,7 @@ impl<C: AsRef<Channel>> UnknownMessage<C> {
         Self {
             ch,
             info: peek.info,
+            token: peek.token,
         }
     }
 
@@ -702,7 +713,7 @@ impl<C: AsRef<Channel>> UnknownMessage<C> {
 
 impl<C: AsRef<Channel>> Drop for UnknownMessage<C> {
     fn drop(&mut self) {
-        if let Err(error) = self.ch.as_ref().discard(self.info) {
+        if let Err(error) = self.ch.as_ref().discard(self.token) {
             debug!("failed to discard unknown message: {:?}", error);
         }
     }
