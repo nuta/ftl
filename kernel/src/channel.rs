@@ -1,10 +1,12 @@
 use alloc::collections::vec_deque::VecDeque;
 use alloc::vec;
 use alloc::vec::Vec;
+use core::cmp::min;
 use core::mem;
 
 use ftl_types::channel::MessageInfo;
 use ftl_types::channel::Peek;
+use ftl_types::channel::RecvToken;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use ftl_types::sink::Event;
@@ -27,10 +29,17 @@ use crate::spinlock::SpinLock;
 use crate::syscall::SyscallResult;
 use crate::thread::Thread;
 
-struct Message {
-    info: MessageInfo,
-    arg1: usize,
-    arg2: usize,
+enum EntryState {
+    Pending {
+        info: MessageInfo,
+        arg1: usize,
+        arg2: usize,
+    },
+    Notified(RecvToken),
+}
+
+struct Entry {
+    state: EntryState,
     body: Option<Vec<u8>>,
     handle: Option<AnyHandle>,
 }
@@ -46,15 +55,44 @@ enum State {
     PeerClosed,
 }
 
+struct TokenAllocator {
+    bitmap: u64,
+}
+
+impl TokenAllocator {
+    const fn new() -> Self {
+        Self { bitmap: 0 }
+    }
+
+    fn is_full(&self) -> bool {
+        self.bitmap == u64::MAX
+    }
+
+    fn alloc(&mut self) -> Option<RecvToken> {
+        let i = self.bitmap.trailing_ones();
+        if i == 64 {
+            return None;
+        }
+        self.bitmap |= 1 << i;
+        Some(RecvToken::new(i as u16))
+    }
+
+    fn free(&mut self, token: RecvToken) {
+        let index = token.as_u16() as usize;
+        debug_assert!(self.bitmap & (1 << index) != 0);
+        self.bitmap &= !(1 << index);
+    }
+}
+
 struct Mutable {
     /// The channel state.
     state: State,
-    /// Pending messages that are not yet notified to the sink.
-    rx_pending: VecDeque<Message>,
-    /// Messages that have been notified to the sink, but not yet received.
-    rx_notified: Vec<Message>,
+    /// Received messages.
+    queue: VecDeque<Entry>,
     /// The sink waker.
     emitter: Option<EventEmitter>,
+    /// [`RecvToken`] allocator.
+    token_allocator: TokenAllocator,
 }
 
 pub struct Channel {
@@ -66,17 +104,17 @@ impl Channel {
         let ch0 = SharedRef::new(Self {
             mutable: SpinLock::new(Mutable {
                 state: State::Initializing,
-                rx_pending: VecDeque::new(),
-                rx_notified: Vec::new(),
+                queue: VecDeque::new(),
                 emitter: None,
+                token_allocator: TokenAllocator::new(),
             }),
         })?;
         let ch1 = SharedRef::new(Self {
             mutable: SpinLock::new(Mutable {
                 state: State::Connected(ch0.clone()),
-                rx_pending: VecDeque::new(),
-                rx_notified: Vec::new(),
+                queue: VecDeque::new(),
                 emitter: None,
+                token_allocator: TokenAllocator::new(),
             }),
         })?;
         ch0.mutable.lock().state = State::Connected(ch1.clone());
@@ -124,10 +162,8 @@ impl Channel {
             None
         };
 
-        peer_mutable.rx_pending.push_back(Message {
-            info,
-            arg1,
-            arg2,
+        peer_mutable.queue.push_back(Entry {
+            state: EntryState::Pending { info, arg1, arg2 },
             body,
             handle,
         });
@@ -143,51 +179,78 @@ impl Channel {
         &self,
         isolation: &SharedRef<dyn Isolation>,
         handle_table: &mut HandleTable,
-        info: MessageInfo,
+        token: RecvToken,
         body_slice: UserSlice,
     ) -> Result<HandleId, ErrorCode> {
-        let mut mutable: crate::spinlock::SpinLockGuard<'_, Mutable> = self.mutable.lock();
+        let mut mutable = self.mutable.lock();
+        for (i, entry) in mutable.queue.iter_mut().enumerate() {
+            if matches!(entry.state, EntryState::Notified(t) if t == token) {
+                let slot = if entry.handle.is_some() {
+                    Some(handle_table.reserve()?)
+                } else {
+                    None
+                };
 
-        // Find the message in the notified queue, and remove it from the vec.
-        let Some(message) = mutable
-            .rx_notified
-            .iter()
-            .position(|message| message.info == info)
-            .map(|pos| mutable.rx_notified.remove(pos))
-        else {
-            return Err(ErrorCode::NotFound);
-        };
+                // Copy the body first since it may fail.
+                if let Some(ref body) = entry.body {
+                    let copy_len = min(body_slice.len(), body.len());
+                    let slice = body_slice.subslice(0, copy_len)?;
+                    isolation.write_bytes(&slice, &body[..copy_len])?;
+                }
 
-        let handle_id = if let Some(handle) = message.handle {
-            debug_assert!(info.has_handle());
-            handle_table.reserve()?.insert(handle)
-        } else {
-            HandleId::from_raw(0)
-        };
+                // Point of no return: All operations after this point must
+                // succeed to guarantee that "if sys_channel_recv returns an
+                // error, the message is kept in the queue".
+                let entry = mutable.queue.remove(i).unwrap();
 
-        // Copy the body to the isolation.
-        if let Some(body) = message.body {
-            debug_assert!(info.has_body());
-            isolation.write_bytes(&body_slice, &body)?;
+                let handle_id = if let Some(handle) = entry.handle {
+                    slot.unwrap().insert(handle)
+                } else {
+                    HandleId::from_raw(0)
+                };
+
+                let was_full = mutable.token_allocator.is_full();
+                mutable.token_allocator.free(token);
+                if let Some(ref emitter) = mutable.emitter {
+                    let drained =
+                        matches!(mutable.state, State::Draining) && mutable.queue.is_empty();
+                    if was_full || drained {
+                        emitter.notify();
+                    }
+                }
+
+                return Ok(handle_id);
+            }
         }
 
-        Ok(handle_id)
+        Err(ErrorCode::NotFound)
     }
 
-    fn discard(&self, info: MessageInfo) -> Result<(), ErrorCode> {
+    fn discard(&self, token: RecvToken) -> Result<(), ErrorCode> {
         let mut mutable = self.mutable.lock();
+        for (i, entry) in mutable.queue.iter_mut().enumerate() {
+            if matches!(entry.state, EntryState::Notified(t) if t == token) {
+                let entry = mutable.queue.remove(i).unwrap();
 
-        // Remove the first matching message.
-        let Some(pos) = mutable.rx_notified.iter().position(|m| m.info == info) else {
-            return Err(ErrorCode::NotFound);
-        };
+                if let Some(handle) = entry.handle {
+                    handle.bypass_check().close();
+                }
 
-        let mut message = mutable.rx_notified.remove(pos);
-        if let Some(handle) = message.handle.take() {
-            handle.bypass_check().close();
+                let was_full = mutable.token_allocator.is_full();
+                mutable.token_allocator.free(token);
+                if let Some(ref emitter) = mutable.emitter {
+                    let drained =
+                        matches!(mutable.state, State::Draining) && mutable.queue.is_empty();
+                    if was_full || drained {
+                        emitter.notify();
+                    }
+                }
+
+                return Ok(());
+            }
         }
 
-        Ok(())
+        Err(ErrorCode::NotFound)
     }
 }
 
@@ -226,32 +289,49 @@ impl Handleable for Channel {
         _handle_table: &mut HandleTable,
     ) -> Result<Option<Event>, ErrorCode> {
         let mut mutable = self.mutable.lock();
+        let Mutable {
+            state,
+            queue,
+            token_allocator: token_bitmap,
+            ..
+        } = &mut *mutable;
 
-        if let Some(message) = mutable.rx_pending.pop_front() {
-            let event = Event {
-                message: MessageEvent {
-                    header: EventHeader {
-                        ty: EventType::MESSAGE,
-                        id: handle_id,
+        for entry in queue.iter_mut() {
+            if let EntryState::Pending { info, arg1, arg2 } = &entry.state {
+                let token = match token_bitmap.alloc() {
+                    Some(token) => token,
+                    None => {
+                        // We have too many inflight receives. Do not return an event for now.
+                        return Ok(None);
+                    }
+                };
+
+                let peek = Peek {
+                    info: *info,
+                    token,
+                    arg1: *arg1,
+                    arg2: *arg2,
+                };
+
+                entry.state = EntryState::Notified(token);
+                return Ok(Some(Event {
+                    message: MessageEvent {
+                        header: EventHeader {
+                            ty: EventType::MESSAGE,
+                            id: handle_id,
+                        },
+                        peek,
                     },
-                    peek: Peek {
-                        info: message.info,
-                        arg1: message.arg1,
-                        arg2: message.arg2,
-                    },
-                },
-            };
+                }));
+            }
+        }
 
-            mutable.rx_notified.push(message);
-            return Ok(Some(event));
-        };
-
-        match mutable.state {
+        match state {
             State::Initializing => unreachable!(),
             State::Connected(_) => { /* do nothing */ }
             State::Draining => {
-                if mutable.rx_pending.is_empty() {
-                    mutable.state = State::PeerClosed;
+                if queue.is_empty() {
+                    *state = State::PeerClosed;
                     return Ok(Some(Event {
                         peer_closed: PeerClosedEvent {
                             header: EventHeader {
@@ -327,11 +407,12 @@ pub fn sys_channel_recv(
     a0: usize,
     a1: usize,
     a2: usize,
+    a3: usize,
 ) -> Result<SyscallResult, ErrorCode> {
     let ch_id = HandleId::from_raw(a0);
-    let info = MessageInfo::from_raw(a1);
+    let token = RecvToken::new(a1 as u16);
     let body_ptr = UserPtr::new(a2);
-    let slice = UserSlice::new(body_ptr, info.body_len())?;
+    let slice = UserSlice::new(body_ptr, a3)?;
 
     let process = current.process();
     let mut handle_table = process.handle_table().lock();
@@ -339,7 +420,7 @@ pub fn sys_channel_recv(
         .get::<Channel>(ch_id)?
         .authorize(HandleRight::READ)?;
 
-    let handle_id = ch.recv(process.isolation(), &mut handle_table, info, slice)?;
+    let handle_id = ch.recv(process.isolation(), &mut handle_table, token, slice)?;
     Ok(SyscallResult::Return(handle_id.as_usize()))
 }
 
@@ -349,7 +430,7 @@ pub fn sys_channel_discard(
     a1: usize,
 ) -> Result<SyscallResult, ErrorCode> {
     let ch_id = HandleId::from_raw(a0);
-    let info = MessageInfo::from_raw(a1);
+    let token = RecvToken::new(a1 as u16);
 
     let process = current.process();
     let handle_table = process.handle_table().lock();
@@ -357,6 +438,6 @@ pub fn sys_channel_discard(
         .get::<Channel>(ch_id)?
         .authorize(HandleRight::READ)?;
 
-    ch.discard(info)?;
+    ch.discard(token)?;
     Ok(SyscallResult::Return(0))
 }

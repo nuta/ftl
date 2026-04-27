@@ -118,6 +118,8 @@ impl Sink {
                 continue;
             };
 
+            // TODO: What if this write fails? Should we keep the event not to
+            // lose it?
             crate::isolation::write(isolation, buf, 0, event)?;
 
             return Ok(true);

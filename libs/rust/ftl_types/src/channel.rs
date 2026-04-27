@@ -87,9 +87,24 @@ impl MessageId {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(transparent)]
+pub struct RecvToken(u16);
+
+impl RecvToken {
+    pub const fn new(id: u16) -> Self {
+        Self(id)
+    }
+
+    pub fn as_u16(self) -> u16 {
+        self.0
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(C)]
 pub struct Peek {
     pub info: MessageInfo,
+    pub token: RecvToken,
     pub arg1: usize,
     pub arg2: usize,
 }

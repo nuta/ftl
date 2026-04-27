@@ -19,7 +19,7 @@ use crate::syscall::syscall2;
 
 #[derive(Debug)]
 pub enum Event {
-    Message(Peek),
+    Message(Peek), // TODO: OwnedPeek + OwnedRecvToken to prevent copying
     Irq { irq: u8 },
     PeerClosed,
 }
