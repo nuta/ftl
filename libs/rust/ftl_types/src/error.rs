@@ -27,6 +27,7 @@ pub enum ErrorCode {
     BadAccess = 19,
     TooManyCalls = 20,
     NotHandled = 21,
+    Overloaded = 22,
 }
 
 impl ErrorCode {
@@ -60,6 +61,7 @@ impl From<usize> for ErrorCode {
             19 => Self::BadAccess,
             20 => Self::TooManyCalls,
             21 => Self::NotHandled,
+            22 => Self::Overloaded,
             _ => Self::Unknown,
         }
     }
