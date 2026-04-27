@@ -1,7 +1,6 @@
 use core::fmt;
 use core::ops::ControlFlow;
 
-use ftl::buffer::Buffer;
 use ftl::collections::vec_deque::VecDeque;
 use ftl::prelude::format;
 use ftl::prelude::vec::Vec;
@@ -13,7 +12,7 @@ const MAX_HEADERS: usize = 64;
 
 pub enum Connection {
     ReadingHeaders { read_buf: Vec<u8> },
-    WritingResponse { chunks: VecDeque<Buffer> },
+    WritingResponse { chunks: VecDeque<Vec<u8>> },
     Errored,
     Completed,
 }
@@ -55,7 +54,7 @@ impl Connection {
         }
     }
 
-    pub fn poll_send(&mut self) -> Option<Buffer> {
+    pub fn poll_send(&mut self) -> Option<Vec<u8>> {
         let Self::WritingResponse { chunks } = self else {
             return None;
         };
@@ -69,7 +68,7 @@ impl Connection {
     }
 }
 
-fn process_request(req: Request) -> VecDeque<Buffer> {
+fn process_request(req: Request) -> VecDeque<Vec<u8>> {
     let (status, body) = match (req.method, req.path) {
         (Some("GET"), Some(path)) if path == "/" => (200, include_bytes!("index.html").as_slice()),
         _ => (404, b"file not found".as_slice()),

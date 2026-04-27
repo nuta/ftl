@@ -19,7 +19,6 @@ pub mod arch;
 mod message;
 mod panic;
 
-pub mod buffer;
 pub mod channel;
 pub mod collections;
 pub mod driver;
