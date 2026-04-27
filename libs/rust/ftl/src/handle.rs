@@ -1,9 +1,8 @@
 use core::fmt;
 
 use ftl_types::error::ErrorCode;
-use ftl_types::syscall::SYS_HANDLE_CLOSE;
-
 pub use ftl_types::handle::HandleId;
+use ftl_types::syscall::SYS_HANDLE_CLOSE;
 
 use crate::syscall::syscall1;
 

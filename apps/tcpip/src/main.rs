@@ -83,7 +83,6 @@ fn open_supervisor_channel(
     }
 }
 
-
 fn parse_tcp_listen_endpoint(path: &[u8]) -> Result<Endpoint, ErrorCode> {
     let path = core::str::from_utf8(path).map_err(|_| ErrorCode::InvalidArgument)?;
     let port_str = path
@@ -310,8 +309,7 @@ fn main(supervisor_ch: Channel) {
                             }
                         }
                     }
-                    Incoming::WriteReply(_reply) => {
-                    }
+                    Incoming::WriteReply(_reply) => {}
                     _ => {
                         warn!("unhandled message: {:?}", peek);
                     }
