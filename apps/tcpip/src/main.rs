@@ -1,1041 +1,521 @@
 #![no_std]
 #![no_main]
 
-use core::fmt;
-use core::net::Ipv4Addr;
+use core::cmp::min;
 
-use ftl::buffer::Buffer;
-use ftl::buffer::BufferMut;
-use ftl::buffer::BufferUninit;
-use ftl::channel::Attr;
 use ftl::channel::Channel;
+use ftl::channel::Incoming;
+use ftl::channel::Message;
+use ftl::channel::MessageId;
+use ftl::channel::OpenCompleter;
+use ftl::channel::OpenOptions;
+use ftl::channel::ReadRequest;
+use ftl::channel::WriteRequest;
 use ftl::collections::HashMap;
-use ftl::collections::VecDeque;
 use ftl::error::ErrorCode;
-use ftl::eventloop::Client;
-use ftl::eventloop::Event;
-use ftl::eventloop::EventLoop;
-use ftl::eventloop::OpenRequest;
-use ftl::eventloop::ReadRequest;
-use ftl::eventloop::Reply;
-use ftl::eventloop::Request;
-use ftl::eventloop::WriteRequest;
-use ftl::handle::HandleId;
 use ftl::handle::Handleable;
-use ftl::log::*;
 use ftl::prelude::*;
-use ftl::rc::Rc;
-use ftl::time::Timer;
-use smoltcp::iface::Interface;
-use smoltcp::iface::PollResult;
-use smoltcp::iface::SocketHandle;
-use smoltcp::iface::SocketSet;
-use smoltcp::phy::DeviceCapabilities;
-use smoltcp::socket::dhcpv4;
-use smoltcp::socket::tcp;
-use smoltcp::socket::tcp::ListenError;
-use smoltcp::wire::EthernetAddress;
-use smoltcp::wire::HardwareAddress;
-use smoltcp::wire::IpCidr;
-use smoltcp::wire::IpListenEndpoint;
-use smoltcp::wire::Ipv4Cidr;
+use ftl::sink::Event;
+use ftl::sink::Sink;
+use ftl::sync::Arc;
+use ftl_tcpip::device::DeviceMap;
+use ftl_tcpip::ethernet::MacAddr;
+use ftl_tcpip::ip::IpAddr;
+use ftl_tcpip::ip::ipv4::Ipv4Addr;
+use ftl_tcpip::ip::ipv4::NetMask;
+use ftl_tcpip::packet::Packet;
+use ftl_tcpip::route::Route;
+use ftl_tcpip::route::RouteTable;
+use ftl_tcpip::socket::Endpoint;
+use ftl_tcpip::socket::SocketMap;
+use ftl_tcpip::tcp::TcpConn;
+use ftl_tcpip::tcp::TcpListener;
+use ftl_tcpip::transport::Port;
 
-enum Uri {
-    TcpListen(IpListenEndpoint),
-}
+fn open_supervisor_channel(
+    supervisor_ch: &Channel,
+    path: &[u8],
+    options: OpenOptions,
+    description: &str,
+) -> Channel {
+    let sink = Sink::new().unwrap();
+    sink.add(supervisor_ch).unwrap();
 
-const TCP_BUFFER_SIZE: usize = 4096;
-const NET_RX_BUFFER_SIZE: usize = 1514;
-const RX_QUEUE_SIZE: usize = 1;
-type AppEventLoop = EventLoop<(), ()>;
+    let mid = MessageId::new(1);
+    supervisor_ch
+        .send(Message::Open { mid, path, options })
+        .unwrap();
 
-// TODO: Remove this default timeout once we solve leaks.
-const TCP_SOCKET_TIMEOUT: smoltcp::time::Duration = smoltcp::time::Duration::from_secs(30);
-
-struct RxToken {
-    buffer: Buffer,
-}
-
-impl smoltcp::phy::RxToken for RxToken {
-    fn consume<R, F>(self, f: F) -> R
-    where
-        F: FnOnce(&[u8]) -> R,
-    {
-        f(&self.buffer)
-    }
-}
-
-struct TxToken {
-    ch: Rc<Channel>,
-}
-
-impl smoltcp::phy::TxToken for TxToken {
-    fn consume<R, F>(self, len: usize, f: F) -> R
-    where
-        F: FnOnce(&mut [u8]) -> R,
-    {
-        let mut buf = vec![0u8; len];
-        let result = f(&mut buf);
-
-        if let Err(error) = Client::new(self.ch).write(0, buf, ()) {
-            // TODO: Add a semaphore to limit the number of inflight writes.
-            trace!("failed to send packet: {:?}", error);
-        }
-
-        result
-    }
-}
-
-struct Device {
-    ch: Rc<Channel>,
-    rx_queue: VecDeque<Buffer>,
-    inflight_reads: usize,
-}
-
-impl Device {
-    fn new(ch: Rc<Channel>) -> Self {
-        Self {
-            ch,
-            rx_queue: VecDeque::new(),
-            inflight_reads: 0,
-        }
-    }
-
-    fn on_read_reply(&mut self, buf: Buffer, len: usize) {
-        debug_assert!(self.inflight_reads > 0);
-        self.inflight_reads -= 1;
-
-        if len == 0 {
-            self.fill_rx();
-            return;
-        }
-
-        self.rx_queue.push_back(buf);
-        self.fill_rx();
-    }
-
-    fn fill_rx(&mut self) {
-        while self.rx_queue.len() + self.inflight_reads < RX_QUEUE_SIZE {
-            let uninit = BufferUninit::with_capacity(NET_RX_BUFFER_SIZE);
-            match Client::new(self.ch.clone()).read(0, uninit, ()) {
-                Ok(()) => {
-                    self.inflight_reads += 1;
-                }
-                Err(error) => {
-                    trace!("failed to send a packet to drivers: {:?}", error);
-                    break;
-                }
-            }
-        }
-    }
-}
-
-impl smoltcp::phy::Device for Device {
-    type RxToken<'a> = RxToken;
-    type TxToken<'a> = TxToken;
-
-    fn receive(
-        &mut self,
-        _timestamp: smoltcp::time::Instant,
-    ) -> Option<(Self::RxToken<'_>, Self::TxToken<'_>)> {
-        if let Some(buffer) = self.rx_queue.pop_front() {
-            // Keep one RX read in flight after consuming a packet so the next
-            // incoming frame can trigger a read reply immediately.
-            self.fill_rx();
-            let rx = RxToken { buffer };
-            let tx = TxToken {
-                ch: self.ch.clone(),
-            };
-            Some((rx, tx))
-        } else {
-            if self.inflight_reads == 0 {
-                self.fill_rx();
-            }
-            None
-        }
-    }
-
-    fn transmit(&mut self, _timestamp: smoltcp::time::Instant) -> Option<Self::TxToken<'_>> {
-        Some(TxToken {
-            ch: self.ch.clone(),
-        })
-    }
-
-    fn capabilities(&self) -> DeviceCapabilities {
-        let mut caps = DeviceCapabilities::default();
-        caps.medium = smoltcp::phy::Medium::Ethernet;
-        caps.max_transmission_unit = 1514;
-        caps
-    }
-}
-
-enum Context {
-    Driver,
-    ServiceListener,
-    ControlClient,
-    TcpConn {
-        pending_reads: VecDeque<ReadRequest>,
-        pending_writes: VecDeque<WriteRequest>,
-        channel_closed: bool,
-    },
-    TcpListener {
-        pending_accepts: VecDeque<OpenRequest>,
-    },
-}
-
-impl fmt::Debug for Context {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Context::Driver => write!(f, "Driver"),
-            Context::ServiceListener => write!(f, "ServiceListener"),
-            Context::ControlClient => write!(f, "ControlClient"),
-            Context::TcpConn { .. } => write!(f, "TcpConn"),
-            Context::TcpListener { .. } => write!(f, "TcpListener"),
-        }
-    }
-}
-
-struct SmolClock {
-    started_at: ftl::time::Instant,
-}
-
-impl SmolClock {
-    fn new() -> Self {
-        Self {
-            started_at: ftl::time::Instant::now(),
-        }
-    }
-
-    fn now(&self) -> smoltcp::time::Instant {
-        let elapsed = ftl::time::Instant::now().elapsed_since(&self.started_at);
-        let elapsed_micros = elapsed.as_micros().min(i64::MAX as u128) as i64;
-        smoltcp::time::Instant::from_micros(elapsed_micros)
-    }
-}
-
-struct Main {
-    smol_clock: SmolClock,
-    timer: Rc<Timer>,
-    sockets: SocketSet<'static>,
-    contexts: HashMap<HandleId, Context>,
-    socket2id: HashMap<SocketHandle, HandleId>,
-    dhcp_handle: SocketHandle,
-    device: Device,
-    iface: Interface,
-    ready_to_serve: bool,
-}
-
-impl Main {
-    fn connect_driver(&mut self, eventloop: &mut AppEventLoop) -> Result<(), ErrorCode> {
-        let driver_ch = Rc::new(Channel::connect("ethernet")?);
-        eventloop.add_channel(driver_ch.clone(), ())?;
-
-        let driver_id = driver_ch.handle().id();
-        self.contexts.insert(driver_id, Context::Driver);
-
-        self.device.ch = driver_ch.clone();
-        self.device.rx_queue.clear();
-        self.device.inflight_reads = 0;
-        self.ready_to_serve = false;
-
-        let uninit = BufferUninit::with_capacity(6);
-        if let Err(error) = Client::new(driver_ch.clone()).getattr(Attr::MAC, uninit, ()) {
-            trace!("failed to request MAC: {:?}", error);
-        }
-
-        Ok(())
-    }
-
-    fn update_timer(&mut self) {
-        let now = self.smol_clock.now();
-        let Some(delay) = self.iface.poll_delay(now, &self.sockets) else {
-            return;
-        };
-
-        if let Err(error) = self.timer.set_timeout(delay.into()) {
-            trace!("failed to set poll timer: {:?}", error);
-        }
-    }
-
-    fn do_tcp_listen(&mut self, endpoint: IpListenEndpoint) -> Result<SocketHandle, ErrorCode> {
-        let rx_buf = tcp::SocketBuffer::new(vec![0; TCP_BUFFER_SIZE]);
-        let tx_buf = tcp::SocketBuffer::new(vec![0; TCP_BUFFER_SIZE]);
-        let mut socket = tcp::Socket::new(rx_buf, tx_buf);
-
-        socket.set_nagle_enabled(false);
-        socket.set_ack_delay(None);
-        socket.set_timeout(Some(TCP_SOCKET_TIMEOUT));
-
-        match socket.listen(endpoint) {
-            Ok(_) => {}
-            Err(ListenError::Unaddressable) => {
-                return Err(ErrorCode::InvalidArgument);
-            }
-            Err(e) => {
-                trace!("unexpected listen error: {:?}", e);
-                return Err(ErrorCode::Unreachable);
-            }
-        }
-
-        let handle = self.sockets.add(socket);
-        Ok(handle)
-    }
-
-    pub fn tcp_listen(
-        &mut self,
-        eventloop: &mut AppEventLoop,
-        endpoint: IpListenEndpoint,
-    ) -> Result<Channel, ErrorCode> {
-        let (our_ch, their_ch) = Channel::new()?;
-        let handle = self.do_tcp_listen(endpoint)?;
-        let ch_id = our_ch.handle().id();
-        eventloop.add_channel(our_ch, ())?;
-
-        self.contexts.insert(
-            ch_id,
-            Context::TcpListener {
-                pending_accepts: VecDeque::new(),
-            },
-        );
-        self.socket2id.insert(handle, ch_id);
-        Ok(their_ch)
-    }
-
-    pub fn tcp_accept(
-        &mut self,
-        eventloop: &mut AppEventLoop,
-        accepted_handle: SocketHandle,
-        endpoint: IpListenEndpoint,
-    ) -> Result<Channel, ErrorCode> {
-        let (our_ch, their_ch) = Channel::new()?;
-        let new_ch_id = our_ch.handle().id();
-        eventloop.add_channel(our_ch, ())?;
-
-        // Create a new listen socket.
-        let new_listen_handle = self.do_tcp_listen(endpoint)?;
-
-        self.contexts.insert(
-            new_ch_id,
-            Context::TcpConn {
-                pending_reads: VecDeque::new(),
-                pending_writes: VecDeque::new(),
-                channel_closed: false,
-            },
-        );
-
-        // Replace the accepted socket's state mapping.
-        let listen_ch_id = self.socket2id.insert(accepted_handle, new_ch_id).unwrap();
-        self.socket2id.insert(new_listen_handle, listen_ch_id);
-
-        Ok(their_ch)
-    }
-
-    pub fn poll(&mut self, eventloop: &mut AppEventLoop) {
-        if !self.ready_to_serve {
-            return;
-        }
-
-        loop {
-            let now = self.smol_clock.now();
-            let result = self.iface.poll(now, &mut self.device, &mut self.sockets);
-            self.poll_dhcp();
-            self.do_poll(eventloop);
-            if matches!(result, PollResult::SocketStateChanged) {
-                continue;
-            }
-
-            // We may have queued data while handling sockets. Poll once more to flush.
-            let now = self.smol_clock.now();
-            let result = self.iface.poll(now, &mut self.device, &mut self.sockets);
-            if matches!(result, PollResult::SocketStateChanged) {
-                continue;
-            }
-            break;
-        }
-
-        self.update_timer();
-        trace!(
-            "poll completed: sockets={}, states={}",
-            self.sockets.iter().count(),
-            self.contexts.len()
-        );
-    }
-
-    fn poll_dhcp(&mut self) {
-        let event = self
-            .sockets
-            .get_mut::<dhcpv4::Socket>(self.dhcp_handle)
-            .poll();
-
+    loop {
+        let (id, event) = sink.wait().unwrap();
         match event {
-            None => {}
-            Some(dhcpv4::Event::Configured(config)) => {
-                let our_ip = config.address;
-                let gw_ip = config.router;
-                self.apply_dhcp_config(our_ip, gw_ip);
-            }
-            Some(dhcpv4::Event::Deconfigured) => {
-                trace!("DHCP deconfigured");
-            }
-        }
-    }
-
-    fn apply_dhcp_config(&mut self, mut our_ip: Ipv4Cidr, gw_ip: Option<Ipv4Addr>) {
-        trace!("DHCP configured: address={}, router={:?}", our_ip, gw_ip);
-
-        // Google Compute Engine assigns a /32 address, which confuses
-        // smoltcp since it's not in the same subnet as the router.
-        //
-        // Adjust the address to the common prefix with the router.
-        if let Some(gw_ip) = gw_ip {
-            if !our_ip.contains_addr(&gw_ip) {
-                // Compute the common prefix between the address and the router.
-                let a = u32::from_be_bytes(our_ip.address().octets());
-                let b = u32::from_be_bytes(gw_ip.octets());
-                let prefix = (a ^ b).leading_zeros() as u8;
-
-                let adjusted = Ipv4Cidr::new(our_ip.address(), prefix);
-                trace!(
-                    "adjusting IPv4 prefix: {} -> {} (router {})",
-                    our_ip, adjusted, gw_ip
-                );
-                our_ip = adjusted;
-            }
-        }
-
-        // Set our IP address.
-        self.iface.update_ip_addrs(|addrs| {
-            addrs.clear();
-            addrs.push(IpCidr::Ipv4(our_ip)).unwrap();
-        });
-
-        // Set the default route.
-        if let Some(gw_ip) = gw_ip {
-            if let Err(error) = self.iface.routes_mut().add_default_ipv4_route(gw_ip) {
-                trace!("failed to add default IPv4 route: {:?}", error);
-            }
-        } else {
-            trace!("missing default IPv4 route");
-            self.iface.routes_mut().remove_default_ipv4_route();
-        }
-    }
-
-    fn do_poll(&mut self, eventloop: &mut AppEventLoop) {
-        use smoltcp::socket::Socket;
-
-        let mut accepted_sockets = Vec::new();
-        let mut destroyed_sockets = Vec::new();
-        for (handle, socket) in self.sockets.iter_mut() {
-            match socket {
-                Socket::Dhcpv4(_socket) => {
-                    // DHCP socket is handled in poll_dhcp.
-                }
-                Socket::Tcp(socket) => {
-                    let Some(id) = self.socket2id.get(&handle).copied() else {
-                        trace!("state mapping not found for socket {:?}", handle);
-                        continue;
-                    };
-                    let Some(state) = self.contexts.get_mut(&id) else {
-                        trace!(
-                            "context not found for socket {:?} (channel {:?})",
-                            handle, id
-                        );
-                        destroyed_sockets.push((handle, id));
-                        continue;
-                    };
-                    match socket.state() {
-                        tcp::State::Listen | tcp::State::SynSent => {
-                            // No state changes.
-                        }
-                        tcp::State::SynReceived => {
-                            match state {
-                                Context::TcpListener {
-                                    pending_accepts, ..
-                                } => {
-                                    // Check if we can accept a new connection.
-                                    if let Some(completer) = pending_accepts.pop_front() {
-                                        accepted_sockets.push((
-                                            handle,
-                                            socket.listen_endpoint(),
-                                            completer,
-                                        ));
-                                    }
-                                }
-                                Context::TcpConn { .. } => {
-                                    // Handshake in progress for an accepted socket.
-                                }
-                                _ => {
-                                    trace!("unexpected state: {:?}", state);
-                                    unreachable!();
-                                }
+            Event::Message(peek) if id == supervisor_ch.handle().id() => {
+                match Incoming::parse(&supervisor_ch, peek) {
+                    Incoming::OpenReply(reply) if reply.mid() == mid => {
+                        match reply.recv() {
+                            Ok(handle) => {
+                                break Channel::from_handle(handle);
+                            }
+                            Err(error) => {
+                                panic!("failed to open {description}: {:?}", error);
                             }
                         }
-                        tcp::State::Established => {
-                            tcp_read_write(socket, state);
-                            tcp_channel_closed(socket, state);
-                        }
-                        tcp::State::FinWait1 | tcp::State::FinWait2 => {
-                            tcp_read_write(socket, state);
-                        }
-                        tcp::State::CloseWait => {
-                            tcp_read_write(socket, state);
-                            tcp_peer_closed(socket, state);
-                        }
-                        tcp::State::Closing | tcp::State::LastAck => {
-                            // Waiting for the peer to acknowledge the close.
-                        }
-                        tcp::State::TimeWait | tcp::State::Closed => {
-                            // The socket has been closed by both sides.
-                            let Context::TcpConn { .. } = state else {
-                                unreachable!();
-                            };
-                            destroyed_sockets.push((handle, id));
-                        }
+                    }
+                    Incoming::OpenReply(reply) => {
+                        warn!(
+                            "unexpected open reply while opening {}: mid={:?}",
+                            description,
+                            reply.mid()
+                        );
+                    }
+                    _ => {
+                        warn!(
+                            "unhandled message while opening {}: {:?}",
+                            description, peek
+                        );
                     }
                 }
             }
-        }
-
-        for (handle, endpoint, request) in accepted_sockets {
-            match self.tcp_accept(eventloop, handle, endpoint) {
-                Ok(new_ch) => request.reply(new_ch),
-                Err(error) => request.reply_error(error),
+            _ => {
+                warn!("unhandled event while opening {}: {:?}", description, event);
             }
         }
-
-        for (handle, channel_id) in destroyed_sockets {
-            self.sockets.remove(handle);
-            self.socket2id.remove(&handle);
-            self.contexts.remove(&channel_id);
-            eventloop.remove(channel_id);
-        }
-    }
-
-    fn on_mac_read_reply(&mut self, data: BufferMut, len: usize) {
-        if len != 6 {
-            warn!("unexpected MAC length: {}", len);
-            return;
-        }
-
-        let data = &data[..len];
-        let mac = [data[0], data[1], data[2], data[3], data[4], data[5]];
-        let hwaddr = HardwareAddress::Ethernet(EthernetAddress::from_bytes(&mac));
-        self.iface.set_hardware_addr(hwaddr);
-        self.ready_to_serve = true;
-        trace!(
-            "MAC configured: {:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
-            mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]
-        );
     }
 }
 
-fn tcp_read_write(socket: &mut tcp::Socket, state: &mut Context) {
-    let Context::TcpConn {
-        pending_reads,
-        pending_writes,
-        ..
-    } = state
-    else {
-        unreachable!();
-    };
 
-    while socket.can_recv() {
-        let Some(request) = pending_reads.pop_front() else {
-            break;
-        };
-        let result = socket.recv(|buf| {
-            // Documentation:
-            //
-            // > Call f with the largest contiguous slice of octets in the receive
-            // > buffer, and dequeue the amount of elements returned by f.
-            let read_len = match request.write(buf) {
-                Ok(len) => {
-                    // TODO: Reuse the request if the entire buffer was written.
-                    request.reply(len);
-                    len
-                }
-                Err(error) => {
-                    trace!("failed to write data to read request: {:?}", error);
-                    request.reply_error(error);
-                    0
-                }
-            };
+fn parse_tcp_listen_endpoint(path: &[u8]) -> Result<Endpoint, ErrorCode> {
+    let path = core::str::from_utf8(path).map_err(|_| ErrorCode::InvalidArgument)?;
+    let port_str = path
+        .strip_prefix("tcp-listen:0.0.0.0:")
+        .ok_or(ErrorCode::InvalidArgument)?;
+    let port = port_str
+        .parse::<u16>()
+        .map_err(|_| ErrorCode::InvalidArgument)?;
 
-            (read_len, () /* retrun value of recv */)
-        });
+    Ok(Endpoint {
+        addr: IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), // TODO:
+        port: Port::new(port),
+    })
+}
 
-        if let Err(error) = result {
-            warn!("failed to recv from socket: {:?}", error);
-            break;
-        }
+const RECV_BUFFER_SIZE: usize = 1514;
+
+pub struct TcpIpIo;
+
+impl ftl_tcpip::Io for TcpIpIo {
+    type Device = MyDevice;
+    type TcpWrite = TcpWrite;
+    type TcpRead = TcpRead;
+    type TcpAccept = TcpAccept;
+}
+
+pub struct MyDevice {
+    mac_addr: MacAddr,
+    driver_ch: Arc<Channel>,
+}
+
+impl ftl_tcpip::device::Device for MyDevice {
+    fn mac_addr(&self) -> &MacAddr {
+        &self.mac_addr
     }
 
-    while socket.can_send() {
-        let Some(request) = pending_writes.pop_front() else {
-            break;
+    fn transmit(&mut self, pkt: &mut Packet) {
+        let m = Message::Write {
+            mid: MessageId::new(1),
+            offset: 0,
+            buf: pkt.slice(),
         };
 
-        let result = socket.send(|buf| {
-            // Documentation:
-            //
-            // > Call f with the largest contiguous slice of octets in the
-            // > transmit buffer, and enqueue the amount of elements returned
-            // > by f.
-            let write_len = match request.read(buf) {
-                Ok(len) => {
-                    // TODO: Reuse the request if the entire buffer was written.
-                    request.reply(len);
+        if let Err(e) = self.driver_ch.send(m) {
+            warn!("failed to send message: {:?}", e);
+        }
+    }
+}
+
+pub struct TcpWrite(WriteRequest<Arc<Channel>>);
+
+impl ftl_tcpip::tcp::Write for TcpWrite {
+    fn complete(self, tx_buffer: &mut ftl_tcpip::tcp::RingBuffer) {
+        tx_buffer.write_bytes_with(|buf| {
+            let len = min(buf.len(), self.0.len());
+            match self.0.recv(&mut buf[..len]) {
+                Ok((_, completer)) => {
+                    completer.reply(len);
                     len
                 }
-                Err(error) => {
-                    trace!("failed to read data from write request: {:?}", error);
-                    request.reply_error(error);
+                Err(e) => {
+                    warn!("failed to recv with error: {:?}", e.error());
                     0
                 }
-            };
-
-            (write_len, () /* return value of send */)
+            }
         });
+    }
+}
 
-        if let Err(error) = result {
-            warn!("failed to write to socket: {:?}", error);
-            break;
+pub struct TcpRead(ReadRequest<Arc<Channel>>);
+
+impl ftl_tcpip::tcp::Read for TcpRead {
+    fn complete(self, rx_buffer: &mut ftl_tcpip::tcp::RingBuffer) {
+        rx_buffer.read_bytes_with(self.0.len(), |buf| {
+            let Some(buf) = buf else {
+                // This should not happen.
+                return 0;
+            };
+
+            // FIXME: Consider max body length in IPC?
+
+            self.0.reply(buf);
+            buf.len()
+        });
+    }
+}
+
+pub struct TcpAccept {
+    completer: OpenCompleter<Arc<Channel>>,
+    their_ch: Channel,
+}
+
+impl ftl_tcpip::tcp::Accept for TcpAccept {
+    fn complete(self, result: Result<(), ftl_tcpip::tcp::Error>) {
+        match result {
+            Ok(_) => self.completer.reply(self.their_ch.into_handle()),
+            Err(e) => {
+                warn!("failed to accept tcp sock: {:?}", e);
+                self.completer.reply_error(ErrorCode::InternalError) // FIXME:
+            }
         }
     }
 }
 
-// TODO: Merge this into tcp_read_write?
-fn tcp_channel_closed(socket: &mut tcp::Socket, state: &mut Context) {
-    let Context::TcpConn {
-        pending_writes,
-        channel_closed,
-        ..
-    } = state
-    else {
-        unreachable!();
-    };
-
-    if !*channel_closed {
-        return;
-    }
-
-    if !pending_writes.is_empty() {
-        // Still have application data to enqueue.
-        return;
-    }
-
-    // Initiate a local close (FIN) when the channel is closed.
-    trace!("initiating FIN (channel closed)");
-    socket.close();
-}
-
-fn tcp_peer_closed(socket: &mut tcp::Socket, state: &mut Context) {
-    let Context::TcpConn {
-        pending_reads,
-        pending_writes,
-        channel_closed,
-        ..
-    } = state
-    else {
-        unreachable!();
-    };
-
-    if !*channel_closed {
-        // Keep the socket open until the channel is closed so we can continue
-        // sending data after the peer's FIN (half-close).
-        return;
-    }
-
-    // No more data to read since the peer closed the connection. Complete
-    // all pending reads.
-    debug_assert!(!socket.can_recv());
-    for request in pending_reads.drain(..) {
-        request.reply(0);
-    }
-
-    if !pending_writes.is_empty() {
-        debug_assert!(!socket.can_send());
-        // We still have pending writes to send. Do not close the socket yet.
-        return;
-    }
-
-    debug_assert!(pending_reads.is_empty());
-    debug_assert!(pending_writes.is_empty());
-
-    // It's safe to close the socket now. Send a FIN packet to the peer.
-    trace!("closing socket (peer closed)");
-    socket.close();
-}
-
-fn parse_uri(request: &OpenRequest) -> Result<Uri, ErrorCode> {
-    let mut buf = [0; 256];
-    let len = request.path(&mut buf)?;
-
-    let Ok(uri) = core::str::from_utf8(&buf[..len]) else {
-        return Err(ErrorCode::InvalidArgument);
-    };
-
-    // Split "tcp-listen:0.0.0.0:8080" into "tcp-listen" and "0.0.0.0:8080".
-    let Some((scheme, rest)) = uri.split_once(':') else {
-        return Err(ErrorCode::InvalidArgument);
-    };
-
-    match scheme {
-        "tcp-listen" => {
-            // Split "0.0.0.0:8080" into "0.0.0.0" and "8080".
-            let Some((addr_str, port_str)) = rest.split_once(':') else {
-                return Err(ErrorCode::InvalidArgument);
-            };
-
-            let Ok(addr) = addr_str.parse::<core::net::IpAddr>() else {
-                return Err(ErrorCode::InvalidArgument);
-            };
-
-            let Ok(port) = port_str.parse::<u16>() else {
-                return Err(ErrorCode::InvalidArgument);
-            };
-
-            let endpoint = if addr.is_unspecified() {
-                IpListenEndpoint { addr: None, port }
-            } else {
-                // TODO: We don't support listening on specific addresses for now.
-                return Err(ErrorCode::InvalidArgument);
-            };
-            Ok(Uri::TcpListen(endpoint))
-        }
-        _ => {
-            // Unknown scheme.
-            Err(ErrorCode::InvalidArgument)
-        }
-    }
-}
-
-impl Main {
-    fn new(eventloop: &mut AppEventLoop) -> Self {
-        trace!("starting...");
-        let smol_clock = SmolClock::new();
-        let hwaddr = HardwareAddress::Ethernet(EthernetAddress::from_bytes(&[0; 6]));
-        let config = smoltcp::iface::Config::new(hwaddr);
-
-        let driver_ch = Rc::new(Channel::connect("ethernet").unwrap());
-        let mut states = HashMap::new();
-
-        let driver_id = driver_ch.handle().id();
-        states.insert(driver_id, Context::Driver);
-
-        eventloop.add_channel(driver_ch.clone(), ()).unwrap();
-
-        if let Err(error) =
-            Client::new(driver_ch.clone()).getattr(Attr::MAC, BufferUninit::with_capacity(6), ())
-        {
-            trace!("failed to request MAC: {:?}", error);
-        }
-
-        let mut device = Device::new(driver_ch);
-        let timer = Rc::new(Timer::new().expect("failed to create poll timer"));
-        eventloop.add_timer(timer.clone(), ()).unwrap();
-
-        let iface = Interface::new(config, &mut device, smol_clock.now());
-
-        let mut sockets = SocketSet::new(Vec::new());
-        let dhcp_handle = sockets.add(dhcpv4::Socket::new());
-
-        let service_ch = Rc::new(Channel::register("tcpip").unwrap());
-        let service_id = service_ch.handle().id();
-        eventloop.add_channel(service_ch, ()).unwrap();
-        states.insert(service_id, Context::ServiceListener);
-
-        trace!("ready");
-        Self {
-            smol_clock,
-            timer,
-            sockets,
-            contexts: states,
-            socket2id: HashMap::new(),
-            dhcp_handle,
-            device,
-            iface: iface,
-            ready_to_serve: false,
-        }
-    }
-
-    fn on_open_request(&mut self, eventloop: &mut AppEventLoop, request: OpenRequest) {
-        let handle_id = request.handle_id();
-        match self.contexts.get_mut(&handle_id) {
-            Some(Context::TcpListener {
-                pending_accepts, ..
-            }) => {
-                pending_accepts.push_back(request);
-                return;
-            }
-            Some(Context::ServiceListener) => {
-                let (our_ch, their_ch) = match Channel::new() {
-                    Ok(ch) => ch,
-                    Err(error) => {
-                        request.reply_error(error);
-                        return;
-                    }
-                };
-
-                let our_id = our_ch.handle().id();
-                if let Err(error) = eventloop.add_channel(our_ch, ()) {
-                    request.reply_error(error.into());
-                    return;
-                }
-
-                self.contexts.insert(our_id, Context::ControlClient);
-                request.reply(their_ch);
-                return;
-            }
-            Some(Context::ControlClient) => {}
-            Some(Context::TcpConn { .. }) | Some(Context::Driver) => {
-                request.reply_error(ErrorCode::Unsupported);
-                return;
-            }
-            None => {
-                request.reply_error(ErrorCode::InvalidArgument);
-                return;
-            }
-        }
-
-        match parse_uri(&request) {
-            Ok(Uri::TcpListen(endpoint)) => {
-                match self.tcp_listen(eventloop, endpoint) {
-                    Ok(new_ch) => request.reply(new_ch),
-                    Err(error) => request.reply_error(error),
-                }
-            }
-            Err(error) => {
-                trace!("invalid URI: {:?}", error);
-                request.reply_error(ErrorCode::InvalidArgument)
-            }
-        }
-    }
-
-    fn on_read_request(&mut self, eventloop: &mut AppEventLoop, request: ReadRequest) {
-        let handle_id = request.handle_id();
-        let mut should_poll = false;
-        match self.contexts.get_mut(&handle_id) {
-            Some(Context::TcpConn { pending_reads, .. }) => {
-                pending_reads.push_back(request);
-                should_poll = true;
-            }
-            Some(Context::TcpListener { .. }) => {
-                request.reply_error(ErrorCode::Unsupported);
-            }
-            Some(Context::Driver)
-            | Some(Context::ServiceListener)
-            | Some(Context::ControlClient) => {
-                request.reply_error(ErrorCode::Unsupported);
-            }
-            None => {
-                trace!("state not found for read on {:?}", handle_id);
-                request.reply_error(ErrorCode::InvalidArgument);
-            }
-        }
-
-        if should_poll {
-            self.poll(eventloop);
-        }
-    }
-
-    fn on_write_request(&mut self, eventloop: &mut AppEventLoop, request: WriteRequest) {
-        let handle_id = request.handle_id();
-        let mut should_poll = false;
-        match self.contexts.get_mut(&handle_id) {
-            Some(Context::TcpConn { pending_writes, .. }) => {
-                pending_writes.push_back(request);
-                should_poll = true;
-            }
-            Some(Context::TcpListener { .. }) => {
-                request.reply_error(ErrorCode::Unsupported);
-            }
-            Some(Context::Driver)
-            | Some(Context::ServiceListener)
-            | Some(Context::ControlClient) => {
-                request.reply_error(ErrorCode::Unsupported);
-            }
-            None => {
-                trace!("state not found for write on {:?}", handle_id);
-                request.reply_error(ErrorCode::InvalidArgument);
-            }
-        }
-
-        if should_poll {
-            self.poll(eventloop);
-        }
-    }
-
-    fn on_read_reply(
-        &mut self,
-        eventloop: &mut AppEventLoop,
-        ch: &Rc<Channel>,
-        buf: BufferMut,
-        len: usize,
-    ) {
-        let handle_id = ch.handle().id();
-        match self.contexts.get(&handle_id) {
-            Some(Context::Driver) => {
-                self.device.on_read_reply(buf.into(), len);
-                self.poll(eventloop);
-            }
-            Some(_) => {
-                trace!("unexpected read reply");
-            }
-            None => {
-                trace!("state not found for read reply on {:?}", handle_id);
-            }
-        }
-    }
-
-    fn on_getattr_reply(
-        &mut self,
-        eventloop: &mut AppEventLoop,
-        ch: &Rc<Channel>,
-        buf: BufferMut,
-        len: usize,
-    ) {
-        let handle_id = ch.handle().id();
-        match self.contexts.get(&handle_id) {
-            Some(Context::Driver) => {
-                self.on_mac_read_reply(buf, len);
-                self.poll(eventloop);
-            }
-            Some(_) => {
-                trace!("unexpected getattr reply");
-            }
-            None => {
-                trace!("state not found for getattr reply on {:?}", handle_id);
-            }
-        }
-    }
-
-    fn on_write_reply(&mut self, ch: &Rc<Channel>, _buf: Buffer, _len: usize) {
-        let handle_id = ch.handle().id();
-        match self.contexts.get(&handle_id) {
-            Some(Context::Driver) => {
-                // Sent a packet.
-            }
-            Some(_) => {
-                trace!("unexpected write reply on {:?}", handle_id);
-            }
-            None => {
-                trace!("state not found for write reply on {:?}", handle_id);
-            }
-        }
-    }
-
-    fn on_peer_closed(&mut self, eventloop: &mut AppEventLoop, ch: &Rc<Channel>) {
-        let handle_id = ch.handle().id();
-        let mut should_remove_channel = false;
-        let mut should_reconnect_driver = false;
-        match self.contexts.get_mut(&handle_id) {
-            Some(Context::TcpConn { channel_closed, .. }) => {
-                *channel_closed = true;
-            }
-            Some(Context::TcpListener { .. }) => {
-                // Nothing to do.
-                should_remove_channel = true;
-            }
-            Some(Context::Driver) => {
-                should_remove_channel = true;
-                should_reconnect_driver = true;
-            }
-            Some(Context::ServiceListener) | Some(Context::ControlClient) => {
-                // Nothing to do.
-                should_remove_channel = true;
-            }
-            None => {
-                trace!("state not found for peer closed on {:?}", handle_id);
-                return;
-            }
-        }
-
-        if should_remove_channel {
-            self.contexts.remove(&handle_id);
-            eventloop.remove(handle_id);
-        }
-        if should_reconnect_driver {
-            if let Err(error) = self.connect_driver(eventloop) {
-                warn!("failed to reconnect ethernet driver: {:?}", error);
-            } else {
-                trace!("reconnected ethernet driver");
-            }
-        }
-        self.poll(eventloop);
-    }
-
-    fn on_timer_expired(&mut self, eventloop: &mut AppEventLoop) {
-        trace!("timer expired");
-        self.poll(eventloop);
-    }
+#[derive(Debug, Clone)]
+enum Context {
+    Driver {
+        ch: Arc<Channel>,
+    },
+    Server {
+        ch: Arc<Channel>,
+    },
+    Client {
+        ch: Arc<Channel>,
+    },
+    TcpConn {
+        ch: Arc<Channel>,
+        conn: Arc<TcpConn<TcpIpIo>>,
+    },
+    TcpListener {
+        ch: Arc<Channel>,
+        listener: Arc<TcpListener<TcpIpIo>>,
+    },
 }
 
 #[ftl::main]
-fn main() {
-    let mut eventloop: AppEventLoop = EventLoop::new().unwrap();
-    let mut app = Main::new(&mut eventloop);
+fn main(supervisor_ch: Channel) {
+    info!("Hello from tcpip");
+    let server_ch = open_supervisor_channel(
+        &supervisor_ch,
+        b"service/tcpip",
+        OpenOptions::LISTEN,
+        "tcpip service",
+    );
+    info!("registered tcpip service: {:?}", server_ch.handle().id());
 
+    let driver_ch = open_supervisor_channel(
+        &supervisor_ch,
+        b"service/ethernet",
+        OpenOptions::CONNECT,
+        "ethernet service",
+    );
+    info!("connected to driver: {:?}", driver_ch.handle().id());
+
+    let sink = Sink::new().unwrap();
+
+    sink.add(&server_ch).unwrap();
+    sink.add(&driver_ch).unwrap();
+    let server_ch = Arc::new(server_ch);
+    let driver_ch = Arc::new(driver_ch);
+
+    driver_ch
+        .send(Message::Read {
+            mid: MessageId::new(1),
+            offset: 0,
+            len: RECV_BUFFER_SIZE,
+        })
+        .unwrap();
+
+    let mut devices = DeviceMap::new();
+    let device_id = devices
+        .add(MyDevice {
+            mac_addr: MacAddr::new([0x52, 0x54, 0x00, 0x12, 0x34, 0x56]),
+            driver_ch: driver_ch.clone(),
+        })
+        .unwrap();
+
+    let mut routes = RouteTable::new();
+    routes
+        .add(Route::new(
+            device_id,
+            Ipv4Addr::new(10, 0, 2, 15),
+            NetMask::new(255, 255, 255, 0),
+        ))
+        .unwrap();
+
+    let mut sockets = SocketMap::new();
+
+    let mut contexts = HashMap::new();
+    contexts.insert(
+        server_ch.handle().id(),
+        Context::Server {
+            ch: server_ch.clone(),
+        },
+    );
+    contexts.insert(driver_ch.handle().id(), Context::Driver { ch: driver_ch });
+
+    info!("tcpip server is ready");
+
+    let mut pkt = Packet::new(RECV_BUFFER_SIZE, 0).unwrap();
     loop {
-        match eventloop.wait() {
-            Event::Request {
-                request: Request::Open(request),
-                ..
-            } => app.on_open_request(&mut eventloop, request),
-            Event::Request {
-                request: Request::Read(request),
-                ..
-            } => app.on_read_request(&mut eventloop, request),
-            Event::Request {
-                request: Request::Write(request),
-                ..
-            } => app.on_write_request(&mut eventloop, request),
-            Event::Reply {
-                reply: Reply::Open { .. },
-                ..
-            } => {
-                warn!("unexpected open reply");
+        let (id, event) = sink.wait().unwrap();
+        let Some(ctx) = contexts.get(&id).cloned() else {
+            warn!("event for unknown handle {:?}: {:?}", id, event);
+            continue;
+        };
+
+        match (ctx, event) {
+            (Context::Driver { ch }, Event::Message(peek)) => {
+                match Incoming::parse(ch.clone(), peek) {
+                    Incoming::ReadReply(reply) => {
+                        let len = reply.read_len();
+                        let buf = pkt.uninit_buf();
+                        match reply.recv(&mut buf[..len]) {
+                            Ok(_slice) => {
+                                pkt.set_len(len);
+                                ftl_tcpip::ethernet::handle_rx::<TcpIpIo>(
+                                    &mut devices,
+                                    &mut routes,
+                                    &mut sockets,
+                                    &mut pkt,
+                                );
+
+                                // Pull the next packet
+                                ch.send(Message::Read {
+                                    mid: MessageId::new(1),
+                                    offset: 0,
+                                    len: RECV_BUFFER_SIZE,
+                                })
+                                .unwrap();
+                            }
+                            Err(error) => {
+                                panic!("failed to recv with error: {:?}", error);
+                            }
+                        }
+                    }
+                    Incoming::WriteReply(reply) => {
+                    }
+                    _ => {
+                        warn!("unhandled message: {:?}", peek);
+                    }
+                }
             }
-            Event::Reply {
-                reply: Reply::Read {
-                    client, buf, len, ..
-                },
-                ..
-            } => app.on_read_reply(&mut eventloop, client.channel(), buf, len),
-            Event::Reply {
-                reply: Reply::Write {
-                    client, buf, len, ..
-                },
-                ..
-            } => app.on_write_reply(client.channel(), buf, len),
-            Event::Reply {
-                reply: Reply::GetAttr {
-                    client, buf, len, ..
-                },
-                ..
-            } => app.on_getattr_reply(&mut eventloop, client.channel(), buf, len),
-            Event::Reply {
-                reply: Reply::SetAttr { client, .. },
-                ..
-            } => {
-                warn!("unexpected setattr reply from {:?}", client.channel());
+            (Context::Server { ch }, Event::Message(peek)) => {
+                match Incoming::parse(ch.clone(), peek) {
+                    Incoming::Open(request) => {
+                        if request.options() != OpenOptions::CONNECT {
+                            request.reply_error(ErrorCode::InvalidArgument);
+                            continue;
+                        }
+
+                        let mut buf = vec![0; request.path_len()];
+                        let completer = match request.recv(&mut buf) {
+                            Ok((path, completer)) => {
+                                if path != b"service/tcpip" {
+                                    completer.reply_error(ErrorCode::InvalidArgument);
+                                    continue;
+                                }
+                                completer
+                            }
+                            Err(e) => {
+                                warn!("failed to recv service open request: {:?}", e.error());
+                                e.reply_error(ErrorCode::Overloaded);
+                                continue;
+                            }
+                        };
+
+                        let (our_ch, their_ch) = match Channel::new() {
+                            Ok(pair) => pair,
+                            Err(error) => {
+                                completer.reply_error(error);
+                                continue;
+                            }
+                        };
+
+                        if let Err(error) = sink.add(&our_ch) {
+                            warn!("failed to add tcpip client channel to sink: {:?}", error);
+                            completer.reply_error(ErrorCode::OutOfResources);
+                            continue;
+                        }
+
+                        let our_ch = Arc::new(our_ch);
+                        contexts.insert(our_ch.handle().id(), Context::Client { ch: our_ch });
+                        completer.reply(their_ch.into_handle());
+                    }
+                    _ => {
+                        warn!("unhandled service message: {:?}", peek);
+                    }
+                }
             }
-            Event::Reply {
-                reply: Reply::Error { client, error, .. },
-                ..
-            } => {
-                warn!("error reply from {:?}: {:?}", client.channel(), error);
+            (Context::Client { ch }, Event::Message(peek)) => {
+                match Incoming::parse(ch.clone(), peek) {
+                    Incoming::Open(request) => {
+                        if request.options() != OpenOptions::LISTEN {
+                            request.reply_error(ErrorCode::InvalidArgument);
+                            continue;
+                        }
+
+                        let mut buf = vec![0; request.path_len()];
+                        let completer = match request.recv(&mut buf) {
+                            Ok((path, completer)) => {
+                                let endpoint = match parse_tcp_listen_endpoint(path) {
+                                    Ok(endpoint) => endpoint,
+                                    Err(error) => {
+                                        completer.reply_error(error);
+                                        continue;
+                                    }
+                                };
+                                (endpoint, completer)
+                            }
+                            Err(e) => {
+                                warn!("failed to recv listen request: {:?}", e.error());
+                                e.reply_error(ErrorCode::Overloaded);
+                                continue;
+                            }
+                        };
+
+                        let (endpoint, completer) = completer;
+                        let (our_ch, their_ch) = match Channel::new() {
+                            Ok(pair) => pair,
+                            Err(error) => {
+                                completer.reply_error(error);
+                                continue;
+                            }
+                        };
+
+                        if let Err(error) = sink.add(&our_ch) {
+                            warn!("failed to add listener channel to sink: {:?}", error);
+                            completer.reply_error(ErrorCode::OutOfResources);
+                            continue;
+                        }
+
+                        let listener = match sockets.tcp_listen::<TcpIpIo>(endpoint) {
+                            Ok(listener) => listener,
+                            Err(error) => {
+                                let _ = sink.remove(our_ch.handle().id());
+                                completer.reply_error(ErrorCode::OutOfResources);
+                                continue;
+                            }
+                        };
+
+                        let our_ch = Arc::new(our_ch);
+                        info!("listening on TCP {}:{}", endpoint.addr, endpoint.port);
+                        contexts.insert(
+                            our_ch.handle().id(),
+                            Context::TcpListener {
+                                ch: our_ch,
+                                listener,
+                            },
+                        );
+                        completer.reply(their_ch.into_handle());
+                    }
+                    _ => {
+                        warn!("unhandled tcpip client message: {:?}", peek);
+                    }
+                }
             }
-            Event::PeerClosed { ch, .. } => {
-                let ch = ch.clone();
-                app.on_peer_closed(&mut eventloop, &ch);
+            (Context::TcpListener { ch, listener }, Event::Message(peek)) => {
+                match Incoming::parse(ch.clone(), peek) {
+                    Incoming::Open(request) => {
+                        if request.options() != OpenOptions::CONNECT {
+                            request.reply_error(ErrorCode::InvalidArgument);
+                            continue;
+                        }
+
+                        let mut buf = vec![0; request.path_len()];
+                        let completer = match request.recv(&mut buf) {
+                            Ok((_, completer)) => completer,
+                            Err(e) => {
+                                warn!("failed to recv open request: {:?}", e.error());
+                                e.reply_error(ErrorCode::Overloaded);
+                                continue;
+                            }
+                        };
+
+                        let (our_ch, their_ch) = match Channel::new() {
+                            Ok(pair) => pair,
+                            Err(error) => {
+                                completer.reply_error(error);
+                                continue;
+                            }
+                        };
+                        if let Err(error) = sink.add(&our_ch) {
+                            warn!("failed to add accepted connection to sink: {:?}", error);
+                            completer.reply_error(ErrorCode::OutOfResources);
+                            continue;
+                        }
+
+                        let conn = match listener.accept(
+                            &mut sockets,
+                            TcpAccept {
+                                completer,
+                                their_ch,
+                            },
+                        ) {
+                            Ok(conn) => conn,
+                            Err(e) => {
+                                warn!("failed to accept tcp sock: {:?}", e);
+                                let _ = sink.remove(our_ch.handle().id());
+                                continue;
+                            }
+                        };
+
+                        let our_ch = Arc::new(our_ch);
+                        contexts
+                            .insert(our_ch.handle().id(), Context::TcpConn { ch: our_ch, conn });
+                    }
+                    _ => {
+                        warn!("unhandled message: {:?}", peek);
+                    }
+                }
             }
-            Event::Timer { .. } => app.on_timer_expired(&mut eventloop),
-            Event::Irq { interrupt, .. } => {
-                warn!("unexpected interrupt: {:?}", interrupt);
+            (Context::TcpConn { ch, conn }, Event::Message(peek)) => {
+                match Incoming::parse(ch.clone(), peek) {
+                    Incoming::Read(request) => {
+                        conn.read(TcpRead(request));
+                    }
+                    Incoming::Write(request) => {
+                        conn.write(&mut devices, &mut routes, TcpWrite(request));
+                    }
+                    _ => {
+                        warn!("unhandled tcp connection message: {:?}", peek);
+                    }
+                }
             }
-            event => {
-                warn!("unhandled event: {:?}", event);
+            (Context::TcpConn { conn, .. }, Event::PeerClosed) => {
+                trace!("tcp connection peer closed: {:?}", id);
+                conn.close(&mut devices, &mut routes);
+                if let Err(error) = sink.remove(id) {
+                    warn!("failed to remove handle from sink: {:?}", error);
+                }
+                contexts.remove(&id);
+            }
+            (_, Event::PeerClosed) => {
+                trace!("peer closed: {:?}", id);
+                if let Err(error) = sink.remove(id) {
+                    warn!("failed to remove handle from sink: {:?}", error);
+                }
+                contexts.remove(&id);
+            }
+            (ctx, event) => {
+                warn!("unhandled event for {:?}: {:?}", ctx, event);
             }
         }
     }

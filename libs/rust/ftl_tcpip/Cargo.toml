@@ -1,0 +1,15 @@
+[package]
+name = "ftl_tcpip"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+
+[features]
+default = ["std"]
+std = []
+
+[dependencies]
+log = { workspace = true }
+hashbrown = { workspace = true }
+spin = { workspace = true }
+
