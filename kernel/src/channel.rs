@@ -208,8 +208,10 @@ impl Channel {
 
                 let was_full = mutable.token_bitmap.is_full();
                 mutable.token_bitmap.free(token);
-                if was_full && let Some(ref emitter) = mutable.emitter {
-                    emitter.notify();
+                if was_full || (matches!(mutable.state, State::Draining) && mutable.queue.is_empty()) {
+                    if let Some(ref emitter) = mutable.emitter {
+                        emitter.notify();
+                    }
                 }
 
                 return Ok(handle_id);
@@ -231,8 +233,10 @@ impl Channel {
 
                 let was_full = mutable.token_bitmap.is_full();
                 mutable.token_bitmap.free(token);
-                if was_full && let Some(ref emitter) = mutable.emitter {
-                    emitter.notify();
+                if was_full || (matches!(mutable.state, State::Draining) && mutable.queue.is_empty()) {
+                    if let Some(ref emitter) = mutable.emitter {
+                        emitter.notify();
+                    }
                 }
 
                 return Ok(());
