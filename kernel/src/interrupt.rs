@@ -47,14 +47,20 @@ impl Interrupt {
 }
 
 impl Handleable for Interrupt {
-    fn set_event_emitter(&self, emitter: Option<EventEmitter>) -> Result<(), ErrorCode> {
+    fn set_event_emitter(&self, emitter: EventEmitter) -> Result<(), ErrorCode> {
         let mut mutable = self.mutable.lock();
         if mutable.emitter.is_some() {
             return Err(ErrorCode::AlreadyExists);
         }
 
-        mutable.emitter = emitter;
+        mutable.emitter = Some(emitter);
         Ok(())
+    }
+
+    fn remove_event_emitter(&self) {
+        let mut mutable = self.mutable.lock();
+        debug_assert!(mutable.emitter.is_some());
+        mutable.emitter = None;
     }
 
     fn read_event(

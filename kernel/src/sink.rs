@@ -60,7 +60,7 @@ impl Sink {
         id: HandleId,
         object: SharedRef<T>,
     ) -> Result<(), ErrorCode> {
-        object.set_event_emitter(Some(EventEmitter::new(self.clone(), id)))?;
+        object.set_event_emitter(EventEmitter::new(self.clone(), id))?;
 
         let mut mutable = self.mutable.lock();
         mutable.ready_queue.push_back(id.as_usize());
@@ -68,10 +68,20 @@ impl Sink {
         Ok(())
     }
 
-    fn remove(&self, id: HandleId) -> Result<(), ErrorCode> {
+    fn remove(
+        &self,
+        id: HandleId,
+        object: SharedRef<dyn Handleable>,
+    ) -> Result<(), ErrorCode> {
+        // Detach the emitter so the object cannot notify this sink again
+        // after it has been removed.
+        object.remove_event_emitter();
+
         let mut mutable = self.mutable.lock();
         mutable.ready_set.remove(&id.as_usize());
-        mutable.ready_queue.remove(id.as_usize());
+        mutable
+            .ready_queue
+            .retain(|queued_id| *queued_id != id.as_usize());
         Ok(())
     }
 
@@ -179,10 +189,15 @@ pub fn sys_sink_remove(
 
     let process = current.process();
     let handle_table = process.handle_table().lock();
+    let object = handle_table
+        .get_any(object_id)
+        .ok_or(ErrorCode::HandleNotFound)?
+        .authorize(HandleRight::READ)?;
+
     handle_table
         .get::<Sink>(sink_id)?
         .authorize(HandleRight::WRITE)?
-        .remove(object_id)?;
+        .remove(object_id, object)?;
 
     Ok(SyscallResult::Return(0))
 }

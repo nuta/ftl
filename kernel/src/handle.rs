@@ -83,8 +83,12 @@ impl<T: Handleable> From<Handle<T>> for AnyHandle {
 }
 
 pub trait Handleable: Any + Send + Sync {
-    fn set_event_emitter(&self, _emitter: Option<EventEmitter>) -> Result<(), ErrorCode> {
+    fn set_event_emitter(&self, _emitter: EventEmitter) -> Result<(), ErrorCode> {
         Err(ErrorCode::Unsupported)
+    }
+
+    fn remove_event_emitter(&self) {
+        // Do nothing by default.
     }
 
     fn close(&self) {
