@@ -17,7 +17,7 @@ use crate::handle::HandleRight;
 use crate::handle::Handleable;
 use crate::process::HandleTable;
 use crate::shared_ref::SharedRef;
-use crate::sink::EventEmitter;
+use crate::sink::Notifier;
 use crate::spinlock::SpinLock;
 use crate::syscall::SyscallResult;
 use crate::thread::Thread;
@@ -31,7 +31,7 @@ enum State {
 
 struct Mutable {
     state: State,
-    emitter: Option<EventEmitter>,
+    notifier: Option<Notifier>,
 }
 
 pub struct Timer {
@@ -43,7 +43,7 @@ impl Timer {
         SharedRef::new(Self {
             mutable: SpinLock::new(Mutable {
                 state: State::NotSet,
-                emitter: None,
+                notifier: None,
             }),
         })
     }
@@ -75,20 +75,20 @@ impl Timer {
 }
 
 impl Handleable for Timer {
-    fn set_event_emitter(&self, emitter: EventEmitter) -> Result<(), ErrorCode> {
+    fn set_notifier(&self, notifier: Notifier) -> Result<(), ErrorCode> {
         let mut mutable = self.mutable.lock();
-        if mutable.emitter.is_some() {
+        if mutable.notifier.is_some() {
             return Err(ErrorCode::AlreadyExists);
         }
 
-        mutable.emitter = Some(emitter);
+        mutable.notifier = Some(notifier);
         Ok(())
     }
 
-    fn remove_event_emitter(&self) {
+    fn remove_notifier(&self) {
         let mut mutable = self.mutable.lock();
-        debug_assert!(mutable.emitter.is_some());
-        mutable.emitter = None;
+        debug_assert!(mutable.notifier.is_some());
+        mutable.notifier = None;
     }
 
     fn read_event(
@@ -113,7 +113,7 @@ impl Handleable for Timer {
     }
 
     fn close(&self) {
-        self.mutable.lock().emitter = None;
+        self.mutable.lock().notifier = None;
     }
 }
 
@@ -166,8 +166,8 @@ impl GlobalTimer {
                 State::Pending(expires_at) if !now.is_before(&expires_at) => {
                     // The timer has expired, notify the listeners.
                     mutable.state = State::Expired;
-                    if let Some(emitter) = mutable.emitter.as_mut() {
-                        emitter.notify();
+                    if let Some(ref notifier) = mutable.notifier {
+                        notifier.notify();
                     }
                 }
                 State::Pending(_) => {

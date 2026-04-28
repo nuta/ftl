@@ -24,7 +24,7 @@ use crate::isolation::UserPtr;
 use crate::isolation::UserSlice;
 use crate::process::HandleTable;
 use crate::shared_ref::SharedRef;
-use crate::sink::EventEmitter;
+use crate::sink::Notifier;
 use crate::spinlock::SpinLock;
 use crate::syscall::SyscallResult;
 use crate::thread::Thread;
@@ -90,7 +90,7 @@ struct Mutable {
     /// Received messages.
     queue: VecDeque<Entry>,
     /// The sink waker.
-    emitter: Option<EventEmitter>,
+    notifier: Option<Notifier>,
     /// [`RecvToken`] allocator.
     token_allocator: TokenAllocator,
 }
@@ -105,7 +105,7 @@ impl Channel {
             mutable: SpinLock::new(Mutable {
                 state: State::Initializing,
                 queue: VecDeque::new(),
-                emitter: None,
+                notifier: None,
                 token_allocator: TokenAllocator::new(),
             }),
         })?;
@@ -113,7 +113,7 @@ impl Channel {
             mutable: SpinLock::new(Mutable {
                 state: State::Connected(ch0.clone()),
                 queue: VecDeque::new(),
-                emitter: None,
+                notifier: None,
                 token_allocator: TokenAllocator::new(),
             }),
         })?;
@@ -168,8 +168,8 @@ impl Channel {
             handle,
         });
 
-        if let Some(ref emitter) = peer_mutable.emitter {
-            emitter.notify();
+        if let Some(ref notifier) = peer_mutable.notifier {
+            notifier.notify();
         }
 
         Ok(())
@@ -211,11 +211,11 @@ impl Channel {
 
                 let was_full = mutable.token_allocator.is_full();
                 mutable.token_allocator.free(token);
-                if let Some(ref emitter) = mutable.emitter {
+                if let Some(ref notifier) = mutable.notifier {
                     let drained =
                         matches!(mutable.state, State::Draining) && mutable.queue.is_empty();
                     if was_full || drained {
-                        emitter.notify();
+                        notifier.notify();
                     }
                 }
 
@@ -238,11 +238,11 @@ impl Channel {
 
                 let was_full = mutable.token_allocator.is_full();
                 mutable.token_allocator.free(token);
-                if let Some(ref emitter) = mutable.emitter {
+                if let Some(ref notifier) = mutable.notifier {
                     let drained =
                         matches!(mutable.state, State::Draining) && mutable.queue.is_empty();
                     if was_full || drained {
-                        emitter.notify();
+                        notifier.notify();
                     }
                 }
 
@@ -255,20 +255,20 @@ impl Channel {
 }
 
 impl Handleable for Channel {
-    fn set_event_emitter(&self, emitter: EventEmitter) -> Result<(), ErrorCode> {
+    fn set_notifier(&self, notifier: Notifier) -> Result<(), ErrorCode> {
         let mut mutable = self.mutable.lock();
-        if mutable.emitter.is_some() {
+        if mutable.notifier.is_some() {
             return Err(ErrorCode::AlreadyExists);
         }
 
-        mutable.emitter = Some(emitter);
+        mutable.notifier = Some(notifier);
         Ok(())
     }
 
-    fn remove_event_emitter(&self) {
+    fn remove_notifier(&self) {
         let mut mutable = self.mutable.lock();
-        debug_assert!(mutable.emitter.is_some());
-        mutable.emitter = None;
+        debug_assert!(mutable.notifier.is_some());
+        mutable.notifier = None;
     }
 
     fn close(&self) {
@@ -288,8 +288,8 @@ impl Handleable for Channel {
         let mut peer_mutable = peer.mutable.lock();
         let old = mem::replace(&mut peer_mutable.state, State::Draining);
         debug_assert!(matches!(old, State::Connected(_)));
-        if let Some(ref emitter) = peer_mutable.emitter {
-            emitter.notify();
+        if let Some(ref notifier) = peer_mutable.notifier {
+            notifier.notify();
         }
     }
 

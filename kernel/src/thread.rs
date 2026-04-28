@@ -22,7 +22,7 @@ use crate::process::IDLE_PROCESS;
 use crate::process::Process;
 use crate::scheduler::SCHEDULER;
 use crate::shared_ref::SharedRef;
-use crate::sink::EventEmitter;
+use crate::sink::Notifier;
 use crate::sink::Sink;
 use crate::spinlock::SpinLock;
 use crate::syscall::SyscallResult;
@@ -65,7 +65,7 @@ enum State {
 
 struct Mutable {
     state: State,
-    emitter: Option<EventEmitter>,
+    notifier: Option<Notifier>,
     events: VecDeque<SyscallRegs>,
 }
 
@@ -94,7 +94,7 @@ impl Thread {
             process,
             mutable: SpinLock::new(Mutable {
                 state: State::Created,
-                emitter: None,
+                notifier: None,
                 events: VecDeque::new(),
             }),
         })
@@ -106,7 +106,7 @@ impl Thread {
             process: IDLE_PROCESS.clone(),
             mutable: SpinLock::new(Mutable {
                 state: State::Idle,
-                emitter: None,
+                notifier: None,
                 events: VecDeque::new(),
             }),
         })
@@ -125,8 +125,8 @@ impl Thread {
         let mut mutable = self.mutable.lock();
         mutable.state = State::Blocked(Promise::SandboxedSyscall);
         mutable.events.push_back(regs);
-        if let Some(emitter) = &mutable.emitter {
-            emitter.notify();
+        if let Some(ref notifier) = mutable.notifier {
+            notifier.notify();
         }
     }
 
@@ -216,20 +216,20 @@ impl Thread {
 }
 
 impl Handleable for Thread {
-    fn set_event_emitter(&self, emitter: EventEmitter) -> Result<(), ErrorCode> {
+    fn set_notifier(&self, notifier: Notifier) -> Result<(), ErrorCode> {
         let mut mutable = self.mutable.lock();
-        if mutable.emitter.is_some() {
+        if mutable.notifier.is_some() {
             return Err(ErrorCode::AlreadyExists);
         }
 
-        mutable.emitter = Some(emitter);
+        mutable.notifier = Some(notifier);
         Ok(())
     }
 
-    fn remove_event_emitter(&self) {
+    fn remove_notifier(&self) {
         let mut mutable = self.mutable.lock();
-        debug_assert!(mutable.emitter.is_some());
-        mutable.emitter = None;
+        debug_assert!(mutable.notifier.is_some());
+        mutable.notifier = None;
     }
 
     fn read_event(

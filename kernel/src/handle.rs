@@ -6,7 +6,7 @@ use ftl_types::sink::Event;
 
 use crate::process::HandleTable;
 use crate::shared_ref::SharedRef;
-use crate::sink::EventEmitter;
+use crate::sink::Notifier;
 use crate::syscall::SyscallResult;
 use crate::thread::Thread;
 
@@ -83,11 +83,11 @@ impl<T: Handleable> From<Handle<T>> for AnyHandle {
 }
 
 pub trait Handleable: Any + Send + Sync {
-    fn set_event_emitter(&self, _emitter: EventEmitter) -> Result<(), ErrorCode> {
+    fn set_notifier(&self, _notifier: Notifier) -> Result<(), ErrorCode> {
         Err(ErrorCode::Unsupported)
     }
 
-    fn remove_event_emitter(&self) {
+    fn remove_notifier(&self) {
         // Do nothing by default.
     }
 

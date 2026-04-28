@@ -11,13 +11,13 @@ use crate::handle::HandleRight;
 use crate::handle::Handleable;
 use crate::process::HandleTable;
 use crate::shared_ref::SharedRef;
-use crate::sink::EventEmitter;
+use crate::sink::Notifier;
 use crate::spinlock::SpinLock;
 use crate::syscall::SyscallResult;
 use crate::thread::Thread;
 
 struct Mutable {
-    emitter: Option<EventEmitter>,
+    notifier: Option<Notifier>,
     pending: bool,
 }
 
@@ -31,7 +31,7 @@ impl Interrupt {
         SharedRef::new(Self {
             irq,
             mutable: SpinLock::new(Mutable {
-                emitter: None,
+                notifier: None,
                 pending: false,
             }),
         })
@@ -40,27 +40,27 @@ impl Interrupt {
     pub fn notify(&self) {
         let mut mutable = self.mutable.lock();
         mutable.pending = true;
-        if let Some(ref emitter) = mutable.emitter {
-            emitter.notify();
+        if let Some(ref notifier) = mutable.notifier {
+            notifier.notify();
         }
     }
 }
 
 impl Handleable for Interrupt {
-    fn set_event_emitter(&self, emitter: EventEmitter) -> Result<(), ErrorCode> {
+    fn set_notifier(&self, notifier: Notifier) -> Result<(), ErrorCode> {
         let mut mutable = self.mutable.lock();
-        if mutable.emitter.is_some() {
+        if mutable.notifier.is_some() {
             return Err(ErrorCode::AlreadyExists);
         }
 
-        mutable.emitter = Some(emitter);
+        mutable.notifier = Some(notifier);
         Ok(())
     }
 
-    fn remove_event_emitter(&self) {
+    fn remove_notifier(&self) {
         let mut mutable = self.mutable.lock();
-        debug_assert!(mutable.emitter.is_some());
-        mutable.emitter = None;
+        debug_assert!(mutable.notifier.is_some());
+        mutable.notifier = None;
     }
 
     fn read_event(

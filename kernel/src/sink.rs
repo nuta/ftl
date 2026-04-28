@@ -18,16 +18,21 @@ use crate::syscall::SyscallResult;
 use crate::thread::Promise;
 use crate::thread::Thread;
 
-pub struct EventEmitter {
+/// A reference to a sink to wake it up.
+///
+/// Once sink receives a notification, it will call the object's `read_event`
+/// method to read the event.
+pub struct Notifier {
     sink: SharedRef<Sink>,
     id: HandleId,
 }
 
-impl EventEmitter {
+impl Notifier {
     pub fn new(sink: SharedRef<Sink>, id: HandleId) -> Self {
         Self { sink, id }
     }
 
+    /// Notifies the sink that the object has an event to report.
     pub fn notify(&self) {
         self.sink.enqueue(self.id);
     }
@@ -60,7 +65,7 @@ impl Sink {
         id: HandleId,
         object: SharedRef<T>,
     ) -> Result<(), ErrorCode> {
-        object.set_event_emitter(EventEmitter::new(self.clone(), id))?;
+        object.set_notifier(Notifier::new(self.clone(), id))?;
 
         let mut mutable = self.mutable.lock();
         mutable.ready_queue.push_back(id.as_usize());
@@ -68,14 +73,10 @@ impl Sink {
         Ok(())
     }
 
-    fn remove(
-        &self,
-        id: HandleId,
-        object: SharedRef<dyn Handleable>,
-    ) -> Result<(), ErrorCode> {
+    fn remove(&self, id: HandleId, object: SharedRef<dyn Handleable>) -> Result<(), ErrorCode> {
         // FIXME: This does not check if the object is registered with this
         // sink.
-        object.remove_event_emitter();
+        object.remove_notifier();
 
         let mut mutable = self.mutable.lock();
         mutable.ready_set.remove(&id.as_usize());
