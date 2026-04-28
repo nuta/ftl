@@ -33,14 +33,12 @@ use ftl_tcpip::tcp::TcpListener;
 use ftl_tcpip::transport::Port;
 
 fn open_supervisor_channel(
+    sink: &Sink,
     supervisor_ch: &Channel,
     path: &[u8],
     options: OpenOptions,
     description: &str,
 ) -> Channel {
-    let sink = Sink::new().unwrap();
-    sink.add(supervisor_ch).unwrap();
-
     let mid = MessageId::new(1);
     supervisor_ch
         .send(Message::Open { mid, path, options })
@@ -211,7 +209,10 @@ enum Context {
 #[ftl::main]
 fn main(supervisor_ch: Channel) {
     info!("Hello from tcpip");
+    let sink = Sink::new().unwrap();
+    sink.add(&supervisor_ch).unwrap();
     let server_ch = open_supervisor_channel(
+        &sink,
         &supervisor_ch,
         b"service/tcpip",
         OpenOptions::LISTEN,
@@ -220,11 +221,13 @@ fn main(supervisor_ch: Channel) {
     info!("registered tcpip service: {:?}", server_ch.handle().id());
 
     let driver_ch = open_supervisor_channel(
+        &sink,
         &supervisor_ch,
         b"service/ethernet",
         OpenOptions::CONNECT,
         "ethernet service",
     );
+    sink.remove(supervisor_ch.handle().id()).unwrap();
     info!("connected to driver: {:?}", driver_ch.handle().id());
 
     let sink = Sink::new().unwrap();
