@@ -162,8 +162,8 @@ pub struct PageIter<'a> {
 
 impl<'a> PageIter<'a> {
     pub fn new(vmspace: &'a VmSpace, slice: &UserSlice) -> Self {
-        let start = slice.start.as_usize();
-        let end = slice.end.as_usize();
+        let start = slice.start().as_usize();
+        let end = slice.end().as_usize();
         Self {
             vmspace,
             uaddr: start,

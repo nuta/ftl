@@ -33,8 +33,8 @@ impl UserPtr {
 /// A slice in an isolation space.
 #[derive(Clone, Copy)]
 pub struct UserSlice {
-    pub start: UserPtr,
-    pub end: UserPtr,
+    start: UserPtr,
+    end: UserPtr,
 }
 
 impl UserSlice {
@@ -44,6 +44,14 @@ impl UserSlice {
         };
 
         Ok(Self { start: ptr, end })
+    }
+
+    pub const fn start(&self) -> UserPtr {
+        self.start
+    }
+
+    pub const fn end(&self) -> UserPtr {
+        self.end
     }
 
     pub const fn len(&self) -> usize {
