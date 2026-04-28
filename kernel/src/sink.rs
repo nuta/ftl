@@ -3,7 +3,6 @@ use alloc::collections::vec_deque::VecDeque;
 
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
-use ftl_types::sink::Event;
 
 use crate::handle::Handle;
 use crate::handle::HandleRight;
@@ -122,18 +121,20 @@ impl Sink {
             // TODO: This authorize is not necessary because we already checked
             //       when adding the object to the sink.
             let handle = object.authorize(HandleRight::READ)?;
-            let Some(event) = handle.read_event(handle_id, handle_table)? else {
-                // The object has no events to report. Remove it from the ready set.
-                mutable.ready_queue.pop_front();
-                mutable.ready_set.remove(&handle_id.as_usize());
-                continue;
-            };
-
-            // TODO: What if this write fails? Should we keep the event not to
-            // lose it?
-            crate::isolation::write(isolation, buf, 0, event)?;
-
-            return Ok(true);
+            match handle.poll(handle_id, handle_table, isolation, buf) {
+                Ok(true) => {
+                    return Ok(true);
+                }
+                Ok(false) => {
+                    // The object has no events to report. Remove it from the ready set.
+                    mutable.ready_queue.pop_front();
+                    mutable.ready_set.remove(&handle_id.as_usize());
+                    continue;
+                }
+                Err(error) => {
+                    return Err(error);
+                }
+            }
         }
 
         mutable.waiters.push_back(current.clone());
@@ -207,9 +208,10 @@ pub fn sys_sink_wait(
     current: &SharedRef<Thread>,
     a0: usize,
     a1: usize,
+    a2: usize,
 ) -> Result<SyscallResult, ErrorCode> {
     let sink_id = HandleId::from_raw(a0);
-    let buf = UserSlice::new(UserPtr::new(a1), size_of::<Event>())?;
+    let buf = UserSlice::new(UserPtr::new(a1), a2)?;
 
     let process = current.process();
     let mut handle_table = process.handle_table().lock();

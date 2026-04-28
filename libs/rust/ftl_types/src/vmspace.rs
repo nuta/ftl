@@ -51,3 +51,16 @@ impl BitAndAssign<Self> for PageAttrs {
         self.0 &= rhs.0;
     }
 }
+
+/// This is a marker trait for types that can be copied to user space.
+///
+/// - Must be `Copy`.
+///
+/// - Must not have padding. They might leak kernel memory to user space. This
+///   can't be checked easily at compile time, and it's your responsibility to
+///   ensure that.
+pub unsafe trait UserCopyable: Copy {}
+
+unsafe impl UserCopyable for u8 {}
+unsafe impl UserCopyable for usize {}
+unsafe impl<T: UserCopyable, const N: usize> UserCopyable for [T; N] {}

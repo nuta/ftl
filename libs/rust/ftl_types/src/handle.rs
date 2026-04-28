@@ -1,3 +1,5 @@
+use crate::vmspace::UserCopyable;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct HandleId(usize);
@@ -14,3 +16,6 @@ impl HandleId {
         self.0
     }
 }
+
+// SAFETY: The `HandleId` does not have padding.
+unsafe impl UserCopyable for HandleId {}

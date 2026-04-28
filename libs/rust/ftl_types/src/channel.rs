@@ -1,3 +1,5 @@
+use crate::vmspace::UserCopyable;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct MessageKind(u32);
@@ -105,9 +107,13 @@ impl RecvToken {
 pub struct Peek {
     pub info: MessageInfo,
     pub token: RecvToken,
+    pub reserved: u16,
     pub arg1: usize,
     pub arg2: usize,
 }
+
+// SAFETY: The `Peek` does not have padding.
+unsafe impl UserCopyable for Peek {}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Attr(u32);

@@ -1,5 +1,6 @@
 use ftl_types::error::ErrorCode;
 use ftl_types::vmspace::PageAttrs;
+use ftl_types::vmspace::UserCopyable;
 
 use crate::shared_ref::SharedRef;
 use crate::vmspace::PageIter;
@@ -75,7 +76,7 @@ impl UserSlice {
     }
 }
 
-pub fn write<T: Copy>(
+pub fn write<T: UserCopyable>(
     isolation: &SharedRef<dyn Isolation>,
     slice: &UserSlice,
     offset: usize,

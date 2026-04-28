@@ -1,7 +1,5 @@
-use core::fmt;
-
-use crate::channel::Peek;
 use crate::handle::HandleId;
+use crate::vmspace::UserCopyable;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(transparent)]
@@ -15,75 +13,16 @@ impl EventType {
     pub const SANDBOXED_SYSCALL: Self = Self(5);
 }
 
-#[derive(Clone, Copy)]
-#[repr(C)]
-pub union Event {
-    pub common: EventHeader,
-    pub message: MessageEvent,
-    pub irq: IrqEvent,
-    pub peer_closed: PeerClosedEvent,
-    pub timer: TimerEvent,
-    pub sandboxed_syscall: SandboxedSyscallEvent,
-}
-
-impl Event {
-    pub fn header(&self) -> EventHeader {
-        unsafe { self.common }
-    }
-}
-
-impl fmt::Debug for Event {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.header().ty {
-            EventType::MESSAGE => f.debug_struct("MessageEvent").finish(),
-            EventType::IRQ => f.debug_struct("IrqEvent").finish(),
-            EventType::PEER_CLOSED => f.debug_struct("PeerClosedEvent").finish(),
-            EventType::TIMER => f.debug_struct("TimerEvent").finish(),
-            EventType::SANDBOXED_SYSCALL => f.debug_struct("SandboxedSyscallEvent").finish(),
-            _ => f.debug_struct("UnknownEvent").finish(),
-        }
-    }
-}
-
 #[derive(Clone, Copy, Debug)]
 #[repr(C)]
 pub struct EventHeader {
     pub ty: EventType,
+    pub reserved: u32,
     pub id: HandleId,
 }
 
-#[derive(Clone, Copy, Debug)]
-#[repr(C)]
-pub struct MessageEvent {
-    pub header: EventHeader,
-    pub peek: Peek,
-}
-
-#[derive(Clone, Copy, Debug)]
-#[repr(C)]
-pub struct TimerEvent {
-    pub header: EventHeader,
-}
-
-#[derive(Clone, Copy, Debug)]
-#[repr(C)]
-pub struct IrqEvent {
-    pub header: EventHeader,
-    pub irq: u8,
-}
-
-#[derive(Clone, Copy, Debug)]
-#[repr(C)]
-pub struct PeerClosedEvent {
-    pub header: EventHeader,
-}
-
-#[derive(Clone, Copy, Debug)]
-#[repr(C)]
-pub struct SandboxedSyscallEvent {
-    pub header: EventHeader,
-    pub regs: SyscallRegs,
-}
+// SAFETY: The `EventHeader` does not have padding.
+unsafe impl UserCopyable for EventHeader {}
 
 #[derive(Clone, Copy, Debug)]
 #[repr(C)]
@@ -96,3 +35,6 @@ pub struct SyscallRegs {
     pub r8: u64,
     pub r9: u64,
 }
+
+// SAFETY: The `SyscallRegs` does not have padding.
+unsafe impl UserCopyable for SyscallRegs {}

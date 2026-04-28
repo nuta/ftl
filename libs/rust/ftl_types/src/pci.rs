@@ -1,3 +1,5 @@
+use crate::vmspace::UserCopyable;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(C)]
 pub struct PciEntry {
@@ -6,3 +8,6 @@ pub struct PciEntry {
     pub subsystem_vendor_id: u16,
     pub subsystem_id: u16,
 }
+
+// SAFETY: The `PciEntry` does not have padding.
+unsafe impl UserCopyable for PciEntry {}

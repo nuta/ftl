@@ -2,8 +2,9 @@ use core::any::Any;
 
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
-use ftl_types::sink::Event;
 
+use crate::isolation::Isolation;
+use crate::isolation::UserSlice;
 use crate::process::HandleTable;
 use crate::shared_ref::SharedRef;
 use crate::sink::Notifier;
@@ -83,23 +84,33 @@ impl<T: Handleable> From<Handle<T>> for AnyHandle {
 }
 
 pub trait Handleable: Any + Send + Sync {
-    fn set_notifier(&self, _notifier: Notifier) -> Result<(), ErrorCode> {
-        Err(ErrorCode::Unsupported)
-    }
-
-    fn remove_notifier(&self) {
-        // Do nothing by default.
-    }
-
     fn close(&self) {
         // Do nothing by default.
     }
 
-    fn read_event(
+    /// Asks the object to register a sink.
+    fn set_notifier(&self, _notifier: Notifier) -> Result<(), ErrorCode> {
+        Err(ErrorCode::Unsupported)
+    }
+
+    /// Asks the object to remove a sink.
+    fn remove_notifier(&self) {
+        // Do nothing by default.
+    }
+
+    /// Pops an event from the object, and writes it to the buffer.
+    /// 
+    /// - `Ok(true)`: An event was successfully written to the buffer.
+    /// - `Ok(false)`: The object has no events to report.
+    /// - `Err(error)`: An error occurred while reading the event, or writing
+    ///                to the buffer.
+    fn poll(
         &self,
         _handle_id: HandleId,
         _handle_table: &mut HandleTable,
-    ) -> Result<Option<Event>, ErrorCode> {
+        _isolation: &SharedRef<dyn Isolation>,
+        _buf: &UserSlice,
+    ) -> Result<bool, ErrorCode> {
         Err(ErrorCode::Unsupported)
     }
 }

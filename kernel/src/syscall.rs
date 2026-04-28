@@ -71,7 +71,7 @@ fn do_syscall(
         SYS_SINK_CREATE => crate::sink::sys_sink_create(thread),
         SYS_SINK_ADD => crate::sink::sys_sink_add(thread, a0, a1),
         SYS_SINK_REMOVE => crate::sink::sys_sink_remove(thread, a0, a1),
-        SYS_SINK_WAIT => crate::sink::sys_sink_wait(thread, a0, a1),
+        SYS_SINK_WAIT => crate::sink::sys_sink_wait(thread, a0, a1, a2),
         SYS_DMABUF_ALLOC => crate::memory::sys_dmabuf_alloc(thread, a0, a1, a2),
         #[cfg(target_arch = "x86_64")]
         SYS_PCI_LOOKUP => arch::sys_pci_lookup(thread, a0, a1, a2, a3),

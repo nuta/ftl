@@ -1,14 +1,14 @@
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
-use ftl_types::sink::Event;
 use ftl_types::sink::EventHeader;
 use ftl_types::sink::EventType;
-use ftl_types::sink::IrqEvent;
 
 use crate::arch;
 use crate::handle::Handle;
 use crate::handle::HandleRight;
 use crate::handle::Handleable;
+use crate::isolation::Isolation;
+use crate::isolation::UserSlice;
 use crate::process::HandleTable;
 use crate::shared_ref::SharedRef;
 use crate::sink::Notifier;
@@ -63,26 +63,28 @@ impl Handleable for Interrupt {
         mutable.notifier = None;
     }
 
-    fn read_event(
+    fn poll(
         &self,
         handle_id: HandleId,
         _handle_table: &mut HandleTable,
-    ) -> Result<Option<Event>, ErrorCode> {
+        isolation: &SharedRef<dyn Isolation>,
+        buf: &UserSlice,
+    ) -> Result<bool, ErrorCode> {
         let mut mutable = self.mutable.lock();
         if !mutable.pending {
-            return Ok(None);
+            return Ok(false);
         }
 
         mutable.pending = false;
-        Ok(Some(Event {
-            irq: IrqEvent {
-                header: EventHeader {
-                    ty: EventType::IRQ,
-                    id: handle_id,
-                },
-                irq: self.irq,
-            },
-        }))
+
+        let header = EventHeader {
+            ty: EventType::IRQ,
+            id: handle_id,
+            reserved: 0,
+        };
+        crate::isolation::write(isolation, &buf, 0, header)?;
+        crate::isolation::write(isolation, &buf, size_of::<EventHeader>(), self.irq)?;
+        Ok(true)
     }
 }
 

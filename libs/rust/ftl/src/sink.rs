@@ -1,12 +1,12 @@
 use core::fmt;
 use core::mem::MaybeUninit;
+use core::mem::size_of;
 
 use ftl_types::channel::Peek;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
-use ftl_types::sink::Event as RawEvent;
+use ftl_types::sink::EventHeader;
 use ftl_types::sink::EventType;
-pub use ftl_types::sink::SandboxedSyscallEvent;
 use ftl_types::syscall::SYS_SINK_ADD;
 use ftl_types::syscall::SYS_SINK_CREATE;
 use ftl_types::syscall::SYS_SINK_REMOVE;
@@ -16,6 +16,7 @@ use crate::handle::Handleable;
 use crate::handle::OwnedHandle;
 use crate::syscall::syscall0;
 use crate::syscall::syscall2;
+use crate::syscall::syscall3;
 
 #[derive(Debug)]
 pub enum Event {
@@ -26,6 +27,12 @@ pub enum Event {
 
 pub struct Sink {
     handle: OwnedHandle,
+}
+
+#[repr(C)]
+pub struct RawEvent {
+    header: EventHeader,
+    buf: [usize; 32],
 }
 
 impl Sink {
@@ -51,12 +58,16 @@ impl Sink {
 
         // SAFETY: The buffer is initialized by the kernel.
         let raw = unsafe { buf.assume_init_ref() };
-        let header = raw.header();
+        let header = raw.header;
         let event = match header.ty {
-            EventType::MESSAGE => Event::Message(unsafe { raw.message.peek }),
+            EventType::MESSAGE => {
+                let data = raw.buf.as_ptr() as *const Peek;
+                Event::Message(unsafe { *data })
+            }
             EventType::IRQ => {
+                let data = raw.buf.as_ptr() as *const u8;
                 Event::Irq {
-                    irq: unsafe { raw.irq.irq },
+                    irq: unsafe { *data },
                 }
             }
             EventType::PEER_CLOSED => Event::PeerClosed,
@@ -101,6 +112,11 @@ fn sys_sink_remove(sink: HandleId, id: HandleId) -> Result<(), ErrorCode> {
 }
 
 fn sys_sink_wait(sink: HandleId, buf: &mut MaybeUninit<RawEvent>) -> Result<(), ErrorCode> {
-    syscall2(SYS_SINK_WAIT, sink.as_usize(), buf.as_mut_ptr() as usize)?;
+    syscall3(
+        SYS_SINK_WAIT,
+        sink.as_usize(),
+        buf.as_mut_ptr() as usize,
+        size_of::<RawEvent>(),
+    )?;
     Ok(())
 }

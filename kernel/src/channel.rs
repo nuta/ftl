@@ -9,11 +9,8 @@ use ftl_types::channel::Peek;
 use ftl_types::channel::RecvToken;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
-use ftl_types::sink::Event;
 use ftl_types::sink::EventHeader;
 use ftl_types::sink::EventType;
-use ftl_types::sink::MessageEvent;
-use ftl_types::sink::PeerClosedEvent;
 
 use crate::handle::AnyHandle;
 use crate::handle::Handle;
@@ -293,11 +290,13 @@ impl Handleable for Channel {
         }
     }
 
-    fn read_event(
+    fn poll(
         &self,
         handle_id: HandleId,
         _handle_table: &mut HandleTable,
-    ) -> Result<Option<Event>, ErrorCode> {
+        isolation: &SharedRef<dyn Isolation>,
+        buf: &UserSlice,
+    ) -> Result<bool, ErrorCode> {
         let mut mutable = self.mutable.lock();
         let Mutable {
             state,
@@ -312,27 +311,30 @@ impl Handleable for Channel {
                     Some(token) => token,
                     None => {
                         // We have too many inflight receives. Do not return an event for now.
-                        return Ok(None);
+                        return Ok(false);
                     }
                 };
 
                 let peek = Peek {
                     info: *info,
                     token,
+                    reserved: 0,
                     arg1: *arg1,
                     arg2: *arg2,
                 };
 
+                // TODO: What if isolation write fails?
                 entry.state = EntryState::Notified(token);
-                return Ok(Some(Event {
-                    message: MessageEvent {
-                        header: EventHeader {
-                            ty: EventType::MESSAGE,
-                            id: handle_id,
-                        },
-                        peek,
-                    },
-                }));
+
+                let header = EventHeader {
+                    ty: EventType::MESSAGE,
+                    id: handle_id,
+                    reserved: 0,
+                };
+                crate::isolation::write(isolation, &buf, 0, header)?;
+                crate::isolation::write(isolation, &buf, size_of::<EventHeader>(), peek)?;
+
+                return Ok(true);
             }
         }
 
@@ -342,20 +344,23 @@ impl Handleable for Channel {
             State::Draining => {
                 if queue.is_empty() {
                     *state = State::PeerClosed;
-                    return Ok(Some(Event {
-                        peer_closed: PeerClosedEvent {
-                            header: EventHeader {
-                                ty: EventType::PEER_CLOSED,
-                                id: handle_id,
-                            },
+                    crate::isolation::write(
+                        isolation,
+                        &buf,
+                        0,
+                        EventHeader {
+                            ty: EventType::PEER_CLOSED,
+                            id: handle_id,
+                            reserved: 0,
                         },
-                    }));
+                    )?;
+                    return Ok(true);
                 }
             }
             State::PeerClosed => { /* do nothing */ }
         }
 
-        Ok(None)
+        Ok(false)
     }
 }
 
