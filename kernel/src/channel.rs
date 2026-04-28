@@ -257,6 +257,10 @@ impl Channel {
 impl Handleable for Channel {
     fn set_event_emitter(&self, emitter: Option<EventEmitter>) -> Result<(), ErrorCode> {
         let mut mutable = self.mutable.lock();
+        if mutable.emitter.is_some() {
+            return Err(ErrorCode::AlreadyExists);
+        }
+
         mutable.emitter = emitter;
         Ok(())
     }
