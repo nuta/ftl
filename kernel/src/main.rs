@@ -30,3 +30,8 @@ mod thread;
 mod timer;
 mod vmarea;
 mod vmspace;
+
+#[cfg(not(target_os = "none"))]
+pub fn main() {
+    crate::arch::host::main();
+}

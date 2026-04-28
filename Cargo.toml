@@ -31,3 +31,6 @@ ftl_bump_allocator = { path = "libs/rust/ftl_bump_allocator" }
 ftl_arrayvec = { path = "libs/rust/ftl_arrayvec" }
 ftl_virtio = { path = "libs/rust/ftl_virtio" }
 ftl_tcpip = { path = "libs/rust/ftl_tcpip", default-features = false }
+
+[profile.dev]
+panic = "abort"

@@ -10,9 +10,12 @@
 
 #![no_std]
 
-pub mod virtio_pci;
 pub mod virtqueue;
 
+#[cfg(target_arch = "x86_64")]
+pub mod virtio_pci;
+
+#[cfg(target_arch = "x86_64")]
 pub use virtio_pci::VirtioPci;
 pub use virtqueue::ChainEntry;
 pub use virtqueue::HeadId;

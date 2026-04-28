@@ -14,6 +14,7 @@ use ftl_types::syscall::SYS_PCI_GET_BAR;
 use ftl_types::syscall::SYS_PCI_GET_INTERRUPT_LINE;
 #[cfg(target_arch = "x86_64")]
 use ftl_types::syscall::SYS_PCI_GET_SUBSYSTEM_ID;
+#[cfg(target_arch = "x86_64")]
 use ftl_types::syscall::SYS_PCI_LOOKUP;
 #[cfg(target_arch = "x86_64")]
 use ftl_types::syscall::SYS_PCI_SET_BUSMASTER;

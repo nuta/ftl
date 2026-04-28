@@ -137,9 +137,9 @@ impl GlobalTimer {
                         earliest,
                         Some(earliest_at) if expires_at.is_before(&earliest_at)
                     ))
-                {
-                    earliest = Some(expires_at);
-                }
+            {
+                earliest = Some(expires_at);
+            }
         }
 
         if let Some(deadline) = earliest {

@@ -8,9 +8,7 @@ pub struct PageAttrs(usize);
 
 impl PageAttrs {
     pub const NONE: Self = Self(0);
-    #[cfg(target_arch = "x86_64")]
     pub const READABLE: Self = Self(0); // Pages are readable by default.
-    #[cfg(target_arch = "x86_64")]
     pub const WRITABLE: Self = Self(1 << 1); // PTE_W
 
     pub const fn from_raw(attrs: usize) -> Self {

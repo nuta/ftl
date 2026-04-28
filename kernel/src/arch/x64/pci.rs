@@ -62,7 +62,7 @@ fn read_config8(bus: u8, slot: u8, offset: usize) -> u8 {
 
     unsafe {
         out32(PCI_IOPORT_ADDR, get_addr(bus, slot, offset));
-        
+
         in8(get_data_port8(offset))
     }
 }
