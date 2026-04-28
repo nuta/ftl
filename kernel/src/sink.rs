@@ -73,8 +73,8 @@ impl Sink {
         id: HandleId,
         object: SharedRef<dyn Handleable>,
     ) -> Result<(), ErrorCode> {
-        // Detach the emitter so the object cannot notify this sink again
-        // after it has been removed.
+        // FIXME: This does not check if the object is registered with this
+        // sink.
         object.remove_event_emitter();
 
         let mut mutable = self.mutable.lock();
