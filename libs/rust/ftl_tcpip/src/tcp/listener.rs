@@ -67,7 +67,7 @@ impl<I: Io> TcpListener<I> {
 
     pub fn accept(
         &self,
-        sockets: &mut SocketMap<I>,
+        sockets: &mut SocketMap,
         request: I::TcpAccept,
     ) -> Result<Arc<TcpConn<I>>, AcceptError> {
         let conn = Arc::new(TcpConn::new_listen(self.local_port));
@@ -134,7 +134,7 @@ impl<I: Io> TcpListener<I> {
         self: &Arc<Self>,
         devices: &mut DeviceMap<I::Device>,
         routes: &mut RouteTable,
-        sockets: &mut SocketMap<I>,
+        sockets: &mut SocketMap,
         rx: RxHeader,
         payload: &mut Packet,
     ) {
@@ -194,7 +194,7 @@ impl<I: Io> TcpListener<I> {
 
     fn accept_handshake(
         &self,
-        sockets: &mut SocketMap<I>,
+        sockets: &mut SocketMap,
         pending_accept: PendingAccept<I>,
         h: Handshake,
     ) {
@@ -232,7 +232,7 @@ impl<I: Io> TcpListener<I> {
         self: &Arc<Self>,
         devices: &mut DeviceMap<I::Device>,
         routes: &mut RouteTable,
-        sockets: &mut SocketMap<I>,
+        sockets: &mut SocketMap,
         rx: RxHeader,
         payload: &mut Packet,
     ) {

@@ -1,13 +1,15 @@
 use alloc::sync::Arc;
 use core::any::Any;
 
-use crate::io::InsertError;
+use hashbrown::HashMap;
+
+use crate::OutOfMemoryError;
 use crate::io::Io;
-use crate::io::Map;
 use crate::ip::IpAddr;
 use crate::tcp::TcpListener;
 use crate::transport::Port;
 use crate::transport::{self};
+use crate::utils::HashMapExt;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Endpoint {
@@ -30,16 +32,16 @@ pub struct ListenerKey {
 
 pub trait AnySocket: Any + Send + Sync {}
 
-pub struct SocketMap<I: Io> {
-    actives: I::Map<ActiveKey, Arc<dyn AnySocket>>,
-    listeners: I::Map<ListenerKey, Arc<dyn AnySocket>>,
+pub struct SocketMap {
+    actives: HashMap<ActiveKey, Arc<dyn AnySocket>>,
+    listeners: HashMap<ListenerKey, Arc<dyn AnySocket>>,
 }
 
-impl<I: Io> SocketMap<I> {
+impl SocketMap {
     pub fn new() -> Self {
         Self {
-            actives: I::Map::new(),
-            listeners: I::Map::new(),
+            actives: HashMap::new(),
+            listeners: HashMap::new(),
         }
     }
 
@@ -59,18 +61,22 @@ impl<I: Io> SocketMap<I> {
         &mut self,
         key: ActiveKey,
         socket: Arc<T>,
-    ) -> Result<(), InsertError> {
-        self.actives.insert(key, socket.clone())
+    ) -> Result<(), OutOfMemoryError> {
+        self.actives.reserve_and_insert(key, socket.clone())?;
+        Ok(())
     }
 
-    pub fn tcp_listen(&mut self, local: Endpoint) -> Result<Arc<TcpListener<I>>, InsertError> {
+    pub fn tcp_listen<I: Io>(
+        &mut self,
+        local: Endpoint,
+    ) -> Result<Arc<TcpListener<I>>, OutOfMemoryError> {
         let key = ListenerKey {
             local,
             protocol: transport::Protocol::Tcp,
         };
 
-        let socket = Arc::new(TcpListener::<I>::new(local.port));
-        self.listeners.insert(key, socket.clone())?;
+        let socket = Arc::new(TcpListener::new(local.port));
+        self.listeners.reserve_and_insert(key, socket.clone())?;
         Ok(socket)
     }
 }

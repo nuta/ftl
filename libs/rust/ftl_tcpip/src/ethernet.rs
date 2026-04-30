@@ -95,7 +95,7 @@ pub enum RxError {
 pub fn handle_rx<I: Io>(
     devices: &mut DeviceMap<I::Device>,
     routes: &mut RouteTable,
-    sockets: &mut SocketMap<I>,
+    sockets: &mut SocketMap,
     pkt: &mut Packet,
 ) -> Result<(), RxError> {
     let header = pkt.read::<EthernetHeader>().map_err(RxError::PacketRead)?;
