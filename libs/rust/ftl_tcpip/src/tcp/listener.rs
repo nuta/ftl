@@ -67,7 +67,7 @@ impl<I: Io> TcpListener<I> {
 
     pub fn accept(
         &self,
-        sockets: &mut SocketMap,
+        sockets: &mut SocketMap<I>,
         request: I::TcpAccept,
     ) -> Result<Arc<TcpConn<I>>, AcceptError> {
         let conn = Arc::new(TcpConn::new_listen(self.local_port));
@@ -89,7 +89,6 @@ impl<I: Io> TcpListener<I> {
         self: &Arc<Self>,
         devices: &mut DeviceMap<I::Device>,
         routes: &mut RouteTable,
-        sockets: &mut SocketMap,
         rx: RxHeader,
     ) {
         let our_iss = 1234; // TODO: generate a random ISS.
@@ -135,7 +134,7 @@ impl<I: Io> TcpListener<I> {
         self: &Arc<Self>,
         devices: &mut DeviceMap<I::Device>,
         routes: &mut RouteTable,
-        sockets: &mut SocketMap,
+        sockets: &mut SocketMap<I>,
         rx: RxHeader,
         payload: &mut Packet,
     ) {
@@ -195,10 +194,10 @@ impl<I: Io> TcpListener<I> {
 
     fn accept_handshake(
         &self,
-        sockets: &mut SocketMap,
+        sockets: &mut SocketMap<I>,
         pending_accept: PendingAccept<I>,
         h: Handshake,
-    ) -> Result<(), ()> {
+    ) {
         let PendingAccept { request, conn } = pending_accept;
 
         let key = ActiveKey {
@@ -217,22 +216,29 @@ impl<I: Io> TcpListener<I> {
             h.remote_rcv_wnd,
             h.rx_buffer,
         );
-        sockets.insert_active(key, conn.clone());
-        request.complete(Ok(()));
-        Ok(())
+
+        match sockets.insert_active(key, conn.clone()) {
+            Ok(()) => {
+                request.complete(Ok(()));
+            }
+            Err(err) => {
+                warn!("TCP: failed to insert active connection: {:?}", err);
+                request.complete(Ok(())); // TODO: return an error
+            }
+        }
     }
 
     pub(super) fn handle_rx(
         self: &Arc<Self>,
         devices: &mut DeviceMap<I::Device>,
         routes: &mut RouteTable,
-        sockets: &mut SocketMap,
+        sockets: &mut SocketMap<I>,
         rx: RxHeader,
         payload: &mut Packet,
     ) {
         match rx.flags {
             TcpFlags::SYN => {
-                self.start_handshake(devices, routes, sockets, rx);
+                self.start_handshake(devices, routes, rx);
             }
             _ if rx.flags.contains(TcpFlags::ACK) => {
                 self.finish_handshake(devices, routes, sockets, rx, payload);

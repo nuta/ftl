@@ -35,7 +35,7 @@ pub(super) struct RxHeader {
 pub(crate) fn handle_rx<I: Io>(
     devices: &mut DeviceMap<I::Device>,
     routes: &mut RouteTable,
-    sockets: &mut SocketMap,
+    sockets: &mut SocketMap<I>,
     pkt: &mut Packet,
     remote_ip: IpAddr,
     local_ip: IpAddr,

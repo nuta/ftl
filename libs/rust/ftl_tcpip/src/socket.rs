@@ -1,9 +1,9 @@
 use alloc::sync::Arc;
 use core::any::Any;
 
-use hashbrown::HashMap;
-
+use crate::io::InsertError;
 use crate::io::Io;
+use crate::io::Map;
 use crate::ip::IpAddr;
 use crate::tcp::TcpListener;
 use crate::transport::Port;
@@ -30,22 +30,16 @@ pub struct ListenerKey {
 
 pub trait AnySocket: Any + Send + Sync {}
 
-#[derive(Debug)]
-pub enum TryInsertError {
-    Reserve(hashbrown::TryReserveError),
-    AlreadyExists,
+pub struct SocketMap<I: Io> {
+    actives: I::Map<ActiveKey, Arc<dyn AnySocket>>,
+    listeners: I::Map<ListenerKey, Arc<dyn AnySocket>>,
 }
 
-pub struct SocketMap {
-    actives: HashMap<ActiveKey, Arc<dyn AnySocket>>,
-    listeners: HashMap<ListenerKey, Arc<dyn AnySocket>>,
-}
-
-impl SocketMap {
+impl<I: Io> SocketMap<I> {
     pub fn new() -> Self {
         Self {
-            actives: HashMap::new(),
-            listeners: HashMap::new(),
+            actives: I::Map::new(),
+            listeners: I::Map::new(),
         }
     }
 
@@ -65,34 +59,18 @@ impl SocketMap {
         &mut self,
         key: ActiveKey,
         socket: Arc<T>,
-    ) -> Result<(), TryInsertError> {
-        self.actives
-            .try_reserve(1)
-            .map_err(TryInsertError::Reserve)?;
-        self.actives
-            .try_insert(key, socket.clone())
-            .map_err(|_| TryInsertError::AlreadyExists)?;
-        Ok(())
+    ) -> Result<(), InsertError> {
+        self.actives.insert(key, socket.clone())
     }
 
-    pub fn tcp_listen<I: Io>(
-        &mut self,
-        local: Endpoint,
-    ) -> Result<Arc<TcpListener<I>>, TryInsertError> {
+    pub fn tcp_listen(&mut self, local: Endpoint) -> Result<Arc<TcpListener<I>>, InsertError> {
         let key = ListenerKey {
             local,
             protocol: transport::Protocol::Tcp,
         };
 
         let socket = Arc::new(TcpListener::<I>::new(local.port));
-
-        self.listeners
-            .try_reserve(1)
-            .map_err(TryInsertError::Reserve)?;
-        self.listeners
-            .try_insert(key, socket.clone())
-            .map_err(|_| TryInsertError::AlreadyExists)?;
-
+        self.listeners.insert(key, socket.clone())?;
         Ok(socket)
     }
 }
