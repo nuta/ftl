@@ -9,8 +9,8 @@ mod tx;
 pub use connection::TcpConn;
 pub use listener::TcpListener;
 pub use ring_buffer::RingBuffer;
-pub(crate) use rx::handle_rx;
 pub(crate) use rx::RxError;
+pub(crate) use rx::handle_rx;
 
 #[derive(Debug)]
 pub enum Error {}

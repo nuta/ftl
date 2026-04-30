@@ -213,8 +213,6 @@ pub(crate) fn handle_rx<I: Io>(
             crate::tcp::handle_rx::<I>(devices, routes, sockets, pkt, remote, IpAddr::V4(dst))
                 .map_err(RxError::Tcp)
         }
-        protocol => {
-            Err(RxError::UnsupportedProtocol(protocol))
-        }
+        protocol => Err(RxError::UnsupportedProtocol(protocol)),
     }
 }
