@@ -18,16 +18,14 @@ use ftl::prelude::*;
 use ftl::sink::Event;
 use ftl::sink::Sink;
 use ftl::sync::Arc;
-use ftl_tcpip::device::DeviceMap;
+use ftl_tcpip::TcpIp;
 use ftl_tcpip::ethernet::MacAddr;
 use ftl_tcpip::ip::IpAddr;
 use ftl_tcpip::ip::ipv4::Ipv4Addr;
 use ftl_tcpip::ip::ipv4::NetMask;
 use ftl_tcpip::packet::Packet;
 use ftl_tcpip::route::Route;
-use ftl_tcpip::route::RouteTable;
 use ftl_tcpip::socket::Endpoint;
-use ftl_tcpip::socket::SocketMap;
 use ftl_tcpip::tcp::TcpConn;
 use ftl_tcpip::tcp::TcpListener;
 use ftl_tcpip::transport::Port;
@@ -245,24 +243,21 @@ fn main(supervisor_ch: Channel) {
         })
         .unwrap();
 
-    let mut devices = DeviceMap::new();
-    let device_id = devices
-        .add(MyDevice {
+    let mut tcpip = TcpIp::<TcpIpIo>::new();
+    let device_id = tcpip
+        .add_device(MyDevice {
             mac_addr: MacAddr::new([0x52, 0x54, 0x00, 0x12, 0x34, 0x56]),
             driver_ch: driver_ch.clone(),
         })
         .unwrap();
 
-    let mut routes = RouteTable::new();
-    routes
-        .add(Route::new(
+    tcpip
+        .add_route(Route::new(
             device_id,
             Ipv4Addr::new(10, 0, 2, 15),
             NetMask::new(255, 255, 255, 0),
         ))
         .unwrap();
-
-    let mut sockets = SocketMap::new();
 
     let mut contexts = HashMap::new();
     contexts.insert(
@@ -292,12 +287,7 @@ fn main(supervisor_ch: Channel) {
                         match reply.recv(&mut buf[..len]) {
                             Ok(_slice) => {
                                 pkt.set_len(len);
-                                ftl_tcpip::ethernet::handle_rx::<TcpIpIo>(
-                                    &mut devices,
-                                    &mut routes,
-                                    &mut sockets,
-                                    &mut pkt,
-                                );
+                                tcpip.handle_rx(&mut pkt).unwrap();
 
                                 // Pull the next packet
                                 ch.send(Message::Read {
@@ -407,7 +397,7 @@ fn main(supervisor_ch: Channel) {
                             continue;
                         }
 
-                        let listener = match sockets.tcp_listen::<TcpIpIo>(endpoint) {
+                        let listener = match tcpip.tcp_listen(endpoint) {
                             Ok(listener) => listener,
                             Err(_error) => {
                                 let _ = sink.remove(our_ch.handle().id());
@@ -464,7 +454,7 @@ fn main(supervisor_ch: Channel) {
                         }
 
                         let conn = match listener.accept(
-                            &mut sockets,
+                            &mut tcpip,
                             TcpAccept {
                                 completer,
                                 their_ch,
@@ -493,7 +483,7 @@ fn main(supervisor_ch: Channel) {
                         conn.read(TcpRead(request));
                     }
                     Incoming::Write(request) => {
-                        conn.write(&mut devices, &mut routes, TcpWrite(request));
+                        conn.write(&mut tcpip, TcpWrite(request));
                     }
                     _ => {
                         warn!("unhandled tcp connection message: {:?}", peek);
@@ -502,7 +492,7 @@ fn main(supervisor_ch: Channel) {
             }
             (Context::TcpConn { conn, .. }, Event::PeerClosed) => {
                 trace!("tcp connection peer closed: {:?}", id);
-                conn.close(&mut devices, &mut routes);
+                conn.close(&mut tcpip);
                 if let Err(error) = sink.remove(id) {
                     warn!("failed to remove handle from sink: {:?}", error);
                 }

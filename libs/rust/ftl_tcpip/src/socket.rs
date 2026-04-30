@@ -7,7 +7,8 @@ use crate::OutOfMemoryError;
 use crate::io::Io;
 use crate::ip::IpAddr;
 use crate::tcp::TcpListener;
-use crate::transport::{Port, Protocol};
+use crate::transport::Port;
+use crate::transport::Protocol;
 use crate::transport::{self};
 use crate::utils::HashMapExt;
 

@@ -1,6 +1,7 @@
 use core::fmt;
 
 use crate::Device;
+use crate::TcpIp;
 use crate::device::DeviceMap;
 use crate::endian::Ne;
 use crate::io::Io;
@@ -92,20 +93,13 @@ pub enum RxError {
     Arp(crate::arp::RxError),
 }
 
-pub fn handle_rx<I: Io>(
-    devices: &mut DeviceMap<I::Device>,
-    routes: &mut RouteTable,
-    sockets: &mut SocketMap,
-    pkt: &mut Packet,
-) -> Result<(), RxError> {
+pub fn handle_rx<I: Io>(tcpip: &mut TcpIp<I>, pkt: &mut Packet) -> Result<(), RxError> {
     let header = pkt.read::<EthernetHeader>().map_err(RxError::PacketRead)?;
 
     let ether_type: u16 = header.ether_type.into();
     match ether_type {
-        0x0800 => {
-            crate::ip::ipv4::handle_rx::<I>(devices, routes, sockets, pkt).map_err(RxError::Ipv4)
-        }
-        0x0806 => crate::arp::handle_rx::<I>(devices, routes, pkt).map_err(RxError::Arp),
+        0x0800 => crate::ip::ipv4::handle_rx::<I>(tcpip, pkt).map_err(RxError::Ipv4),
+        0x0806 => crate::arp::handle_rx::<I>(tcpip, pkt).map_err(RxError::Arp),
         _ => Err(RxError::BadEthernetType(ether_type)),
     }
 }

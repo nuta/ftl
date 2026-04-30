@@ -1,5 +1,5 @@
 use super::header::TcpHeader;
-use crate::device::DeviceMap;
+use crate::TcpIp;
 use crate::ethernet::EthernetHeader;
 use crate::io::Io;
 use crate::ip::IpAddr;
@@ -7,7 +7,6 @@ use crate::ip::ipv4;
 use crate::ip::ipv4::Ipv4Header;
 use crate::packet;
 use crate::packet::Packet;
-use crate::route::RouteTable;
 use crate::tcp::checksum::compute_checksum;
 use crate::transport::Protocol;
 
@@ -27,8 +26,7 @@ fn encode_header_len(len: usize) -> u8 {
 }
 
 pub(super) fn transmit_segment<I: Io>(
-    devices: &mut DeviceMap<I::Device>,
-    routes: &mut RouteTable,
+    tcpip: &mut TcpIp<I>,
     mut header: TcpHeader,
     remote_ip: IpAddr,
     payload: &[u8],
@@ -42,11 +40,11 @@ pub(super) fn transmit_segment<I: Io>(
     pkt.write_back_bytes(payload)
         .map_err(TxError::PacketWrite)?;
 
-    let Some(route) = routes.lookup_by_dest(remote_ip) else {
+    let Some(route) = tcpip.routes.lookup_by_dest(remote_ip) else {
         return Err(TxError::NoRoute);
     };
 
-    let Some(device) = devices.get_mut(route.device_id()) else {
+    let Some(device) = tcpip.devices.get_mut(route.device_id()) else {
         return Err(TxError::NoDevice);
     };
 

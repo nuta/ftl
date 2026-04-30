@@ -1,5 +1,6 @@
 use core::fmt;
 
+use crate::TcpIp;
 use crate::checksum::Checksum;
 use crate::device::DeviceMap;
 use crate::endian::Ne;
@@ -178,12 +179,7 @@ pub enum RxError {
     Tcp(crate::tcp::RxError),
 }
 
-pub(crate) fn handle_rx<I: Io>(
-    devices: &mut DeviceMap<I::Device>,
-    routes: &mut RouteTable,
-    sockets: &mut SocketMap,
-    pkt: &mut Packet,
-) -> Result<(), RxError> {
+pub(crate) fn handle_rx<I: Io>(tcpip: &mut TcpIp<I>, pkt: &mut Packet) -> Result<(), RxError> {
     let header = pkt.read::<Ipv4Header>().map_err(RxError::PacketRead)?;
     if header.version() != 4 {
         return Err(RxError::BadVersion(header.version()));
@@ -210,8 +206,7 @@ pub(crate) fn handle_rx<I: Io>(
 
     match protocol {
         0x06 => {
-            crate::tcp::handle_rx::<I>(devices, routes, sockets, pkt, remote, IpAddr::V4(dst))
-                .map_err(RxError::Tcp)
+            crate::tcp::handle_rx::<I>(tcpip, pkt, remote, IpAddr::V4(dst)).map_err(RxError::Tcp)
         }
         protocol => Err(RxError::UnsupportedProtocol(protocol)),
     }

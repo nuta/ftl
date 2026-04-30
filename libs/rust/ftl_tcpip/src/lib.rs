@@ -19,8 +19,12 @@ pub mod packet;
 pub mod route;
 pub mod socket;
 pub mod tcp;
+mod tcpip;
 pub mod transport;
 mod utils;
+
+pub use io::Io;
+pub use tcpip::TcpIp;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct OutOfMemoryError;

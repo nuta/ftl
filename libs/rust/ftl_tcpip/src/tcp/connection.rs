@@ -3,10 +3,9 @@ use core::cmp::min;
 use core::fmt;
 
 use super::ring_buffer::RingBuffer;
-use crate::device::DeviceMap;
+use crate::TcpIp;
 use crate::io::Io;
 use crate::packet::Packet;
-use crate::route::RouteTable;
 use crate::socket::AnySocket;
 use crate::socket::Endpoint;
 use crate::tcp::Read;
@@ -100,19 +99,14 @@ impl<I: Io> TcpConn<I> {
         mutable.rx_buffer = rx_buffer;
     }
 
-    pub fn write(
-        &self,
-        devices: &mut DeviceMap<I::Device>,
-        routes: &mut RouteTable,
-        req: I::TcpWrite,
-    ) {
+    pub fn write(&self, tcpip: &mut TcpIp<I>, req: I::TcpWrite) {
         let mut mutable = self.mutable.lock();
         if mutable.tx_buffer.writeable_len() == 0 {
             mutable.pending_writes.push_back(req);
         } else {
             req.complete(&mut mutable.tx_buffer);
             if mutable.tx_buffer.readable_len() > 0 {
-                self.flush(devices, routes, &mut mutable);
+                self.flush(tcpip, &mut mutable);
             }
         }
     }
@@ -126,19 +120,13 @@ impl<I: Io> TcpConn<I> {
         }
     }
 
-    pub fn close(&self, devices: &mut DeviceMap<I::Device>, routes: &mut RouteTable) {
+    pub fn close(&self, tcpip: &mut TcpIp<I>) {
         let mut mutable = self.mutable.lock();
         mutable.close_requested = true;
-        self.flush(devices, routes, &mut mutable);
+        self.flush(tcpip, &mut mutable);
     }
 
-    pub(super) fn handle_rx(
-        &self,
-        devices: &mut DeviceMap<I::Device>,
-        routes: &mut RouteTable,
-        rx: RxHeader,
-        payload: &mut Packet,
-    ) {
+    pub(super) fn handle_rx(&self, tcpip: &mut TcpIp<I>, rx: RxHeader, payload: &mut Packet) {
         let mut mutable = self.mutable.lock();
 
         // Update remote's receive window size.
@@ -188,7 +176,7 @@ impl<I: Io> TcpConn<I> {
                 "TCP: out-of-order data: seq={}, rcv_nxt={}",
                 rx.seq, mutable.rcv_nxt
             );
-            self.send_ack(devices, routes, &mutable);
+            self.send_ack(tcpip, &mutable);
             return;
         }
 
@@ -230,18 +218,13 @@ impl<I: Io> TcpConn<I> {
         }
 
         if should_ack {
-            self.send_ack(devices, routes, &mutable);
+            self.send_ack(tcpip, &mutable);
         }
 
-        self.flush(devices, routes, &mut mutable);
+        self.flush(tcpip, &mut mutable);
     }
 
-    fn send_ack(
-        &self,
-        devices: &mut DeviceMap<I::Device>,
-        routes: &mut RouteTable,
-        mutable: &Mutable<I>,
-    ) {
+    fn send_ack(&self, tcpip: &mut TcpIp<I>, mutable: &Mutable<I>) {
         let Some(remote) = mutable.remote.as_ref() else {
             return;
         };
@@ -258,17 +241,12 @@ impl<I: Io> TcpConn<I> {
             urgent_pointer: 0.into(),
         };
 
-        if let Err(err) = transmit_segment::<I>(devices, routes, header, remote.addr, &[]) {
+        if let Err(err) = transmit_segment::<I>(tcpip, header, remote.addr, &[]) {
             warn!("TCP: failed to send ACK: {:?}", err);
         }
     }
 
-    fn flush(
-        &self,
-        devices: &mut DeviceMap<I::Device>,
-        routes: &mut RouteTable,
-        mutable: &mut Mutable<I>,
-    ) {
+    fn flush(&self, tcpip: &mut TcpIp<I>, mutable: &mut Mutable<I>) {
         match mutable.state {
             State::Established | State::CloseWait => {
                 let remote = mutable.remote.as_ref().unwrap();
@@ -319,9 +297,7 @@ impl<I: Io> TcpConn<I> {
                     urgent_pointer: 0.into(),
                 };
 
-                if let Err(err) =
-                    transmit_segment::<I>(devices, routes, header, remote.addr, payload)
-                {
+                if let Err(err) = transmit_segment::<I>(tcpip, header, remote.addr, payload) {
                     warn!("TCP: failed to send data: {:?}", err);
                     return;
                 }

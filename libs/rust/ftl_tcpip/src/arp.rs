@@ -1,6 +1,7 @@
 use hashbrown::HashMap;
 
 use crate::Device;
+use crate::TcpIp;
 use crate::device::DeviceId;
 use crate::device::DeviceMap;
 use crate::endian::Ne;
@@ -118,11 +119,7 @@ pub enum RxError {
     DeviceNotFound(DeviceId),
 }
 
-pub(crate) fn handle_rx<I: Io>(
-    devices: &mut DeviceMap<I::Device>,
-    routes: &mut RouteTable,
-    pkt: &mut Packet,
-) -> Result<(), RxError> {
+pub(crate) fn handle_rx<I: Io>(tcpip: &mut TcpIp<I>, pkt: &mut Packet) -> Result<(), RxError> {
     let arp = pkt.read::<ArpPacket>().map_err(RxError::PacketRead)?;
 
     let hw_type = arp.hw_type.into();
@@ -148,10 +145,13 @@ pub(crate) fn handle_rx<I: Io>(
 
     match arp.opcode.into() {
         OPCODE_REQUEST => {
-            let route = routes.lookup_by_dest_exact_mut(IpAddr::V4(target_addr));
+            let route = tcpip
+                .routes
+                .lookup_by_dest_exact_mut(IpAddr::V4(target_addr));
             if let Some(route) = route {
                 let device_id = route.device_id();
-                let device = devices
+                let device = tcpip
+                    .devices
                     .get_mut(device_id)
                     .ok_or(RxError::DeviceNotFound(device_id))?;
 
