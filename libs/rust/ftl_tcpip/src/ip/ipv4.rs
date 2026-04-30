@@ -2,7 +2,6 @@ use core::fmt;
 
 use crate::TcpIp;
 use crate::checksum::Checksum;
-use crate::device::DeviceMap;
 use crate::endian::Ne;
 use crate::ethernet;
 use crate::ethernet::EtherType;
@@ -12,8 +11,6 @@ use crate::packet;
 use crate::packet::Packet;
 use crate::packet::WriteableToPacket;
 use crate::route::Route;
-use crate::route::RouteTable;
-use crate::socket::SocketMap;
 use crate::transport;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]

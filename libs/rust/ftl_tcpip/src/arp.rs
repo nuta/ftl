@@ -3,7 +3,6 @@ use hashbrown::HashMap;
 use crate::Device;
 use crate::TcpIp;
 use crate::device::DeviceId;
-use crate::device::DeviceMap;
 use crate::endian::Ne;
 use crate::ethernet;
 use crate::ethernet::EtherType;
@@ -16,7 +15,6 @@ use crate::packet;
 use crate::packet::Packet;
 use crate::packet::WriteableToPacket;
 use crate::route::Route;
-use crate::route::RouteTable;
 
 enum ArpEntry {
     Resolved(MacAddr),

@@ -9,7 +9,6 @@ use crate::ip::IpAddr;
 use crate::packet::Packet;
 use crate::socket::AnySocket;
 use crate::socket::Endpoint;
-use crate::socket::SocketMap;
 use crate::tcp::Accept;
 use crate::tcp::RingBuffer;
 use crate::tcp::TcpConn;

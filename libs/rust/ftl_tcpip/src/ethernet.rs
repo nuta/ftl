@@ -2,7 +2,6 @@ use core::fmt;
 
 use crate::Device;
 use crate::TcpIp;
-use crate::device::DeviceMap;
 use crate::endian::Ne;
 use crate::io::Io;
 use crate::ip::IpAddr;
@@ -10,8 +9,6 @@ use crate::packet;
 use crate::packet::Packet;
 use crate::packet::WriteableToPacket;
 use crate::route::Route;
-use crate::route::RouteTable;
-use crate::socket::SocketMap;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 #[repr(transparent)]
