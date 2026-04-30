@@ -200,7 +200,10 @@ impl<I: Io> TcpListener<I> {
             addr: h.local_ip,
             port: self.local_port,
         };
-        match tcpip.sockets.establish_tcp_conn(h.remote, local, conn.clone()) {
+        match tcpip
+            .sockets
+            .establish_tcp_conn(h.remote, local, conn.clone())
+        {
             Ok(()) => {
                 request.complete(Ok(()));
             }

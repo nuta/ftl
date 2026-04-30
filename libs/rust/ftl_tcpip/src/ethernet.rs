@@ -48,10 +48,8 @@ pub(crate) enum EtherType {
 impl WriteableToPacket for EthernetHeader {}
 
 #[derive(Debug)]
-pub(crate) enum TxError {
-    PacketWrite(
-        #[expect(dead_code)]
-        packet::ReserveError),
+pub enum TxError {
+    PacketWrite(packet::ReserveError),
 }
 
 pub(crate) fn transmit<D: Device>(
