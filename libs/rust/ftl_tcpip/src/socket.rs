@@ -7,7 +7,7 @@ use crate::OutOfMemoryError;
 use crate::io::Io;
 use crate::ip::IpAddr;
 use crate::tcp::TcpListener;
-use crate::transport::Port;
+use crate::transport::{Port, Protocol};
 use crate::transport::{self};
 use crate::utils::HashMapExt;
 
@@ -57,11 +57,17 @@ impl SocketMap {
         Some(socket)
     }
 
-    pub(crate) fn insert_active<T: AnySocket>(
+    pub(crate) fn tcp_establish<T: AnySocket>(
         &mut self,
-        key: ActiveKey,
+        remote: Endpoint,
+        local: Endpoint,
         socket: Arc<T>,
     ) -> Result<(), OutOfMemoryError> {
+        let key = ActiveKey {
+            remote,
+            local,
+            protocol: Protocol::Tcp,
+        };
         self.actives.reserve_and_insert(key, socket.clone())?;
         Ok(())
     }
@@ -72,7 +78,7 @@ impl SocketMap {
     ) -> Result<Arc<TcpListener<I>>, OutOfMemoryError> {
         let key = ListenerKey {
             local,
-            protocol: transport::Protocol::Tcp,
+            protocol: Protocol::Tcp,
         };
 
         let socket = Arc::new(TcpListener::new(local.port));

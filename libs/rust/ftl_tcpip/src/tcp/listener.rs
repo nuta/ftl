@@ -8,7 +8,6 @@ use crate::io::Io;
 use crate::ip::IpAddr;
 use crate::packet::Packet;
 use crate::route::RouteTable;
-use crate::socket::ActiveKey;
 use crate::socket::AnySocket;
 use crate::socket::Endpoint;
 use crate::socket::SocketMap;
@@ -21,7 +20,6 @@ use crate::tcp::header::TcpHeader;
 use crate::tcp::rx::RxHeader;
 use crate::tcp::tx::transmit_segment;
 use crate::transport::Port;
-use crate::transport::Protocol;
 
 struct Handshake {
     remote: Endpoint,
@@ -200,15 +198,6 @@ impl<I: Io> TcpListener<I> {
     ) {
         let PendingAccept { request, conn } = pending_accept;
 
-        let key = ActiveKey {
-            remote: h.remote,
-            local: Endpoint {
-                addr: h.local_ip,
-                port: self.local_port,
-            },
-            protocol: Protocol::Tcp,
-        };
-
         conn.open_passively(
             h.remote,
             h.local_iss,
@@ -217,7 +206,11 @@ impl<I: Io> TcpListener<I> {
             h.rx_buffer,
         );
 
-        match sockets.insert_active(key, conn.clone()) {
+        let local = Endpoint {
+            addr: h.local_ip,
+            port: self.local_port,
+        };
+        match sockets.tcp_establish(h.remote, local, conn.clone()) {
             Ok(()) => {
                 request.complete(Ok(()));
             }
