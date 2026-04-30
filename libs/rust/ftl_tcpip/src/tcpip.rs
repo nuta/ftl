@@ -39,6 +39,6 @@ impl<I: Io> TcpIp<I> {
     }
 
     pub fn tcp_listen(&mut self, local: Endpoint) -> Result<Arc<TcpListener<I>>, OutOfMemoryError> {
-        self.sockets.tcp_listen(local)
+        self.sockets.create_tcp_listener(local)
     }
 }

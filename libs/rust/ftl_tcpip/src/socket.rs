@@ -6,6 +6,7 @@ use hashbrown::HashMap;
 use crate::OutOfMemoryError;
 use crate::io::Io;
 use crate::ip::IpAddr;
+use crate::tcp::TcpConn;
 use crate::tcp::TcpListener;
 use crate::transport::Port;
 use crate::transport::Protocol;
@@ -58,22 +59,22 @@ impl SocketMap {
         Some(socket)
     }
 
-    pub(crate) fn tcp_establish<T: AnySocket>(
+    pub(crate) fn establish_tcp_conn<I: Io>(
         &mut self,
         remote: Endpoint,
         local: Endpoint,
-        socket: Arc<T>,
+        conn: Arc<TcpConn<I>>,
     ) -> Result<(), OutOfMemoryError> {
         let key = ActiveKey {
             remote,
             local,
             protocol: Protocol::Tcp,
         };
-        self.actives.reserve_and_insert(key, socket.clone())?;
+        self.actives.reserve_and_insert(key, conn.clone())?;
         Ok(())
     }
 
-    pub fn tcp_listen<I: Io>(
+    pub fn create_tcp_listener<I: Io>(
         &mut self,
         local: Endpoint,
     ) -> Result<Arc<TcpListener<I>>, OutOfMemoryError> {
