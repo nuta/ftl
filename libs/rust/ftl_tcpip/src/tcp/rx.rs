@@ -17,7 +17,7 @@ use crate::transport::Port;
 use crate::transport::Protocol;
 
 #[derive(Debug)]
-pub(crate) enum RxError {
+pub enum RxError {
     PacketRead(packet::ReserveError),
 }
 

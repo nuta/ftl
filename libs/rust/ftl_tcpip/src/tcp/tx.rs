@@ -13,9 +13,9 @@ use crate::transport::Protocol;
 
 #[derive(Debug)]
 pub(super) enum TxError {
-    PacketAlloc(packet::AllocError),
-    PacketWrite(packet::ReserveError),
-    Ipv4Tx(ipv4::TxError),
+    PacketAlloc(#[expect(dead_code)] packet::AllocError),
+    PacketWrite(#[expect(dead_code)] packet::ReserveError),
+    Ipv4Tx(#[expect(dead_code)] ipv4::TxError),
     NoRoute,
     NoDevice,
 }
