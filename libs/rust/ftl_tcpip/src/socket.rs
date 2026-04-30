@@ -40,7 +40,7 @@ pub struct SocketMap {
 }
 
 impl SocketMap {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             actives: HashMap::new(),
             listeners: HashMap::new(),
@@ -74,7 +74,7 @@ impl SocketMap {
         Ok(())
     }
 
-    pub fn create_tcp_listener<I: Io>(
+    pub(crate) fn create_tcp_listener<I: Io>(
         &mut self,
         local: Endpoint,
     ) -> Result<Arc<TcpListener<I>>, OutOfMemoryError> {

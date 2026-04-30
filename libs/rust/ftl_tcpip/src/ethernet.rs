@@ -48,8 +48,10 @@ pub(crate) enum EtherType {
 impl WriteableToPacket for EthernetHeader {}
 
 #[derive(Debug)]
-pub enum TxError {
-    PacketWrite(packet::ReserveError),
+pub(crate) enum TxError {
+    PacketWrite(
+        #[expect(dead_code)]
+        packet::ReserveError),
 }
 
 pub(crate) fn transmit<D: Device>(
@@ -90,7 +92,7 @@ pub enum RxError {
     Arp(crate::arp::RxError),
 }
 
-pub fn handle_rx<I: Io>(tcpip: &mut TcpIp<I>, pkt: &mut Packet) -> Result<(), RxError> {
+pub(crate) fn handle_rx<I: Io>(tcpip: &mut TcpIp<I>, pkt: &mut Packet) -> Result<(), RxError> {
     let header = pkt.read::<EthernetHeader>().map_err(RxError::PacketRead)?;
 
     let ether_type: u16 = header.ether_type.into();

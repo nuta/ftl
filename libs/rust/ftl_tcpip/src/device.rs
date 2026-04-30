@@ -12,12 +12,12 @@ pub trait Device {
     fn transmit(&mut self, pkt: &mut Packet);
 }
 
-pub struct Entry<D> {
+struct Entry<D> {
     id: DeviceId,
     device: D,
 }
 
-pub struct DeviceMap<D: Device> {
+pub(crate) struct DeviceMap<D: Device> {
     next_id: u8,
     devices: Vec<Entry<D>>,
 }
