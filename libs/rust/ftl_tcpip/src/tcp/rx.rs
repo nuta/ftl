@@ -1,5 +1,5 @@
-use crate::Io;
 use crate::device::DeviceMap;
+use crate::io::Io;
 use crate::ip::IpAddr;
 use crate::ip::ipv4::Ipv4Addr;
 use crate::packet;

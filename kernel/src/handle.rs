@@ -99,7 +99,7 @@ pub trait Handleable: Any + Send + Sync {
     }
 
     /// Pops an event from the object, and writes it to the buffer.
-    /// 
+    ///
     /// - `Ok(true)`: An event was successfully written to the buffer.
     /// - `Ok(false)`: The object has no events to report.
     /// - `Err(error)`: An error occurred while reading the event, or writing

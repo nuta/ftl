@@ -1,7 +1,6 @@
 use hashbrown::HashMap;
 
 use crate::Device;
-use crate::Io;
 use crate::device::DeviceId;
 use crate::device::DeviceMap;
 use crate::endian::Ne;
@@ -9,11 +8,12 @@ use crate::ethernet;
 use crate::ethernet::EtherType;
 use crate::ethernet::EthernetHeader;
 use crate::ethernet::MacAddr;
+use crate::io::Io;
 use crate::ip::IpAddr;
 use crate::ip::ipv4::Ipv4Addr;
+use crate::packet;
 use crate::packet::Packet;
 use crate::packet::WriteableToPacket;
-use crate::packet::{self};
 use crate::route::Route;
 use crate::route::RouteTable;
 

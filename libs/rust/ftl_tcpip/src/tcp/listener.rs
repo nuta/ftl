@@ -3,8 +3,8 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::fmt;
 
-use crate::Io;
 use crate::device::DeviceMap;
+use crate::io::Io;
 use crate::ip::IpAddr;
 use crate::packet::Packet;
 use crate::route::RouteTable;

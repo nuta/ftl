@@ -13,6 +13,7 @@ mod checksum;
 pub mod device;
 mod endian;
 pub mod ethernet;
+pub mod io;
 pub mod ip;
 pub mod packet;
 pub mod route;
@@ -21,12 +22,5 @@ pub mod tcp;
 pub mod transport;
 mod utils;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct OutOfMemoryError;
-
-pub trait Io: 'static {
-    type Device: Device;
-    type TcpWrite: tcp::Write;
-    type TcpRead: tcp::Read;
-    type TcpAccept: tcp::Accept;
-}

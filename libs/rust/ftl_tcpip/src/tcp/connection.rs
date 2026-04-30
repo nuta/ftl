@@ -3,8 +3,8 @@ use core::cmp::min;
 use core::fmt;
 
 use super::ring_buffer::RingBuffer;
-use crate::Io;
 use crate::device::DeviceMap;
+use crate::io::Io;
 use crate::packet::Packet;
 use crate::route::RouteTable;
 use crate::socket::AnySocket;

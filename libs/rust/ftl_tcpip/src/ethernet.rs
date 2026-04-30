@@ -1,9 +1,9 @@
 use core::fmt;
 
 use crate::Device;
-use crate::Io;
 use crate::device::DeviceMap;
 use crate::endian::Ne;
+use crate::io::Io;
 use crate::ip::IpAddr;
 use crate::packet;
 use crate::packet::Packet;
@@ -84,34 +84,28 @@ pub(crate) fn transmit<D: Device>(
     Ok(())
 }
 
+#[derive(Debug)]
+pub enum RxError {
+    PacketRead(packet::ReserveError),
+    BadEthernetType(u16),
+    Ipv4(crate::ip::ipv4::RxError),
+    Arp(crate::arp::RxError),
+}
+
 pub fn handle_rx<I: Io>(
     devices: &mut DeviceMap<I::Device>,
     routes: &mut RouteTable,
     sockets: &mut SocketMap,
     pkt: &mut Packet,
-) {
-    let header = match pkt.read::<EthernetHeader>() {
-        Ok(header) => header,
-        Err(err) => {
-            debug!("bad Ethernet packet: {:?}", err);
-            return;
-        }
-    };
+) -> Result<(), RxError> {
+    let header = pkt.read::<EthernetHeader>().map_err(RxError::PacketRead)?;
 
     let ether_type: u16 = header.ether_type.into();
     match ether_type {
         0x0800 => {
-            if let Err(err) = crate::ip::ipv4::handle_rx::<I>(devices, routes, sockets, pkt) {
-                debug!("bad IPv4 packet: {:?}", err);
-            }
+            crate::ip::ipv4::handle_rx::<I>(devices, routes, sockets, pkt).map_err(RxError::Ipv4)
         }
-        0x0806 => {
-            if let Err(err) = crate::arp::handle_rx::<I>(devices, routes, pkt) {
-                debug!("bad ARP packet: {:?}", err);
-            }
-        }
-        _ => {
-            debug!("unsupported Ethernet type: {:#x}", ether_type);
-        }
+        0x0806 => crate::arp::handle_rx::<I>(devices, routes, pkt).map_err(RxError::Arp),
+        _ => Err(RxError::BadEthernetType(ether_type)),
     }
 }

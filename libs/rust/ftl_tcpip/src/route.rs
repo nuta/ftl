@@ -6,6 +6,7 @@ use crate::device::DeviceId;
 use crate::ip::IpAddr;
 use crate::ip::ipv4::Ipv4Addr;
 use crate::ip::ipv4::NetMask;
+use crate::utils::VecExt;
 
 pub struct Route {
     device_id: DeviceId,
@@ -63,8 +64,7 @@ impl RouteTable {
     }
 
     pub fn add(&mut self, route: Route) -> Result<(), OutOfMemoryError> {
-        self.routes.try_reserve(1).map_err(|_| OutOfMemoryError)?;
-        self.routes.push(route);
+        self.routes.try_push(route)?;
         Ok(())
     }
 

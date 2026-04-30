@@ -3,7 +3,7 @@ use core::any::Any;
 
 use hashbrown::HashMap;
 
-use crate::Io;
+use crate::io::Io;
 use crate::ip::IpAddr;
 use crate::tcp::TcpListener;
 use crate::transport::Port;

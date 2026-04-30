@@ -1,11 +1,11 @@
 use core::fmt;
 
-use crate::Io;
 use crate::checksum::Checksum;
 use crate::device::DeviceMap;
 use crate::endian::Ne;
 use crate::ethernet;
 use crate::ethernet::EtherType;
+use crate::io::Io;
 use crate::ip::IpAddr;
 use crate::packet;
 use crate::packet::Packet;
