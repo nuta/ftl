@@ -1,6 +1,5 @@
 use alloc::vec::Vec;
 use core::mem;
-use core::time::Duration;
 
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
