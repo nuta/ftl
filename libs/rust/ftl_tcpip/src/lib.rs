@@ -24,8 +24,8 @@ pub mod transport;
 mod utils;
 
 pub use io::Io;
-pub use tcpip::TcpIp;
 pub use tcpip::TcpConnHandle;
+pub use tcpip::TcpIp;
 pub use tcpip::TcpListenerHandle;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

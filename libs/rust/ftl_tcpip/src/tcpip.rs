@@ -1,6 +1,5 @@
-use core::fmt;
-
 use alloc::sync::Arc;
+use core::fmt;
 
 use crate::OutOfMemoryError;
 use crate::device::DeviceId;
@@ -41,11 +40,20 @@ impl<I: Io> TcpIp<I> {
         self.routes.add(route)
     }
 
-    pub fn tcp_listen(&mut self, local: Endpoint) -> Result<TcpListenerHandle<I>, OutOfMemoryError> {
-        self.sockets.create_tcp_listener(local).map(TcpListenerHandle)
+    pub fn tcp_listen(
+        &mut self,
+        local: Endpoint,
+    ) -> Result<TcpListenerHandle<I>, OutOfMemoryError> {
+        self.sockets
+            .create_tcp_listener(local)
+            .map(TcpListenerHandle)
     }
 
-    pub fn tcp_accept(&mut self, handle: TcpListenerHandle<I>, req: I::TcpAccept) -> TcpConnHandle<I> {
+    pub fn tcp_accept(
+        &mut self,
+        handle: TcpListenerHandle<I>,
+        req: I::TcpAccept,
+    ) -> TcpConnHandle<I> {
         let conn = handle.0.accept(self, req);
         TcpConnHandle(conn)
     }
@@ -63,22 +71,19 @@ impl<I: Io> TcpIp<I> {
     }
 }
 
-
 pub struct TcpConnHandle<I: Io>(pub(crate) Arc<TcpConn<I>>);
 
 pub struct TcpListenerHandle<I: Io>(pub(crate) Arc<TcpListener<I>>);
 
 impl<I: Io> fmt::Debug for TcpConnHandle<I> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("TcpConn")
-            .finish()
+        f.debug_struct("TcpConn").finish()
     }
 }
 
 impl<I: Io> fmt::Debug for TcpListenerHandle<I> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("TcpListener")
-            .finish()
+        f.debug_struct("TcpListener").finish()
     }
 }
 

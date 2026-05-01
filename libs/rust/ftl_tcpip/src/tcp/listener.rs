@@ -11,8 +11,8 @@ use crate::socket::AnySocket;
 use crate::socket::Endpoint;
 use crate::tcp::Accept;
 use crate::tcp::RingBuffer;
-use crate::tcp::connection::TcpConn;
 use crate::tcp::connection::DEFAULT_RCV_WND;
+use crate::tcp::connection::TcpConn;
 use crate::tcp::header::TcpFlags;
 use crate::tcp::header::TcpHeader;
 use crate::tcp::rx::RxHeader;
@@ -58,11 +58,7 @@ impl<I: Io> TcpListener<I> {
         }
     }
 
-    pub fn accept(
-        &self,
-        tcpip: &mut TcpIp<I>,
-        request: I::TcpAccept,
-    ) -> Arc<TcpConn<I>> {
+    pub fn accept(&self, tcpip: &mut TcpIp<I>, request: I::TcpAccept) -> Arc<TcpConn<I>> {
         let conn = Arc::new(TcpConn::new_listen(self.local_port));
         let pending_accept = PendingAccept {
             request,

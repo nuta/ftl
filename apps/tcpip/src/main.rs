@@ -18,7 +18,9 @@ use ftl::prelude::*;
 use ftl::sink::Event;
 use ftl::sink::Sink;
 use ftl::sync::Arc;
+use ftl_tcpip::TcpConnHandle;
 use ftl_tcpip::TcpIp;
+use ftl_tcpip::TcpListenerHandle;
 use ftl_tcpip::ethernet::MacAddr;
 use ftl_tcpip::ip::IpAddr;
 use ftl_tcpip::ip::ipv4::Ipv4Addr;
@@ -26,8 +28,6 @@ use ftl_tcpip::ip::ipv4::NetMask;
 use ftl_tcpip::packet::Packet;
 use ftl_tcpip::route::Route;
 use ftl_tcpip::socket::Endpoint;
-use ftl_tcpip::TcpConnHandle;
-use ftl_tcpip::TcpListenerHandle;
 use ftl_tcpip::transport::Port;
 
 fn open_supervisor_channel(
@@ -453,11 +453,12 @@ fn main(supervisor_ch: Channel) {
                             continue;
                         }
 
-                        let conn = tcpip.tcp_accept(listener, 
+                        let conn = tcpip.tcp_accept(
+                            listener,
                             TcpAccept {
                                 completer,
                                 their_ch,
-                            }
+                            },
                         );
 
                         let our_ch = Arc::new(our_ch);
