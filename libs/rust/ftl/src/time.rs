@@ -35,8 +35,8 @@ impl Timer {
         Ok(Timer { handle })
     }
 
-    pub fn set_timeout(&self, duration: Duration) -> Result<(), ErrorCode> {
-        sys_timer_set(self.handle.id(), duration)
+    pub fn set_timeout(&self, at: Instant) -> Result<(), ErrorCode> {
+        sys_timer_set(self.handle.id(), at)
     }
 }
 
@@ -68,11 +68,11 @@ pub fn sys_timer_create() -> Result<OwnedHandle, ErrorCode> {
     Ok(OwnedHandle::from_raw(HandleId::from_raw(id)))
 }
 
-pub fn sys_timer_set(handle: HandleId, duration: Duration) -> Result<(), ErrorCode> {
+pub fn sys_timer_set(handle: HandleId, at: Instant) -> Result<(), ErrorCode> {
     syscall2(
         SYS_TIMER_SET,
         handle.as_usize(),
-        duration.as_nanos() as usize, // TODO: Check overflow
+        at.0.as_raw() as usize, // TODO: Check overflow
     )?;
     Ok(())
 }

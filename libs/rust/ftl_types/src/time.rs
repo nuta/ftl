@@ -11,28 +11,12 @@ const SAFE_DELTA: u64 = (1u64 << 63) - 1;
 pub struct Monotonic(u64);
 
 impl Monotonic {
-    pub const fn from_nanos(nanos: u64) -> Self {
-        Self(nanos)
+    pub const fn from_nanos(raw: u64) -> Self {
+        Self(raw)
     }
 
-    pub const fn from_micros(micros: u64) -> Self {
-        Self(micros * 1_000)
-    }
-
-    pub const fn from_millis(millis: u64) -> Self {
-        Self(millis * 1_000_000)
-    }
-
-    pub const fn as_nanos(&self) -> u64 {
+    pub const fn as_raw(&self) -> u64 {
         self.0
-    }
-
-    pub const fn as_micros(&self) -> u64 {
-        self.0 / 1_000
-    }
-
-    pub const fn as_millis(&self) -> u64 {
-        self.0 / 1_000_000
     }
 
     pub fn checked_add(&self, duration: Duration) -> Option<Self> {

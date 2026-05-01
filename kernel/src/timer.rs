@@ -48,18 +48,19 @@ impl Timer {
         })
     }
 
-    pub fn set_timeout(self: &SharedRef<Self>, duration: Duration) -> Result<(), ErrorCode> {
-        if duration.is_zero() {
-            // TODO: Should we fire the timer immediately instead?
-            return Err(ErrorCode::InvalidArgument);
-        }
-
+    pub fn set_timeout(self: &SharedRef<Self>, expires_at: Monotonic) -> Result<(), ErrorCode> {
         let now = arch::read_timer();
-        let expires_at = now
-            .checked_add(duration)
-            .ok_or(ErrorCode::InvalidArgument)?;
 
         let mut mutable = self.mutable.lock();
+        if expires_at.is_before(&now) {
+            // The timer has already expired, notify the listener immediately.
+            if let Some(ref notifier) = mutable.notifier {
+                notifier.notify();
+            }
+
+            return Ok(());
+        }
+
         let old_state = mem::replace(&mut mutable.state, State::Pending(expires_at));
         drop(mutable);
 
@@ -201,7 +202,7 @@ pub fn sys_time_now() -> Result<SyscallResult, ErrorCode> {
     let now = arch::read_timer();
     // FIXME: Use a user slice to return the time.
     static_assert!(size_of::<u64>() == size_of::<usize>());
-    Ok(SyscallResult::Return(now.as_nanos() as usize))
+    Ok(SyscallResult::Return(now.as_raw() as usize))
 }
 
 pub fn sys_timer_create(thread: &SharedRef<Thread>) -> Result<SyscallResult, ErrorCode> {
@@ -220,7 +221,7 @@ pub fn sys_timer_set(
     a1: usize,
 ) -> Result<SyscallResult, ErrorCode> {
     let timer_id = HandleId::from_raw(a0);
-    let timeout_nanos = a1 as u64;
+    let expires_at = Monotonic::from_nanos(a1 as u64);
     static_assert!(size_of::<u64>() == size_of::<usize>());
 
     thread
@@ -229,7 +230,7 @@ pub fn sys_timer_set(
         .lock()
         .get::<Timer>(timer_id)?
         .authorize(HandleRight::WRITE)?
-        .set_timeout(Duration::from_nanos(timeout_nanos))?;
+        .set_timeout(expires_at)?;
 
     Ok(SyscallResult::Return(0))
 }
