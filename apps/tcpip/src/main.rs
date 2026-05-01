@@ -112,7 +112,7 @@ pub struct MyDevice {
     driver_ch: Arc<Channel>,
 }
 
-impl ftl_tcpip::device::Device for MyDevice {
+impl ftl_tcpip::interface::Device for MyDevice {
     fn mac_addr(&self) -> &MacAddr {
         &self.mac_addr
     }

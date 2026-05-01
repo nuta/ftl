@@ -55,30 +55,30 @@ impl<D: Device> Interface<D> {
     }
 }
 
-pub(crate) struct DeviceMap<D: Device> {
+pub(crate) struct InterfaceMap<D: Device> {
     next_id: u8,
-    devices: Vec<Interface<D>>,
+    interfaces: Vec<Interface<D>>,
 }
 
-impl<D: Device> DeviceMap<D> {
+impl<D: Device> InterfaceMap<D> {
     pub fn new() -> Self {
         Self {
             next_id: 1,
-            devices: Vec::new(),
+            interfaces: Vec::new(),
         }
     }
 
     pub fn add(&mut self, device: D) -> Result<InterfaceId, OutOfMemoryError> {
-        self.devices.try_reserve(1).map_err(|_| OutOfMemoryError)?;
+        self.interfaces.try_reserve(1).map_err(|_| OutOfMemoryError)?;
 
         let id = InterfaceId(self.next_id);
-        self.devices.push(Interface::new(id, device));
+        self.interfaces.push(Interface::new(id, device));
         self.next_id += 1;
         Ok(id)
     }
 
     pub fn get_mut(&mut self, id: InterfaceId) -> Option<&mut Interface<D>> {
-        for iface in &mut self.devices {
+        for iface in &mut self.interfaces {
             if iface.id == id {
                 return Some(iface);
             }

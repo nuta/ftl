@@ -1,7 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 // #![allow(unused)] // TODO:
 
-use crate::device::Device;
+use crate::interface::Device;
 
 extern crate alloc;
 
@@ -10,7 +10,7 @@ extern crate log;
 
 mod arp;
 mod checksum;
-pub mod device;
+pub mod interface;
 mod endian;
 pub mod ethernet;
 pub mod io;

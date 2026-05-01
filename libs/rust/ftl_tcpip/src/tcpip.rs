@@ -2,9 +2,9 @@ use alloc::sync::Arc;
 use core::fmt;
 
 use crate::OutOfMemoryError;
-use crate::device::DeviceMap;
-use crate::device::Interface;
-use crate::device::InterfaceId;
+use crate::interface::InterfaceMap;
+use crate::interface::Interface;
+use crate::interface::InterfaceId;
 use crate::io::Io;
 use crate::ip::IpAddr;
 use crate::packet::Packet;
@@ -16,7 +16,7 @@ use crate::tcp::TcpConn;
 use crate::tcp::TcpListener;
 
 pub struct TcpIp<I: Io> {
-    pub(crate) devices: DeviceMap<I::Device>,
+    pub(crate) interfaces: InterfaceMap<I::Device>,
     pub(crate) routes: RouteTable,
     pub(crate) sockets: SocketMap,
 }
@@ -24,7 +24,7 @@ pub struct TcpIp<I: Io> {
 impl<I: Io> TcpIp<I> {
     pub fn new() -> Self {
         Self {
-            devices: DeviceMap::new(),
+            interfaces: InterfaceMap::new(),
             routes: RouteTable::new(),
             sockets: SocketMap::new(),
         }
@@ -35,11 +35,11 @@ impl<I: Io> TcpIp<I> {
     }
 
     pub fn add_device(&mut self, device: I::Device) -> Result<InterfaceId, OutOfMemoryError> {
-        self.devices.add(device)
+        self.interfaces.add(device)
     }
 
     pub fn get_iface_mut(&mut self, id: InterfaceId) -> Option<&mut Interface<I::Device>> {
-        self.devices.get_mut(id)
+        self.interfaces.get_mut(id)
     }
 
     pub fn add_route(&mut self, route: Route) -> Result<(), OutOfMemoryError> {
@@ -81,7 +81,7 @@ impl<I: Io> TcpIp<I> {
         addr: IpAddr,
     ) -> Option<(&mut Interface<I::Device>, IpAddr)> {
         if let Some((iface_id, dest_addr)) = self.routes.lookup(addr) {
-            let iface = self.devices.get_mut(iface_id).unwrap();
+            let iface = self.interfaces.get_mut(iface_id).unwrap();
             Some((iface, dest_addr))
         } else {
             None

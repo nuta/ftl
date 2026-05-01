@@ -1,7 +1,7 @@
 use core::ops::Deref;
 use core::ops::DerefMut;
 
-use crate::device::Device;
+use crate::interface::Device;
 use crate::tcp;
 
 pub trait Mutex<T: ?Sized> {

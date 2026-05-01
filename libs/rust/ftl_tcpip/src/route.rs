@@ -1,7 +1,7 @@
 use alloc::vec::Vec;
 
 use crate::OutOfMemoryError;
-use crate::device::InterfaceId;
+use crate::interface::InterfaceId;
 use crate::ip::IpAddr;
 use crate::ip::ipv4::IpCidr;
 use crate::ip::ipv4::Ipv4Addr;

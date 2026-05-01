@@ -2,8 +2,8 @@ use hashbrown::HashMap;
 
 use crate::Device;
 use crate::TcpIp;
-use crate::device::Interface;
-use crate::device::InterfaceId;
+use crate::interface::Interface;
+use crate::interface::InterfaceId;
 use crate::endian::Ne;
 use crate::ethernet;
 use crate::ethernet::EtherType;

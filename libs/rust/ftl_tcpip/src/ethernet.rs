@@ -2,7 +2,7 @@ use core::fmt;
 
 use crate::Device;
 use crate::TcpIp;
-use crate::device::Interface;
+use crate::interface::Interface;
 use crate::endian::Ne;
 use crate::io::Io;
 use crate::ip::IpAddr;

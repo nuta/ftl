@@ -2,7 +2,7 @@ use core::fmt;
 
 use crate::TcpIp;
 use crate::checksum::Checksum;
-use crate::device::Interface;
+use crate::interface::Interface;
 use crate::endian::Ne;
 use crate::ethernet;
 use crate::ethernet::EtherType;
