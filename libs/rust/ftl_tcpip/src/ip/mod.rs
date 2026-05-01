@@ -1,6 +1,9 @@
 use core::fmt;
 
-pub mod ipv4;
+pub(crate) mod ipv4;
+
+pub use ipv4::Ipv4Addr;
+pub use ipv4::NetMask;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum IpAddr {
