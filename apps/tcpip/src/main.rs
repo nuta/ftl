@@ -131,7 +131,7 @@ impl ftl_tcpip::device::Device for MyDevice {
 pub struct TcpWrite(WriteRequest<Arc<Channel>>);
 
 impl ftl_tcpip::tcp::Write for TcpWrite {
-    fn complete(self, tx_buffer: &mut ftl_tcpip::tcp::RingBuffer) {
+    fn complete(self, tx_buffer: &mut ftl_tcpip::tcp::TcpBuffer) {
         tx_buffer.write_bytes_with(|buf| {
             let len = min(buf.len(), self.0.len());
             match self.0.recv(&mut buf[..len]) {
@@ -151,7 +151,7 @@ impl ftl_tcpip::tcp::Write for TcpWrite {
 pub struct TcpRead(ReadRequest<Arc<Channel>>);
 
 impl ftl_tcpip::tcp::Read for TcpRead {
-    fn complete(self, rx_buffer: &mut ftl_tcpip::tcp::RingBuffer) {
+    fn complete(self, rx_buffer: &mut ftl_tcpip::tcp::TcpBuffer) {
         rx_buffer.read_bytes_with(self.0.len(), |buf| {
             let Some(buf) = buf else {
                 // This should not happen.

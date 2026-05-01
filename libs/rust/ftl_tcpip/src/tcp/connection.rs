@@ -2,7 +2,7 @@ use alloc::collections::VecDeque;
 use core::cmp::min;
 use core::fmt;
 
-use super::ring_buffer::RingBuffer;
+use super::buffer::TcpBuffer;
 use crate::TcpIp;
 use crate::io::Io;
 use crate::packet::Packet;
@@ -50,8 +50,8 @@ struct Mutable<I: Io> {
     snd_wnd: u16,
     /// Sequence number of the next byte we expect to receive.
     rcv_nxt: u32,
-    tx_buffer: RingBuffer,
-    rx_buffer: RingBuffer,
+    tx_buffer: TcpBuffer,
+    rx_buffer: TcpBuffer,
     pending_writes: VecDeque<I::TcpWrite>,
     pending_reads: VecDeque<I::TcpRead>,
 }
@@ -72,8 +72,8 @@ impl<I: Io> TcpConn<I> {
                 snd_nxt: 0,
                 snd_wnd: 0,
                 rcv_nxt: 0,
-                tx_buffer: RingBuffer::new(),
-                rx_buffer: RingBuffer::new(),
+                tx_buffer: TcpBuffer::new(),
+                rx_buffer: TcpBuffer::new(),
                 pending_writes: VecDeque::new(),
                 pending_reads: VecDeque::new(),
             }),
@@ -86,7 +86,7 @@ impl<I: Io> TcpConn<I> {
         iss: u32,
         rcv_nxt: u32,
         snd_wnd: u16,
-        rx_buffer: RingBuffer,
+        rx_buffer: TcpBuffer,
     ) {
         let snd_nxt = iss.wrapping_add(1); // +1 for the SYN packet
         let mut mutable = self.mutable.lock();

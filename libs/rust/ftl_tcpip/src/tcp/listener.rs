@@ -10,7 +10,7 @@ use crate::packet::Packet;
 use crate::socket::AnySocket;
 use crate::socket::Endpoint;
 use crate::tcp::Accept;
-use crate::tcp::RingBuffer;
+use crate::tcp::TcpBuffer;
 use crate::tcp::connection::DEFAULT_RCV_WND;
 use crate::tcp::connection::TcpConn;
 use crate::tcp::header::TcpFlags;
@@ -25,7 +25,7 @@ struct Handshake {
     local_iss: u32,
     remote_rcv_nxt: u32,
     remote_rcv_wnd: u16,
-    rx_buffer: RingBuffer,
+    rx_buffer: TcpBuffer,
 }
 
 struct PendingAccept<I: Io> {
@@ -91,7 +91,7 @@ impl<I: Io> TcpListener<I> {
             local_iss: our_iss,
             remote_rcv_nxt: rx.seq.wrapping_add(1),
             remote_rcv_wnd: rx.window_size,
-            rx_buffer: RingBuffer::new(),
+            rx_buffer: TcpBuffer::new(),
         };
 
         let header = TcpHeader {

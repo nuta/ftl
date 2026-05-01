@@ -1,11 +1,11 @@
 use alloc::vec::Vec;
 use core::cmp::min;
 
-pub struct RingBuffer {
+pub struct TcpBuffer {
     buf: Vec<u8>,
 }
 
-impl RingBuffer {
+impl TcpBuffer {
     pub const fn new() -> Self {
         Self { buf: Vec::new() }
     }
