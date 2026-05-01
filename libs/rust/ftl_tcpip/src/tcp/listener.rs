@@ -3,25 +3,21 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::fmt;
 
-use crate::Io;
-use crate::device::DeviceMap;
+use crate::TcpIp;
+use crate::io::Io;
 use crate::ip::IpAddr;
 use crate::packet::Packet;
-use crate::route::RouteTable;
-use crate::socket::ActiveKey;
 use crate::socket::AnySocket;
 use crate::socket::Endpoint;
-use crate::socket::SocketMap;
 use crate::tcp::Accept;
-use crate::tcp::RingBuffer;
-use crate::tcp::TcpConn;
+use crate::tcp::TcpBuffer;
 use crate::tcp::connection::DEFAULT_RCV_WND;
+use crate::tcp::connection::TcpConn;
 use crate::tcp::header::TcpFlags;
 use crate::tcp::header::TcpHeader;
 use crate::tcp::rx::RxHeader;
 use crate::tcp::tx::transmit_segment;
 use crate::transport::Port;
-use crate::transport::Protocol;
 
 struct Handshake {
     remote: Endpoint,
@@ -29,7 +25,7 @@ struct Handshake {
     local_iss: u32,
     remote_rcv_nxt: u32,
     remote_rcv_wnd: u16,
-    rx_buffer: RingBuffer,
+    rx_buffer: TcpBuffer,
 }
 
 struct PendingAccept<I: Io> {
@@ -44,9 +40,6 @@ struct Mutable<I: Io> {
     finished_handshakes: VecDeque<Handshake>,
     pending_accepts: VecDeque<PendingAccept<I>>,
 }
-
-#[derive(Debug)]
-pub enum AcceptError {}
 
 pub struct TcpListener<I: Io> {
     local_port: Port,
@@ -65,11 +58,7 @@ impl<I: Io> TcpListener<I> {
         }
     }
 
-    pub fn accept(
-        &self,
-        sockets: &mut SocketMap,
-        request: I::TcpAccept,
-    ) -> Result<Arc<TcpConn<I>>, AcceptError> {
+    pub fn accept(&self, tcpip: &mut TcpIp<I>, request: I::TcpAccept) -> Arc<TcpConn<I>> {
         let conn = Arc::new(TcpConn::new_listen(self.local_port));
         let pending_accept = PendingAccept {
             request,
@@ -78,20 +67,15 @@ impl<I: Io> TcpListener<I> {
 
         let mut mutable = self.mutable.lock();
         if let Some(h) = mutable.finished_handshakes.pop_front() {
-            self.accept_handshake(sockets, pending_accept, h);
+            self.accept_handshake(tcpip, pending_accept, h);
         } else {
             mutable.pending_accepts.push_back(pending_accept);
         }
-        Ok(conn)
+
+        conn
     }
 
-    fn start_handshake(
-        self: &Arc<Self>,
-        devices: &mut DeviceMap<I::Device>,
-        routes: &mut RouteTable,
-        sockets: &mut SocketMap,
-        rx: RxHeader,
-    ) {
+    fn start_handshake(self: &Arc<Self>, tcpip: &mut TcpIp<I>, rx: RxHeader) {
         let our_iss = 1234; // TODO: generate a random ISS.
 
         // TODO: Backlog limit: ensure mutable.handshakes.len() + mutable.finished_handshakes.len() <= MAX_BACKLOG.
@@ -107,7 +91,7 @@ impl<I: Io> TcpListener<I> {
             local_iss: our_iss,
             remote_rcv_nxt: rx.seq.wrapping_add(1),
             remote_rcv_wnd: rx.window_size,
-            rx_buffer: RingBuffer::new(),
+            rx_buffer: TcpBuffer::new(),
         };
 
         let header = TcpHeader {
@@ -126,16 +110,14 @@ impl<I: Io> TcpListener<I> {
         mutable.inflight_handshakes.push(handshake);
         drop(mutable);
 
-        if let Err(err) = transmit_segment::<I>(devices, routes, header, rx.remote_ip, &[]) {
+        if let Err(err) = transmit_segment::<I>(tcpip, header, rx.remote_ip, &[]) {
             warn!("TCP: failed to reply to SYN: {:?}", err);
         }
     }
 
     fn finish_handshake(
         self: &Arc<Self>,
-        devices: &mut DeviceMap<I::Device>,
-        routes: &mut RouteTable,
-        sockets: &mut SocketMap,
+        tcpip: &mut TcpIp<I>,
         rx: RxHeader,
         payload: &mut Packet,
     ) {
@@ -177,8 +159,7 @@ impl<I: Io> TcpListener<I> {
                 };
 
                 // ACK to the payload.
-                if let Err(err) = transmit_segment::<I>(devices, routes, header, h.remote.addr, &[])
-                {
+                if let Err(err) = transmit_segment::<I>(tcpip, header, h.remote.addr, &[]) {
                     warn!("TCP: failed to ACK final ACK payload: {:?}", err);
                 }
             }
@@ -186,7 +167,7 @@ impl<I: Io> TcpListener<I> {
 
         if let Some(pending_accept) = mutable.pending_accepts.pop_front() {
             // Register the connection immediately.
-            self.accept_handshake(sockets, pending_accept, h);
+            self.accept_handshake(tcpip, pending_accept, h);
         } else {
             // Queue this established connection for later completion.
             mutable.finished_handshakes.push_back(h);
@@ -195,20 +176,11 @@ impl<I: Io> TcpListener<I> {
 
     fn accept_handshake(
         &self,
-        sockets: &mut SocketMap,
+        tcpip: &mut TcpIp<I>,
         pending_accept: PendingAccept<I>,
         h: Handshake,
-    ) -> Result<(), ()> {
+    ) {
         let PendingAccept { request, conn } = pending_accept;
-
-        let key = ActiveKey {
-            remote: h.remote,
-            local: Endpoint {
-                addr: h.local_ip,
-                port: self.local_port,
-            },
-            protocol: Protocol::Tcp,
-        };
 
         conn.open_passively(
             h.remote,
@@ -217,25 +189,37 @@ impl<I: Io> TcpListener<I> {
             h.remote_rcv_wnd,
             h.rx_buffer,
         );
-        sockets.insert_active(key, conn.clone());
-        request.complete(Ok(()));
-        Ok(())
+
+        let local = Endpoint {
+            addr: h.local_ip,
+            port: self.local_port,
+        };
+        match tcpip
+            .sockets_mut()
+            .establish_tcp_conn(h.remote, local, conn.clone())
+        {
+            Ok(()) => {
+                request.complete(Ok(()));
+            }
+            Err(err) => {
+                warn!("TCP: failed to insert active connection: {:?}", err);
+                request.complete(Ok(())); // TODO: return an error
+            }
+        }
     }
 
     pub(super) fn handle_rx(
         self: &Arc<Self>,
-        devices: &mut DeviceMap<I::Device>,
-        routes: &mut RouteTable,
-        sockets: &mut SocketMap,
+        tcpip: &mut TcpIp<I>,
         rx: RxHeader,
         payload: &mut Packet,
     ) {
         match rx.flags {
             TcpFlags::SYN => {
-                self.start_handshake(devices, routes, sockets, rx);
+                self.start_handshake(tcpip, rx);
             }
             _ if rx.flags.contains(TcpFlags::ACK) => {
-                self.finish_handshake(devices, routes, sockets, rx, payload);
+                self.finish_handshake(tcpip, rx, payload);
             }
             _ => {
                 debug!("TCP: unexpected flags: {:?}", rx.flags);

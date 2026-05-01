@@ -1,18 +1,16 @@
 use core::fmt;
 
-use crate::Io;
+use crate::TcpIp;
 use crate::checksum::Checksum;
-use crate::device::DeviceMap;
 use crate::endian::Ne;
 use crate::ethernet;
 use crate::ethernet::EtherType;
+use crate::interface::Interface;
+use crate::io::Io;
 use crate::ip::IpAddr;
 use crate::packet;
 use crate::packet::Packet;
 use crate::packet::WriteableToPacket;
-use crate::route::Route;
-use crate::route::RouteTable;
-use crate::socket::SocketMap;
 use crate::transport;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
@@ -73,11 +71,22 @@ impl NetMask {
     pub fn contains(&self, our_addr: &Ipv4Addr, dest_addr: &Ipv4Addr) -> bool {
         (dest_addr.0 & self.0) == (our_addr.0 & self.0)
     }
+
+    pub fn bits(&self) -> u8 {
+        self.0.count_ones() as u8
+    }
 }
 
 impl fmt::Debug for NetMask {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self)
+        write!(
+            f,
+            "{}.{}.{}.{}",
+            (self.0 >> 24) & 0xff,
+            (self.0 >> 16) & 0xff,
+            (self.0 >> 8) & 0xff,
+            self.0 & 0xff
+        )
     }
 }
 
@@ -91,6 +100,33 @@ impl fmt::Display for NetMask {
             (self.0 >> 8) & 0xff,
             self.0 & 0xff
         )
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub enum IpCidr {
+    Ipv4(Ipv4Cidr),
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Ipv4Cidr {
+    network: Ipv4Addr,
+    mask: NetMask,
+}
+
+impl Ipv4Cidr {
+    pub const fn new(network: Ipv4Addr, mask: NetMask) -> Self {
+        Self { network, mask }
+    }
+
+    pub fn contains(&self, addr: Ipv4Addr) -> bool {
+        self.mask.contains(&self.network, &addr)
+    }
+}
+
+impl fmt::Debug for Ipv4Cidr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}/{}", self.network, self.mask)
     }
 }
 
@@ -135,18 +171,16 @@ impl Ipv4Header {
 
 #[derive(Debug)]
 pub enum TxError {
-    NoRoute,
-    NoDevice,
     PacketWrite(packet::ReserveError),
     EthernetTx(ethernet::TxError),
 }
 
 pub(crate) fn transmit<I: Io>(
-    device: &mut I::Device,
-    route: &Route,
+    iface: &mut Interface<I::Device>,
     pkt: &mut Packet,
-    src_ip: Ipv4Addr,
     dest_ip: Ipv4Addr,
+    next_hop: Ipv4Addr,
+    local_ip: Ipv4Addr,
     protocol: transport::Protocol,
 ) -> Result<(), TxError> {
     let mut header = Ipv4Header {
@@ -158,13 +192,13 @@ pub(crate) fn transmit<I: Io>(
         ttl: 64,
         protocol: protocol as u8,
         checksum: 0.into(),
-        src_addr: src_ip.into(),
+        src_addr: local_ip.into(),
         dst_addr: dest_ip.into(),
     };
     header.checksum = header.compute_checksum().into();
 
     pkt.write_front(header).map_err(TxError::PacketWrite)?;
-    ethernet::transmit(device, route, EtherType::Ipv4, pkt, IpAddr::V4(dest_ip))
+    ethernet::transmit(iface, EtherType::Ipv4, pkt, IpAddr::V4(next_hop))
         .map_err(TxError::EthernetTx)?;
     Ok(())
 }
@@ -175,14 +209,10 @@ pub enum RxError {
     BadVersion(u8),
     BadHeaderLength(u8),
     UnsupportedProtocol(u8),
+    Tcp(crate::tcp::RxError),
 }
 
-pub(crate) fn handle_rx<I: Io>(
-    devices: &mut DeviceMap<I::Device>,
-    routes: &mut RouteTable,
-    sockets: &mut SocketMap,
-    pkt: &mut Packet,
-) -> Result<(), RxError> {
+pub(crate) fn handle_rx<I: Io>(tcpip: &mut TcpIp<I>, pkt: &mut Packet) -> Result<(), RxError> {
     let header = pkt.read::<Ipv4Header>().map_err(RxError::PacketRead)?;
     if header.version() != 4 {
         return Err(RxError::BadVersion(header.version()));
@@ -209,16 +239,8 @@ pub(crate) fn handle_rx<I: Io>(
 
     match protocol {
         0x06 => {
-            if let Err(err) =
-                crate::tcp::handle_rx::<I>(devices, routes, sockets, pkt, remote, IpAddr::V4(dst))
-            {
-                warn!("bad TCP packet: {:?}", err);
-            }
+            crate::tcp::handle_rx::<I>(tcpip, pkt, remote, IpAddr::V4(dst)).map_err(RxError::Tcp)
         }
-        protocol => {
-            return Err(RxError::UnsupportedProtocol(protocol));
-        }
+        protocol => Err(RxError::UnsupportedProtocol(protocol)),
     }
-
-    Ok(())
 }

@@ -73,7 +73,7 @@ impl Packet {
         unsafe { self.buf.as_ptr().add(HEAD_PAD) }
     }
 
-    pub fn uninit_buf(&self) -> &mut [u8] {
+    pub fn uninit_buf(&mut self) -> &mut [u8] {
         unsafe { slice::from_raw_parts_mut(self.buf_mut_ptr(), self.capacity) }
     }
 

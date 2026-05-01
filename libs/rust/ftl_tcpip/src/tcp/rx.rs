@@ -1,14 +1,12 @@
-use crate::Io;
-use crate::device::DeviceMap;
+use crate::TcpIp;
+use crate::io::Io;
 use crate::ip::IpAddr;
 use crate::ip::ipv4::Ipv4Addr;
 use crate::packet;
 use crate::packet::Packet;
-use crate::route::RouteTable;
 use crate::socket::ActiveKey;
 use crate::socket::Endpoint;
 use crate::socket::ListenerKey;
-use crate::socket::SocketMap;
 use crate::tcp::TcpConn;
 use crate::tcp::TcpListener;
 use crate::tcp::header::TcpFlags;
@@ -17,7 +15,7 @@ use crate::transport::Port;
 use crate::transport::Protocol;
 
 #[derive(Debug)]
-pub(crate) enum RxError {
+pub enum RxError {
     PacketRead(packet::ReserveError),
 }
 
@@ -33,9 +31,7 @@ pub(super) struct RxHeader {
 }
 
 pub(crate) fn handle_rx<I: Io>(
-    devices: &mut DeviceMap<I::Device>,
-    routes: &mut RouteTable,
-    sockets: &mut SocketMap,
+    tcpip: &mut TcpIp<I>,
     pkt: &mut Packet,
     remote_ip: IpAddr,
     local_ip: IpAddr,
@@ -73,9 +69,9 @@ pub(crate) fn handle_rx<I: Io>(
         },
     };
 
-    match sockets.get_active::<TcpConn<I>>(&key) {
+    match tcpip.sockets().get_active::<TcpConn<I>>(&key) {
         Some(conn) => {
-            conn.handle_rx(devices, routes, rx, pkt);
+            conn.handle_rx(tcpip, rx, pkt);
         }
         None => {
             let key = ListenerKey {
@@ -86,9 +82,9 @@ pub(crate) fn handle_rx<I: Io>(
                 protocol: Protocol::Tcp,
             };
 
-            match sockets.get_listener::<TcpListener<I>>(&key) {
+            match tcpip.sockets().get_listener::<TcpListener<I>>(&key) {
                 Some(listener) => {
-                    listener.handle_rx(devices, routes, sockets, rx, pkt);
+                    listener.handle_rx(tcpip, rx, pkt);
                 }
                 None => {
                     trace!("TCP: no connection or listener found");

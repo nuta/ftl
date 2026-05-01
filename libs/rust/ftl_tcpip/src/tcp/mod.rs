@@ -1,14 +1,14 @@
+mod buffer;
 mod checksum;
 mod connection;
 mod header;
 mod listener;
-mod ring_buffer;
 mod rx;
 mod tx;
 
-pub use connection::TcpConn;
-pub use listener::TcpListener;
-pub use ring_buffer::RingBuffer;
+pub use buffer::TcpBuffer;
+pub(crate) use connection::TcpConn;
+pub(crate) use listener::TcpListener;
 pub(crate) use rx::RxError;
 pub(crate) use rx::handle_rx;
 
@@ -16,11 +16,11 @@ pub(crate) use rx::handle_rx;
 pub enum Error {}
 
 pub trait Read: Send + Sync {
-    fn complete(self, rx_buffer: &mut RingBuffer);
+    fn complete(self, rx_buffer: &mut TcpBuffer);
 }
 
 pub trait Write: Send + Sync {
-    fn complete(self, tx_buffer: &mut RingBuffer);
+    fn complete(self, tx_buffer: &mut TcpBuffer);
 }
 
 pub trait Accept: Send + Sync {

@@ -1,23 +1,22 @@
 use super::header::TcpHeader;
-use crate::Io;
-use crate::device::DeviceMap;
+use crate::TcpIp;
 use crate::ethernet::EthernetHeader;
+use crate::io::Io;
 use crate::ip::IpAddr;
 use crate::ip::ipv4;
 use crate::ip::ipv4::Ipv4Header;
 use crate::packet;
 use crate::packet::Packet;
-use crate::route::RouteTable;
 use crate::tcp::checksum::compute_checksum;
 use crate::transport::Protocol;
 
 #[derive(Debug)]
 pub(super) enum TxError {
-    PacketAlloc(packet::AllocError),
-    PacketWrite(packet::ReserveError),
-    Ipv4Tx(ipv4::TxError),
+    PacketAlloc(#[expect(dead_code)] packet::AllocError),
+    PacketWrite(#[expect(dead_code)] packet::ReserveError),
+    Ipv4Tx(#[expect(dead_code)] ipv4::TxError),
     NoRoute,
-    NoDevice,
+    NoLocalIpv4,
 }
 
 fn encode_header_len(len: usize) -> u8 {
@@ -27,8 +26,7 @@ fn encode_header_len(len: usize) -> u8 {
 }
 
 pub(super) fn transmit_segment<I: Io>(
-    devices: &mut DeviceMap<I::Device>,
-    routes: &mut RouteTable,
+    tcpip: &mut TcpIp<I>,
     mut header: TcpHeader,
     remote_ip: IpAddr,
     payload: &[u8],
@@ -42,12 +40,8 @@ pub(super) fn transmit_segment<I: Io>(
     pkt.write_back_bytes(payload)
         .map_err(TxError::PacketWrite)?;
 
-    let Some(route) = routes.lookup_by_dest(remote_ip) else {
+    let Some((iface, next_hop)) = tcpip.lookup_route(remote_ip) else {
         return Err(TxError::NoRoute);
-    };
-
-    let Some(device) = devices.get_mut(route.device_id()) else {
-        return Err(TxError::NoDevice);
     };
 
     header.header_len = encode_header_len(size_of::<TcpHeader>());
@@ -58,19 +52,23 @@ pub(super) fn transmit_segment<I: Io>(
         Into::<u32>::into(header.seq),
         Into::<u32>::into(header.ack)
     );
-    match remote_ip {
-        IpAddr::V4(remote_ipv4) => {
+    match (remote_ip, next_hop) {
+        (IpAddr::V4(remote_ipv4), IpAddr::V4(next_hop)) => {
+            let Some(local_ipv4) = iface.ipv4_addr() else {
+                return Err(TxError::NoLocalIpv4);
+            };
+
             header.checksum =
-                compute_checksum(&header, route.ipv4_addr(), remote_ipv4, pkt.slice()).into();
+                compute_checksum(&header, local_ipv4, remote_ipv4, pkt.slice()).into();
 
             pkt.write_front(header).map_err(TxError::PacketWrite)?;
 
             ipv4::transmit::<I>(
-                device,
-                route,
+                iface,
                 &mut pkt,
-                route.ipv4_addr(),
                 remote_ipv4,
+                next_hop,
+                local_ipv4,
                 Protocol::Tcp,
             )
             .map_err(TxError::Ipv4Tx)?;

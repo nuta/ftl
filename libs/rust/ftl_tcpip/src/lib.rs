@@ -1,7 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 // #![allow(unused)] // TODO:
 
-use crate::device::Device;
+use crate::interface::Device;
 
 extern crate alloc;
 
@@ -10,23 +10,23 @@ extern crate log;
 
 mod arp;
 mod checksum;
-pub mod device;
 mod endian;
 pub mod ethernet;
+pub mod interface;
+pub mod io;
 pub mod ip;
 pub mod packet;
 pub mod route;
 pub mod socket;
 pub mod tcp;
+mod tcpip;
 pub mod transport;
 mod utils;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct OutOfMemoryError;
+pub use io::Io;
+pub use tcpip::TcpConnHandle;
+pub use tcpip::TcpIp;
+pub use tcpip::TcpListenerHandle;
 
-pub trait Io: 'static {
-    type Device: Device;
-    type TcpWrite: tcp::Write;
-    type TcpRead: tcp::Read;
-    type TcpAccept: tcp::Accept;
-}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct OutOfMemoryError;

@@ -3,11 +3,15 @@ use core::any::Any;
 
 use hashbrown::HashMap;
 
-use crate::Io;
+use crate::OutOfMemoryError;
+use crate::io::Io;
 use crate::ip::IpAddr;
+use crate::tcp::TcpConn;
 use crate::tcp::TcpListener;
 use crate::transport::Port;
+use crate::transport::Protocol;
 use crate::transport::{self};
+use crate::utils::HashMapExt;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Endpoint {
@@ -30,19 +34,13 @@ pub struct ListenerKey {
 
 pub trait AnySocket: Any + Send + Sync {}
 
-#[derive(Debug)]
-pub enum TryInsertError {
-    Reserve(hashbrown::TryReserveError),
-    AlreadyExists,
-}
-
 pub struct SocketMap {
     actives: HashMap<ActiveKey, Arc<dyn AnySocket>>,
     listeners: HashMap<ListenerKey, Arc<dyn AnySocket>>,
 }
 
 impl SocketMap {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             actives: HashMap::new(),
             listeners: HashMap::new(),
@@ -61,38 +59,32 @@ impl SocketMap {
         Some(socket)
     }
 
-    pub(crate) fn insert_active<T: AnySocket>(
+    pub(crate) fn establish_tcp_conn<I: Io>(
         &mut self,
-        key: ActiveKey,
-        socket: Arc<T>,
-    ) -> Result<(), TryInsertError> {
-        self.actives
-            .try_reserve(1)
-            .map_err(TryInsertError::Reserve)?;
-        self.actives
-            .try_insert(key, socket.clone())
-            .map_err(|_| TryInsertError::AlreadyExists)?;
+        remote: Endpoint,
+        local: Endpoint,
+        conn: Arc<TcpConn<I>>,
+    ) -> Result<(), OutOfMemoryError> {
+        let key = ActiveKey {
+            remote,
+            local,
+            protocol: Protocol::Tcp,
+        };
+        self.actives.reserve_and_insert(key, conn.clone())?;
         Ok(())
     }
 
-    pub fn tcp_listen<I: Io>(
+    pub(crate) fn create_tcp_listener<I: Io>(
         &mut self,
         local: Endpoint,
-    ) -> Result<Arc<TcpListener<I>>, TryInsertError> {
+    ) -> Result<Arc<TcpListener<I>>, OutOfMemoryError> {
         let key = ListenerKey {
             local,
-            protocol: transport::Protocol::Tcp,
+            protocol: Protocol::Tcp,
         };
 
-        let socket = Arc::new(TcpListener::<I>::new(local.port));
-
-        self.listeners
-            .try_reserve(1)
-            .map_err(TryInsertError::Reserve)?;
-        self.listeners
-            .try_insert(key, socket.clone())
-            .map_err(|_| TryInsertError::AlreadyExists)?;
-
+        let socket = Arc::new(TcpListener::new(local.port));
+        self.listeners.reserve_and_insert(key, socket.clone())?;
         Ok(socket)
     }
 }
