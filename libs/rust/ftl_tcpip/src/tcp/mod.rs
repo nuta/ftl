@@ -6,9 +6,9 @@ mod ring_buffer;
 mod rx;
 mod tx;
 
-pub use connection::TcpConn;
-pub use listener::TcpListener;
 pub use ring_buffer::RingBuffer;
+pub(crate) use connection::TcpConn;
+pub(crate) use listener::TcpListener;
 pub(crate) use rx::RxError;
 pub(crate) use rx::handle_rx;
 

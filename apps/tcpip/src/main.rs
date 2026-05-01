@@ -26,8 +26,8 @@ use ftl_tcpip::ip::ipv4::NetMask;
 use ftl_tcpip::packet::Packet;
 use ftl_tcpip::route::Route;
 use ftl_tcpip::socket::Endpoint;
-use ftl_tcpip::tcp::TcpConn;
-use ftl_tcpip::tcp::TcpListener;
+use ftl_tcpip::TcpConnHandle;
+use ftl_tcpip::TcpListenerHandle;
 use ftl_tcpip::transport::Port;
 
 fn open_supervisor_channel(
@@ -196,11 +196,11 @@ enum Context {
     },
     TcpConn {
         ch: Arc<Channel>,
-        conn: Arc<TcpConn<TcpIpIo>>,
+        conn: TcpConnHandle<TcpIpIo>,
     },
     TcpListener {
         ch: Arc<Channel>,
-        listener: Arc<TcpListener<TcpIpIo>>,
+        listener: TcpListenerHandle<TcpIpIo>,
     },
 }
 
@@ -453,20 +453,12 @@ fn main(supervisor_ch: Channel) {
                             continue;
                         }
 
-                        let conn = match listener.accept(
-                            &mut tcpip,
+                        let conn = tcpip.tcp_accept(listener, 
                             TcpAccept {
                                 completer,
                                 their_ch,
-                            },
-                        ) {
-                            Ok(conn) => conn,
-                            Err(e) => {
-                                warn!("failed to accept tcp sock: {:?}", e);
-                                let _ = sink.remove(our_ch.handle().id());
-                                continue;
                             }
-                        };
+                        );
 
                         let our_ch = Arc::new(our_ch);
                         contexts
@@ -480,10 +472,10 @@ fn main(supervisor_ch: Channel) {
             (Context::TcpConn { ch, conn }, Event::Message(peek)) => {
                 match Incoming::parse(ch.clone(), peek) {
                     Incoming::Read(request) => {
-                        conn.read(TcpRead(request));
+                        tcpip.tcp_read(conn, TcpRead(request));
                     }
                     Incoming::Write(request) => {
-                        conn.write(&mut tcpip, TcpWrite(request));
+                        tcpip.tcp_write(conn, TcpWrite(request));
                     }
                     _ => {
                         warn!("unhandled tcp connection message: {:?}", peek);
@@ -492,7 +484,7 @@ fn main(supervisor_ch: Channel) {
             }
             (Context::TcpConn { conn, .. }, Event::PeerClosed) => {
                 trace!("tcp connection peer closed: {:?}", id);
-                conn.close(&mut tcpip);
+                tcpip.tcp_close(conn);
                 if let Err(error) = sink.remove(id) {
                     warn!("failed to remove handle from sink: {:?}", error);
                 }

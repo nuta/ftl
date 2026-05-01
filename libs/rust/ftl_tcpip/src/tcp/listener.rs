@@ -11,7 +11,7 @@ use crate::socket::AnySocket;
 use crate::socket::Endpoint;
 use crate::tcp::Accept;
 use crate::tcp::RingBuffer;
-use crate::tcp::TcpConn;
+use crate::tcp::connection::TcpConn;
 use crate::tcp::connection::DEFAULT_RCV_WND;
 use crate::tcp::header::TcpFlags;
 use crate::tcp::header::TcpHeader;
@@ -41,9 +41,6 @@ struct Mutable<I: Io> {
     pending_accepts: VecDeque<PendingAccept<I>>,
 }
 
-#[derive(Debug)]
-pub enum AcceptError {}
-
 pub struct TcpListener<I: Io> {
     local_port: Port,
     mutable: spin::Mutex<Mutable<I>>,
@@ -65,7 +62,7 @@ impl<I: Io> TcpListener<I> {
         &self,
         tcpip: &mut TcpIp<I>,
         request: I::TcpAccept,
-    ) -> Result<Arc<TcpConn<I>>, AcceptError> {
+    ) -> Arc<TcpConn<I>> {
         let conn = Arc::new(TcpConn::new_listen(self.local_port));
         let pending_accept = PendingAccept {
             request,
@@ -78,7 +75,8 @@ impl<I: Io> TcpListener<I> {
         } else {
             mutable.pending_accepts.push_back(pending_accept);
         }
-        Ok(conn)
+
+        conn
     }
 
     fn start_handshake(self: &Arc<Self>, tcpip: &mut TcpIp<I>, rx: RxHeader) {

@@ -56,7 +56,7 @@ struct Mutable<I: Io> {
     pending_reads: VecDeque<I::TcpRead>,
 }
 
-pub struct TcpConn<I: Io> {
+pub(crate) struct TcpConn<I: Io> {
     mutable: spin::Mutex<Mutable<I>>,
 }
 
