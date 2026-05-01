@@ -1,14 +1,14 @@
+mod buffer;
 mod checksum;
 mod connection;
 mod header;
 mod listener;
-mod buffer;
 mod rx;
 mod tx;
 
+pub use buffer::TcpBuffer;
 pub(crate) use connection::TcpConn;
 pub(crate) use listener::TcpListener;
-pub use buffer::TcpBuffer;
 pub(crate) use rx::RxError;
 pub(crate) use rx::handle_rx;
 

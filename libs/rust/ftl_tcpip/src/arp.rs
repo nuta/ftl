@@ -2,7 +2,8 @@ use hashbrown::HashMap;
 
 use crate::Device;
 use crate::TcpIp;
-use crate::device::DeviceId;
+use crate::device::Interface;
+use crate::device::InterfaceId;
 use crate::endian::Ne;
 use crate::ethernet;
 use crate::ethernet::EtherType;
@@ -14,7 +15,6 @@ use crate::ip::ipv4::Ipv4Addr;
 use crate::packet;
 use crate::packet::Packet;
 use crate::packet::WriteableToPacket;
-use crate::route::Route;
 
 enum ArpEntry {
     Resolved(MacAddr),
@@ -73,11 +73,12 @@ pub enum TxError {
 }
 
 fn transmit_arp_reply<D: Device>(
-    route: &Route,
-    device: &mut D,
+    iface: &mut Interface<D>,
     remote_addr: Ipv4Addr,
     remote_mac: MacAddr,
+    local_addr: Ipv4Addr,
 ) -> Result<(), TxError> {
+    let device = iface.device_mut();
     let arp_pkt = ArpPacket {
         hw_type: HWTYPE_ETHERNET.into(),
         proto_type: PROTOTYPE_IPV4.into(),
@@ -85,7 +86,7 @@ fn transmit_arp_reply<D: Device>(
         proto_len: 4.into(), // 4 bytes for IPv4 address
         opcode: OPCODE_REPLY.into(),
         sender_hw_addr: *device.mac_addr(),
-        sender_proto_addr: route.ipv4_addr().into(),
+        sender_proto_addr: local_addr.into(),
         target_hw_addr: remote_mac,
         target_proto_addr: remote_addr.into(),
     };
@@ -94,14 +95,8 @@ fn transmit_arp_reply<D: Device>(
         .map_err(TxError::PacketAlloc)?;
     pkt.write_back(arp_pkt).map_err(TxError::PacketWrite)?;
 
-    ethernet::transmit(
-        device,
-        route,
-        EtherType::Arp,
-        &mut pkt,
-        IpAddr::V4(remote_addr),
-    )
-    .map_err(TxError::EthernetTx)?;
+    ethernet::transmit(iface, EtherType::Arp, &mut pkt, IpAddr::V4(remote_addr))
+        .map_err(TxError::EthernetTx)?;
     Ok(())
 }
 
@@ -114,7 +109,7 @@ pub enum RxError {
     BadHardwareLength(u8),
     BadProtocolLength(u8),
     ReplyFailed(TxError),
-    DeviceNotFound(DeviceId),
+    DeviceNotFound(InterfaceId),
 }
 
 pub(crate) fn handle_rx<I: Io>(tcpip: &mut TcpIp<I>, pkt: &mut Packet) -> Result<(), RxError> {
@@ -143,21 +138,12 @@ pub(crate) fn handle_rx<I: Io>(tcpip: &mut TcpIp<I>, pkt: &mut Packet) -> Result
 
     match arp.opcode.into() {
         OPCODE_REQUEST => {
-            let route = tcpip
-                .routes
-                .lookup_by_dest_exact_mut(IpAddr::V4(target_addr));
-            if let Some(route) = route {
-                let device_id = route.device_id();
-                let device = tcpip
-                    .devices
-                    .get_mut(device_id)
-                    .ok_or(RxError::DeviceNotFound(device_id))?;
-
+            if let Some((iface, _)) = tcpip.lookup_route(IpAddr::V4(target_addr)) {
                 // Register the sender's MAC address so that we can reply to it.
-                route.arp_table_mut().add(sender_addr, arp.sender_hw_addr);
+                iface.arp_table_mut().add(sender_addr, arp.sender_hw_addr);
 
                 trace!("replying to ARP request for {}", target_addr);
-                transmit_arp_reply(route, device, sender_addr, arp.sender_hw_addr)
+                transmit_arp_reply(iface, sender_addr, arp.sender_hw_addr, target_addr)
                     .map_err(RxError::ReplyFailed)?;
             }
         }

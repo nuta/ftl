@@ -2,6 +2,7 @@ use core::fmt;
 
 use crate::TcpIp;
 use crate::checksum::Checksum;
+use crate::device::Interface;
 use crate::endian::Ne;
 use crate::ethernet;
 use crate::ethernet::EtherType;
@@ -10,7 +11,6 @@ use crate::ip::IpAddr;
 use crate::packet;
 use crate::packet::Packet;
 use crate::packet::WriteableToPacket;
-use crate::route::Route;
 use crate::transport;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
@@ -71,11 +71,22 @@ impl NetMask {
     pub fn contains(&self, our_addr: &Ipv4Addr, dest_addr: &Ipv4Addr) -> bool {
         (dest_addr.0 & self.0) == (our_addr.0 & self.0)
     }
+
+    pub fn bits(&self) -> u8 {
+        self.0.count_ones() as u8
+    }
 }
 
 impl fmt::Debug for NetMask {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self)
+        write!(
+            f,
+            "{}.{}.{}.{}",
+            (self.0 >> 24) & 0xff,
+            (self.0 >> 16) & 0xff,
+            (self.0 >> 8) & 0xff,
+            self.0 & 0xff
+        )
     }
 }
 
@@ -89,6 +100,33 @@ impl fmt::Display for NetMask {
             (self.0 >> 8) & 0xff,
             self.0 & 0xff
         )
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub enum IpCidr {
+    Ipv4(Ipv4Cidr),
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Ipv4Cidr {
+    network: Ipv4Addr,
+    mask: NetMask,
+}
+
+impl Ipv4Cidr {
+    pub const fn new(network: Ipv4Addr, mask: NetMask) -> Self {
+        Self { network, mask }
+    }
+
+    pub fn contains(&self, addr: Ipv4Addr) -> bool {
+        self.mask.contains(&self.network, &addr)
+    }
+}
+
+impl fmt::Debug for Ipv4Cidr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}/{}", self.network, self.mask)
     }
 }
 
@@ -140,11 +178,10 @@ pub enum TxError {
 }
 
 pub(crate) fn transmit<I: Io>(
-    device: &mut I::Device,
-    route: &Route,
+    iface: &mut Interface<I::Device>,
     pkt: &mut Packet,
-    src_ip: Ipv4Addr,
     dest_ip: Ipv4Addr,
+    local_ip: Ipv4Addr,
     protocol: transport::Protocol,
 ) -> Result<(), TxError> {
     let mut header = Ipv4Header {
@@ -156,13 +193,13 @@ pub(crate) fn transmit<I: Io>(
         ttl: 64,
         protocol: protocol as u8,
         checksum: 0.into(),
-        src_addr: src_ip.into(),
+        src_addr: local_ip.into(),
         dst_addr: dest_ip.into(),
     };
     header.checksum = header.compute_checksum().into();
 
     pkt.write_front(header).map_err(TxError::PacketWrite)?;
-    ethernet::transmit(device, route, EtherType::Ipv4, pkt, IpAddr::V4(dest_ip))
+    ethernet::transmit(iface, EtherType::Ipv4, pkt, IpAddr::V4(dest_ip))
         .map_err(TxError::EthernetTx)?;
     Ok(())
 }

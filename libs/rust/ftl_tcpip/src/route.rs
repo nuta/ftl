@@ -1,56 +1,29 @@
 use alloc::vec::Vec;
 
 use crate::OutOfMemoryError;
-use crate::arp::ArpTable;
-use crate::device::DeviceId;
+use crate::device::InterfaceId;
 use crate::ip::IpAddr;
+use crate::ip::ipv4::IpCidr;
 use crate::ip::ipv4::Ipv4Addr;
-use crate::ip::ipv4::NetMask;
 use crate::utils::VecExt;
 
 pub struct Route {
-    device_id: DeviceId,
-    arp_table: ArpTable,
-    ipv4_addr: Ipv4Addr,
-    net_mask: NetMask,
+    iface_id: InterfaceId,
+    cidr: IpCidr,
+    gateway: Option<Ipv4Addr>,
 }
 
 impl Route {
-    pub fn new(device_id: DeviceId, ipv4_addr: Ipv4Addr, net_mask: NetMask) -> Self {
+    pub fn new(iface_id: InterfaceId, cidr: IpCidr) -> Self {
         Self {
-            device_id,
-            arp_table: ArpTable::new(),
-            ipv4_addr,
-            net_mask,
+            iface_id,
+            cidr,
+            gateway: None,
         }
     }
 
-    pub fn device_id(&self) -> DeviceId {
-        self.device_id
-    }
-
-    pub fn ipv4_addr(&self) -> Ipv4Addr {
-        self.ipv4_addr
-    }
-
-    pub(crate) fn arp_table(&self) -> &ArpTable {
-        &self.arp_table
-    }
-
-    pub(crate) fn arp_table_mut(&mut self) -> &mut ArpTable {
-        &mut self.arp_table
-    }
-
-    fn should_receive_exact(&self, dest_addr: IpAddr) -> bool {
-        let IpAddr::V4(dest_addr) = dest_addr; // TODO:
-
-        self.ipv4_addr == dest_addr
-    }
-
-    fn should_receive(&self, dest_addr: IpAddr) -> bool {
-        let IpAddr::V4(dest_addr) = dest_addr; // TODO:
-
-        self.ipv4_addr == dest_addr || self.net_mask.contains(&self.ipv4_addr, &dest_addr)
+    pub fn iface_id(&self) -> InterfaceId {
+        self.iface_id
     }
 }
 
@@ -68,16 +41,16 @@ impl RouteTable {
         Ok(())
     }
 
-    // TODO: rename
-    pub fn lookup_by_dest_exact_mut(&mut self, dest_addr: IpAddr) -> Option<&mut Route> {
-        self.routes
-            .iter_mut()
-            .find(|route| route.should_receive_exact(dest_addr))
-    }
+    pub fn lookup(&self, addr: IpAddr) -> Option<(InterfaceId, IpAddr)> {
+        for route in &self.routes {
+            let IpAddr::V4(addr) = addr;
+            let IpCidr::Ipv4(cidr) = route.cidr;
+            if cidr.contains(addr) {
+                let dest_addr = route.gateway.unwrap_or(addr);
+                return Some((route.iface_id, IpAddr::V4(dest_addr)));
+            }
+        }
 
-    pub fn lookup_by_dest(&self, dest_addr: IpAddr) -> Option<&Route> {
-        self.routes
-            .iter()
-            .find(|route| route.should_receive(dest_addr))
+        None
     }
 }

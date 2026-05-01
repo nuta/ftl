@@ -23,7 +23,9 @@ use ftl_tcpip::TcpIp;
 use ftl_tcpip::TcpListenerHandle;
 use ftl_tcpip::ethernet::MacAddr;
 use ftl_tcpip::ip::IpAddr;
+use ftl_tcpip::ip::IpCidr;
 use ftl_tcpip::ip::Ipv4Addr;
+use ftl_tcpip::ip::Ipv4Cidr;
 use ftl_tcpip::ip::NetMask;
 use ftl_tcpip::packet::Packet;
 use ftl_tcpip::route::Route;
@@ -243,21 +245,26 @@ fn main(supervisor_ch: Channel) {
         })
         .unwrap();
 
+    let mac_addr = MacAddr::new([0x52, 0x54, 0x00, 0x12, 0x34, 0x56]);
+    let local_ip = Ipv4Addr::new(10, 0, 2, 15);
+    let cidr = Ipv4Cidr::new(local_ip, NetMask::new(255, 255, 255, 0));
+
     let mut tcpip = TcpIp::<TcpIpIo>::new();
     let device_id = tcpip
         .add_device(MyDevice {
-            mac_addr: MacAddr::new([0x52, 0x54, 0x00, 0x12, 0x34, 0x56]),
+            mac_addr,
             driver_ch: driver_ch.clone(),
         })
         .unwrap();
 
     tcpip
-        .add_route(Route::new(
-            device_id,
-            Ipv4Addr::new(10, 0, 2, 15),
-            NetMask::new(255, 255, 255, 0),
-        ))
+        .add_route(Route::new(device_id, IpCidr::Ipv4(cidr)))
         .unwrap();
+
+    tcpip
+        .get_iface_mut(device_id)
+        .unwrap()
+        .set_ipv4_addr(local_ip);
 
     let mut contexts = HashMap::new();
     contexts.insert(

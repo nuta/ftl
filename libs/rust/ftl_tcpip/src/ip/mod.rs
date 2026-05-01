@@ -2,7 +2,9 @@ use core::fmt;
 
 pub(crate) mod ipv4;
 
+pub use ipv4::IpCidr;
 pub use ipv4::Ipv4Addr;
+pub use ipv4::Ipv4Cidr;
 pub use ipv4::NetMask;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
