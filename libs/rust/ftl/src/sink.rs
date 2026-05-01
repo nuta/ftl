@@ -23,6 +23,7 @@ pub enum Event {
     Message(Peek), // TODO: OwnedPeek + OwnedRecvToken to prevent copying
     Irq { irq: u8 },
     PeerClosed,
+    Timer,
 }
 
 pub struct Sink {
@@ -71,6 +72,7 @@ impl Sink {
                 }
             }
             EventType::PEER_CLOSED => Event::PeerClosed,
+            EventType::TIMER => Event::Timer,
             type_ => panic!("unimplemented event type: {:?}", type_),
         };
 
