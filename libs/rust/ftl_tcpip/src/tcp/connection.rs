@@ -1,9 +1,11 @@
 use alloc::collections::VecDeque;
 use core::cmp::min;
 use core::fmt;
+use core::time::Duration;
 
 use super::buffer::TcpBuffer;
 use crate::TcpIp;
+use crate::io::Instant;
 use crate::io::Io;
 use crate::packet::Packet;
 use crate::socket::AnySocket;
@@ -18,9 +20,25 @@ use crate::transport::Port;
 
 pub(super) const DEFAULT_RCV_WND: u16 = 1024;
 const MAX_SEGMENT_DATA_LEN: usize = 1460;
+const TIME_WAIT_TIMEOUT: Duration = Duration::from_secs(3);
+
+pub(crate) enum TimeoutResult<I: Io> {
+    Ok,
+    ResetTimer(I::Instant),
+    Closed,
+}
+
+fn time_wait<I: Io>(io: &mut I) -> State<I> {
+    let now = io.now();
+    // SAFETY: TIME_WAIT_TIMEOUT is shorter than the maximum duration of an
+    // instant.
+    let expires_at = now.checked_add(TIME_WAIT_TIMEOUT).unwrap();
+    io.set_timer(expires_at);
+    State::TimeWait { expires_at }
+}
 
 #[derive(Debug, Clone, Copy)]
-enum State {
+enum State<I: Io> {
     Listen,
     Established,
     CloseWait,
@@ -28,7 +46,7 @@ enum State {
     FinWait1,
     FinWait2,
     Closing,
-    TimeWait,
+    TimeWait { expires_at: I::Instant },
     Closed,
 }
 
@@ -37,7 +55,7 @@ enum State {
 // --[ACKed] --+---[inflight]--+---[max_bytes]--+---[cannot send]------
 //             |<-- snd_wnd ------------------->|
 struct Mutable<I: Io> {
-    state: State,
+    state: State<I>,
     remote: Option<Endpoint>,
     local_port: Port,
     close_requested: bool,
@@ -97,6 +115,22 @@ impl<I: Io> TcpConn<I> {
         mutable.snd_wnd = snd_wnd;
         mutable.rcv_nxt = rcv_nxt;
         mutable.rx_buffer = rx_buffer;
+    }
+
+    pub(crate) fn handle_timeout(&self, now: &I::Instant) -> TimeoutResult<I> {
+        let mut mutable = self.mutable.lock();
+        match &mutable.state {
+            State::TimeWait { expires_at } => {
+                if now.is_before(&expires_at) {
+                    TimeoutResult::ResetTimer(*expires_at)
+                } else {
+                    mutable.state = State::Closed;
+                    TimeoutResult::Closed
+                }
+            }
+            State::Closed => TimeoutResult::Closed,
+            _ => TimeoutResult::Ok,
+        }
     }
 
     pub fn write(&self, tcpip: &mut TcpIp<I>, req: I::TcpWrite) {
@@ -164,7 +198,7 @@ impl<I: Io> TcpConn<I> {
                 // FIN state transitions: the remote acknowledged our FIN.
                 match mutable.state {
                     State::FinWait1 => mutable.state = State::FinWait2,
-                    State::Closing => mutable.state = State::TimeWait,
+                    State::Closing => mutable.state = time_wait(tcpip.io_mut()),
                     State::LastAck => mutable.state = State::Closed,
                     _ => {}
                 }
@@ -212,7 +246,7 @@ impl<I: Io> TcpConn<I> {
                 State::FinWait1 => mutable.state = State::Closing,
                 // The remote acknowledged our FIN. Acknowledge their FIN, and
                 // enter TIME_WAIT state.
-                State::FinWait2 => mutable.state = State::TimeWait,
+                State::FinWait2 => mutable.state = time_wait(tcpip.io_mut()),
                 _ => {}
             }
         }
@@ -309,7 +343,7 @@ impl<I: Io> TcpConn<I> {
             | State::FinWait1
             | State::FinWait2
             | State::Closing
-            | State::TimeWait
+            | State::TimeWait { .. }
             | State::Closed => {}
         }
     }

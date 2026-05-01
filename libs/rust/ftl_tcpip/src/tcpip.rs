@@ -16,22 +16,35 @@ use crate::tcp::TcpConn;
 use crate::tcp::TcpListener;
 
 pub struct TcpIp<I: Io> {
+    io: I,
     interfaces: InterfaceMap<I::Device>,
     routes: RouteTable,
     sockets: SocketMap,
 }
 
 impl<I: Io> TcpIp<I> {
-    pub fn new() -> Self {
+    pub fn new(io: I) -> Self {
         Self {
+            io,
             interfaces: InterfaceMap::new(),
             routes: RouteTable::new(),
             sockets: SocketMap::new(),
         }
     }
 
+    pub fn io_mut(&mut self) -> &mut I {
+        &mut self.io
+    }
+
     pub fn handle_rx(&mut self, pkt: &mut Packet) -> Result<(), crate::ethernet::RxError> {
         crate::ethernet::handle_rx::<I>(self, pkt)
+    }
+
+    pub fn handle_timeout(&mut self) {
+        let now = self.io.now();
+        if let Some(next) = self.sockets.handle_timeout::<I>(now) {
+            self.io.set_timer(next);
+        }
     }
 
     pub fn add_device(&mut self, device: I::Device) -> Result<InterfaceId, OutOfMemoryError> {

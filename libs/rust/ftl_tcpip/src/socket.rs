@@ -4,10 +4,12 @@ use core::any::Any;
 use hashbrown::HashMap;
 
 use crate::OutOfMemoryError;
+use crate::io::Instant;
 use crate::io::Io;
 use crate::ip::IpAddr;
 use crate::tcp::TcpConn;
 use crate::tcp::TcpListener;
+use crate::tcp::TimeoutResult;
 use crate::transport::Port;
 use crate::transport::Protocol;
 use crate::transport::{self};
@@ -72,6 +74,38 @@ impl SocketMap {
         };
         self.actives.reserve_and_insert(key, conn.clone())?;
         Ok(())
+    }
+
+    pub(crate) fn handle_timeout<I: Io>(&mut self, now: I::Instant) -> Option<I::Instant> {
+        let mut earliest: Option<I::Instant> = None;
+        self.actives.retain(|key, socket| {
+            // TODO: Replace Any with enum.
+            let socket = socket.clone() as Arc<dyn Any + Send + Sync>;
+            let conn = socket.downcast::<TcpConn<I>>().unwrap();
+            match conn.handle_timeout(&now) {
+                TimeoutResult::Ok => true,
+                TimeoutResult::ResetTimer(next) => {
+                    let skip = matches!(earliest, Some(e) if e.is_before(&next));
+                    if !skip {
+                        earliest = Some(next);
+                    }
+
+                    true
+                }
+                TimeoutResult::Closed => {
+                    trace!("destroying an socket: {:?}", key);
+                    false
+                }
+            }
+        });
+
+        trace!(
+            "{} active sockets, {} listener sockets",
+            self.actives.len(),
+            self.listeners.len()
+        );
+
+        earliest
     }
 
     pub(crate) fn create_tcp_listener<I: Io>(

@@ -8,6 +8,7 @@ mod tx;
 
 pub use buffer::TcpBuffer;
 pub(crate) use connection::TcpConn;
+pub(crate) use connection::TimeoutResult;
 pub(crate) use listener::TcpListener;
 pub(crate) use rx::RxError;
 pub(crate) use rx::handle_rx;

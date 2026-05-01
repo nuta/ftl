@@ -98,13 +98,56 @@ fn parse_tcp_listen_endpoint(path: &[u8]) -> Result<Endpoint, ErrorCode> {
 
 const RECV_BUFFER_SIZE: usize = 1514;
 
-pub struct TcpIpIo;
+pub struct TcpIpIo {
+    timer: ftl::time::Timer,
+    timer_deadline: Option<MyInstant>,
+}
 
 impl ftl_tcpip::Io for TcpIpIo {
     type Device = MyDevice;
     type TcpWrite = TcpWrite;
     type TcpRead = TcpRead;
     type TcpAccept = TcpAccept;
+
+    type Instant = MyInstant;
+    fn now(&self) -> Self::Instant {
+        MyInstant(ftl::time::Instant::now())
+    }
+
+    fn set_timer(&mut self, at: Self::Instant) {
+        if let Some(current) = self.timer_deadline
+            && current.0.is_before(&at.0)
+        {
+            return;
+        }
+
+        if let Err(error) = self.timer.set_timeout(at.0) {
+            warn!("failed to set timer: {:?}", error);
+        } else {
+            self.timer_deadline = Some(at);
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct MyInstant(ftl::time::Instant);
+
+impl ftl_tcpip::io::Instant for MyInstant {
+    fn checked_add(&self, duration: core::time::Duration) -> Option<Self> {
+        self.0.checked_add(duration).map(MyInstant)
+    }
+
+    fn now(&self) -> Self {
+        MyInstant(ftl::time::Instant::now())
+    }
+
+    fn is_before(&self, other: &MyInstant) -> bool {
+        self.0.is_before(&other.0)
+    }
+
+    fn elapsed_since(&self, other: &MyInstant) -> core::time::Duration {
+        self.0.elapsed_since(&other.0)
+    }
 }
 
 pub struct MyDevice {
@@ -190,6 +233,7 @@ enum Context {
     Driver {
         ch: Arc<Channel>,
     },
+    Timer,
     Server {
         ch: Arc<Channel>,
     },
@@ -249,7 +293,13 @@ fn main(supervisor_ch: Channel) {
     let local_ip = Ipv4Addr::new(10, 0, 2, 15);
     let cidr = Ipv4Cidr::new(local_ip, NetMask::new(255, 255, 255, 0));
 
-    let mut tcpip = TcpIp::<TcpIpIo>::new();
+    let io = TcpIpIo {
+        timer: ftl::time::Timer::new().unwrap(),
+        timer_deadline: None,
+    };
+    sink.add(&io.timer).unwrap();
+    let timer_id = io.timer.handle().id();
+    let mut tcpip = TcpIp::<TcpIpIo>::new(io);
     let device_id = tcpip
         .add_device(MyDevice {
             mac_addr,
@@ -274,6 +324,7 @@ fn main(supervisor_ch: Channel) {
         },
     );
     contexts.insert(driver_ch.handle().id(), Context::Driver { ch: driver_ch });
+    contexts.insert(timer_id, Context::Timer);
 
     info!("tcpip server is ready");
 
@@ -286,6 +337,10 @@ fn main(supervisor_ch: Channel) {
         };
 
         match (ctx, event) {
+            (Context::Timer, Event::Timer) => {
+                tcpip.io_mut().timer_deadline = None;
+                tcpip.handle_timeout();
+            }
             (Context::Driver { ch }, Event::Message(peek)) => {
                 match Incoming::parse(ch.clone(), peek) {
                     Incoming::ReadReply(reply) => {
