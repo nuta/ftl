@@ -13,11 +13,20 @@ use crate::handle::OwnedHandle;
 use crate::syscall::syscall0;
 use crate::syscall::syscall2;
 
+#[derive(Clone, Copy)]
 pub struct Instant(Monotonic);
 
 impl Instant {
     pub fn now() -> Self {
         Self(sys_time_now().expect("failed to get time"))
+    }
+
+    pub fn checked_add(&self, duration: Duration) -> Option<Self> {
+        self.0.checked_add(duration).map(Self)
+    }
+
+    pub fn is_before(&self, other: &Instant) -> bool {
+        self.0.is_before(&other.0)
     }
 
     pub fn elapsed_since(&self, other: &Instant) -> Duration {
