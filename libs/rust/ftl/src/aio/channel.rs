@@ -1,5 +1,6 @@
 use alloc::collections::vec_deque::VecDeque;
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 use core::pin::Pin;
 use core::task::Context;
 use core::task::Poll;
@@ -137,16 +138,18 @@ impl ChannelAio {
     }
 
     pub fn handle_peer_closed(&self, handle_id: HandleId) {
-        self.lock_state_by_id(handle_id, |state| {
-            state.peer_closed = true;
+        self.lock_state_by_id(handle_id, |e| {
+            e.peer_closed = true;
 
-            // Do not drain pending sends here; peer has closed their send side,
-            // but still may receive messages from us.
-            for waker in state.pending_recvs.drain(..) {
+            for waker in e.pending_recvs.drain(..) {
                 waker.wake();
             }
 
-            for (_, call) in state.inflight_calls.drain() {
+            for waker in e.pending_sends.drain(..) {
+                waker.wake();
+            }
+
+            for (_, call) in e.inflight_calls.drain() {
                 if let InflightCall::Pending(waker) = call {
                     waker.wake_by_ref();
                 }
@@ -235,6 +238,13 @@ impl<'a> Future for CallFuture<'a> {
         GLOBAL_EXECUTOR.channels.lock_state(this.ch, |e| {
             match &mut this.state {
                 CallState::NeedsMid(msg) => {
+                    if e.peer_closed {
+                        // The peer won't send any more messages. That is,
+                        // we can't receive a reply anyway. Abort the call.
+                        this.state = CallState::Done;
+                        return Poll::Ready(Err(ErrorCode::PeerClosed));
+                    }
+
                     let Some(new_mid) = e.alloc_mid() else {
                         e.pending_sends.push_back(cx.waker().clone());
                         return Poll::Pending;

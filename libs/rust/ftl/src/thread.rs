@@ -61,13 +61,7 @@ pub fn sys_thread_create(
     sp: usize,
     start_info: usize,
 ) -> Result<OwnedHandle, ErrorCode> {
-    let id = syscall4(
-        SYS_THREAD_CREATE,
-        process.as_usize(),
-        entry,
-        sp,
-        start_info,
-    )?;
+    let id = syscall4(SYS_THREAD_CREATE, process.as_usize(), entry, sp, start_info)?;
     let handle = OwnedHandle::from_raw(HandleId::from_raw(id));
     Ok(handle)
 }

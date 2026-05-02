@@ -285,10 +285,7 @@ impl<C: AsRef<Channel>> OpenRequest<C> {
         self.inner.info.body_len()
     }
 
-    pub fn recv(
-        mut self,
-        path: &mut [u8],
-    ) -> Result<(&[u8], OpenCompleter<C>), RecvError<C>> {
+    pub fn recv(mut self, path: &mut [u8]) -> Result<(&[u8], OpenCompleter<C>), RecvError<C>> {
         match self.inner.recv_body(path) {
             Ok(body) => {
                 let completer = OpenCompleter::new(self.inner);
@@ -444,10 +441,7 @@ impl<C: AsRef<Channel>> WriteRequest<C> {
         self.inner.info.body_len()
     }
 
-    pub fn recv(
-        mut self,
-        buf: &mut [u8],
-    ) -> Result<(&[u8], WriteCompleter<C>), RecvError<C>> {
+    pub fn recv(mut self, buf: &mut [u8]) -> Result<(&[u8], WriteCompleter<C>), RecvError<C>> {
         match self.inner.recv_body(buf) {
             Ok(body) => {
                 let completer = WriteCompleter::new(self.inner);
@@ -608,10 +602,7 @@ impl<C: AsRef<Channel>> SetAttrRequest<C> {
         self.attr
     }
 
-    pub fn recv(
-        mut self,
-        buf: &mut [u8],
-    ) -> Result<(&[u8], SetAttrCompleter<C>), RecvError<C>> {
+    pub fn recv(mut self, buf: &mut [u8]) -> Result<(&[u8], SetAttrCompleter<C>), RecvError<C>> {
         match self.inner.recv_body(buf) {
             Ok(body) => {
                 let completer = SetAttrCompleter::new(self.inner);
