@@ -279,8 +279,6 @@ impl Client {
 
         let peek = CallFuture::new(self.ch.as_ref(), msg).await?;
         let reply = WriteReply::new(&self.ch, peek);
-        let written_len = reply.written_len();
-        drop(reply); // Receive the reply message
-        Ok(written_len)
+        Ok(reply.written_len())
     }
 }
