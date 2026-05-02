@@ -118,14 +118,8 @@ impl Future for RecvFuture {
 }
 
 enum InflightCall {
-    WaitingForReply {
-        mid: MessageId,
-        waker: Waker,
-    },
-    Done {
-        mid: MessageId,
-        token: RecvToken,
-    }
+    WaitingForReply { mid: MessageId, waker: Waker },
+    Done { mid: MessageId, token: RecvToken },
 }
 
 enum CallState<'a> {
@@ -152,52 +146,56 @@ impl<'a> Future for CallFuture<'a> {
     type Output = Result<Message<'a>, ErrorCode>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        GLOBAL_EXECUTOR
-            .channels
-            .use_channel(&self.ch, |state| {
-                match &mut self.state {
-                    CallState::NeedsMid(msg) => {
-                        let Some(mid) = state.mid_allocator.alloc() else {
-                            state.pending_sends.push_back(cx.waker().clone());
-                            return Poll::Pending;
-                        };
+        GLOBAL_EXECUTOR.channels.use_channel(&self.ch, |state| {
+            match &mut self.state {
+                CallState::NeedsMid(msg) => {
+                    let Some(mid) = state.mid_allocator.alloc() else {
+                        state.pending_sends.push_back(cx.waker().clone());
+                        return Poll::Pending;
+                    };
 
-                        // TODO: Build a message with the mid
-                        if let Err(error) = self.ch.send(msg) {
-                            self.state = CallState::Done;
-                            return Poll::Ready(Err(error));
-                        }
+                    // TODO: Build a message with the mid
+                    if let Err(error) = self.ch.send(msg) {
+                        self.state = CallState::Done;
+                        return Poll::Ready(Err(error));
+                    }
 
-                        state.inflight_calls.insert(mid, InflightCall::WaitingForReply {
+                    state.inflight_calls.insert(
+                        mid,
+                        InflightCall::WaitingForReply {
                             mid,
                             waker: cx.waker().clone(),
-                        });
+                        },
+                    );
 
-                        self.state = CallState::WaitForReply(mid);
-                        Poll::Pending
-                    }
-                    CallState::WaitForReply(mid) => {
-                        let call = state.inflight_calls.get_mut(mid).expect("missing inflight call");
-                        match call {
-                            InflightCall::WaitingForReply { mid, waker } => {
-                                *waker = cx.waker().clone();
-                                Poll::Pending
-                            }
-                            InflightCall::Done { mid, token } => {
-                                self.ch.recv_args(*token)?;
-                                let reply = todo!();
+                    self.state = CallState::WaitForReply(mid);
+                    Poll::Pending
+                }
+                CallState::WaitForReply(mid) => {
+                    let call = state
+                        .inflight_calls
+                        .get_mut(mid)
+                        .expect("missing inflight call");
+                    match call {
+                        InflightCall::WaitingForReply { mid, waker } => {
+                            *waker = cx.waker().clone();
+                            Poll::Pending
+                        }
+                        InflightCall::Done { mid, token } => {
+                            self.ch.recv_args(*token)?;
+                            let reply = todo!();
 
-                                state.mid_allocator.free(*mid);
-                                state.inflight_calls.remove(mid);
-                                self.state = CallState::Done;
-                                Poll::Ready(Ok(reply))
-                            }
+                            state.mid_allocator.free(*mid);
+                            state.inflight_calls.remove(mid);
+                            self.state = CallState::Done;
+                            Poll::Ready(Ok(reply))
                         }
                     }
-                    CallState::Done => {
-                        panic!("call future is already done");
-                    }
                 }
-            })
+                CallState::Done => {
+                    panic!("call future is already done");
+                }
+            }
+        })
     }
 }
