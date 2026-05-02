@@ -15,6 +15,7 @@ use hashbrown::hash_map::Entry;
 
 use crate::aio::executor::GLOBAL_EXECUTOR;
 use crate::channel::Channel;
+use crate::channel::sys_channel_discard;
 use crate::handle::Handleable;
 use crate::handle::OwnedHandle;
 use crate::message::Incoming;
@@ -100,26 +101,33 @@ impl ChannelAio {
         }
     }
 
-    pub fn handle_message(&self, handle_id: HandleId, peek: Peek) {
-        self.lock_state_by_id(handle_id, |state| {
+    pub fn handle_message(&self, ch_id: HandleId, peek: Peek) {
+        self.lock_state_by_id(ch_id, |e| {
             let mid = peek.info.mid();
             // TODO: Check if the message is a reply type.
-            if let Some(call) = state.inflight_calls.remove(&mid) {
+            if let Some(call) = e.inflight_calls.remove(&mid) {
                 match call {
                     InflightCall::Pending(waker) => {
-                        state
+                        e
                             .inflight_calls
                             .insert(mid, InflightCall::Ready(Some(peek)));
 
                         waker.wake();
                     }
-                    InflightCall::Ready { .. } => {
+                    InflightCall::Ready(_peek) => {
                         unreachable!("inflight call is already done");
+                    }
+                    InflightCall::Cancelled => {
+                        e.free_mid(mid);
+                        e.inflight_calls.remove(&mid);
+                        if let Err(err) = sys_channel_discard(ch_id, peek.token) {
+                            debug!("failed to discard reply message after cancellation: {:?}", err);
+                        }
                     }
                 }
             } else {
-                state.peeks.push_back(peek);
-                if let Some(waker) = state.pending_recvs.pop_front() {
+                e.peeks.push_back(peek);
+                if let Some(waker) = e.pending_recvs.pop_front() {
                     waker.wake();
                 }
             }
@@ -194,6 +202,7 @@ impl Future for RecvFuture {
 enum InflightCall {
     Pending(Waker),
     Ready(Option<Peek>),
+    Cancelled,
 }
 
 enum CallState<'a> {
@@ -281,6 +290,10 @@ impl<'a> Future for CallFuture<'a> {
                             
                             Poll::Ready(Ok(peek))
                         }
+                        InflightCall::Cancelled => {
+                            // A call is cancelled when the future is dropped.
+                            unreachable!();
+                        }
                     }
                 }
                 CallState::Done => {
@@ -345,6 +358,41 @@ impl Client {
             Incoming::WriteReply(reply) => Ok(reply.written_len()),
             Incoming::ErrorReply(reply) => Err(reply.error()),
             _ => Err(ErrorCode::InvalidMessage),
+        }
+    }
+}
+
+impl Drop for CallFuture<'_> {
+    fn drop(&mut self) {
+        match &mut self.state {
+            CallState::NeedsMid(_msg) => {
+                // Nothing to do.
+            }
+            CallState::WaitingForReply(mid) => {
+                GLOBAL_EXECUTOR.channels.lock_state(self.ch, |e| {
+                    let call = e.inflight_calls.get_mut(mid).unwrap();
+                    match call {
+                        InflightCall::Pending(_waker) => {
+                            // Mark the inflight call as cancelled so that we
+                            // discard the reply message later.
+                            *call = InflightCall::Cancelled;
+                        }
+                        InflightCall::Ready(peek) => {
+                            // We've already received the reply. Discard it.
+                            let token = peek.unwrap().token;
+                            e.free_mid(*mid);
+                            e.inflight_calls.remove(mid);
+                            if let Err(err) = self.ch.discard(token) {
+                                debug!("failed to discard reply message after cancellation: {:?}", err);
+                            }
+                        }
+                        InflightCall::Cancelled => {
+                            unreachable!();
+                        }
+                    }
+                });
+            }
+            CallState::Done => {}
         }
     }
 }
