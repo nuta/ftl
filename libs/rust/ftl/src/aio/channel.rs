@@ -6,6 +6,7 @@ use core::task::Poll;
 use core::task::Waker;
 
 use ftl_types::channel::MessageId;
+use ftl_types::channel::OpenOptions;
 use ftl_types::channel::Peek;
 use ftl_types::channel::RecvToken;
 use ftl_types::error::ErrorCode;
@@ -138,8 +139,8 @@ enum InflightCall {
 }
 
 enum CallState<'a> {
-    NeedsMid(Message<'a>),
-    WaitForReply(MessageId),
+    NeedsMid(Option<Message<'a>>),
+    WaitingForReply(MessageId),
     Done,
 }
 
@@ -151,7 +152,7 @@ pub struct CallFuture<'a> {
 impl<'a> CallFuture<'a> {
     pub fn new(ch: &'a Channel, msg: Message<'a>) -> Self {
         Self {
-            state: CallState::NeedsMid(msg),
+            state: CallState::NeedsMid(Some(msg)),
             ch,
         }
     }
@@ -161,48 +162,50 @@ impl<'a> Future for CallFuture<'a> {
     type Output = Result<Message<'a>, ErrorCode>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        GLOBAL_EXECUTOR.channels.use_channel(&self.ch, |state| {
-            match &mut self.state {
+        let this = unsafe { self.get_unchecked_mut() };
+        GLOBAL_EXECUTOR.channels.use_channel(this.ch, |e| {
+            match &mut this.state {
                 CallState::NeedsMid(msg) => {
-                    let Some(mid) = state.mid_allocator.alloc() else {
-                        state.pending_sends.push_back(cx.waker().clone());
+                    let Some(mid) = e.mid_allocator.alloc() else {
+                        e.pending_sends.push_back(cx.waker().clone());
                         return Poll::Pending;
                     };
 
                     // TODO: Build a message with the mid
-                    if let Err(error) = self.ch.send(msg) {
-                        self.state = CallState::Done;
+                    let msg = msg.take().unwrap();
+                    if let Err(error) = this.ch.as_ref().send(msg) {
+                        this.state = CallState::Done;
                         return Poll::Ready(Err(error));
                     }
 
-                    state
-                        .inflight_calls
+                    e.inflight_calls
                         .insert(mid, InflightCall::WaitingForReply(cx.waker().clone()));
 
-                    self.state = CallState::WaitForReply(mid);
+                    this.state = CallState::WaitingForReply(mid);
                     Poll::Pending
                 }
-                CallState::WaitForReply(mid) => {
-                    let call = state
+                CallState::WaitingForReply(mid) => {
+                    let call = e
                         .inflight_calls
                         .get_mut(mid)
                         .expect("missing inflight call");
                     match call {
                         InflightCall::WaitingForReply(waker) => {
                             *waker = cx.waker().clone();
+                            this.state = CallState::WaitingForReply(*mid);
                             Poll::Pending
                         }
                         InflightCall::Done { mid, peek } => {
-                            self.ch.recv_args(peek.token)?;
+                            this.ch.recv_args(peek.token)?;
                             let reply = todo!();
 
-                            state.mid_allocator.free(*mid);
-                            if let Some(waker) = state.pending_sends.pop_front() {
+                            e.mid_allocator.free(*mid);
+                            if let Some(waker) = e.pending_sends.pop_front() {
                                 waker.wake();
                             }
 
-                            state.inflight_calls.remove(mid);
-                            self.state = CallState::Done;
+                            e.inflight_calls.remove(mid);
+                            this.state = CallState::Done;
                             Poll::Ready(Ok(reply))
                         }
                     }
@@ -212,5 +215,28 @@ impl<'a> Future for CallFuture<'a> {
                 }
             }
         })
+    }
+}
+
+struct Client {
+    ch: Arc<Channel>,
+}
+
+impl Client {
+    pub fn new(ch: Arc<Channel>) -> Self {
+        Self { ch }
+    }
+
+    pub async fn open(&self, path: &[u8], options: OpenOptions) -> Result<Channel, ErrorCode> {
+        CallFuture::new(
+            self.ch.as_ref(),
+            Message::Open {
+                mid: MessageId::new(0),
+                path,
+                options,
+            },
+        )
+        .await?;
+        todo!()
     }
 }
