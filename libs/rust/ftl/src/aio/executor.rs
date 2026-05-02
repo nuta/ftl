@@ -14,6 +14,7 @@ use ftl_types::error::ErrorCode;
 use hashbrown::HashMap;
 
 use crate::aio::channel::ChannelAio;
+use crate::channel::Channel;
 use crate::sink::Event;
 use crate::sink::Sink;
 
@@ -37,7 +38,7 @@ impl RunQueue {
 }
 
 struct Task {
-    future: Pin<Box<dyn Future<Output = ()> + Send + Sync>>,
+    future: Pin<Box<dyn Future<Output = ()> + Send>>,
     waker: Waker,
 }
 
@@ -89,7 +90,7 @@ impl Executor {
         })
     }
 
-    pub fn spawn(&self, future: impl Future<Output = ()> + Send + Sync + 'static) {
+    pub fn spawn(&self, future: impl Future<Output = ()> + Send + 'static) {
         let mut tasks = self.tasks.lock();
         let task_id = TaskId(self.next_task_id.fetch_add(1, Ordering::Relaxed));
         let waker = TaskWaker::new(task_id, self.run_queue.clone());
@@ -99,6 +100,12 @@ impl Executor {
         };
         tasks.insert(task_id, task);
         self.run_queue.push(task_id);
+    }
+
+    pub(super) fn add_channel(&self, ch: &Channel) {
+        if self.channels.add(ch) {
+            self.sink.add(ch).expect("failed to add channel to sink");
+        }
     }
 
     fn run_runnable_tasks(&self) {
@@ -139,9 +146,9 @@ impl Executor {
                     self.channels.handle_message(id, peek);
                 }
                 Event::PeerClosed => {
-                    todo!()
+                    self.channels.handle_peer_closed(id);
                 }
-                Event::Irq { irq } => {
+                Event::Irq { irq: _ } => {
                     todo!()
                 }
                 Event::Timer => {
@@ -155,11 +162,11 @@ impl Executor {
 pub(super) static GLOBAL_EXECUTOR: spin::Lazy<Executor> =
     spin::Lazy::new(|| Executor::new().unwrap());
 
-pub fn spawn(future: impl Future<Output = ()> + Send + Sync + 'static) {
+pub fn spawn(future: impl Future<Output = ()> + Send + 'static) {
     GLOBAL_EXECUTOR.spawn(future);
 }
 
-pub fn run(future: impl Future<Output = ()> + Send + Sync + 'static) {
+pub fn run(future: impl Future<Output = ()> + Send + 'static) {
     spawn(future);
     GLOBAL_EXECUTOR.run();
 }

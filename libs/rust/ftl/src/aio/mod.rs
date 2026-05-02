@@ -1,4 +1,5 @@
-#![allow(unused)]
-
-mod channel;
+pub mod channel;
 mod executor;
+
+pub use executor::run;
+pub use executor::spawn;

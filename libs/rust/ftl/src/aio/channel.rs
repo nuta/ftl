@@ -50,6 +50,31 @@ struct ChannelState {
     pending_recvs: VecDeque<Waker>,
     pending_sends: VecDeque<Waker>,
     inflight_calls: HashMap<MessageId, InflightCall>,
+    peer_closed: bool,
+}
+
+impl ChannelState {
+    fn new() -> Self {
+        Self {
+            mid_allocator: IdAllocator::new(),
+            peeks: VecDeque::new(),
+            pending_recvs: VecDeque::new(),
+            pending_sends: VecDeque::new(),
+            inflight_calls: HashMap::new(),
+            peer_closed: false,
+        }
+    }
+
+    fn alloc_mid(&mut self) -> Option<MessageId> {
+        self.mid_allocator.alloc()
+    }
+
+    fn free_mid(&mut self, mid: MessageId) {
+        self.mid_allocator.free(mid);
+        if let Some(waker) = self.pending_sends.pop_front() {
+            waker.wake();
+        }
+    }
 }
 
 pub struct ChannelAio {
@@ -63,43 +88,76 @@ impl ChannelAio {
         }
     }
 
-    pub fn handle_message(&self, handle_id: HandleId, peek: Peek) {
+    pub fn add(&self, ch: &Channel) -> bool {
         let mut states = self.states.lock();
-        let state = states
-            .get_mut(&handle_id)
-            .expect("missing async state for channel");
-
-        let mid = peek.info.mid();
-        // TODO: Check if the message is a reply type.
-        if let Some(call) = state.inflight_calls.remove(&mid) {
-            match call {
-                InflightCall::WaitingForReply(waker) => {
-                    waker.wake();
-                    state
-                        .inflight_calls
-                        .insert(mid, InflightCall::Done { mid, peek });
-                }
-                InflightCall::Done { .. } => {
-                    unreachable!("inflight call is already done");
-                }
-            }
+        let id = ch.handle().id();
+        if states.contains_key(&id) {
+            false
         } else {
-            state.peeks.push_back(peek);
-            if let Some(waker) = state.pending_recvs.pop_front() {
-                waker.wake();
-            }
+            states.insert(id, ChannelState::new());
+            true
         }
     }
 
-    fn use_channel<F, R>(&self, ch: &Channel, f: F) -> R
+    pub fn handle_message(&self, handle_id: HandleId, peek: Peek) {
+        self.lock_state_by_id(handle_id, |state| {
+            let mid = peek.info.mid();
+            // TODO: Check if the message is a reply type.
+            if let Some(call) = state.inflight_calls.remove(&mid) {
+                match call {
+                    InflightCall::WaitingForReply(waker) => {
+                        waker.wake();
+                        state
+                            .inflight_calls
+                            .insert(mid, InflightCall::Done { mid, peek });
+                    }
+                    InflightCall::Done { .. } => {
+                        unreachable!("inflight call is already done");
+                    }
+                }
+            } else {
+                state.peeks.push_back(peek);
+                if let Some(waker) = state.pending_recvs.pop_front() {
+                    waker.wake();
+                }
+            }
+        });
+    }
+
+    pub fn handle_peer_closed(&self, handle_id: HandleId) {
+        self.lock_state_by_id(handle_id, |state| {
+            state.peer_closed = true;
+
+            // Do not drain pending sends here; peer has closed their send side,
+            // but still may receive messages from us.
+            for waker in state.pending_recvs.drain(..) {
+                waker.wake();
+            }
+
+            for (_, call) in state.inflight_calls.drain() {
+                if let InflightCall::WaitingForReply(waker) = call {
+                    waker.clone().wake();
+                }
+            }
+        });
+    }
+
+    fn lock_state_by_id<F, R>(&self, handle_id: HandleId, f: F) -> R
     where
         F: FnOnce(&mut ChannelState) -> R,
     {
         let mut states = self.states.lock();
         let state = states
-            .get_mut(&ch.handle().id())
+            .get_mut(&handle_id)
             .expect("missing async state for channel");
         f(state)
+    }
+
+    fn lock_state<F, R>(&self, ch: &Channel, f: F) -> R
+    where
+        F: FnOnce(&mut ChannelState) -> R,
+    {
+        self.lock_state_by_id(ch.handle().id(), f)
     }
 }
 
@@ -117,10 +175,12 @@ impl Future for RecvFuture {
     type Output = Result<Incoming<Arc<Channel>>, ErrorCode>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        GLOBAL_EXECUTOR.channels.use_channel(&self.ch, |state| {
+        GLOBAL_EXECUTOR.channels.lock_state(&self.ch, |state| {
             if let Some(peek) = state.peeks.pop_front() {
                 let incoming = Incoming::parse(self.ch.clone(), peek);
                 Poll::Ready(Ok(incoming))
+            } else if state.peer_closed {
+                Poll::Ready(Err(ErrorCode::PeerClosed))
             } else {
                 state.pending_recvs.push_back(cx.waker().clone());
                 Poll::Pending
@@ -157,16 +217,17 @@ impl<'a> CallFuture<'a> {
 impl<'a> Future for CallFuture<'a> {
     type Output = Result<Peek, ErrorCode>;
 
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = unsafe { self.get_unchecked_mut() };
-        GLOBAL_EXECUTOR.channels.use_channel(this.ch, |e| {
+        GLOBAL_EXECUTOR.channels.lock_state(this.ch, |e| {
             match &mut this.state {
                 CallState::NeedsMid(msg) => {
-                    let Some(new_mid) = e.mid_allocator.alloc() else {
+                    let Some(new_mid) = e.alloc_mid() else {
                         e.pending_sends.push_back(cx.waker().clone());
                         return Poll::Pending;
                     };
 
+                    // TODO: Does rustc optimize this away?
                     let mut msg = msg.take().unwrap();
                     match &mut msg {
                         Message::Open { mid, .. } => *mid = new_mid,
@@ -178,6 +239,7 @@ impl<'a> Future for CallFuture<'a> {
                     };
 
                     if let Err(error) = this.ch.as_ref().send(msg) {
+                        e.free_mid(new_mid);
                         this.state = CallState::Done;
                         return Poll::Ready(Err(error));
                     }
@@ -189,25 +251,26 @@ impl<'a> Future for CallFuture<'a> {
                     Poll::Pending
                 }
                 CallState::WaitingForReply(new_mid) => {
-                    let call: &mut InflightCall = e
-                        .inflight_calls
-                        .get_mut(new_mid)
-                        .expect("missing inflight call");
-
+                    let call = e.inflight_calls.get_mut(new_mid).unwrap();
                     match call {
+                        InflightCall::WaitingForReply(waker) if e.peer_closed => {
+                            // Peer has closed their channel. This means we'll never
+                            // receive a reply. Abort the call.
+                            e.inflight_calls.remove(new_mid);
+                            e.free_mid(*new_mid);
+                            this.state = CallState::Done;
+
+                            Poll::Ready(Err(ErrorCode::PeerClosed))
+                        }
                         InflightCall::WaitingForReply(waker) => {
                             *waker = cx.waker().clone();
                             this.state = CallState::WaitingForReply(*new_mid);
                             Poll::Pending
                         }
-                        InflightCall::Done { mid, peek } => {
+                        InflightCall::Done { mid, peek: _ } => {
                             let mid = *mid;
 
-                            e.mid_allocator.free(mid);
-                            if let Some(waker) = e.pending_sends.pop_front() {
-                                waker.wake();
-                            }
-
+                            e.free_mid(mid);
                             let Some(InflightCall::Done { mid: _, peek }) =
                                 e.inflight_calls.remove(&mid)
                             else {
@@ -227,13 +290,16 @@ impl<'a> Future for CallFuture<'a> {
     }
 }
 
-struct Client {
+#[derive(Clone)]
+pub struct Client {
     ch: Arc<Channel>,
 }
 
 impl Client {
     pub fn new(ch: impl Into<Arc<Channel>>) -> Self {
-        Self { ch: ch.into() }
+        let ch = ch.into();
+        GLOBAL_EXECUTOR.add_channel(ch.as_ref());
+        Self { ch }
     }
 
     pub async fn open(&self, path: &[u8], options: OpenOptions) -> Result<OwnedHandle, ErrorCode> {
@@ -244,9 +310,11 @@ impl Client {
         };
 
         let peek = CallFuture::new(self.ch.as_ref(), msg).await?;
-        let reply = OpenReply::new(&self.ch, peek);
-        let handle = reply.recv()?;
-        Ok(handle)
+        match Incoming::parse(self.ch.clone(), peek) {
+            Incoming::OpenReply(reply) => reply.recv(),
+            Incoming::ErrorReply(reply) => Err(reply.error()),
+            _ => Err(ErrorCode::InvalidMessage),
+        }
     }
 
     pub async fn read<'a>(&self, offset: usize, buf: &'a mut [u8]) -> Result<&'a [u8], ErrorCode> {
@@ -257,9 +325,11 @@ impl Client {
         };
 
         let peek = CallFuture::new(self.ch.as_ref(), msg).await?;
-        let reply = ReadReply::new(&self.ch, peek);
-        let buf = reply.recv(buf)?;
-        Ok(buf)
+        match Incoming::parse(self.ch.clone(), peek) {
+            Incoming::ReadReply(reply) => reply.recv(buf),
+            Incoming::ErrorReply(reply) => Err(reply.error()),
+            _ => Err(ErrorCode::InvalidMessage),
+        }
     }
 
     pub async fn write(&self, offset: usize, buf: &[u8]) -> Result<usize, ErrorCode> {
@@ -270,7 +340,10 @@ impl Client {
         };
 
         let peek = CallFuture::new(self.ch.as_ref(), msg).await?;
-        let reply = WriteReply::new(&self.ch, peek);
-        Ok(reply.written_len())
+        match Incoming::parse(self.ch.clone(), peek) {
+            Incoming::WriteReply(reply) => Ok(reply.written_len()),
+            Incoming::ErrorReply(reply) => Err(reply.error()),
+            _ => Err(ErrorCode::InvalidMessage),
+        }
     }
 }
