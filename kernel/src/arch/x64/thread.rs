@@ -42,7 +42,7 @@ impl Thread {
         Self {
             rip: entry as u64,
             cs: GDT_KERNEL_CS as u64,
-            rflags: 0x2, // interrupts disabled
+            rflags: 0x202, // interrupts enabled
             rsp: sp as u64,
             gsbase: start_info as u64,
             ..Default::default()

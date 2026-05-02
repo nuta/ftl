@@ -17,21 +17,23 @@ pub extern "C" fn direct_syscall_handler(
     n: usize,
 ) -> usize {
     naked_asm!(
+        // Save the caller's RFLAGS before masking interrupts. In-kernel apps
+        // run with IF set so hardware IRQs can preempt busy app loops.
+        "pushfq",
         "cli",
         "swapgs",
 
         // thread = CpuVar.current_thread
         "mov rax, gs:[{current_thread_offset}]",
 
+        // Save the caller's RFLAGS.
+        "pop r11",
+        "mov [rax + {rflags_offset}], r11",
+
         // Save the return address. Pop it since we'll return to the address
         // directly using IRETQ, not via RET.
         "pop r11",
         "mov [rax + {rip_offset}], r11",
-
-        // Save rflags.
-        "pushfq",
-        "pop r11",
-        "mov [rax + {rflags_offset}], r11",
 
         // Save callee-saved registers to the thread.
         "mov [rax + {rbx_offset}], rbx",
