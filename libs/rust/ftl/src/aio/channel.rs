@@ -1,6 +1,5 @@
 use alloc::collections::vec_deque::VecDeque;
 use alloc::sync::Arc;
-use alloc::vec::Vec;
 use core::pin::Pin;
 use core::task::Context;
 use core::task::Poll;
@@ -176,6 +175,11 @@ impl ChannelAio {
     {
         self.lock_state_by_id(ch.handle().id(), f)
     }
+
+    fn remove_state(&self, ch: &Channel) {
+        let mut states = self.states.lock();
+        states.remove(&ch.handle().id());
+    }
 }
 
 pub struct RecvFuture {
@@ -314,64 +318,6 @@ impl<'a> Future for CallFuture<'a> {
     }
 }
 
-#[derive(Clone)]
-pub struct Client {
-    ch: Arc<Channel>,
-}
-
-impl Client {
-    pub fn new(ch: impl Into<Arc<Channel>>) -> Self {
-        let ch = ch.into();
-        GLOBAL_EXECUTOR.add_channel(ch.as_ref());
-        Self { ch }
-    }
-
-    pub async fn open(&self, path: &[u8], options: OpenOptions) -> Result<OwnedHandle, ErrorCode> {
-        let msg = Message::Open {
-            mid: MessageId::new(0),
-            path,
-            options,
-        };
-
-        let peek = CallFuture::new(self.ch.as_ref(), msg).await?;
-        match Incoming::parse(self.ch.clone(), peek) {
-            Incoming::OpenReply(reply) => reply.recv(),
-            Incoming::ErrorReply(reply) => Err(reply.error()),
-            _ => Err(ErrorCode::InvalidMessage),
-        }
-    }
-
-    pub async fn read<'a>(&self, offset: usize, buf: &'a mut [u8]) -> Result<&'a [u8], ErrorCode> {
-        let msg = Message::Read {
-            mid: MessageId::new(0),
-            offset,
-            len: buf.len(),
-        };
-
-        let peek = CallFuture::new(self.ch.as_ref(), msg).await?;
-        match Incoming::parse(self.ch.clone(), peek) {
-            Incoming::ReadReply(reply) => reply.recv(buf),
-            Incoming::ErrorReply(reply) => Err(reply.error()),
-            _ => Err(ErrorCode::InvalidMessage),
-        }
-    }
-
-    pub async fn write(&self, offset: usize, buf: &[u8]) -> Result<usize, ErrorCode> {
-        let msg = Message::Write {
-            mid: MessageId::new(0),
-            offset,
-            buf,
-        };
-
-        let peek = CallFuture::new(self.ch.as_ref(), msg).await?;
-        match Incoming::parse(self.ch.clone(), peek) {
-            Incoming::WriteReply(reply) => Ok(reply.written_len()),
-            Incoming::ErrorReply(reply) => Err(reply.error()),
-            _ => Err(ErrorCode::InvalidMessage),
-        }
-    }
-}
-
 impl Drop for CallFuture<'_> {
     fn drop(&mut self) {
         match &mut self.state {
@@ -411,5 +357,68 @@ impl Drop for CallFuture<'_> {
             }
             CallState::Done => {}
         }
+    }
+}
+
+pub struct Client {
+    ch: Channel,
+}
+
+impl Client {
+    pub fn new(ch: impl Into<Channel>) -> Self {
+        let ch = ch.into();
+        GLOBAL_EXECUTOR.add_channel(ch.as_ref());
+        Self { ch }
+    }
+
+    pub async fn open(&self, path: &[u8], options: OpenOptions) -> Result<OwnedHandle, ErrorCode> {
+        let msg = Message::Open {
+            mid: MessageId::new(0),
+            path,
+            options,
+        };
+
+        let peek = CallFuture::new(self.ch.as_ref(), msg).await?;
+        match Incoming::parse(&self.ch, peek) {
+            Incoming::OpenReply(reply) => reply.recv(),
+            Incoming::ErrorReply(reply) => Err(reply.error()),
+            _ => Err(ErrorCode::InvalidMessage),
+        }
+    }
+
+    pub async fn read<'a>(&self, offset: usize, buf: &'a mut [u8]) -> Result<&'a [u8], ErrorCode> {
+        let msg = Message::Read {
+            mid: MessageId::new(0),
+            offset,
+            len: buf.len(),
+        };
+
+        let peek = CallFuture::new(self.ch.as_ref(), msg).await?;
+        match Incoming::parse(&self.ch, peek) {
+            Incoming::ReadReply(reply) => reply.recv(buf),
+            Incoming::ErrorReply(reply) => Err(reply.error()),
+            _ => Err(ErrorCode::InvalidMessage),
+        }
+    }
+
+    pub async fn write(&self, offset: usize, buf: &[u8]) -> Result<usize, ErrorCode> {
+        let msg = Message::Write {
+            mid: MessageId::new(0),
+            offset,
+            buf,
+        };
+
+        let peek = CallFuture::new(self.ch.as_ref(), msg).await?;
+        match Incoming::parse(&self.ch, peek) {
+            Incoming::WriteReply(reply) => Ok(reply.written_len()),
+            Incoming::ErrorReply(reply) => Err(reply.error()),
+            _ => Err(ErrorCode::InvalidMessage),
+        }
+    }
+}
+
+impl Drop for Client {
+    fn drop(&mut self) {
+        GLOBAL_EXECUTOR.channels.remove_state(&self.ch);
     }
 }
