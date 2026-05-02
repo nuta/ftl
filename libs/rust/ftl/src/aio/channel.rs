@@ -105,20 +105,18 @@ impl ChannelAio {
         self.lock_state_by_id(ch_id, |e| {
             let mid = peek.info.mid();
             // TODO: Check if the message is a reply type.
-            if let Some(call) = e.inflight_calls.remove(&mid) {
-                match call {
+            if let Entry::Occupied(mut entry) = e.inflight_calls.entry(mid) {
+                match entry.get() {
                     InflightCall::Pending(waker) => {
-                        e.inflight_calls
-                            .insert(mid, InflightCall::Ready(Some(peek)));
-
-                        waker.wake();
+                        waker.wake_by_ref();
+                        *entry.get_mut() = InflightCall::Ready(Some(peek));
                     }
                     InflightCall::Ready(_peek) => {
                         unreachable!("inflight call is already done");
                     }
                     InflightCall::Cancelled => {
+                        entry.remove();
                         e.free_mid(mid);
-                        e.inflight_calls.remove(&mid);
                         if let Err(err) = sys_channel_discard(ch_id, peek.token) {
                             debug!(
                                 "failed to discard reply message after cancellation: {:?}",
