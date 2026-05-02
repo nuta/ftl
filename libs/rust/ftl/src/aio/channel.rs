@@ -159,7 +159,7 @@ impl<'a> CallFuture<'a> {
 }
 
 impl<'a> Future for CallFuture<'a> {
-    type Output = Result<Message<'a>, ErrorCode>;
+    type Output = Result<Peek, ErrorCode>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = unsafe { self.get_unchecked_mut() };
@@ -185,10 +185,11 @@ impl<'a> Future for CallFuture<'a> {
                     Poll::Pending
                 }
                 CallState::WaitingForReply(mid) => {
-                    let call = e
+                    let call: &mut InflightCall = e
                         .inflight_calls
                         .get_mut(mid)
                         .expect("missing inflight call");
+
                     match call {
                         InflightCall::WaitingForReply(waker) => {
                             *waker = cx.waker().clone();
@@ -196,17 +197,21 @@ impl<'a> Future for CallFuture<'a> {
                             Poll::Pending
                         }
                         InflightCall::Done { mid, peek } => {
-                            this.ch.recv_args(peek.token)?;
-                            let reply = todo!();
+                            let mid = *mid;
 
-                            e.mid_allocator.free(*mid);
+                            e.mid_allocator.free(mid);
                             if let Some(waker) = e.pending_sends.pop_front() {
                                 waker.wake();
                             }
 
-                            e.inflight_calls.remove(mid);
+                            let Some(InflightCall::Done { mid: _, peek }) =
+                                e.inflight_calls.remove(&mid)
+                            else {
+                                unreachable!();
+                            };
+
                             this.state = CallState::Done;
-                            Poll::Ready(Ok(reply))
+                            Poll::Ready(Ok(peek))
                         }
                     }
                 }
@@ -228,7 +233,7 @@ impl Client {
     }
 
     pub async fn open(&self, path: &[u8], options: OpenOptions) -> Result<Channel, ErrorCode> {
-        CallFuture::new(
+        let msg = CallFuture::new(
             self.ch.as_ref(),
             Message::Open {
                 mid: MessageId::new(0),
