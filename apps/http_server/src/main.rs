@@ -44,16 +44,16 @@ async fn handle_connection(conn_ch: Client) {
         let mut written = 0;
         while written < data.len() {
             let len = match conn_ch.write(0, &data[written..]).await {
+                Ok(0) => {
+                    warn!("failed to write response: zero-length write");
+                    return;
+                }
                 Ok(len) => len,
                 Err(error) => {
                     warn!("failed to write response: {:?}", error);
                     return;
                 }
             };
-            if len == 0 {
-                warn!("failed to write response: zero-length write");
-                return;
-            }
 
             trace!("wrote {} bytes", len);
             written += len;
