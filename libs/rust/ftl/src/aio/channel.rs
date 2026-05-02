@@ -108,12 +108,11 @@ impl ChannelAio {
 
 pub struct RecvFuture {
     ch: Arc<Channel>,
-    token: RecvToken,
 }
 
 impl RecvFuture {
-    pub fn new(ch: Arc<Channel>, token: RecvToken) -> Self {
-        Self { ch, token }
+    pub fn new(ch: Arc<Channel>) -> Self {
+        Self { ch }
     }
 }
 
