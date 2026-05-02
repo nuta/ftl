@@ -30,6 +30,9 @@ impl TcpFlags {
     pub const RST: Self = Self(1 << 2);
     pub const PSH: Self = Self(1 << 3);
     pub const ACK: Self = Self(1 << 4);
+    pub const URG: Self = Self(1 << 5);
+    pub const ECE: Self = Self(1 << 6);
+    pub const CWR: Self = Self(1 << 7);
 
     pub const fn empty() -> Self {
         Self(0)
@@ -67,6 +70,9 @@ impl fmt::Debug for TcpFlags {
             (TcpFlags::RST, "RST"),
             (TcpFlags::PSH, "PSH"),
             (TcpFlags::ACK, "ACK"),
+            (TcpFlags::URG, "URG"),
+            (TcpFlags::ECE, "ECE"),
+            (TcpFlags::CWR, "CWR"),
         ] {
             if self.0 & value.0 != 0 {
                 if !first {
