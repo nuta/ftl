@@ -498,7 +498,7 @@ pub struct WriteReply<C: AsRef<Channel>> {
 }
 
 impl<C: AsRef<Channel>> WriteReply<C> {
-    fn new(ch: C, peek: Peek) -> Self {
+    pub(crate) fn new(ch: C, peek: Peek) -> Self {
         Self {
             inner: ReplyInner::new(ch, peek.info, peek.token),
             written_len: peek.arg1,

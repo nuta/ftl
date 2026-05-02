@@ -21,6 +21,7 @@ use crate::message::Incoming;
 use crate::message::Message;
 use crate::message::OpenReply;
 use crate::message::ReadReply;
+use crate::message::WriteReply;
 
 struct IdAllocator {
     bitmap: u64,
@@ -273,5 +274,22 @@ impl Client {
         let reply = ReadReply::new(&self.ch, peek);
         let buf = reply.recv(buf)?;
         Ok(buf)
+    }
+
+    pub async fn write(&self, offset: usize, buf: &[u8]) -> Result<usize, ErrorCode> {
+        let peek = CallFuture::new(
+            self.ch.as_ref(),
+            Message::Write {
+                mid: MessageId::new(0),
+                offset,
+                buf,
+            },
+        )
+        .await?;
+
+        let reply = WriteReply::new(&self.ch, peek);
+        let written_len = reply.written_len();
+        drop(reply); // Receive the reply message
+        Ok(written_len)
     }
 }
