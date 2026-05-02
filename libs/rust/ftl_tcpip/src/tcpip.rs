@@ -73,7 +73,7 @@ impl<I: Io> TcpIp<I> {
         handle: TcpListenerHandle<I>,
         req: I::TcpAccept,
     ) -> TcpConnHandle<I> {
-        let conn = handle.0.accept(self, req);
+        let conn = handle.0.accept(req);
         TcpConnHandle(conn)
     }
 

@@ -1,7 +1,8 @@
 use alloc::collections::VecDeque;
 use alloc::sync::Arc;
-use alloc::vec::Vec;
 use core::fmt;
+
+use hashbrown::HashMap;
 
 use crate::TcpIp;
 use crate::io::Io;
@@ -18,6 +19,7 @@ use crate::tcp::header::TcpHeader;
 use crate::tcp::rx::RxHeader;
 use crate::tcp::tx::transmit_segment;
 use crate::transport::Port;
+use crate::utils::HashMapExt;
 
 struct Handshake {
     remote: Endpoint,
@@ -35,9 +37,9 @@ struct PendingAccept<I: Io> {
 
 struct Mutable<I: Io> {
     /// Handshakes that we have sent SYN+ACK, and are waiting for an ACK.
-    inflight_handshakes: Vec<Handshake>,
+    inflight_handshakes: HashMap<Endpoint, Handshake>,
     /// Handshakes that we have received an ACK for. Established connections.
-    finished_handshakes: VecDeque<Handshake>,
+    finished_handshakes: VecDeque<Arc<TcpConn<I>>>,
     pending_accepts: VecDeque<PendingAccept<I>>,
 }
 
@@ -51,28 +53,28 @@ impl<I: Io> TcpListener<I> {
         Self {
             local_port,
             mutable: spin::Mutex::new(Mutable {
-                inflight_handshakes: Vec::new(),
+                inflight_handshakes: HashMap::new(),
                 finished_handshakes: VecDeque::new(),
                 pending_accepts: VecDeque::new(),
             }),
         }
     }
 
-    pub fn accept(&self, tcpip: &mut TcpIp<I>, request: I::TcpAccept) -> Arc<TcpConn<I>> {
-        let conn = Arc::new(TcpConn::new_listen(self.local_port));
-        let pending_accept = PendingAccept {
-            request,
-            conn: conn.clone(),
-        };
-
+    pub fn accept(&self, request: I::TcpAccept) -> Arc<TcpConn<I>> {
         let mut mutable = self.mutable.lock();
-        if let Some(h) = mutable.finished_handshakes.pop_front() {
-            self.accept_handshake(tcpip, pending_accept, h);
+        if let Some(conn) = mutable.finished_handshakes.pop_front() {
+            drop(mutable);
+            request.complete(Ok(()));
+            conn
         } else {
+            let conn = Arc::new(TcpConn::new_listen(self.local_port));
+            let pending_accept = PendingAccept {
+                request,
+                conn: conn.clone(),
+            };
             mutable.pending_accepts.push_back(pending_accept);
+            conn
         }
-
-        conn
     }
 
     fn start_handshake(self: &Arc<Self>, tcpip: &mut TcpIp<I>, rx: RxHeader) {
@@ -107,7 +109,14 @@ impl<I: Io> TcpListener<I> {
         };
 
         let mut mutable = self.mutable.lock();
-        mutable.inflight_handshakes.push(handshake);
+        if let Err(err) = mutable
+            .inflight_handshakes
+            .reserve_and_insert(remote, handshake)
+        {
+            warn!("TCP: failed to insert handshake: {:?}", err);
+            // TODO: RST the connection.
+            return;
+        }
         drop(mutable);
 
         if let Err(err) = transmit_segment::<I>(tcpip, header, rx.remote_ip, &[]) {
@@ -121,20 +130,23 @@ impl<I: Io> TcpListener<I> {
         rx: RxHeader,
         payload: &mut Packet,
     ) {
-        let mut mutable = self.mutable.lock();
-
         // Find the matching handshake.
-        let Some((index, _)) = mutable
-            .inflight_handshakes
-            .iter()
-            .enumerate()
-            .find(|(_, h)| rx.remote_ip == h.remote.addr && rx.src_port == h.remote.port)
-        else {
-            debug!("TCP: no SYN found for {}:{}", rx.remote_ip, rx.src_port);
-            return;
+        let (mut h, pending_accept) = {
+            let mut mutable = self.mutable.lock();
+
+            let remote = Endpoint {
+                addr: rx.remote_ip,
+                port: rx.src_port,
+            };
+            let Some(h) = mutable.inflight_handshakes.remove(&remote) else {
+                debug!("TCP: no SYN found for {}:{}", rx.remote_ip, rx.src_port);
+                return;
+            };
+
+            let pending_accept = mutable.pending_accepts.pop_front();
+            (h, pending_accept)
         };
 
-        let mut h = mutable.inflight_handshakes.remove(index);
         if !payload.is_empty() {
             if rx.seq != h.remote_rcv_nxt {
                 trace!(
@@ -165,46 +177,52 @@ impl<I: Io> TcpListener<I> {
             }
         }
 
-        if let Some(pending_accept) = mutable.pending_accepts.pop_front() {
-            // Register the connection immediately.
-            self.accept_handshake(tcpip, pending_accept, h);
-        } else {
-            // Queue this established connection for later completion.
-            mutable.finished_handshakes.push_back(h);
-        }
-    }
-
-    fn accept_handshake(
-        &self,
-        tcpip: &mut TcpIp<I>,
-        pending_accept: PendingAccept<I>,
-        h: Handshake,
-    ) {
-        let PendingAccept { request, conn } = pending_accept;
-
-        conn.open_passively(
-            h.remote,
-            h.local_iss,
-            h.remote_rcv_nxt,
-            h.remote_rcv_wnd,
-            h.rx_buffer,
-        );
-
         let local = Endpoint {
             addr: h.local_ip,
             port: self.local_port,
         };
-        match tcpip
-            .sockets_mut()
-            .establish_tcp_conn(h.remote, local, conn.clone())
-        {
-            Ok(()) => {
-                request.complete(Ok(()));
-            }
-            Err(err) => {
-                warn!("TCP: failed to insert active connection: {:?}", err);
+
+        if let Some(PendingAccept { request, conn }) = pending_accept {
+            conn.open_passively(
+                h.remote,
+                h.local_iss,
+                h.remote_rcv_nxt,
+                h.remote_rcv_wnd,
+                h.rx_buffer,
+            );
+
+            if let Err(err) = tcpip
+                .sockets_mut()
+                .establish_tcp_conn(h.remote, local, conn)
+            {
+                warn!("TCP: failed to establish TCP connection: {:?}", err);
                 request.complete(Ok(())); // TODO: return an error
+                return;
             }
+
+            request.complete(Ok(()));
+        } else {
+            // Create a new connection and keep it until the application calls tcp_accept.
+            let conn = Arc::new(TcpConn::new_listen(self.local_port));
+            conn.open_passively(
+                h.remote,
+                h.local_iss,
+                h.remote_rcv_nxt,
+                h.remote_rcv_wnd,
+                h.rx_buffer,
+            );
+
+            if let Err(err) = tcpip
+                .sockets_mut()
+                .establish_tcp_conn(h.remote, local, conn.clone())
+            {
+                warn!("TCP: failed to establish TCP connection: {:?}", err);
+                // TODO: RST the connection.
+                return;
+            }
+
+            let mut mutable = self.mutable.lock();
+            mutable.finished_handshakes.push_back(conn);
         }
     }
 
