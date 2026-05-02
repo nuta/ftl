@@ -149,7 +149,9 @@ impl ChannelAio {
                 waker.wake();
             }
 
-            for call in e.inflight_calls.values() {
+            // The channel is marked as peer-closed. Call futures will check
+            // the flag first, and abort without touching inflight_calls.
+            for (_, call) in e.inflight_calls.drain() {
                 if let InflightCall::Pending(waker) = call {
                     waker.wake_by_ref();
                 }
@@ -378,6 +380,10 @@ impl Drop for CallFuture<'_> {
             }
             CallState::WaitingForReply(mid) => {
                 GLOBAL_EXECUTOR.channels.lock_state(self.ch, |e| {
+                    if e.peer_closed {
+                        return;
+                    }
+
                     let call = e.inflight_calls.get_mut(mid).unwrap();
                     match call {
                         InflightCall::Pending(_waker) => {
