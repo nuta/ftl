@@ -687,7 +687,7 @@ impl<C: AsRef<Channel>> ErrorReply<C> {
     fn new(ch: C, peek: Peek) -> Self {
         Self {
             inner: ReplyInner::new(ch, peek.info, peek.token),
-            error: todo!(),
+            error: ErrorCode::from(peek.arg1),
         }
     }
 
