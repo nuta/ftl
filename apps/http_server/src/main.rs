@@ -203,6 +203,10 @@ fn handle_connection_message(
             drop(reply);
             queue_next_write(ch, conn)
         }
+        Incoming::ErrorReply(reply) => {
+            warn!("connection error: {:?}", reply.error());
+            false
+        }
         _ => {
             warn!("unhandled connection message");
             true
