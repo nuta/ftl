@@ -149,7 +149,7 @@ impl ChannelAio {
                 waker.wake();
             }
 
-            for (_, call) in e.inflight_calls.drain() {
+            for call in e.inflight_calls.values() {
                 if let InflightCall::Pending(waker) = call {
                     waker.wake_by_ref();
                 }
@@ -237,14 +237,16 @@ impl<'a> Future for CallFuture<'a> {
         let this = unsafe { self.get_unchecked_mut() };
         GLOBAL_EXECUTOR.channels.lock_state(this.ch, |e| {
             match &mut this.state {
+                CallState::Done => {
+                    panic!("call future is already done");
+                }
+                _ if e.peer_closed => {
+                    // The peer won't send any more messages. That is,
+                    // we can't receive a reply anyway. Abort the call.
+                    this.state = CallState::Done;
+                    Poll::Ready(Err(ErrorCode::PeerClosed))
+                }
                 CallState::NeedsMid(msg) => {
-                    if e.peer_closed {
-                        // The peer won't send any more messages. That is,
-                        // we can't receive a reply anyway. Abort the call.
-                        this.state = CallState::Done;
-                        return Poll::Ready(Err(ErrorCode::PeerClosed));
-                    }
-
                     let Some(new_mid) = e.alloc_mid() else {
                         e.pending_sends.push_back(cx.waker().clone());
                         return Poll::Pending;
@@ -273,21 +275,18 @@ impl<'a> Future for CallFuture<'a> {
                     this.state = CallState::WaitingForReply(new_mid);
                     Poll::Pending
                 }
+                CallState::WaitingForReply(mid) if e.peer_closed => {
+                    // The peer won't send any more messages. That is,
+                    // we can't receive a reply anyway. Abort the call.
+                    this.state = CallState::Done;
+                    Poll::Ready(Err(ErrorCode::PeerClosed))
+                }
                 CallState::WaitingForReply(mid) => {
                     let Entry::Occupied(mut entry) = e.inflight_calls.entry(*mid) else {
                         unreachable!();
                     };
 
                     match entry.get_mut() {
-                        InflightCall::Pending(waker) if e.peer_closed => {
-                            // Peer has closed their channel. This means we'll never
-                            // receive a reply. Abort the call.
-                            entry.remove();
-                            e.free_mid(*mid);
-                            this.state = CallState::Done;
-
-                            Poll::Ready(Err(ErrorCode::PeerClosed))
-                        }
                         InflightCall::Pending(waker) => {
                             *waker = cx.waker().clone();
                             this.state = CallState::WaitingForReply(*mid);
@@ -307,9 +306,6 @@ impl<'a> Future for CallFuture<'a> {
                             unreachable!();
                         }
                     }
-                }
-                CallState::Done => {
-                    panic!("call future is already done");
                 }
             }
         })
