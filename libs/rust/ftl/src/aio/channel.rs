@@ -108,8 +108,7 @@ impl ChannelAio {
             if let Some(call) = e.inflight_calls.remove(&mid) {
                 match call {
                     InflightCall::Pending(waker) => {
-                        e
-                            .inflight_calls
+                        e.inflight_calls
                             .insert(mid, InflightCall::Ready(Some(peek)));
 
                         waker.wake();
@@ -121,7 +120,10 @@ impl ChannelAio {
                         e.free_mid(mid);
                         e.inflight_calls.remove(&mid);
                         if let Err(err) = sys_channel_discard(ch_id, peek.token) {
-                            debug!("failed to discard reply message after cancellation: {:?}", err);
+                            debug!(
+                                "failed to discard reply message after cancellation: {:?}",
+                                err
+                            );
                         }
                     }
                 }
@@ -287,7 +289,7 @@ impl<'a> Future for CallFuture<'a> {
                             entry.remove();
                             e.free_mid(*mid);
                             this.state = CallState::Done;
-                            
+
                             Poll::Ready(Ok(peek))
                         }
                         InflightCall::Cancelled => {
@@ -383,7 +385,10 @@ impl Drop for CallFuture<'_> {
                             e.free_mid(*mid);
                             e.inflight_calls.remove(mid);
                             if let Err(err) = self.ch.discard(token) {
-                                debug!("failed to discard reply message after cancellation: {:?}", err);
+                                debug!(
+                                    "failed to discard reply message after cancellation: {:?}",
+                                    err
+                                );
                             }
                         }
                         InflightCall::Cancelled => {
