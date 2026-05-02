@@ -123,6 +123,10 @@ impl Sink {
             let handle = object.authorize(HandleRight::READ)?;
             match handle.poll(handle_id, handle_table, isolation, buf) {
                 Ok(true) => {
+                    // Move the handle to the back of the queue not to read the
+                    // same handle over and over again.
+                    mutable.ready_queue.pop_front();
+                    mutable.ready_queue.push_back(handle_id.as_usize());
                     return Ok(true);
                 }
                 Ok(false) => {
