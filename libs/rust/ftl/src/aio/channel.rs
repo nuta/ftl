@@ -16,8 +16,11 @@ use hashbrown::HashMap;
 use crate::aio::executor::GLOBAL_EXECUTOR;
 use crate::channel::Channel;
 use crate::handle::Handleable;
+use crate::handle::OwnedHandle;
 use crate::message::Incoming;
 use crate::message::Message;
+use crate::message::OpenReply;
+use crate::message::ReadReply;
 
 struct IdAllocator {
     bitmap: u64,
@@ -166,34 +169,42 @@ impl<'a> Future for CallFuture<'a> {
         GLOBAL_EXECUTOR.channels.use_channel(this.ch, |e| {
             match &mut this.state {
                 CallState::NeedsMid(msg) => {
-                    let Some(mid) = e.mid_allocator.alloc() else {
+                    let Some(new_mid) = e.mid_allocator.alloc() else {
                         e.pending_sends.push_back(cx.waker().clone());
                         return Poll::Pending;
                     };
 
-                    // TODO: Build a message with the mid
-                    let msg = msg.take().unwrap();
+                    let mut msg = msg.take().unwrap();
+                    match &mut msg {
+                        Message::Open { mid, .. } => *mid = new_mid,
+                        Message::Read { mid, .. } => *mid = new_mid,
+                        Message::Write { mid, .. } => *mid = new_mid,
+                        Message::Getattr { mid, .. } => *mid = new_mid,
+                        Message::Setattr { mid, .. } => *mid = new_mid,
+                        _ => unreachable!("not a request message"),
+                    };
+
                     if let Err(error) = this.ch.as_ref().send(msg) {
                         this.state = CallState::Done;
                         return Poll::Ready(Err(error));
                     }
 
                     e.inflight_calls
-                        .insert(mid, InflightCall::WaitingForReply(cx.waker().clone()));
+                        .insert(new_mid, InflightCall::WaitingForReply(cx.waker().clone()));
 
-                    this.state = CallState::WaitingForReply(mid);
+                    this.state = CallState::WaitingForReply(new_mid);
                     Poll::Pending
                 }
-                CallState::WaitingForReply(mid) => {
+                CallState::WaitingForReply(new_mid) => {
                     let call: &mut InflightCall = e
                         .inflight_calls
-                        .get_mut(mid)
+                        .get_mut(new_mid)
                         .expect("missing inflight call");
 
                     match call {
                         InflightCall::WaitingForReply(waker) => {
                             *waker = cx.waker().clone();
-                            this.state = CallState::WaitingForReply(*mid);
+                            this.state = CallState::WaitingForReply(*new_mid);
                             Poll::Pending
                         }
                         InflightCall::Done { mid, peek } => {
@@ -228,12 +239,12 @@ struct Client {
 }
 
 impl Client {
-    pub fn new(ch: Arc<Channel>) -> Self {
-        Self { ch }
+    pub fn new(ch: impl Into<Arc<Channel>>) -> Self {
+        Self { ch: ch.into() }
     }
 
-    pub async fn open(&self, path: &[u8], options: OpenOptions) -> Result<Channel, ErrorCode> {
-        let msg = CallFuture::new(
+    pub async fn open(&self, path: &[u8], options: OpenOptions) -> Result<OwnedHandle, ErrorCode> {
+        let peek = CallFuture::new(
             self.ch.as_ref(),
             Message::Open {
                 mid: MessageId::new(0),
@@ -242,6 +253,25 @@ impl Client {
             },
         )
         .await?;
-        todo!()
+
+        let reply = OpenReply::new(&self.ch, peek);
+        let handle = reply.recv()?;
+        Ok(handle)
+    }
+
+    pub async fn read<'a>(&self, offset: usize, buf: &'a mut [u8]) -> Result<&'a [u8], ErrorCode> {
+        let peek = CallFuture::new(
+            self.ch.as_ref(),
+            Message::Read {
+                mid: MessageId::new(0),
+                offset,
+                len: buf.len(),
+            },
+        )
+        .await?;
+
+        let reply = ReadReply::new(&self.ch, peek);
+        let buf = reply.recv(buf)?;
+        Ok(buf)
     }
 }

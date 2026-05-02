@@ -327,7 +327,7 @@ impl<C: AsRef<Channel>> OpenCompleter<C> {
 pub struct OpenReply<C: AsRef<Channel>>(ReplyInner<C>);
 
 impl<C: AsRef<Channel>> OpenReply<C> {
-    fn new(ch: C, peek: Peek) -> Self {
+    pub(crate) fn new(ch: C, peek: Peek) -> Self {
         Self(ReplyInner::new(ch, peek.info, peek.token))
     }
 
@@ -404,7 +404,7 @@ pub struct ReadReply<C: AsRef<Channel>> {
 }
 
 impl<C: AsRef<Channel>> ReadReply<C> {
-    fn new(ch: C, peek: Peek) -> Self {
+    pub(crate) fn new(ch: C, peek: Peek) -> Self {
         Self {
             inner: ReplyInner::new(ch, peek.info, peek.token),
         }
