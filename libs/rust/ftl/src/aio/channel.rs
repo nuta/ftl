@@ -321,7 +321,7 @@ impl<'a> Future for CallFuture<'a> {
 impl Drop for CallFuture<'_> {
     fn drop(&mut self) {
         match &mut self.state {
-            CallState::NeedsMid(_msg) => {
+            CallState::Done | CallState::NeedsMid(_) => {
                 // Nothing to do.
             }
             CallState::WaitingForReply(mid) => {
@@ -355,7 +355,6 @@ impl Drop for CallFuture<'_> {
                     }
                 });
             }
-            CallState::Done => {}
         }
     }
 }
