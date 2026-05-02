@@ -26,6 +26,7 @@ pub mod collections;
 pub mod driver;
 pub mod error;
 pub mod handle;
+pub mod aio;
 pub mod interrupt;
 pub mod log;
 pub mod prelude;
