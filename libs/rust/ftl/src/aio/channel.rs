@@ -106,9 +106,7 @@ impl ChannelAio {
             if let Some(call) = state.inflight_calls.remove(&mid) {
                 match call {
                     InflightCall::Pending(waker) => {
-                        state
-                            .inflight_calls
-                            .insert(mid, InflightCall::Ready { mid, peek });
+                        state.inflight_calls.insert(mid, InflightCall::Ready(peek));
 
                         waker.wake();
                     }
@@ -192,7 +190,7 @@ impl Future for RecvFuture {
 
 enum InflightCall {
     Pending(Waker),
-    Ready { mid: MessageId, peek: Peek },
+    Ready(Peek),
 }
 
 enum CallState<'a> {
@@ -251,29 +249,26 @@ impl<'a> Future for CallFuture<'a> {
                     this.state = CallState::WaitingForReply(new_mid);
                     Poll::Pending
                 }
-                CallState::WaitingForReply(new_mid) => {
-                    let call = e.inflight_calls.get_mut(new_mid).unwrap();
+                CallState::WaitingForReply(mid) => {
+                    let call = e.inflight_calls.get_mut(mid).unwrap();
                     match call {
                         InflightCall::Pending(waker) if e.peer_closed => {
                             // Peer has closed their channel. This means we'll never
                             // receive a reply. Abort the call.
-                            e.inflight_calls.remove(new_mid);
-                            e.free_mid(*new_mid);
+                            e.inflight_calls.remove(mid);
+                            e.free_mid(*mid);
                             this.state = CallState::Done;
 
                             Poll::Ready(Err(ErrorCode::PeerClosed))
                         }
                         InflightCall::Pending(waker) => {
                             *waker = cx.waker().clone();
-                            this.state = CallState::WaitingForReply(*new_mid);
+                            this.state = CallState::WaitingForReply(*mid);
                             Poll::Pending
                         }
-                        InflightCall::Ready { mid, peek: _ } => {
-                            let mid = *mid;
-
-                            e.free_mid(mid);
-                            let Some(InflightCall::Ready { mid: _, peek }) =
-                                e.inflight_calls.remove(&mid)
+                        InflightCall::Ready { .. } => {
+                            e.free_mid(*mid);
+                            let Some(InflightCall::Ready(peek)) = e.inflight_calls.remove(mid)
                             else {
                                 unreachable!();
                             };
