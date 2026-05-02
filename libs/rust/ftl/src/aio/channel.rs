@@ -107,7 +107,9 @@ impl ChannelAio {
             if let Some(call) = state.inflight_calls.remove(&mid) {
                 match call {
                     InflightCall::Pending(waker) => {
-                        state.inflight_calls.insert(mid, InflightCall::Ready(peek));
+                        state
+                            .inflight_calls
+                            .insert(mid, InflightCall::Ready(Some(peek)));
 
                         waker.wake();
                     }
@@ -191,7 +193,7 @@ impl Future for RecvFuture {
 
 enum InflightCall {
     Pending(Waker),
-    Ready(Peek),
+    Ready(Option<Peek>),
 }
 
 enum CallState<'a> {
@@ -270,11 +272,9 @@ impl<'a> Future for CallFuture<'a> {
                             this.state = CallState::WaitingForReply(*mid);
                             Poll::Pending
                         }
-                        InflightCall::Ready { .. } => {
-                            let InflightCall::Ready(peek) = entry.remove() else {
-                                unreachable!();
-                            };
-
+                        InflightCall::Ready(peek) => {
+                            let peek = peek.take().unwrap();
+                            entry.remove();
                             e.free_mid(*mid);
                             this.state = CallState::Done;
                             Poll::Ready(Ok(peek))
