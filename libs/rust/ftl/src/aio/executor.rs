@@ -136,7 +136,7 @@ impl Executor {
             let (id, event) = self.sink.wait().unwrap();
             match event {
                 Event::Message(peek) => {
-                    self.channels.handle_peek(id, peek);
+                    self.channels.handle_message(id, peek);
                 }
                 Event::PeerClosed => {
                     todo!()

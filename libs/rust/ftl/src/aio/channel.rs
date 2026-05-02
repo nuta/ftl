@@ -66,15 +66,30 @@ impl ChannelAio {
         }
     }
 
-    pub fn handle_peek(&self, handle_id: HandleId, peek: Peek) {
+    pub fn handle_message(&self, handle_id: HandleId, peek: Peek) {
         let mut states = self.states.lock();
         let state = states
             .get_mut(&handle_id)
             .expect("missing async state for channel");
-        state.peeks.push_back(peek);
 
-        if let Some(waker) = state.pending_recvs.pop_front() {
-            waker.wake();
+        let mid = peek.info.mid();
+        if let Some(call) = state.inflight_calls.remove(&mid) {
+            match call {
+                InflightCall::WaitingForReply(waker) => {
+                    waker.wake();
+                    state
+                        .inflight_calls
+                        .insert(mid, InflightCall::Done { mid, peek });
+                }
+                InflightCall::Done { .. } => {
+                    unreachable!("inflight call is already done");
+                }
+            }
+        } else {
+            state.peeks.push_back(peek);
+            if let Some(waker) = state.pending_recvs.pop_front() {
+                waker.wake();
+            }
         }
     }
 
@@ -118,8 +133,8 @@ impl Future for RecvFuture {
 }
 
 enum InflightCall {
-    WaitingForReply { mid: MessageId, waker: Waker },
-    Done { mid: MessageId, token: RecvToken },
+    WaitingForReply(Waker),
+    Done { mid: MessageId, peek: Peek },
 }
 
 enum CallState<'a> {
@@ -160,13 +175,9 @@ impl<'a> Future for CallFuture<'a> {
                         return Poll::Ready(Err(error));
                     }
 
-                    state.inflight_calls.insert(
-                        mid,
-                        InflightCall::WaitingForReply {
-                            mid,
-                            waker: cx.waker().clone(),
-                        },
-                    );
+                    state
+                        .inflight_calls
+                        .insert(mid, InflightCall::WaitingForReply(cx.waker().clone()));
 
                     self.state = CallState::WaitForReply(mid);
                     Poll::Pending
@@ -177,15 +188,19 @@ impl<'a> Future for CallFuture<'a> {
                         .get_mut(mid)
                         .expect("missing inflight call");
                     match call {
-                        InflightCall::WaitingForReply { mid, waker } => {
+                        InflightCall::WaitingForReply(waker) => {
                             *waker = cx.waker().clone();
                             Poll::Pending
                         }
-                        InflightCall::Done { mid, token } => {
-                            self.ch.recv_args(*token)?;
+                        InflightCall::Done { mid, peek } => {
+                            self.ch.recv_args(peek.token)?;
                             let reply = todo!();
 
                             state.mid_allocator.free(*mid);
+                            if let Some(waker) = state.pending_sends.pop_front() {
+                                waker.wake();
+                            }
+
                             state.inflight_calls.remove(mid);
                             self.state = CallState::Done;
                             Poll::Ready(Ok(reply))
