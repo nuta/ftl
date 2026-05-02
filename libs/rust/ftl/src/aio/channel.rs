@@ -11,6 +11,7 @@ use ftl_types::channel::Peek;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use hashbrown::HashMap;
+use hashbrown::hash_map::Entry;
 
 use crate::aio::executor::GLOBAL_EXECUTOR;
 use crate::channel::Channel;
@@ -250,12 +251,15 @@ impl<'a> Future for CallFuture<'a> {
                     Poll::Pending
                 }
                 CallState::WaitingForReply(mid) => {
-                    let call = e.inflight_calls.get_mut(mid).unwrap();
-                    match call {
+                    let Entry::Occupied(mut entry) = e.inflight_calls.entry(*mid) else {
+                        unreachable!();
+                    };
+
+                    match entry.get_mut() {
                         InflightCall::Pending(waker) if e.peer_closed => {
                             // Peer has closed their channel. This means we'll never
                             // receive a reply. Abort the call.
-                            e.inflight_calls.remove(mid);
+                            entry.remove();
                             e.free_mid(*mid);
                             this.state = CallState::Done;
 
@@ -267,12 +271,11 @@ impl<'a> Future for CallFuture<'a> {
                             Poll::Pending
                         }
                         InflightCall::Ready { .. } => {
-                            e.free_mid(*mid);
-                            let Some(InflightCall::Ready(peek)) = e.inflight_calls.remove(mid)
-                            else {
+                            let InflightCall::Ready(peek) = entry.remove() else {
                                 unreachable!();
                             };
 
+                            e.free_mid(*mid);
                             this.state = CallState::Done;
                             Poll::Ready(Ok(peek))
                         }
