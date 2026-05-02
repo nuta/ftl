@@ -8,7 +8,6 @@ use core::task::Waker;
 use ftl_types::channel::MessageId;
 use ftl_types::channel::OpenOptions;
 use ftl_types::channel::Peek;
-use ftl_types::channel::RecvToken;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use hashbrown::HashMap;
@@ -19,9 +18,6 @@ use crate::handle::Handleable;
 use crate::handle::OwnedHandle;
 use crate::message::Incoming;
 use crate::message::Message;
-use crate::message::OpenReply;
-use crate::message::ReadReply;
-use crate::message::WriteReply;
 
 struct IdAllocator {
     bitmap: u64,
@@ -30,10 +26,6 @@ struct IdAllocator {
 impl IdAllocator {
     const fn new() -> Self {
         Self { bitmap: 0 }
-    }
-
-    fn is_full(&self) -> bool {
-        self.bitmap == u64::MAX
     }
 
     fn alloc(&mut self) -> Option<MessageId> {

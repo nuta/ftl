@@ -4,7 +4,7 @@
 use core::ops::ControlFlow;
 
 use ftl::aio;
-use ftl::aio::Client;
+use ftl::aio::channel::Client;
 use ftl::channel::Channel;
 use ftl::channel::OpenOptions;
 use ftl::prelude::*;
