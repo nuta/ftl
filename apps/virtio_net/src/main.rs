@@ -284,6 +284,7 @@ fn main(supervisor_ch: Channel) {
                         let completer = readers.pop_front().unwrap();
                         handle_rx(&mut rxq, dmabuf, total_len, completer);
                     }
+                    virtio.notify(&rxq);
                 }
             }
             (_, Event::PeerClosed) => {
