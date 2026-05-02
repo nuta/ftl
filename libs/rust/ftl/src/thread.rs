@@ -65,7 +65,7 @@ pub fn sys_thread_create(
         SYS_THREAD_CREATE,
         process.as_usize(),
         entry,
-        sp as usize,
+        sp,
         start_info,
     )?;
     let handle = OwnedHandle::from_raw(HandleId::from_raw(id));

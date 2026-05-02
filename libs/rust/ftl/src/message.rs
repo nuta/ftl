@@ -242,7 +242,7 @@ impl<C: AsRef<Channel>> ReplyInner<C> {
         Ok(handle)
     }
 
-    fn recv_body<'a>(mut self, body: &'a mut [u8]) -> Result<&'a [u8], ErrorCode> {
+    fn recv_body(mut self, body: &mut [u8]) -> Result<&[u8], ErrorCode> {
         let recv_len = min(body.len(), self.info.body_len());
         self.ch
             .as_ref()
@@ -285,10 +285,10 @@ impl<C: AsRef<Channel>> OpenRequest<C> {
         self.inner.info.body_len()
     }
 
-    pub fn recv<'a>(
+    pub fn recv(
         mut self,
-        path: &'a mut [u8],
-    ) -> Result<(&'a [u8], OpenCompleter<C>), RecvError<C>> {
+        path: &mut [u8],
+    ) -> Result<(&[u8], OpenCompleter<C>), RecvError<C>> {
         match self.inner.recv_body(path) {
             Ok(body) => {
                 let completer = OpenCompleter::new(self.inner);
@@ -418,7 +418,7 @@ impl<C: AsRef<Channel>> ReadReply<C> {
         self.inner.body_len()
     }
 
-    pub fn recv<'a>(self, buf: &'a mut [u8]) -> Result<&'a [u8], ErrorCode> {
+    pub fn recv(self, buf: &mut [u8]) -> Result<&[u8], ErrorCode> {
         self.inner.recv_body(buf)
     }
 }
@@ -444,10 +444,10 @@ impl<C: AsRef<Channel>> WriteRequest<C> {
         self.inner.info.body_len()
     }
 
-    pub fn recv<'a>(
+    pub fn recv(
         mut self,
-        buf: &'a mut [u8],
-    ) -> Result<(&'a [u8], WriteCompleter<C>), RecvError<C>> {
+        buf: &mut [u8],
+    ) -> Result<(&[u8], WriteCompleter<C>), RecvError<C>> {
         match self.inner.recv_body(buf) {
             Ok(body) => {
                 let completer = WriteCompleter::new(self.inner);
@@ -586,7 +586,7 @@ impl<C: AsRef<Channel>> GetAttrReply<C> {
         self.inner.body_len()
     }
 
-    pub fn recv<'a>(self, buf: &'a mut [u8]) -> Result<&'a [u8], ErrorCode> {
+    pub fn recv(self, buf: &mut [u8]) -> Result<&[u8], ErrorCode> {
         self.inner.recv_body(buf)
     }
 }
@@ -608,10 +608,10 @@ impl<C: AsRef<Channel>> SetAttrRequest<C> {
         self.attr
     }
 
-    pub fn recv<'a>(
+    pub fn recv(
         mut self,
-        buf: &'a mut [u8],
-    ) -> Result<(&'a [u8], SetAttrCompleter<C>), RecvError<C>> {
+        buf: &mut [u8],
+    ) -> Result<(&[u8], SetAttrCompleter<C>), RecvError<C>> {
         match self.inner.recv_body(buf) {
             Ok(body) => {
                 let completer = SetAttrCompleter::new(self.inner);

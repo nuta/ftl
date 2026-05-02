@@ -148,7 +148,7 @@ impl ChannelAio {
 
             for (_, call) in state.inflight_calls.drain() {
                 if let InflightCall::Pending(waker) = call {
-                    waker.clone().wake();
+                    waker.wake_by_ref();
                 }
             }
         });
