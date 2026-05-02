@@ -1,20 +1,48 @@
-use alloc::string::String;
-use alloc::string::ToString;
 use core::fmt;
 
 use crate::syscall::sys_console_write;
 
 pub struct Printer;
 
-static BUFFER: spin::Mutex<String> = spin::Mutex::new(String::new());
+struct Buffer<const N: usize> {
+    buffer: [u8; N],
+    tail: usize,
+}
+
+impl<const N: usize> Buffer<N> {
+    pub const fn new() -> Self {
+        Self { buffer: [0; N], tail: 0 }
+    }
+
+    pub fn push(&mut self, byte: u8) {
+        if self.tail >= N {
+            return;
+        }
+
+        self.buffer[self.tail] = byte;
+        self.tail += 1;
+    }
+
+    pub fn as_slice(&self) -> &[u8] {
+        &self.buffer[..self.tail]
+    }
+
+    pub fn clear(&mut self) {
+        self.tail = 0;
+    }
+}
+
+static BUFFER: spin::Mutex<Buffer<512>> = spin::Mutex::new(Buffer::new());
 
 impl fmt::Write for Printer {
     fn write_str(&mut self, s: &str) -> fmt::Result {
         let mut buffer = BUFFER.lock();
-        buffer.push_str(s);
-        while let Some(index) = buffer.find('\n') {
-            sys_console_write(buffer[..(index + 1)].as_bytes());
-            *buffer = buffer[index + 1..].to_string();
+        for byte in s.as_bytes() {
+            buffer.push(*byte);
+            if *byte == b'\n' {
+                sys_console_write(buffer.as_slice());
+                buffer.clear();
+            }
         }
 
         Ok(())
