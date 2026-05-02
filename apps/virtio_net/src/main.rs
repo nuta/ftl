@@ -245,6 +245,7 @@ fn main(supervisor_ch: Channel) {
                         }];
 
                         let Some(token) = txq.reserve() else {
+                            warn!("failed to reserve token for TX");
                             completer.reply_error(ErrorCode::BadAccess);
                             dmabuf_pool.free(dmabuf);
                             continue;
