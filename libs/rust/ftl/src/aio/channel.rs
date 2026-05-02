@@ -73,6 +73,7 @@ impl ChannelAio {
             .expect("missing async state for channel");
 
         let mid = peek.info.mid();
+        // TODO: Check if the message is a reply type.
         if let Some(call) = state.inflight_calls.remove(&mid) {
             match call {
                 InflightCall::WaitingForReply(waker) => {
