@@ -245,48 +245,39 @@ impl Client {
     }
 
     pub async fn open(&self, path: &[u8], options: OpenOptions) -> Result<OwnedHandle, ErrorCode> {
-        let peek = CallFuture::new(
-            self.ch.as_ref(),
-            Message::Open {
-                mid: MessageId::new(0),
-                path,
-                options,
-            },
-        )
-        .await?;
+        let msg = Message::Open {
+            mid: MessageId::new(0),
+            path,
+            options,
+        };
 
+        let peek = CallFuture::new(self.ch.as_ref(), msg).await?;
         let reply = OpenReply::new(&self.ch, peek);
         let handle = reply.recv()?;
         Ok(handle)
     }
 
     pub async fn read<'a>(&self, offset: usize, buf: &'a mut [u8]) -> Result<&'a [u8], ErrorCode> {
-        let peek = CallFuture::new(
-            self.ch.as_ref(),
-            Message::Read {
-                mid: MessageId::new(0),
-                offset,
-                len: buf.len(),
-            },
-        )
-        .await?;
+        let msg = Message::Read {
+            mid: MessageId::new(0),
+            offset,
+            len: buf.len(),
+        };
 
+        let peek = CallFuture::new(self.ch.as_ref(), msg).await?;
         let reply = ReadReply::new(&self.ch, peek);
         let buf = reply.recv(buf)?;
         Ok(buf)
     }
 
     pub async fn write(&self, offset: usize, buf: &[u8]) -> Result<usize, ErrorCode> {
-        let peek = CallFuture::new(
-            self.ch.as_ref(),
-            Message::Write {
-                mid: MessageId::new(0),
-                offset,
-                buf,
-            },
-        )
-        .await?;
+        let msg = Message::Write {
+            mid: MessageId::new(0),
+            offset,
+            buf,
+        };
 
+        let peek = CallFuture::new(self.ch.as_ref(), msg).await?;
         let reply = WriteReply::new(&self.ch, peek);
         let written_len = reply.written_len();
         drop(reply); // Receive the reply message
