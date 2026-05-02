@@ -274,9 +274,11 @@ impl<'a> Future for CallFuture<'a> {
                         }
                         InflightCall::Ready(peek) => {
                             let peek = peek.take().unwrap();
+
                             entry.remove();
                             e.free_mid(*mid);
                             this.state = CallState::Done;
+                            
                             Poll::Ready(Ok(peek))
                         }
                     }
