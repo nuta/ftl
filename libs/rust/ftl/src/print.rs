@@ -11,7 +11,10 @@ struct Buffer<const N: usize> {
 
 impl<const N: usize> Buffer<N> {
     pub const fn new() -> Self {
-        Self { buffer: [0; N], tail: 0 }
+        Self {
+            buffer: [0; N],
+            tail: 0,
+        }
     }
 
     pub fn push(&mut self, byte: u8) {
