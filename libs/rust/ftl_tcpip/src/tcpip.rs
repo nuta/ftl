@@ -75,23 +75,21 @@ impl<I: Io> TcpIp<I> {
         };
 
         // TODO: Error handling.
-        let socket = self.sockets.create_udp_socket(local).unwrap();
-
         let iface = self.interfaces.get_mut(iface_id).unwrap();
         let mac = *iface.device_mut().mac_addr();
         let mut client = DhcpClient::new(mac);
         match client.poll_tx() {
             Ok(Some(tx)) => {
-                socket
-                    .send_from_v4(
-                        iface,
-                        tx.local_ip,
-                        tx.remote_ip,
-                        tx.remote_port,
-                        tx.remote_ip,
-                        tx.pkt.slice(),
-                    )
-                    .unwrap();
+                crate::udp::transmit::<I>(
+                    iface,
+                    tx.local_ip,
+                    local.port,
+                    tx.remote_ip,
+                    tx.remote_port,
+                    tx.remote_ip,
+                    tx.pkt.slice(),
+                )
+                .unwrap();
             }
             Ok(None) => {
                 debug!("no DHCP packet to send");
@@ -103,7 +101,9 @@ impl<I: Io> TcpIp<I> {
             }
         }
 
-        self.sockets.register_dhcp_client(iface_id, local.port, client).unwrap();
+        self.sockets
+            .create_dhcp_client(iface_id, local.port, client)
+            .unwrap();
     }
 
     pub fn tcp_listen(

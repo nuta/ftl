@@ -154,19 +154,29 @@ impl<I: Io> SocketMap<I> {
         self.udp_sockets.get(&key).cloned()
     }
 
-    pub(crate) fn register_dhcp_client(
+    pub(crate) fn create_dhcp_client(
         &mut self,
         iface_id: InterfaceId,
         local_port: Port,
         client: DhcpClient,
     ) -> Result<(), OutOfMemoryError> {
-        let key = DhcpClientKey { iface_id, local_port };
+        let key = DhcpClientKey {
+            iface_id,
+            local_port,
+        };
         self.dhcp_clients.reserve_and_insert(key, client)?;
         Ok(())
     }
 
-    pub(crate) fn get_dhcp_client_mut(&mut self, iface_id: InterfaceId, local_port: Port) -> Option<&mut DhcpClient> {
-        let key = DhcpClientKey { iface_id, local_port };
+    pub(crate) fn get_dhcp_client_mut(
+        &mut self,
+        iface_id: InterfaceId,
+        local_port: Port,
+    ) -> Option<&mut DhcpClient> {
+        let key = DhcpClientKey {
+            iface_id,
+            local_port,
+        };
         self.dhcp_clients.get_mut(&key)
     }
 }

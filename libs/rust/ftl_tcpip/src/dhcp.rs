@@ -57,6 +57,7 @@ pub(crate) enum TxError {
 #[derive(Debug)]
 pub(crate) enum RxError {
     RxInInitState,
+    PacketRead(packet::ReserveError),
 }
 
 enum State {
@@ -129,7 +130,7 @@ impl DhcpClient {
         }
     }
 
-    pub fn handle_rx(&mut self, data: &[u8]) -> Result<(), RxError> {
+    pub fn handle_rx(&mut self, pkt: &mut Packet) -> Result<(), RxError> {
         let state = self.state.lock();
         match *state {
             State::Init => {
@@ -138,7 +139,8 @@ impl DhcpClient {
                 Err(RxError::RxInInitState)
             }
             State::SentDiscover => {
-                trace!("DHCP: received: {:x?}", data);
+                trace!("DHCP: received: {:x?}", pkt.slice());
+                let header = pkt.read::<DhcpHeader>().map_err(RxError::PacketRead)?;
                 Ok(())
             }
         }

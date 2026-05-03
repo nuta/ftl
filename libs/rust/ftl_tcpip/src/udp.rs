@@ -53,49 +53,17 @@ impl<I: Io> UdpSocket<I> {
                     return Err(TxError::NoLocalIpv4);
                 };
 
-                self.send_from_v4(iface, local_ipv4, remote_ipv4, remote.port, next_hop, data)
+                transmit::<I>(
+                    iface,
+                    local_ipv4,
+                    self.local_port,
+                    remote_ipv4,
+                    remote.port,
+                    next_hop,
+                    data,
+                )
             }
         }
-    }
-
-    pub(crate) fn send_from_v4(
-        &self,
-        iface: &mut Interface<I::Device>,
-        local_ipv4: Ipv4Addr,
-        remote_ipv4: Ipv4Addr,
-        remote_port: Port,
-        nexthop_ipv4: Ipv4Addr,
-        data: &[u8],
-    ) -> Result<(), TxError> {
-        let udp_len: u16 = (data.len() + size_of::<UdpHeader>())
-            .try_into()
-            .map_err(|_| TxError::DataTooLong(data.len()))?;
-
-        let mut header = UdpHeader {
-            src_port: self.local_port.into(),
-            dst_port: remote_port.into(),
-            len: udp_len.into(),
-            checksum: 0.into(),
-        };
-
-        let head_room =
-            size_of::<EthernetHeader>() + size_of::<Ipv4Header>() + size_of::<UdpHeader>();
-        let mut pkt = Packet::new(data.len(), head_room).map_err(TxError::PacketAlloc)?;
-        header.checksum = compute_udp_checksum(&header, local_ipv4, remote_ipv4, data).into();
-        pkt.write_front(header).map_err(TxError::PacketWrite)?;
-        pkt.write_back_bytes(data).map_err(TxError::PacketWrite)?;
-
-        crate::ip::ipv4::transmit::<I>(
-            iface,
-            &mut pkt,
-            remote_ipv4,
-            nexthop_ipv4,
-            local_ipv4,
-            Protocol::Udp,
-        )
-        .map_err(TxError::Ipv4Tx)?;
-
-        Ok(())
     }
 
     pub fn try_recv(&self) -> Option<Datagram> {
@@ -115,6 +83,16 @@ impl<I: Io> UdpSocket<I> {
         });
         Ok(())
     }
+}
+
+#[derive(Debug)]
+pub enum TxError {
+    DataTooLong(usize),
+    PacketAlloc(packet::AllocError),
+    PacketWrite(packet::ReserveError),
+    NoRoute,
+    NoLocalIpv4,
+    Ipv4Tx(crate::ip::ipv4::TxError),
 }
 
 fn compute_udp_checksum(
@@ -142,14 +120,43 @@ fn compute_udp_checksum(
     }
 }
 
-#[derive(Debug)]
-pub enum TxError {
-    DataTooLong(usize),
-    PacketAlloc(packet::AllocError),
-    PacketWrite(packet::ReserveError),
-    NoRoute,
-    NoLocalIpv4,
-    Ipv4Tx(crate::ip::ipv4::TxError),
+pub(crate) fn transmit<I: Io>(
+    iface: &mut Interface<I::Device>,
+    local_ipv4: Ipv4Addr,
+    local_port: Port,
+    remote_ipv4: Ipv4Addr,
+    remote_port: Port,
+    nexthop_ipv4: Ipv4Addr,
+    data: &[u8],
+) -> Result<(), TxError> {
+    let udp_len: u16 = (data.len() + size_of::<UdpHeader>())
+        .try_into()
+        .map_err(|_| TxError::DataTooLong(data.len()))?;
+
+    let mut header = UdpHeader {
+        src_port: local_port.into(),
+        dst_port: remote_port.into(),
+        len: udp_len.into(),
+        checksum: 0.into(),
+    };
+
+    let head_room = size_of::<EthernetHeader>() + size_of::<Ipv4Header>() + size_of::<UdpHeader>();
+    let mut pkt = Packet::new(data.len(), head_room).map_err(TxError::PacketAlloc)?;
+    header.checksum = compute_udp_checksum(&header, local_ipv4, remote_ipv4, data).into();
+    pkt.write_front(header).map_err(TxError::PacketWrite)?;
+    pkt.write_back_bytes(data).map_err(TxError::PacketWrite)?;
+
+    crate::ip::ipv4::transmit::<I>(
+        iface,
+        &mut pkt,
+        remote_ipv4,
+        nexthop_ipv4,
+        local_ipv4,
+        Protocol::Udp,
+    )
+    .map_err(TxError::Ipv4Tx)?;
+
+    Ok(())
 }
 
 #[derive(Debug)]
@@ -179,40 +186,44 @@ pub(crate) fn handle_rx<I: Io>(
     local: IpAddr,
 ) -> Result<(), RxError> {
     let header = pkt.read::<UdpHeader>().map_err(RxError::PacketRead)?;
-    let local = Endpoint {
-        addr: local,
-        port: Port::from(header.dst_port),
-    };
-    let remote = Endpoint {
-        addr: remote,
-        port: Port::from(header.src_port),
-    };
-
-    let socket = match tcpip.sockets().get_udp_socket(&local) {
-        Some(socket) => socket,
-        None => {
-            debug!("UDP: no socket found for local address: {:?}", local);
-            return Ok(());
-        }
-    };
-
-    socket.handle_rx(pkt, remote)?;
-
-    if let Some(client) = tcpip.sockets_mut().get_dhcp_client_mut(iface_id, socket.local_port) {
-        client.handle_rx(pkt.slice()).map_err(RxError::DhcpRx)?;
+    let local_port = Port::from(header.dst_port);
+    if let Some(client) = tcpip
+        .sockets_mut()
+        .get_dhcp_client_mut(iface_id, local_port)
+    {
+        client.handle_rx(pkt).map_err(RxError::DhcpRx)?;
         if let Some(tx) = client.poll_tx().map_err(RxError::DhcpTx)? {
             let iface = tcpip.interfaces_mut().get_mut(iface_id).unwrap();
-            socket
-                .send_from_v4(
-                    iface,
-                    tx.local_ip,
-                    tx.remote_ip,
-                    tx.remote_port,
-                    tx.remote_ip,
-                    tx.pkt.slice(),
-                )
-                .map_err(RxError::DhcpTransmit)?;
+            transmit::<I>(
+                iface,
+                tx.local_ip,
+                local_port,
+                tx.remote_ip,
+                tx.remote_port,
+                tx.remote_ip,
+                tx.pkt.slice(),
+            )
+            .map_err(RxError::DhcpTransmit)?;
         }
+    } else {
+        let remote = Endpoint {
+            addr: remote,
+            port: Port::from(header.src_port),
+        };
+        let local = Endpoint {
+            addr: local,
+            port: local_port,
+        };
+
+        let socket = match tcpip.sockets().get_udp_socket(&local) {
+            Some(socket) => socket,
+            None => {
+                debug!("UDP: no socket found for local address: {:?}", local);
+                return Ok(());
+            }
+        };
+
+        socket.handle_rx(pkt, remote)?;
     }
 
     Ok(())
