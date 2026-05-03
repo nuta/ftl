@@ -90,12 +90,16 @@ impl<I: Io> TcpIp<I> {
         handle.0.close(self);
     }
 
-
     pub fn udp_open(&mut self, local: Endpoint) -> Result<UdpHandle<I>, OutOfMemoryError> {
         self.sockets.create_udp_socket(local).map(UdpHandle)
     }
 
-    pub fn udp_send(&mut self, handle: UdpHandle<I>, remote: Endpoint, data: &[u8]) -> Result<(), crate::udp::TxError> {
+    pub fn udp_send(
+        &mut self,
+        handle: UdpHandle<I>,
+        remote: Endpoint,
+        data: &[u8],
+    ) -> Result<(), crate::udp::TxError> {
         handle.0.send(self, remote, data)
     }
 

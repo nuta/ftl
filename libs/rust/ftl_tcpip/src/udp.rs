@@ -1,7 +1,7 @@
-use alloc::sync::Arc;
-use core::marker::PhantomData;
 use alloc::collections::VecDeque;
+use alloc::sync::Arc;
 use alloc::vec::Vec;
+use core::marker::PhantomData;
 
 use crate::TcpIp;
 use crate::checksum::Checksum;
@@ -11,13 +11,12 @@ use crate::io::Io;
 use crate::ip::IpAddr;
 use crate::ip::Ipv4Addr;
 use crate::ip::ipv4::Ipv4Header;
+use crate::packet;
 use crate::packet::Packet;
 use crate::packet::WriteableToPacket;
-use crate::packet;
 use crate::socket::Endpoint;
 use crate::transport::Port;
 use crate::transport::Protocol;
-
 
 pub struct UdpHandle<I: Io>(pub(crate) Arc<UdpSocket<I>>);
 
@@ -41,12 +40,7 @@ impl<I: Io> UdpSocket<I> {
         }
     }
 
-    pub fn send(
-        &self,
-        tcpip: &mut TcpIp<I>,
-        remote: Endpoint,
-        data: &[u8],
-    ) -> Result<(), TxError> {
+    pub fn send(&self, tcpip: &mut TcpIp<I>, remote: Endpoint, data: &[u8]) -> Result<(), TxError> {
         let udp_len: u16 = (data.len() + size_of::<UdpHeader>())
             .try_into()
             .map_err(|_| TxError::DataTooLong(data.len()))?;
@@ -96,17 +90,16 @@ impl<I: Io> UdpSocket<I> {
         rx.pop_front()
     }
 
-    fn handle_rx(
-        &self,
-        pkt: &mut Packet,
-        remote: Endpoint,
-    ) -> Result<(), RxError> {
+    fn handle_rx(&self, pkt: &mut Packet, remote: Endpoint) -> Result<(), RxError> {
         let mut rx = self.rx.lock();
         if rx.len() >= 128 {
             return Err(RxError::RxQueueFull);
         }
 
-        rx.push_back(Datagram { remote, data: pkt.slice().to_vec() });
+        rx.push_back(Datagram {
+            remote,
+            data: pkt.slice().to_vec(),
+        });
         Ok(())
     }
 }
@@ -170,7 +163,6 @@ pub(crate) fn handle_rx<I: Io>(
             return Ok(());
         }
     };
-
 
     socket.handle_rx(pkt, remote)
 }
