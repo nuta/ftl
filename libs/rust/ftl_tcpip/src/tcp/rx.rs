@@ -1,14 +1,12 @@
 use crate::TcpIp;
 use crate::io::Io;
 use crate::ip::IpAddr;
-use crate::ip::ipv4::Ipv4Addr;
 use crate::packet;
 use crate::packet::Packet;
 use crate::socket::Endpoint;
 use crate::tcp::header::TcpFlags;
 use crate::tcp::header::TcpHeader;
 use crate::transport::Port;
-use crate::transport::Protocol;
 
 #[derive(Debug)]
 pub enum RxError {

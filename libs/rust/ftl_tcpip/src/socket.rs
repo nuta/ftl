@@ -133,4 +133,14 @@ impl<I: Io> SocketMap<I> {
         self.udp_sockets.reserve_and_insert(key, socket.clone())?;
         Ok(socket)
     }
+
+    pub(crate) fn get_udp_socket(&self, local: &Endpoint) -> Option<Arc<UdpSocket<I>>> {
+        let mut key = UdpSocketKey { local: *local };
+        if let Some(socket) = self.udp_sockets.get(&key) {
+            return Some(socket.clone());
+        }
+
+        key.local.addr = IpAddr::V4(Ipv4Addr::UNSPECIFIED);
+        self.udp_sockets.get(&key).cloned()
+    }
 }

@@ -1,5 +1,7 @@
 use alloc::sync::Arc;
 use core::marker::PhantomData;
+use alloc::collections::VecDeque;
+use alloc::vec::Vec;
 
 use crate::TcpIp;
 use crate::checksum::Checksum;
@@ -11,15 +13,22 @@ use crate::ip::Ipv4Addr;
 use crate::ip::ipv4::Ipv4Header;
 use crate::packet::Packet;
 use crate::packet::WriteableToPacket;
-use crate::packet::{self};
+use crate::packet;
 use crate::socket::Endpoint;
 use crate::transport::Port;
 use crate::transport::Protocol;
 
+
 pub struct UdpHandle<I: Io>(pub(crate) Arc<UdpSocket<I>>);
+
+struct Datagram {
+    remote: Endpoint,
+    data: Vec<u8>,
+}
 
 pub(crate) struct UdpSocket<I: Io> {
     local_port: Port,
+    rx: spin::Mutex<VecDeque<Datagram>>,
     _pd: PhantomData<I>,
 }
 
@@ -27,6 +36,7 @@ impl<I: Io> UdpSocket<I> {
     pub(crate) fn new(local_port: Port) -> Self {
         Self {
             local_port,
+            rx: spin::Mutex::new(VecDeque::new()),
             _pd: PhantomData,
         }
     }
@@ -81,6 +91,20 @@ impl<I: Io> UdpSocket<I> {
 
         Ok(())
     }
+
+    fn handle_rx(
+        &self,
+        pkt: &mut Packet,
+        remote: Endpoint,
+    ) -> Result<(), RxError> {
+        let mut rx = self.rx.lock();
+        if rx.len() >= 128 {
+            return Err(RxError::RxQueueFull);
+        }
+
+        rx.push_back(Datagram { remote, data: pkt.slice().to_vec() });
+        Ok(())
+    }
 }
 
 fn compute_udp_checksum(src_ip: Ipv4Addr, dst_ip: Ipv4Addr, udp_len: u16, payload: &[u8]) -> u16 {
@@ -106,6 +130,7 @@ pub enum TxError {
 #[derive(Debug)]
 pub enum RxError {
     PacketRead(packet::ReserveError),
+    RxQueueFull,
 }
 
 #[repr(C, packed)]
@@ -125,5 +150,23 @@ pub(crate) fn handle_rx<I: Io>(
     local: IpAddr,
 ) -> Result<(), RxError> {
     let header = pkt.read::<UdpHeader>().map_err(RxError::PacketRead)?;
-    todo!()
+    let local = Endpoint {
+        addr: local,
+        port: Port::from(header.src_port),
+    };
+    let remote = Endpoint {
+        addr: remote,
+        port: Port::from(header.dst_port),
+    };
+
+    let socket = match tcpip.sockets().get_udp_socket(&local) {
+        Some(socket) => socket,
+        None => {
+            debug!("UDP: no socket found for local address: {:?}", local);
+            return Ok(());
+        }
+    };
+
+
+    socket.handle_rx(pkt, remote)
 }
