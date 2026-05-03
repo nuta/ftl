@@ -7,6 +7,7 @@ use crate::interface::Interface;
 use crate::interface::InterfaceId;
 use crate::io::Io;
 use crate::ip::IpAddr;
+use crate::ip::Ipv4Addr;
 use crate::packet;
 use crate::packet::Packet;
 use crate::packet::WriteableToPacket;
@@ -16,6 +17,8 @@ use crate::packet::WriteableToPacket;
 pub struct MacAddr([u8; 6]);
 
 impl MacAddr {
+    pub const BROADCAST: Self = Self([0xff; 6]);
+
     pub const fn new(addr: [u8; 6]) -> Self {
         Self(addr)
     }
@@ -60,6 +63,7 @@ pub(crate) fn transmit<D: Device>(
     dst_addr: IpAddr,
 ) -> Result<(), TxError> {
     let dest_mac = match dst_addr {
+        IpAddr::V4(Ipv4Addr::BROADCAST) => MacAddr::BROADCAST,
         IpAddr::V4(addr) => {
             match iface.arp_table().lookup(addr) {
                 Some(mac) => *mac,

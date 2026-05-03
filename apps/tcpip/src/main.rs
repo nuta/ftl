@@ -303,6 +303,8 @@ fn main(supervisor_ch: Channel) {
         })
         .unwrap();
 
+    tcpip.enable_dhcp(iface_id);
+
     // tcpip
     //     .add_route(Route::new(device_id, IpCidr::Ipv4(cidr)))
     //     .unwrap();
