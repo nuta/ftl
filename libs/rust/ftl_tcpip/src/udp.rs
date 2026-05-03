@@ -21,9 +21,9 @@ use crate::transport::Protocol;
 
 pub struct UdpHandle<I: Io>(pub(crate) Arc<UdpSocket<I>>);
 
-struct Datagram {
-    remote: Endpoint,
-    data: Vec<u8>,
+pub struct Datagram {
+    pub remote: Endpoint,
+    pub data: Vec<u8>,
 }
 
 pub(crate) struct UdpSocket<I: Io> {
@@ -44,7 +44,6 @@ impl<I: Io> UdpSocket<I> {
     pub fn send(
         &self,
         tcpip: &mut TcpIp<I>,
-        pkt: &mut Packet,
         remote: Endpoint,
         data: &[u8],
     ) -> Result<(), TxError> {
@@ -90,6 +89,11 @@ impl<I: Io> UdpSocket<I> {
         }
 
         Ok(())
+    }
+
+    pub fn try_recv(&self) -> Option<Datagram> {
+        let mut rx = self.rx.lock();
+        rx.pop_front()
     }
 
     fn handle_rx(

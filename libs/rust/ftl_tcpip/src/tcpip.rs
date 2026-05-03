@@ -60,10 +60,6 @@ impl<I: Io> TcpIp<I> {
         self.routes.add(route)
     }
 
-    pub fn udp_open(&mut self, local: Endpoint) -> Result<UdpHandle<I>, OutOfMemoryError> {
-        self.sockets.create_udp_socket(local).map(UdpHandle)
-    }
-
     pub fn tcp_listen(
         &mut self,
         local: Endpoint,
@@ -92,6 +88,19 @@ impl<I: Io> TcpIp<I> {
 
     pub fn tcp_close(&mut self, handle: TcpConnHandle<I>) {
         handle.0.close(self);
+    }
+
+
+    pub fn udp_open(&mut self, local: Endpoint) -> Result<UdpHandle<I>, OutOfMemoryError> {
+        self.sockets.create_udp_socket(local).map(UdpHandle)
+    }
+
+    pub fn udp_send(&mut self, handle: UdpHandle<I>, remote: Endpoint, data: &[u8]) -> Result<(), crate::udp::TxError> {
+        handle.0.send(self, remote, data)
+    }
+
+    pub fn udp_try_recv(&mut self, handle: UdpHandle<I>) -> Option<crate::udp::Datagram> {
+        handle.0.try_recv()
     }
 
     pub(crate) fn sockets(&self) -> &SocketMap<I> {
