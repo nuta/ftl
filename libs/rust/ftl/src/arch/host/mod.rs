@@ -11,3 +11,8 @@ pub fn min_page_size() -> usize {
 pub fn process_name() -> &'static str {
     "host"
 }
+
+// A dummy function to suppress unused warnings.
+pub fn start() {
+    crate::allocator::init();
+}
