@@ -99,7 +99,11 @@ pub enum RxError {
     Arp(crate::arp::RxError),
 }
 
-pub(crate) fn handle_rx<I: Io>(tcpip: &mut TcpIp<I>, iface_id: InterfaceId, pkt: &mut Packet) -> Result<(), RxError> {
+pub(crate) fn handle_rx<I: Io>(
+    tcpip: &mut TcpIp<I>,
+    iface_id: InterfaceId,
+    pkt: &mut Packet,
+) -> Result<(), RxError> {
     let header = pkt.read::<EthernetHeader>().map_err(RxError::PacketRead)?;
 
     let ether_type: u16 = header.ether_type.into();

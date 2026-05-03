@@ -162,4 +162,3 @@ impl<I: Io> SocketMap<I> {
         self.dhcp_clients.get_mut(&key)
     }
 }
-

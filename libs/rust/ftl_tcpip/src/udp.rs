@@ -188,7 +188,16 @@ pub(crate) fn handle_rx<I: Io>(
         client.handle_rx(pkt.slice()).map_err(RxError::DhcpRx)?;
         if let Some(tx) = client.poll_tx().map_err(RxError::DhcpTx)? {
             let iface = tcpip.interfaces_mut().get_mut(iface_id).unwrap();
-            socket.send_from_v4(iface, tx.local_ip, tx.remote_ip, tx.remote_port, tx.remote_ip, tx.pkt.slice()).map_err(RxError::DhcpTransmit)?;
+            socket
+                .send_from_v4(
+                    iface,
+                    tx.local_ip,
+                    tx.remote_ip,
+                    tx.remote_port,
+                    tx.remote_ip,
+                    tx.pkt.slice(),
+                )
+                .map_err(RxError::DhcpTransmit)?;
         }
     }
 

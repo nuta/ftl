@@ -1,9 +1,11 @@
 use crate::endian::Ne;
-use crate::ethernet::{EthernetHeader, MacAddr};
+use crate::ethernet::EthernetHeader;
+use crate::ethernet::MacAddr;
 use crate::ip::Ipv4Addr;
 use crate::ip::ipv4::Ipv4Header;
-use crate::packet::{self, WriteableToPacket};
 use crate::packet::Packet;
+use crate::packet::WriteableToPacket;
+use crate::packet::{self};
 use crate::transport::Port;
 use crate::udp::UdpHeader;
 
@@ -29,6 +31,15 @@ struct DhcpHeader {
 }
 
 impl WriteableToPacket for DhcpHeader {}
+
+#[repr(C, packed)]
+struct DhcpMessageTypeOption {
+    type_: u8,
+    length: u8,
+    value: u8,
+}
+
+impl WriteableToPacket for DhcpMessageTypeOption {}
 
 pub(crate) struct Tx {
     pub local_ip: Ipv4Addr,
@@ -66,9 +77,7 @@ impl DhcpClient {
         }
     }
 
-    pub fn poll_tx(
-        &mut self,
-    ) -> Result<Option<Tx>, TxError> {
+    pub fn poll_tx(&mut self) -> Result<Option<Tx>, TxError> {
         let mut client_mac = [0; 16];
         client_mac[..6].copy_from_slice(self.mac.as_bytes());
 
@@ -93,9 +102,18 @@ impl DhcpClient {
                     magic: MAGIC_COOKIE.into(),
                 };
 
+                let type_option = DhcpMessageTypeOption {
+                    type_: 53, // DHCP Message Type
+                    length: 1, // in bytes
+                    value: 1, // DHCPDISCOVER
+                };
+
+                let len = size_of::<DhcpHeader>() + size_of::<DhcpMessageTypeOption>() + 1;
                 let head_room = size_of::<EthernetHeader>() + size_of::<Ipv4Header>() + size_of::<UdpHeader>();
-                let mut pkt = Packet::new(size_of::<DhcpHeader>(), head_room).map_err(TxError::PacketAlloc)?;
+                let mut pkt = Packet::new(len, head_room).map_err(TxError::PacketAlloc)?;
                 pkt.write_back(header).map_err(TxError::PacketWrite)?;
+                pkt.write_back(type_option).map_err(TxError::PacketWrite)?;
+                pkt.write_back_bytes(&[0xff]).map_err(TxError::PacketWrite)?; // End
 
                 Ok(Some(Tx {
                     local_ip: Ipv4Addr::UNSPECIFIED,
@@ -104,9 +122,7 @@ impl DhcpClient {
                     pkt,
                 }))
             }
-            State::SentDiscover => {
-                Ok(None)
-            }
+            State::SentDiscover => Ok(None),
         }
     }
 

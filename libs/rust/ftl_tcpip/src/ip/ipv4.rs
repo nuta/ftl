@@ -216,7 +216,11 @@ pub enum RxError {
     Udp(crate::udp::RxError),
 }
 
-pub(crate) fn handle_rx<I: Io>(tcpip: &mut TcpIp<I>, iface_id: InterfaceId, pkt: &mut Packet) -> Result<(), RxError> {
+pub(crate) fn handle_rx<I: Io>(
+    tcpip: &mut TcpIp<I>,
+    iface_id: InterfaceId,
+    pkt: &mut Packet,
+) -> Result<(), RxError> {
     let header = pkt.read::<Ipv4Header>().map_err(RxError::PacketRead)?;
     if header.version() != 4 {
         return Err(RxError::BadVersion(header.version()));
@@ -246,7 +250,8 @@ pub(crate) fn handle_rx<I: Io>(tcpip: &mut TcpIp<I>, iface_id: InterfaceId, pkt:
             crate::tcp::handle_rx::<I>(tcpip, pkt, remote, IpAddr::V4(dst)).map_err(RxError::Tcp)
         }
         _ if protocol == Protocol::Udp as u8 => {
-            crate::udp::handle_rx::<I>(tcpip, iface_id, pkt, remote, IpAddr::V4(dst)).map_err(RxError::Udp)
+            crate::udp::handle_rx::<I>(tcpip, iface_id, pkt, remote, IpAddr::V4(dst))
+                .map_err(RxError::Udp)
         }
         protocol => Err(RxError::UnsupportedProtocol(protocol)),
     }

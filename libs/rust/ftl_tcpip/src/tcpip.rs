@@ -41,7 +41,11 @@ impl<I: Io> TcpIp<I> {
         &mut self.io
     }
 
-    pub fn handle_rx(&mut self, iface_id: InterfaceId, pkt: &mut Packet) -> Result<(), crate::ethernet::RxError> {
+    pub fn handle_rx(
+        &mut self,
+        iface_id: InterfaceId,
+        pkt: &mut Packet,
+    ) -> Result<(), crate::ethernet::RxError> {
         crate::ethernet::handle_rx::<I>(self, iface_id, pkt)
     }
 
@@ -78,7 +82,16 @@ impl<I: Io> TcpIp<I> {
         let mut client = DhcpClient::new(mac);
         match client.poll_tx() {
             Ok(Some(tx)) => {
-                socket.send_from_v4(iface, tx.local_ip, tx.remote_ip, tx.remote_port, tx.remote_ip, tx.pkt.slice()).unwrap();
+                socket
+                    .send_from_v4(
+                        iface,
+                        tx.local_ip,
+                        tx.remote_ip,
+                        tx.remote_port,
+                        tx.remote_ip,
+                        tx.pkt.slice(),
+                    )
+                    .unwrap();
             }
             Ok(None) => {
                 debug!("no DHCP packet to send");
