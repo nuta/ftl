@@ -122,6 +122,15 @@ impl Packet {
         Ok(unsafe { &*ptr })
     }
 
+    pub fn discard(&mut self, len: usize) -> Result<(), ReserveError> {
+        if len > self.len() {
+            return Err(ReserveError::BufferTooShort);
+        }
+
+        self.head += len as u16;
+        Ok(())
+    }
+
     pub fn write_front<T: WriteableToPacket>(&mut self, value: T) -> Result<(), ReserveError> {
         let len = size_of::<T>();
         debug_assert!(len <= u16::MAX as usize);
