@@ -4,9 +4,7 @@ use crate::ip::IpAddr;
 use crate::ip::ipv4::Ipv4Addr;
 use crate::packet;
 use crate::packet::Packet;
-use crate::socket::ActiveKey;
 use crate::socket::Endpoint;
-use crate::socket::ListenerKey;
 use crate::tcp::header::TcpFlags;
 use crate::tcp::header::TcpHeader;
 use crate::transport::Port;
@@ -55,32 +53,21 @@ pub(crate) fn handle_rx<I: Io>(
         Into::<u32>::into(rx.ack),
     );
 
-    let key = ActiveKey {
-        local: Endpoint {
-            addr: local_ip,
-            port: rx.dst_port,
-        },
-        protocol: Protocol::Tcp,
-        remote: Endpoint {
-            addr: remote_ip,
-            port: rx.src_port,
-        },
+    let local = Endpoint {
+        addr: local_ip,
+        port: rx.dst_port,
+    };
+    let remote = Endpoint {
+        addr: remote_ip,
+        port: rx.src_port,
     };
 
-    match tcpip.sockets().get_active(&key) {
+    match tcpip.sockets().get_tcp_conn(&local, &remote) {
         Some(conn) => {
             conn.handle_rx(tcpip, rx, pkt);
         }
         None => {
-            let key = ListenerKey {
-                local: Endpoint {
-                    addr: IpAddr::V4(Ipv4Addr::UNSPECIFIED),
-                    port: rx.dst_port,
-                },
-                protocol: Protocol::Tcp,
-            };
-
-            match tcpip.sockets().get_listener(&key) {
+            match tcpip.sockets().get_tcp_listener(&local) {
                 Some(listener) => {
                     listener.handle_rx(tcpip, rx, pkt);
                 }
