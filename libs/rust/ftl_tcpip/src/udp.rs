@@ -7,6 +7,8 @@ use crate::TcpIp;
 use crate::checksum::Checksum;
 use crate::endian::Ne;
 use crate::ethernet::EthernetHeader;
+use crate::interface::Interface;
+use crate::interface::InterfaceId;
 use crate::io::Io;
 use crate::ip::IpAddr;
 use crate::ip::Ipv4Addr;
@@ -41,17 +43,6 @@ impl<I: Io> UdpSocket<I> {
     }
 
     pub fn send(&self, tcpip: &mut TcpIp<I>, remote: Endpoint, data: &[u8]) -> Result<(), TxError> {
-        let udp_len: u16 = (data.len() + size_of::<UdpHeader>())
-            .try_into()
-            .map_err(|_| TxError::DataTooLong(data.len()))?;
-
-        let mut header = UdpHeader {
-            src_port: self.local_port.into(),
-            dst_port: remote.port.into(),
-            len: udp_len.into(),
-            checksum: 0.into(),
-        };
-
         let Some((iface, next_hop)) = tcpip.lookup_route(remote.addr) else {
             return Err(TxError::NoRoute);
         };
@@ -62,25 +53,48 @@ impl<I: Io> UdpSocket<I> {
                     return Err(TxError::NoLocalIpv4);
                 };
 
-                let head_room =
-                    size_of::<EthernetHeader>() + size_of::<Ipv4Header>() + size_of::<UdpHeader>();
-                let mut pkt = Packet::new(data.len(), head_room).map_err(TxError::PacketAlloc)?;
-                header.checksum =
-                    compute_udp_checksum(local_ipv4, remote_ipv4, udp_len, pkt.slice()).into();
-                pkt.write_front(header).map_err(TxError::PacketWrite)?;
-                pkt.write_back_bytes(data).map_err(TxError::PacketWrite)?;
-
-                crate::ip::ipv4::transmit::<I>(
-                    iface,
-                    &mut pkt,
-                    remote_ipv4,
-                    next_hop,
-                    local_ipv4,
-                    Protocol::Udp,
-                )
-                .map_err(TxError::Ipv4Tx)?;
+                self.send_from_v4(iface, local_ipv4, remote_ipv4, remote.port, next_hop, data)
             }
         }
+    }
+
+    pub(crate) fn send_from_v4(
+        &self,
+        iface: &mut Interface<I::Device>,
+        local_ipv4: Ipv4Addr,
+        remote_ipv4: Ipv4Addr,
+        remote_port: Port,
+        nexthop_ipv4: Ipv4Addr,
+        data: &[u8],
+    ) -> Result<(), TxError> {
+        let udp_len: u16 = (data.len() + size_of::<UdpHeader>())
+            .try_into()
+            .map_err(|_| TxError::DataTooLong(data.len()))?;
+
+        let mut header = UdpHeader {
+            src_port: self.local_port.into(),
+            dst_port: remote_port.into(),
+            len: udp_len.into(),
+            checksum: 0.into(),
+        };
+
+        let head_room =
+            size_of::<EthernetHeader>() + size_of::<Ipv4Header>() + size_of::<UdpHeader>();
+        let mut pkt = Packet::new(data.len(), head_room).map_err(TxError::PacketAlloc)?;
+        header.checksum =
+            compute_udp_checksum(local_ipv4, remote_ipv4, udp_len, pkt.slice()).into();
+        pkt.write_front(header).map_err(TxError::PacketWrite)?;
+        pkt.write_back_bytes(data).map_err(TxError::PacketWrite)?;
+
+        crate::ip::ipv4::transmit::<I>(
+            iface,
+            &mut pkt,
+            remote_ipv4,
+            nexthop_ipv4,
+            local_ipv4,
+            Protocol::Udp,
+        )
+        .map_err(TxError::Ipv4Tx)?;
 
         Ok(())
     }
@@ -128,6 +142,9 @@ pub enum TxError {
 pub enum RxError {
     PacketRead(packet::ReserveError),
     RxQueueFull,
+    DhcpRx(crate::dhcp::RxError),
+    DhcpTx(crate::dhcp::TxError),
+    DhcpTransmit(crate::udp::TxError),
 }
 
 #[repr(C, packed)]
@@ -142,6 +159,7 @@ impl WriteableToPacket for UdpHeader {}
 
 pub(crate) fn handle_rx<I: Io>(
     tcpip: &mut TcpIp<I>,
+    iface_id: InterfaceId,
     pkt: &mut Packet,
     remote: IpAddr,
     local: IpAddr,
@@ -164,5 +182,15 @@ pub(crate) fn handle_rx<I: Io>(
         }
     };
 
-    socket.handle_rx(pkt, remote)
+    socket.handle_rx(pkt, remote)?;
+
+    if let Some(client) = tcpip.sockets_mut().get_dhcp_client_mut(&local) {
+        client.handle_rx(pkt.slice()).map_err(RxError::DhcpRx)?;
+        if let Some(tx) = client.poll_tx().map_err(RxError::DhcpTx)? {
+            let iface = tcpip.interfaces_mut().get_mut(iface_id).unwrap();
+            socket.send_from_v4(iface, tx.local_ip, tx.remote_ip, tx.remote_port, tx.remote_ip, tx.pkt.slice()).map_err(RxError::DhcpTransmit)?;
+        }
+    }
+
+    Ok(())
 }

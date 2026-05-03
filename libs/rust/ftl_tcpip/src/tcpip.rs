@@ -2,11 +2,13 @@ use alloc::sync::Arc;
 use core::fmt;
 
 use crate::OutOfMemoryError;
+use crate::dhcp::DhcpClient;
 use crate::interface::Interface;
 use crate::interface::InterfaceId;
 use crate::interface::InterfaceMap;
 use crate::io::Io;
 use crate::ip::IpAddr;
+use crate::ip::Ipv4Addr;
 use crate::packet::Packet;
 use crate::route::Route;
 use crate::route::RouteTable;
@@ -14,6 +16,7 @@ use crate::socket::Endpoint;
 use crate::socket::SocketMap;
 use crate::tcp::TcpConn;
 use crate::tcp::TcpListener;
+use crate::transport::Port;
 use crate::udp::UdpHandle;
 
 pub struct TcpIp<I: Io> {
@@ -37,8 +40,8 @@ impl<I: Io> TcpIp<I> {
         &mut self.io
     }
 
-    pub fn handle_rx(&mut self, pkt: &mut Packet) -> Result<(), crate::ethernet::RxError> {
-        crate::ethernet::handle_rx::<I>(self, pkt)
+    pub fn handle_rx(&mut self, iface_id: InterfaceId, pkt: &mut Packet) -> Result<(), crate::ethernet::RxError> {
+        crate::ethernet::handle_rx::<I>(self, iface_id, pkt)
     }
 
     pub fn handle_timeout(&mut self) {
@@ -58,6 +61,34 @@ impl<I: Io> TcpIp<I> {
 
     pub fn add_route(&mut self, route: Route) -> Result<(), OutOfMemoryError> {
         self.routes.add(route)
+    }
+
+    pub fn enable_dhcp(&mut self, iface_id: InterfaceId) {
+        let local = Endpoint {
+            addr: IpAddr::V4(Ipv4Addr::UNSPECIFIED),
+            port: Port::new(68),
+        };
+
+        // TODO: Error handling.
+        let socket = self.sockets.create_udp_socket(local).unwrap();
+
+        let iface = self.interfaces.get_mut(iface_id).unwrap();
+        let mut client = DhcpClient::new();
+        match client.poll_tx() {
+            Ok(Some(tx)) => {
+                socket.send_from_v4(iface, tx.local_ip, tx.remote_ip, tx.remote_port, tx.remote_ip, tx.pkt.slice()).unwrap();
+            }
+            Ok(None) => {
+                debug!("no DHCP packet to send");
+                return;
+            }
+            Err(e) => {
+                error!("failed to poll DHCP client: {:?}", e);
+                return;
+            }
+        }
+
+        self.sockets.register_dhcp_client(local, client).unwrap();
     }
 
     pub fn tcp_listen(

@@ -6,6 +6,7 @@ use crate::endian::Ne;
 use crate::ethernet;
 use crate::ethernet::EtherType;
 use crate::interface::Interface;
+use crate::interface::InterfaceId;
 use crate::io::Io;
 use crate::ip::IpAddr;
 use crate::packet;
@@ -19,6 +20,7 @@ pub struct Ipv4Addr(u32);
 
 impl Ipv4Addr {
     pub const UNSPECIFIED: Self = Self(0);
+    pub const BROADCAST: Self = Self(0xff_ff_ff_ff);
 
     pub const fn new(a: u8, b: u8, c: u8, d: u8) -> Self {
         Self((a as u32) << 24 | (b as u32) << 16 | (c as u32) << 8 | d as u32)
@@ -214,7 +216,7 @@ pub enum RxError {
     Udp(crate::udp::RxError),
 }
 
-pub(crate) fn handle_rx<I: Io>(tcpip: &mut TcpIp<I>, pkt: &mut Packet) -> Result<(), RxError> {
+pub(crate) fn handle_rx<I: Io>(tcpip: &mut TcpIp<I>, iface_id: InterfaceId, pkt: &mut Packet) -> Result<(), RxError> {
     let header = pkt.read::<Ipv4Header>().map_err(RxError::PacketRead)?;
     if header.version() != 4 {
         return Err(RxError::BadVersion(header.version()));
@@ -244,7 +246,7 @@ pub(crate) fn handle_rx<I: Io>(tcpip: &mut TcpIp<I>, pkt: &mut Packet) -> Result
             crate::tcp::handle_rx::<I>(tcpip, pkt, remote, IpAddr::V4(dst)).map_err(RxError::Tcp)
         }
         _ if protocol == Protocol::Udp as u8 => {
-            crate::udp::handle_rx::<I>(tcpip, pkt, remote, IpAddr::V4(dst)).map_err(RxError::Udp)
+            crate::udp::handle_rx::<I>(tcpip, iface_id, pkt, remote, IpAddr::V4(dst)).map_err(RxError::Udp)
         }
         protocol => Err(RxError::UnsupportedProtocol(protocol)),
     }

@@ -10,6 +10,7 @@ extern crate log;
 
 mod arp;
 mod checksum;
+pub mod dhcp;
 mod endian;
 pub mod ethernet;
 pub mod interface;
@@ -21,7 +22,7 @@ pub mod socket;
 pub mod tcp;
 mod tcpip;
 pub mod transport;
-mod udp;
+pub mod udp;
 mod utils;
 
 pub use io::Io;

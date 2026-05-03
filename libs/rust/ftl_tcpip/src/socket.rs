@@ -3,6 +3,7 @@ use alloc::sync::Arc;
 use hashbrown::HashMap;
 
 use crate::OutOfMemoryError;
+use crate::dhcp::DhcpClient;
 use crate::io::Instant;
 use crate::io::Io;
 use crate::ip::IpAddr;
@@ -40,6 +41,7 @@ pub struct SocketMap<I: Io> {
     actives: HashMap<TcpConnKey, Arc<TcpConn<I>>>,
     listeners: HashMap<TcpListenerKey, Arc<TcpListener<I>>>,
     udp_sockets: HashMap<UdpSocketKey, Arc<UdpSocket<I>>>,
+    dhcp_clients: HashMap<UdpSocketKey, DhcpClient>,
 }
 
 impl<I: Io> SocketMap<I> {
@@ -48,6 +50,7 @@ impl<I: Io> SocketMap<I> {
             actives: HashMap::new(),
             listeners: HashMap::new(),
             udp_sockets: HashMap::new(),
+            dhcp_clients: HashMap::new(),
         }
     }
 
@@ -143,4 +146,20 @@ impl<I: Io> SocketMap<I> {
         key.local.addr = IpAddr::V4(Ipv4Addr::UNSPECIFIED);
         self.udp_sockets.get(&key).cloned()
     }
+
+    pub(crate) fn register_dhcp_client(
+        &mut self,
+        local: Endpoint,
+        client: DhcpClient,
+    ) -> Result<(), OutOfMemoryError> {
+        let key = UdpSocketKey { local };
+        self.dhcp_clients.reserve_and_insert(key, client)?;
+        Ok(())
+    }
+
+    pub(crate) fn get_dhcp_client_mut(&mut self, local: &Endpoint) -> Option<&mut DhcpClient> {
+        let key = UdpSocketKey { local: *local };
+        self.dhcp_clients.get_mut(&key)
+    }
 }
+
