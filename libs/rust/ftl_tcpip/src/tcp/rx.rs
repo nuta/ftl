@@ -7,8 +7,6 @@ use crate::packet::Packet;
 use crate::socket::ActiveKey;
 use crate::socket::Endpoint;
 use crate::socket::ListenerKey;
-use crate::tcp::TcpConn;
-use crate::tcp::TcpListener;
 use crate::tcp::header::TcpFlags;
 use crate::tcp::header::TcpHeader;
 use crate::transport::Port;
@@ -69,7 +67,7 @@ pub(crate) fn handle_rx<I: Io>(
         },
     };
 
-    match tcpip.sockets().get_active::<TcpConn<I>>(&key) {
+    match tcpip.sockets().get_active(&key) {
         Some(conn) => {
             conn.handle_rx(tcpip, rx, pkt);
         }
@@ -82,7 +80,7 @@ pub(crate) fn handle_rx<I: Io>(
                 protocol: Protocol::Tcp,
             };
 
-            match tcpip.sockets().get_listener::<TcpListener<I>>(&key) {
+            match tcpip.sockets().get_listener(&key) {
                 Some(listener) => {
                     listener.handle_rx(tcpip, rx, pkt);
                 }

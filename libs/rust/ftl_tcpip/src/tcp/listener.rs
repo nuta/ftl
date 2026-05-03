@@ -8,7 +8,6 @@ use crate::TcpIp;
 use crate::io::Io;
 use crate::ip::IpAddr;
 use crate::packet::Packet;
-use crate::socket::AnySocket;
 use crate::socket::Endpoint;
 use crate::tcp::Accept;
 use crate::tcp::TcpBuffer;
@@ -246,8 +245,6 @@ impl<I: Io> TcpListener<I> {
         }
     }
 }
-
-impl<I: Io> AnySocket for TcpListener<I> {}
 
 impl<I: Io> fmt::Debug for TcpListener<I> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

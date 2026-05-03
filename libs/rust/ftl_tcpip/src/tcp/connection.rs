@@ -8,7 +8,6 @@ use crate::TcpIp;
 use crate::io::Instant;
 use crate::io::Io;
 use crate::packet::Packet;
-use crate::socket::AnySocket;
 use crate::socket::Endpoint;
 use crate::tcp::Read;
 use crate::tcp::Write;
@@ -348,8 +347,6 @@ impl<I: Io> TcpConn<I> {
         }
     }
 }
-
-impl<I: Io> AnySocket for TcpConn<I> {}
 
 impl<I: Io> fmt::Debug for TcpConn<I> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

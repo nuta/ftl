@@ -19,7 +19,7 @@ pub struct TcpIp<I: Io> {
     io: I,
     interfaces: InterfaceMap<I::Device>,
     routes: RouteTable,
-    sockets: SocketMap,
+    sockets: SocketMap<I>,
 }
 
 impl<I: Io> TcpIp<I> {
@@ -42,7 +42,7 @@ impl<I: Io> TcpIp<I> {
 
     pub fn handle_timeout(&mut self) {
         let now = self.io.now();
-        if let Some(next) = self.sockets.handle_timeout::<I>(now) {
+        if let Some(next) = self.sockets.handle_timeout(&now) {
             self.io.set_timer(next);
         }
     }
@@ -89,11 +89,11 @@ impl<I: Io> TcpIp<I> {
         handle.0.close(self);
     }
 
-    pub(crate) fn sockets(&self) -> &SocketMap {
+    pub(crate) fn sockets(&self) -> &SocketMap<I> {
         &self.sockets
     }
 
-    pub(crate) fn sockets_mut(&mut self) -> &mut SocketMap {
+    pub(crate) fn sockets_mut(&mut self) -> &mut SocketMap<I> {
         &mut self.sockets
     }
 
