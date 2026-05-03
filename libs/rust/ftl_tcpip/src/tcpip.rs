@@ -9,7 +9,10 @@ use crate::interface::InterfaceId;
 use crate::interface::InterfaceMap;
 use crate::io::Io;
 use crate::ip::IpAddr;
+use crate::ip::IpCidr;
 use crate::ip::Ipv4Addr;
+use crate::ip::Ipv4Cidr;
+use crate::ip::NetMask;
 use crate::packet::Packet;
 use crate::route::Route;
 use crate::route::RouteTable;
@@ -104,6 +107,31 @@ impl<I: Io> TcpIp<I> {
         self.sockets
             .create_dhcp_client(iface_id, local.port, client)
             .unwrap();
+    }
+
+    pub(crate) fn apply_dhcp_lease(
+        &mut self,
+        iface_id: InterfaceId,
+        lease: crate::dhcp::Lease,
+    ) -> Result<(), OutOfMemoryError> {
+        trace!(
+            "DHCP: applying lease: addr={}, mask={}, router={:?}",
+            lease.addr, lease.subnet_mask, lease.router
+        );
+
+        let our_route = IpCidr::Ipv4(Ipv4Cidr::new(lease.addr, lease.subnet_mask));
+        self.routes.add(Route::new(iface_id, our_route))?;
+
+        if let Some(router) = lease.router {
+            let default_cidr = IpCidr::Ipv4(Ipv4Cidr::new(lease.addr, lease.subnet_mask));
+            let route = Route::new(iface_id, default_cidr).with_gateway(router);
+            self.routes.add(route)?;
+        }
+
+        let iface = self.interfaces.get_mut(iface_id).unwrap();
+        iface.set_ipv4_addr(lease.addr);
+        iface.set_net_mask(lease.subnet_mask);
+        Ok(())
     }
 
     pub fn tcp_listen(

@@ -2,6 +2,7 @@ use crate::endian::Ne;
 use crate::ethernet::EthernetHeader;
 use crate::ethernet::MacAddr;
 use crate::ip::Ipv4Addr;
+use crate::ip::NetMask;
 use crate::ip::ipv4::Ipv4Header;
 use crate::packet::Packet;
 use crate::packet::WriteableToPacket;
@@ -10,6 +11,27 @@ use crate::transport::Port;
 use crate::udp::UdpHeader;
 
 const MAGIC_COOKIE: u32 = 0x63825363;
+const BOOT_REQUEST: u8 = 1;
+const DHCP_BROADCAST_FLAG: u16 = 0x8000;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(transparent)]
+struct OptionType(u8);
+
+impl OptionType {
+    const PAD: Self = Self(0);
+    const SUBNET_MASK: Self = Self(1);
+    const ROUTER: Self = Self(3);
+    const REQUESTED_IP_ADDRESS: Self = Self(50);
+    const DHCP_MESSAGE_TYPE: Self = Self(53);
+    const SERVER_IDENTIFIER: Self = Self(54);
+    const PARAMETER_REQUEST_LIST: Self = Self(55);
+    const END: Self = Self(0xff);
+}
+
+impl WriteableToPacket for OptionType {}
+
+const REQUESTED_PARAMETERS: &[u8] = &[OptionType::SUBNET_MASK.0, OptionType::ROUTER.0];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(transparent)]
@@ -45,7 +67,7 @@ impl WriteableToPacket for DhcpHeader {}
 
 #[repr(C, packed)]
 struct DhcpMessageTypeOption {
-    type_: u8,
+    type_: OptionType,
     length: u8,
     opcode: Opcode,
 }
@@ -59,6 +81,13 @@ pub(crate) struct Tx {
     pub pkt: Packet,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Lease {
+    pub addr: Ipv4Addr,
+    pub subnet_mask: NetMask,
+    pub router: Option<Ipv4Addr>,
+}
+
 #[derive(Debug)]
 pub(crate) enum TxError {
     PacketAlloc(packet::AllocError),
@@ -68,21 +97,25 @@ pub(crate) enum TxError {
 #[derive(Debug)]
 pub(crate) enum RxError {
     PacketRead(packet::ReserveError),
+    BadMagicCookie(u32),
     ReceivedBeforeDiscover(Opcode),
     ReceivedBeforeRequest(Opcode),
     ExpectedOffer(Opcode),
     ExpectedAck(Opcode),
     ReceivedAfterAck(Opcode),
-    InvalidOptionLength(u8),
+    InvalidOptionLength { option_type: OptionType, len: u8 },
     MissingDhcpMessageTypeOption,
+    MissingSubnetMaskOption,
 }
-
 enum State {
     BeforeDiscover,
     SentDiscover,
-    BeforeRequest { request_ip: Ipv4Addr },
+    BeforeRequest {
+        request_ip: Ipv4Addr,
+        server_identifier: Option<Ipv4Addr>,
+    },
     SentRequest,
-    Connected { your_ip: Ipv4Addr },
+    Connected,
 }
 
 pub(crate) struct DhcpClient {
@@ -98,34 +131,20 @@ impl DhcpClient {
         }
     }
 
-    pub fn handle_rx(&mut self, pkt: &mut Packet) -> Result<(), RxError> {
+    pub fn handle_rx(&mut self, pkt: &mut Packet) -> Result<Option<Lease>, RxError> {
         let header = pkt.read::<DhcpHeader>().map_err(RxError::PacketRead)?;
-        let your_ip = Ipv4Addr::from(header.your_ip);
-        let mut opcode = None;
-        loop {
-            let option_type = *pkt.read::<u8>().map_err(RxError::PacketRead)?;
-            let option_len = *pkt.read::<u8>().map_err(RxError::PacketRead)?;
-            match option_type {
-                53 => {
-                    if option_len != 1 {
-                        return Err(RxError::InvalidOptionLength(option_len));
-                    }
-
-                    let opcode_raw = *pkt.read::<u8>().map_err(RxError::PacketRead)?;
-                    opcode = Some(Opcode(opcode_raw));
-                }
-                0xff => {
-                    break;
-                }
-                _ => {
-                    // Ignore other options.
-                    pkt.discard(option_len as usize)
-                        .map_err(RxError::PacketRead)?;
-                }
-            }
+        let magic = header.magic.into();
+        if magic != MAGIC_COOKIE {
+            return Err(RxError::BadMagicCookie(magic));
         }
 
-        let opcode = opcode.ok_or(RxError::MissingDhcpMessageTypeOption)?;
+        let your_ip = Ipv4Addr::from(header.your_ip);
+        let mut parser = OptionParser::new();
+        parser.parse(pkt)?;
+        let opcode = parser
+            .message_type
+            .ok_or(RxError::MissingDhcpMessageTypeOption)?;
+
         let mut state = self.state.lock();
         match *state {
             State::BeforeDiscover => {
@@ -141,22 +160,29 @@ impl DhcpClient {
                 trace!("DHCP: received OFFER: your_ip={:?}", your_ip);
                 *state = State::BeforeRequest {
                     request_ip: your_ip,
+                    server_identifier: parser.server_identifier,
                 };
 
-                Ok(())
+                Ok(None)
             }
-            State::BeforeRequest { request_ip } => Err(RxError::ReceivedBeforeRequest(opcode)),
+            State::BeforeRequest { .. } => Err(RxError::ReceivedBeforeRequest(opcode)),
             State::SentRequest => {
                 if opcode != Opcode::ACK {
                     return Err(RxError::ExpectedAck(opcode));
                 }
 
-                trace!("DHCP: received ACK: your_ip={:?}", your_ip);
-                *state = State::Connected { your_ip };
+                let subnet_mask = parser.subnet_mask.ok_or(RxError::MissingSubnetMaskOption)?;
+                let lease = Lease {
+                    addr: your_ip,
+                    subnet_mask,
+                    router: parser.router,
+                };
 
-                Ok(())
+                trace!("DHCP: received ACK: your_ip={:?}", your_ip);
+                *state = State::Connected;
+                Ok(Some(lease))
             }
-            State::Connected { your_ip } => Err(RxError::ReceivedAfterAck(opcode)),
+            State::Connected { .. } => Err(RxError::ReceivedAfterAck(opcode)),
         }
     }
 
@@ -168,13 +194,13 @@ impl DhcpClient {
         match *state {
             State::BeforeDiscover => {
                 let header = DhcpHeader {
-                    opcode: 1,
+                    opcode: BOOT_REQUEST,
                     hardware_type: 1,
                     hwaddr_length: 6,
                     hops: 0,
                     transaction_id: 0x12345678.into(),
                     seconds: 0.into(),
-                    flags: 0.into(),
+                    flags: DHCP_BROADCAST_FLAG.into(),
                     client_ip: 0.into(),
                     your_ip: 0.into(),
                     server_ip: 0.into(),
@@ -185,20 +211,21 @@ impl DhcpClient {
                     magic: MAGIC_COOKIE.into(),
                 };
 
-                let type_option = DhcpMessageTypeOption {
-                    type_: 53, // DHCP Message Type
-                    length: 1, // in bytes
-                    opcode: Opcode::DISCOVER,
-                };
-
-                let len = size_of::<DhcpHeader>() + size_of::<DhcpMessageTypeOption>() + 1;
+                let len = size_of::<DhcpHeader>()
+                    + size_of::<DhcpMessageTypeOption>()
+                    + 2
+                    + REQUESTED_PARAMETERS.len()
+                    + 1;
                 let head_room =
                     size_of::<EthernetHeader>() + size_of::<Ipv4Header>() + size_of::<UdpHeader>();
                 let mut pkt = Packet::new(len, head_room).map_err(TxError::PacketAlloc)?;
+
                 pkt.write_back(header).map_err(TxError::PacketWrite)?;
-                pkt.write_back(type_option).map_err(TxError::PacketWrite)?;
-                pkt.write_back_bytes(&[0xff])
-                    .map_err(TxError::PacketWrite)?; // End
+                let mut options_writer = OptionWriter::new(pkt, Opcode::DISCOVER)?;
+                options_writer
+                    .write_parameter_request_list(REQUESTED_PARAMETERS)
+                    .map_err(TxError::PacketWrite)?;
+                let pkt = options_writer.finish().map_err(TxError::PacketWrite)?;
 
                 *state = State::SentDiscover;
                 Ok(Some(Tx {
@@ -209,16 +236,19 @@ impl DhcpClient {
                 }))
             }
             State::SentDiscover => Ok(None),
-            State::BeforeRequest { request_ip } => {
+            State::BeforeRequest {
+                request_ip,
+                server_identifier,
+            } => {
                 let header = DhcpHeader {
-                    opcode: 1,
+                    opcode: BOOT_REQUEST,
                     hardware_type: 1,
                     hwaddr_length: 6,
                     hops: 0,
                     transaction_id: 0x12345678.into(),
                     seconds: 0.into(),
-                    flags: 0.into(),
-                    client_ip: request_ip.into(),
+                    flags: DHCP_BROADCAST_FLAG.into(),
+                    client_ip: 0.into(),
                     your_ip: 0.into(),
                     server_ip: 0.into(),
                     gateway_ip: 0.into(),
@@ -228,20 +258,32 @@ impl DhcpClient {
                     magic: MAGIC_COOKIE.into(),
                 };
 
-                let type_option = DhcpMessageTypeOption {
-                    type_: 53, // DHCP Message Type
-                    length: 1, // in bytes
-                    opcode: Opcode::REQUEST,
-                };
-
-                let len = size_of::<DhcpHeader>() + size_of::<DhcpMessageTypeOption>() + 1;
+                let server_identifier_len = if server_identifier.is_some() { 6 } else { 0 };
+                let len = size_of::<DhcpHeader>()
+                    + size_of::<DhcpMessageTypeOption>()
+                    + 6
+                    + server_identifier_len
+                    + 2
+                    + REQUESTED_PARAMETERS.len()
+                    + 1;
                 let head_room =
                     size_of::<EthernetHeader>() + size_of::<Ipv4Header>() + size_of::<UdpHeader>();
                 let mut pkt = Packet::new(len, head_room).map_err(TxError::PacketAlloc)?;
                 pkt.write_back(header).map_err(TxError::PacketWrite)?;
-                pkt.write_back(type_option).map_err(TxError::PacketWrite)?;
-                pkt.write_back_bytes(&[0xff])
-                    .map_err(TxError::PacketWrite)?; // End
+
+                let mut options_writer = OptionWriter::new(pkt, Opcode::REQUEST)?;
+                options_writer
+                    .write_ipv4_option(OptionType::REQUESTED_IP_ADDRESS, request_ip)
+                    .map_err(TxError::PacketWrite)?;
+                if let Some(server_identifier) = server_identifier {
+                    options_writer
+                        .write_ipv4_option(OptionType::SERVER_IDENTIFIER, server_identifier)
+                        .map_err(TxError::PacketWrite)?;
+                }
+                options_writer
+                    .write_parameter_request_list(REQUESTED_PARAMETERS)
+                    .map_err(TxError::PacketWrite)?;
+                let pkt = options_writer.finish().map_err(TxError::PacketWrite)?;
 
                 *state = State::SentRequest;
                 Ok(Some(Tx {
@@ -252,7 +294,137 @@ impl DhcpClient {
                 }))
             }
             State::SentRequest => Ok(None),
-            State::Connected { your_ip } => Ok(None),
+            State::Connected { .. } => Ok(None),
         }
+    }
+}
+
+struct OptionParser {
+    message_type: Option<Opcode>,
+    subnet_mask: Option<NetMask>,
+    router: Option<Ipv4Addr>,
+    server_identifier: Option<Ipv4Addr>,
+}
+
+impl OptionParser {
+    fn new() -> Self {
+        Self {
+            message_type: None,
+            subnet_mask: None,
+            router: None,
+            server_identifier: None,
+        }
+    }
+
+    fn parse(&mut self, pkt: &mut Packet) -> Result<(), RxError> {
+        loop {
+            let type_raw = pkt.read::<u8>().map_err(RxError::PacketRead)?;
+            let option_type = OptionType(*type_raw);
+            if option_type == OptionType::PAD {
+                continue;
+            }
+            if option_type == OptionType::END {
+                break;
+            }
+
+            let len = *pkt.read::<u8>().map_err(RxError::PacketRead)?;
+            match option_type {
+                OptionType::DHCP_MESSAGE_TYPE => {
+                    if len != 1 {
+                        return Err(RxError::InvalidOptionLength { option_type, len });
+                    }
+
+                    let raw = *pkt.read::<u8>().map_err(RxError::PacketRead)?;
+                    self.message_type = Some(Opcode(raw));
+                }
+                OptionType::SUBNET_MASK => {
+                    if len != 4 {
+                        return Err(RxError::InvalidOptionLength { option_type, len });
+                    }
+
+                    let raw = pkt.read::<[u8; 4]>().map_err(RxError::PacketRead)?;
+                    let netmask = NetMask::new(raw[0], raw[1], raw[2], raw[3]);
+                    self.subnet_mask = Some(netmask);
+                }
+                OptionType::ROUTER => {
+                    // Router option may have multiple addresses, but each must be 4 bytes long.
+                    if len < 4 || len % 4 != 0 {
+                        return Err(RxError::InvalidOptionLength { option_type, len });
+                    }
+
+                    let raw = pkt.read::<[u8; 4]>().map_err(RxError::PacketRead)?;
+                    let router = Ipv4Addr::new(raw[0], raw[1], raw[2], raw[3]);
+                    self.router = Some(router);
+                    pkt.discard(len as usize - 4).map_err(RxError::PacketRead)?;
+                }
+                OptionType::SERVER_IDENTIFIER => {
+                    if len != 4 {
+                        return Err(RxError::InvalidOptionLength { option_type, len });
+                    }
+
+                    let raw = pkt.read::<[u8; 4]>().map_err(RxError::PacketRead)?;
+                    let server_identifier = Ipv4Addr::new(raw[0], raw[1], raw[2], raw[3]);
+                    self.server_identifier = Some(server_identifier);
+                }
+                _ => {
+                    pkt.discard(len as usize).map_err(RxError::PacketRead)?;
+                }
+            }
+        }
+
+        Ok(())
+    }
+}
+
+struct OptionWriter {
+    pkt: Packet,
+}
+
+impl OptionWriter {
+    fn new(mut pkt: Packet, message_type: Opcode) -> Result<Self, TxError> {
+        pkt.write_back(DhcpMessageTypeOption {
+            type_: OptionType::DHCP_MESSAGE_TYPE,
+            length: 1,
+            opcode: message_type,
+        })
+        .map_err(TxError::PacketWrite)?;
+
+        Ok(Self { pkt })
+    }
+
+    fn write_option(
+        &mut self,
+        option_type: OptionType,
+        data: &[u8],
+    ) -> Result<(), packet::ReserveError> {
+        self.pkt.write_back(option_type)?;
+        self.pkt.write_back_bytes(&[data.len() as u8])?;
+        self.pkt.write_back_bytes(data)?;
+        Ok(())
+    }
+
+    fn write_parameter_request_list(
+        &mut self,
+        parameters: &[u8],
+    ) -> Result<(), packet::ReserveError> {
+        self.write_option(OptionType::PARAMETER_REQUEST_LIST, parameters)?;
+        Ok(())
+    }
+
+    fn write_ipv4_option(
+        &mut self,
+        option_type: OptionType,
+        addr: Ipv4Addr,
+    ) -> Result<(), packet::ReserveError> {
+        self.write_option(option_type, &addr.as_u32().to_be_bytes())
+    }
+
+    fn write_end(&mut self) -> Result<(), packet::ReserveError> {
+        self.pkt.write_back(OptionType::END)
+    }
+
+    fn finish(mut self) -> Result<Packet, packet::ReserveError> {
+        self.write_end()?;
+        Ok(self.pkt)
     }
 }

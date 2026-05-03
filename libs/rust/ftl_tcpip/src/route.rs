@@ -25,6 +25,11 @@ impl Route {
     pub fn iface_id(&self) -> InterfaceId {
         self.iface_id
     }
+
+    pub fn with_gateway(mut self, gateway: Ipv4Addr) -> Self {
+        self.gateway = Some(gateway);
+        self
+    }
 }
 
 pub struct RouteTable {

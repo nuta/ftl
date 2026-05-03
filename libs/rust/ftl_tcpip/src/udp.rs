@@ -160,11 +160,12 @@ pub(crate) fn transmit<I: Io>(
 }
 
 #[derive(Debug)]
-pub enum RxError {
+pub(crate) enum RxError {
     PacketRead(packet::ReserveError),
     RxQueueFull,
     DhcpRx(crate::dhcp::RxError),
     DhcpTx(crate::dhcp::TxError),
+    DhcpConfigure(crate::OutOfMemoryError),
     DhcpTransmit(crate::udp::TxError),
 }
 
@@ -191,7 +192,13 @@ pub(crate) fn handle_rx<I: Io>(
         .sockets_mut()
         .get_dhcp_client_mut(iface_id, local_port)
     {
-        client.handle_rx(pkt).map_err(RxError::DhcpRx)?;
+        if let Some(lease) = client.handle_rx(pkt).map_err(RxError::DhcpRx)? {
+            tcpip
+                .apply_dhcp_lease(iface_id, lease)
+                .map_err(RxError::DhcpConfigure)?;
+            return Ok(());
+        }
+
         if let Some(tx) = client.poll_tx().map_err(RxError::DhcpTx)? {
             let iface = tcpip.interfaces_mut().get_mut(iface_id).unwrap();
             transmit::<I>(

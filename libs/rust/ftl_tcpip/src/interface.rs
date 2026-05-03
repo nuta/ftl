@@ -50,8 +50,16 @@ impl<D: Device> Interface<D> {
         self.ipv4_addr = Some(ipv4_addr);
     }
 
+    pub fn set_net_mask(&mut self, net_mask: NetMask) {
+        self.net_mask = net_mask;
+    }
+
     pub fn ipv4_addr(&self) -> Option<Ipv4Addr> {
         self.ipv4_addr
+    }
+
+    pub fn net_mask(&self) -> NetMask {
+        self.net_mask
     }
 }
 
