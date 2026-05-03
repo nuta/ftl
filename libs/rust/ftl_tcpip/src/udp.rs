@@ -1,5 +1,5 @@
-use std::marker::PhantomData;
-use std::sync::Arc;
+use core::marker::PhantomData;
+use alloc::sync::Arc;
 
 use crate::TcpIp;
 use crate::endian::Ne;

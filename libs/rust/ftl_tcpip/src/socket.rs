@@ -129,7 +129,7 @@ impl<I: Io> SocketMap<I> {
         local: Endpoint,
     ) -> Result<Arc<UdpSocket<I>>, OutOfMemoryError> {
         let key = UdpSocketKey { local };
-        let socket = Arc::new(UdpSocket::new(local.port));
+        let socket = Arc::new(UdpSocket::<I>::new(local.port));
         self.udp_sockets.reserve_and_insert(key, socket.clone())?;
         Ok(socket)
     }
