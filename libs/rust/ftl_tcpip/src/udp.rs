@@ -81,8 +81,7 @@ impl<I: Io> UdpSocket<I> {
         let head_room =
             size_of::<EthernetHeader>() + size_of::<Ipv4Header>() + size_of::<UdpHeader>();
         let mut pkt = Packet::new(data.len(), head_room).map_err(TxError::PacketAlloc)?;
-        header.checksum =
-            compute_udp_checksum(local_ipv4, remote_ipv4, udp_len, pkt.slice()).into();
+        header.checksum = compute_udp_checksum(&header, local_ipv4, remote_ipv4, data).into();
         pkt.write_front(header).map_err(TxError::PacketWrite)?;
         pkt.write_back_bytes(data).map_err(TxError::PacketWrite)?;
 
@@ -118,14 +117,29 @@ impl<I: Io> UdpSocket<I> {
     }
 }
 
-fn compute_udp_checksum(src_ip: Ipv4Addr, dst_ip: Ipv4Addr, udp_len: u16, payload: &[u8]) -> u16 {
+fn compute_udp_checksum(
+    header: &UdpHeader,
+    src_ip: Ipv4Addr,
+    dst_ip: Ipv4Addr,
+    payload: &[u8],
+) -> u16 {
     let mut checksum = Checksum::new();
+    let udp_len = size_of::<UdpHeader>() + payload.len();
+    debug_assert!(udp_len <= u16::MAX as usize);
+
     checksum.supply_u32(src_ip.as_u32());
     checksum.supply_u32(dst_ip.as_u32());
     checksum.supply_u16(Protocol::Udp as u16);
     checksum.supply_u16(udp_len as u16);
+    checksum.supply_u16(header.src_port.into());
+    checksum.supply_u16(header.dst_port.into());
+    checksum.supply_u16(header.len.into());
+    checksum.supply_u16(0);
     checksum.supply_bytes(payload);
-    checksum.finish()
+    match checksum.finish() {
+        0 => 0xffff,
+        checksum => checksum,
+    }
 }
 
 #[derive(Debug)]
