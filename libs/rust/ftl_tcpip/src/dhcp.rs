@@ -1,14 +1,37 @@
+use crate::endian::Ne;
 use crate::ethernet::EthernetHeader;
 use crate::ip::Ipv4Addr;
 use crate::ip::ipv4::Ipv4Header;
-use crate::packet;
+use crate::packet::{self, WriteableToPacket};
 use crate::packet::Packet;
 use crate::transport::Port;
 use crate::udp::UdpHeader;
 
+const MAGIC_COOKIE: u32 = 0x63825363;
+
+#[repr(C, packed)]
+struct DhcpHeader {
+    opcode: u8,
+    hardware_type: u8,
+    hwaddr_length: u8,
+    hops: u8,
+    transaction_id: Ne<u32>,
+    seconds: Ne<u16>,
+    flags: Ne<u16>,
+    client_ip: Ne<u32>,
+    your_ip: Ne<u32>,
+    server_ip: Ne<u32>,
+    gateway_ip: Ne<u32>,
+    client_mac: [u8; 16],
+    server_name: [u8; 64],
+    file: [u8; 128],
+    magic: Ne<u32>,
+}
+
+impl WriteableToPacket for DhcpHeader {}
+
 pub(crate) struct Tx {
     pub local_ip: Ipv4Addr,
-    pub local_port: Port,
     pub remote_ip: Ipv4Addr,
     pub remote_port: Port,
     pub pkt: Packet,
@@ -17,6 +40,7 @@ pub(crate) struct Tx {
 #[derive(Debug)]
 pub(crate) enum TxError {
     PacketAlloc(packet::AllocError),
+    PacketWrite(packet::ReserveError),
 }
 
 #[derive(Debug)]
@@ -46,11 +70,30 @@ impl DhcpClient {
         let state = self.state.lock();
         match *state {
             State::Init => {
+                let header = DhcpHeader {
+                    opcode: 1, // DHCPDISCOVER
+                    hardware_type: 1,
+                    hwaddr_length: 6,
+                    hops: 0,
+                    transaction_id: 0x12345678.into(),
+                    seconds: 0.into(),
+                    flags: 0.into(),
+                    client_ip: 0.into(),
+                    your_ip: 0.into(),
+                    server_ip: 0.into(),
+                    gateway_ip: 0.into(),
+                    client_mac: [0; 16],
+                    server_name: [0; 64],
+                    file: [0; 128],
+                    magic: MAGIC_COOKIE.into(),
+                };
+
                 let head_room = size_of::<EthernetHeader>() + size_of::<Ipv4Header>() + size_of::<UdpHeader>();
-                let pkt = Packet::new(0, head_room).map_err(TxError::PacketAlloc)?;
+                let mut pkt = Packet::new(size_of::<DhcpHeader>(), head_room).map_err(TxError::PacketAlloc)?;
+                pkt.write_front(header).map_err(TxError::PacketWrite)?;
+
                 Ok(Some(Tx {
                     local_ip: Ipv4Addr::UNSPECIFIED,
-                    local_port: Port::new(68),
                     remote_ip: Ipv4Addr::BROADCAST,
                     remote_port: Port::new(67),
                     pkt,
