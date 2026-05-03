@@ -3,6 +3,8 @@ use alloc::sync::Arc;
 use hashbrown::HashMap;
 
 use crate::OutOfMemoryError;
+use crate::dhcp::DhcpClient;
+use crate::interface::InterfaceId;
 use crate::io::Instant;
 use crate::io::Io;
 use crate::ip::IpAddr;
@@ -11,6 +13,7 @@ use crate::tcp::TcpConn;
 use crate::tcp::TcpListener;
 use crate::tcp::TimeoutResult;
 use crate::transport::Port;
+use crate::udp::UdpSocket;
 use crate::utils::HashMapExt;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -30,9 +33,22 @@ struct TcpListenerKey {
     pub local: Endpoint,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct UdpSocketKey {
+    pub local: Endpoint,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct DhcpClientKey {
+    pub iface_id: InterfaceId,
+    pub local_port: Port,
+}
+
 pub struct SocketMap<I: Io> {
     actives: HashMap<TcpConnKey, Arc<TcpConn<I>>>,
     listeners: HashMap<TcpListenerKey, Arc<TcpListener<I>>>,
+    udp_sockets: HashMap<UdpSocketKey, Arc<UdpSocket<I>>>,
+    dhcp_clients: HashMap<DhcpClientKey, DhcpClient>,
 }
 
 impl<I: Io> SocketMap<I> {
@@ -40,6 +56,8 @@ impl<I: Io> SocketMap<I> {
         Self {
             actives: HashMap::new(),
             listeners: HashMap::new(),
+            udp_sockets: HashMap::new(),
+            dhcp_clients: HashMap::new(),
         }
     }
 
@@ -114,5 +132,51 @@ impl<I: Io> SocketMap<I> {
         let socket = Arc::new(TcpListener::new(local.port));
         self.listeners.reserve_and_insert(key, socket.clone())?;
         Ok(socket)
+    }
+
+    pub(crate) fn create_udp_socket(
+        &mut self,
+        local: Endpoint,
+    ) -> Result<Arc<UdpSocket<I>>, OutOfMemoryError> {
+        let key = UdpSocketKey { local };
+        let socket = Arc::new(UdpSocket::<I>::new(local.port));
+        self.udp_sockets.reserve_and_insert(key, socket.clone())?;
+        Ok(socket)
+    }
+
+    pub(crate) fn get_udp_socket(&self, local: &Endpoint) -> Option<Arc<UdpSocket<I>>> {
+        let mut key = UdpSocketKey { local: *local };
+        if let Some(socket) = self.udp_sockets.get(&key) {
+            return Some(socket.clone());
+        }
+
+        key.local.addr = IpAddr::V4(Ipv4Addr::UNSPECIFIED);
+        self.udp_sockets.get(&key).cloned()
+    }
+
+    pub(crate) fn create_dhcp_client(
+        &mut self,
+        iface_id: InterfaceId,
+        local_port: Port,
+        client: DhcpClient,
+    ) -> Result<(), OutOfMemoryError> {
+        let key = DhcpClientKey {
+            iface_id,
+            local_port,
+        };
+        self.dhcp_clients.reserve_and_insert(key, client)?;
+        Ok(())
+    }
+
+    pub(crate) fn get_dhcp_client_mut(
+        &mut self,
+        iface_id: InterfaceId,
+        local_port: Port,
+    ) -> Option<&mut DhcpClient> {
+        let key = DhcpClientKey {
+            iface_id,
+            local_port,
+        };
+        self.dhcp_clients.get_mut(&key)
     }
 }

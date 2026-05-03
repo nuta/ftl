@@ -6,6 +6,7 @@ use crate::endian::Ne;
 #[repr(u8)]
 pub enum Protocol {
     Tcp = 0x06,
+    Udp = 0x11,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]

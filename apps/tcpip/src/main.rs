@@ -3,6 +3,7 @@
 
 use core::cmp::min;
 
+use ftl::channel::Attr;
 use ftl::channel::Channel;
 use ftl::channel::Incoming;
 use ftl::channel::Message;
@@ -23,12 +24,8 @@ use ftl_tcpip::TcpIp;
 use ftl_tcpip::TcpListenerHandle;
 use ftl_tcpip::ethernet::MacAddr;
 use ftl_tcpip::ip::IpAddr;
-use ftl_tcpip::ip::IpCidr;
 use ftl_tcpip::ip::Ipv4Addr;
-use ftl_tcpip::ip::Ipv4Cidr;
-use ftl_tcpip::ip::NetMask;
 use ftl_tcpip::packet::Packet;
-use ftl_tcpip::route::Route;
 use ftl_tcpip::socket::Endpoint;
 use ftl_tcpip::transport::Port;
 
@@ -94,6 +91,41 @@ fn parse_tcp_listen_endpoint(path: &[u8]) -> Result<Endpoint, ErrorCode> {
         addr: IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), // TODO:
         port: Port::new(port),
     })
+}
+
+// TODO: Reusing sink is not a good idea.
+fn read_mac(sink: &Sink, driver_ch: &Channel) -> MacAddr {
+    let mid = MessageId::new(1);
+    driver_ch
+        .send(Message::Getattr {
+            mid,
+            attr: Attr::MAC,
+        })
+        .unwrap();
+
+    loop {
+        let (id, event) = sink.wait().unwrap();
+        match event {
+            Event::Message(peek) if id == driver_ch.handle().id() => {
+                match Incoming::parse(driver_ch, peek) {
+                    Incoming::GetAttrReply(reply) if reply.mid() == mid => {
+                        if reply.read_len() != 6 {
+                            panic!("ethernet driver returned invalid MAC length");
+                        }
+
+                        let mut mac = [0; 6];
+                        reply.recv(&mut mac).unwrap();
+                        return MacAddr::new(mac);
+                    }
+                    Incoming::ErrorReply(reply) if reply.mid() == mid => {
+                        panic!("failed to read ethernet MAC: {:?}", reply.error());
+                    }
+                    _ => warn!("unhandled message while reading ethernet MAC: {:?}", peek),
+                }
+            }
+            _ => warn!("unhandled event while reading ethernet MAC: {:?}", event),
+        }
+    }
 }
 
 const RECV_BUFFER_SIZE: usize = 1514;
@@ -276,8 +308,11 @@ fn main(supervisor_ch: Channel) {
 
     let sink = Sink::new().unwrap();
 
-    sink.add(&server_ch).unwrap();
     sink.add(&driver_ch).unwrap();
+    let mac_addr = read_mac(&sink, &driver_ch);
+    trace!("ethernet MAC address: {:?}", mac_addr);
+
+    sink.add(&server_ch).unwrap();
     let server_ch = Arc::new(server_ch);
     let driver_ch = Arc::new(driver_ch);
 
@@ -289,10 +324,6 @@ fn main(supervisor_ch: Channel) {
         })
         .unwrap();
 
-    let mac_addr = MacAddr::new([0x52, 0x54, 0x00, 0x12, 0x34, 0x56]);
-    let local_ip = Ipv4Addr::new(10, 0, 2, 15);
-    let cidr = Ipv4Cidr::new(local_ip, NetMask::new(255, 255, 255, 0));
-
     let io = TcpIpIo {
         timer: ftl::time::Timer::new().unwrap(),
         timer_deadline: None,
@@ -300,21 +331,14 @@ fn main(supervisor_ch: Channel) {
     sink.add(&io.timer).unwrap();
     let timer_id = io.timer.handle().id();
     let mut tcpip = TcpIp::<TcpIpIo>::new(io);
-    let device_id = tcpip
+    let iface_id = tcpip
         .add_device(MyDevice {
             mac_addr,
             driver_ch: driver_ch.clone(),
         })
         .unwrap();
 
-    tcpip
-        .add_route(Route::new(device_id, IpCidr::Ipv4(cidr)))
-        .unwrap();
-
-    tcpip
-        .get_iface_mut(device_id)
-        .unwrap()
-        .set_ipv4_addr(local_ip);
+    tcpip.enable_dhcp(iface_id);
 
     let mut contexts = HashMap::new();
     contexts.insert(
@@ -349,7 +373,7 @@ fn main(supervisor_ch: Channel) {
                         match reply.recv(&mut buf[..len]) {
                             Ok(_slice) => {
                                 pkt.set_len(len);
-                                if let Err(error) = tcpip.handle_rx(&mut pkt) {
+                                if let Err(error) = tcpip.handle_rx(iface_id, &mut pkt) {
                                     warn!("failed to handle rx: {:x?}", error);
                                 }
 

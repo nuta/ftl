@@ -4,8 +4,10 @@ use crate::Device;
 use crate::TcpIp;
 use crate::endian::Ne;
 use crate::interface::Interface;
+use crate::interface::InterfaceId;
 use crate::io::Io;
 use crate::ip::IpAddr;
+use crate::ip::Ipv4Addr;
 use crate::packet;
 use crate::packet::Packet;
 use crate::packet::WriteableToPacket;
@@ -15,8 +17,14 @@ use crate::packet::WriteableToPacket;
 pub struct MacAddr([u8; 6]);
 
 impl MacAddr {
+    pub const BROADCAST: Self = Self([0xff; 6]);
+
     pub const fn new(addr: [u8; 6]) -> Self {
         Self(addr)
+    }
+
+    pub fn as_bytes(&self) -> &[u8; 6] {
+        &self.0
     }
 }
 
@@ -59,6 +67,7 @@ pub(crate) fn transmit<D: Device>(
     dst_addr: IpAddr,
 ) -> Result<(), TxError> {
     let dest_mac = match dst_addr {
+        IpAddr::V4(Ipv4Addr::BROADCAST) => MacAddr::BROADCAST,
         IpAddr::V4(addr) => {
             match iface.arp_table().lookup(addr) {
                 Some(mac) => *mac,
@@ -90,12 +99,20 @@ pub enum RxError {
     Arp(crate::arp::RxError),
 }
 
-pub(crate) fn handle_rx<I: Io>(tcpip: &mut TcpIp<I>, pkt: &mut Packet) -> Result<(), RxError> {
-    let header = pkt.read::<EthernetHeader>().map_err(RxError::PacketRead)?;
+pub(crate) fn handle_rx<I: Io>(
+    tcpip: &mut TcpIp<I>,
+    iface_id: InterfaceId,
+    pkt: &mut Packet,
+) -> Result<(), RxError> {
+    let (ether_type, src_mac) = {
+        let header = pkt.read::<EthernetHeader>().map_err(RxError::PacketRead)?;
+        (Into::<u16>::into(header.ether_type), header.src)
+    };
 
-    let ether_type: u16 = header.ether_type.into();
     match ether_type {
-        0x0800 => crate::ip::ipv4::handle_rx::<I>(tcpip, pkt).map_err(RxError::Ipv4),
+        0x0800 => {
+            crate::ip::ipv4::handle_rx::<I>(tcpip, iface_id, pkt, src_mac).map_err(RxError::Ipv4)
+        }
         0x0806 => crate::arp::handle_rx::<I>(tcpip, pkt).map_err(RxError::Arp),
         _ => Err(RxError::BadEthernetType(ether_type)),
     }

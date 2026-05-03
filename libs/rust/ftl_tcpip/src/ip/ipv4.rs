@@ -5,19 +5,23 @@ use crate::checksum::Checksum;
 use crate::endian::Ne;
 use crate::ethernet;
 use crate::ethernet::EtherType;
+use crate::ethernet::MacAddr;
 use crate::interface::Interface;
+use crate::interface::InterfaceId;
 use crate::io::Io;
 use crate::ip::IpAddr;
 use crate::packet;
 use crate::packet::Packet;
 use crate::packet::WriteableToPacket;
 use crate::transport;
+use crate::transport::Protocol;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Ipv4Addr(u32);
 
 impl Ipv4Addr {
     pub const UNSPECIFIED: Self = Self(0);
+    pub const BROADCAST: Self = Self(0xff_ff_ff_ff);
 
     pub const fn new(a: u8, b: u8, c: u8, d: u8) -> Self {
         Self((a as u32) << 24 | (b as u32) << 16 | (c as u32) << 8 | d as u32)
@@ -210,9 +214,15 @@ pub enum RxError {
     BadHeaderLength(u8),
     UnsupportedProtocol(u8),
     Tcp(crate::tcp::RxError),
+    Udp(crate::udp::RxError),
 }
 
-pub(crate) fn handle_rx<I: Io>(tcpip: &mut TcpIp<I>, pkt: &mut Packet) -> Result<(), RxError> {
+pub(crate) fn handle_rx<I: Io>(
+    tcpip: &mut TcpIp<I>,
+    iface_id: InterfaceId,
+    pkt: &mut Packet,
+    src_mac: MacAddr,
+) -> Result<(), RxError> {
     let header = pkt.read::<Ipv4Header>().map_err(RxError::PacketRead)?;
     if header.version() != 4 {
         return Err(RxError::BadVersion(header.version()));
@@ -229,6 +239,18 @@ pub(crate) fn handle_rx<I: Io>(tcpip: &mut TcpIp<I>, pkt: &mut Packet) -> Result
     let dst = Ipv4Addr::from(header.dst_addr);
     let protocol = header.protocol;
 
+    // TODO: Avoid iface lookup twice (in DHCP client).
+    if src != Ipv4Addr::UNSPECIFIED {
+        trace!(
+            "ARP: learning an hardware address for {}: {:?}",
+            src, src_mac
+        );
+        let iface = tcpip.interfaces_mut().get_mut(iface_id).unwrap();
+        if let Err(err) = iface.arp_table_mut().add(src, src_mac) {
+            debug!("failed to add ARP entry for {}: {:x?}", src, err);
+        }
+    }
+
     // TODO: check dst address
 
     // truncate the packet to the IPv4 payload length. Ethernet may have added
@@ -238,8 +260,12 @@ pub(crate) fn handle_rx<I: Io>(tcpip: &mut TcpIp<I>, pkt: &mut Packet) -> Result
     pkt.truncate(payload_len);
 
     match protocol {
-        0x06 => {
+        _ if protocol == Protocol::Tcp as u8 => {
             crate::tcp::handle_rx::<I>(tcpip, pkt, remote, IpAddr::V4(dst)).map_err(RxError::Tcp)
+        }
+        _ if protocol == Protocol::Udp as u8 => {
+            crate::udp::handle_rx::<I>(tcpip, iface_id, pkt, remote, IpAddr::V4(dst))
+                .map_err(RxError::Udp)
         }
         protocol => Err(RxError::UnsupportedProtocol(protocol)),
     }

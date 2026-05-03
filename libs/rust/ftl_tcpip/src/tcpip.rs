@@ -2,11 +2,17 @@ use alloc::sync::Arc;
 use core::fmt;
 
 use crate::OutOfMemoryError;
+use crate::dhcp::DhcpClient;
+use crate::interface::Device;
 use crate::interface::Interface;
 use crate::interface::InterfaceId;
 use crate::interface::InterfaceMap;
 use crate::io::Io;
 use crate::ip::IpAddr;
+use crate::ip::IpCidr;
+use crate::ip::Ipv4Addr;
+use crate::ip::Ipv4Cidr;
+use crate::ip::NetMask;
 use crate::packet::Packet;
 use crate::route::Route;
 use crate::route::RouteTable;
@@ -14,6 +20,8 @@ use crate::socket::Endpoint;
 use crate::socket::SocketMap;
 use crate::tcp::TcpConn;
 use crate::tcp::TcpListener;
+use crate::transport::Port;
+use crate::udp::UdpHandle;
 
 pub struct TcpIp<I: Io> {
     io: I,
@@ -36,8 +44,12 @@ impl<I: Io> TcpIp<I> {
         &mut self.io
     }
 
-    pub fn handle_rx(&mut self, pkt: &mut Packet) -> Result<(), crate::ethernet::RxError> {
-        crate::ethernet::handle_rx::<I>(self, pkt)
+    pub fn handle_rx(
+        &mut self,
+        iface_id: InterfaceId,
+        pkt: &mut Packet,
+    ) -> Result<(), crate::ethernet::RxError> {
+        crate::ethernet::handle_rx::<I>(self, iface_id, pkt)
     }
 
     pub fn handle_timeout(&mut self) {
@@ -57,6 +69,72 @@ impl<I: Io> TcpIp<I> {
 
     pub fn add_route(&mut self, route: Route) -> Result<(), OutOfMemoryError> {
         self.routes.add(route)
+    }
+
+    pub fn enable_dhcp(&mut self, iface_id: InterfaceId) {
+        let local = Endpoint {
+            addr: IpAddr::V4(Ipv4Addr::UNSPECIFIED),
+            port: Port::new(68),
+        };
+
+        // TODO: Error handling.
+        let iface = self.interfaces.get_mut(iface_id).unwrap();
+        let mac = *iface.device_mut().mac_addr();
+        let mut client = DhcpClient::new(mac);
+        match client.poll_tx() {
+            Ok(Some(tx)) => {
+                crate::udp::transmit::<I>(
+                    iface,
+                    tx.local_ip,
+                    local.port,
+                    tx.remote_ip,
+                    tx.remote_port,
+                    tx.remote_ip,
+                    tx.pkt.slice(),
+                )
+                .unwrap();
+            }
+            Ok(None) => {
+                debug!("no DHCP packet to send");
+                return;
+            }
+            Err(e) => {
+                error!("failed to poll DHCP client: {:?}", e);
+                return;
+            }
+        }
+
+        self.sockets
+            .create_dhcp_client(iface_id, local.port, client)
+            .unwrap();
+    }
+
+    pub(crate) fn apply_dhcp_lease(
+        &mut self,
+        iface_id: InterfaceId,
+        lease: crate::dhcp::Lease,
+    ) -> Result<(), OutOfMemoryError> {
+        trace!(
+            "DHCP: applying lease: addr={}, mask={}, router={:?}",
+            lease.addr, lease.subnet_mask, lease.router
+        );
+
+        let our_route = IpCidr::Ipv4(Ipv4Cidr::new(lease.addr, lease.subnet_mask));
+        self.routes.add(Route::new(iface_id, our_route))?;
+
+        if let Some(router) = lease.router {
+            let default_cidr = IpCidr::Ipv4(Ipv4Cidr::new(
+                Ipv4Addr::UNSPECIFIED,
+                NetMask::new(0, 0, 0, 0),
+            ));
+            let route = Route::new(iface_id, default_cidr).with_gateway(router);
+            self.routes.add(route)?;
+        }
+
+        let iface = self.interfaces.get_mut(iface_id).unwrap();
+        iface.set_ipv4_addr(lease.addr);
+        iface.set_net_mask(lease.subnet_mask);
+        Ok(())
     }
 
     pub fn tcp_listen(
@@ -87,6 +165,23 @@ impl<I: Io> TcpIp<I> {
 
     pub fn tcp_close(&mut self, handle: TcpConnHandle<I>) {
         handle.0.close(self);
+    }
+
+    pub fn udp_open(&mut self, local: Endpoint) -> Result<UdpHandle<I>, OutOfMemoryError> {
+        self.sockets.create_udp_socket(local).map(UdpHandle)
+    }
+
+    pub fn udp_send(
+        &mut self,
+        handle: UdpHandle<I>,
+        remote: Endpoint,
+        data: &[u8],
+    ) -> Result<(), crate::udp::TxError> {
+        handle.0.send(self, remote, data)
+    }
+
+    pub fn udp_try_recv(&mut self, handle: UdpHandle<I>) -> Option<crate::udp::Datagram> {
+        handle.0.try_recv()
     }
 
     pub(crate) fn sockets(&self) -> &SocketMap<I> {
