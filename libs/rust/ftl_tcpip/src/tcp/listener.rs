@@ -232,7 +232,7 @@ impl<I: Io> TcpListener<I> {
         payload: &mut Packet,
     ) {
         match rx.flags {
-            TcpFlags::SYN => {
+            _ if rx.flags.contains(TcpFlags::SYN) => {
                 self.start_handshake(tcpip, rx);
             }
             _ if rx.flags.contains(TcpFlags::ACK) => {
