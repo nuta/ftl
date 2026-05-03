@@ -80,13 +80,9 @@ pub(crate) enum RxError {
 enum State {
     BeforeDiscover,
     SentDiscover,
-    BeforeRequest {
-        request_ip: Ipv4Addr,
-    },
+    BeforeRequest { request_ip: Ipv4Addr },
     SentRequest,
-    Connected {
-        your_ip: Ipv4Addr,
-    },
+    Connected { your_ip: Ipv4Addr },
 }
 
 pub(crate) struct DhcpClient {
@@ -123,11 +119,12 @@ impl DhcpClient {
                 }
                 _ => {
                     // Ignore other options.
-                    pkt.discard(option_len as usize).map_err(RxError::PacketRead)?;
+                    pkt.discard(option_len as usize)
+                        .map_err(RxError::PacketRead)?;
                 }
             }
         }
-        
+
         let opcode = opcode.ok_or(RxError::MissingDhcpMessageTypeOption)?;
         let mut state = self.state.lock();
         match *state {
@@ -140,7 +137,7 @@ impl DhcpClient {
                 if opcode != Opcode::OFFER {
                     return Err(RxError::ExpectedOffer(opcode));
                 }
-                
+
                 trace!("DHCP: received OFFER: your_ip={:?}", your_ip);
                 *state = State::BeforeRequest {
                     request_ip: your_ip,
@@ -148,24 +145,18 @@ impl DhcpClient {
 
                 Ok(())
             }
-            State::BeforeRequest { request_ip } => {
-                Err(RxError::ReceivedBeforeRequest(opcode))
-            }
+            State::BeforeRequest { request_ip } => Err(RxError::ReceivedBeforeRequest(opcode)),
             State::SentRequest => {
                 if opcode != Opcode::ACK {
                     return Err(RxError::ExpectedAck(opcode));
                 }
 
                 trace!("DHCP: received ACK: your_ip={:?}", your_ip);
-                *state = State::Connected {
-                    your_ip,
-                };
+                *state = State::Connected { your_ip };
 
                 Ok(())
             }
-            State::Connected { your_ip } => {
-                Err(RxError::ReceivedAfterAck(opcode))
-            }
+            State::Connected { your_ip } => Err(RxError::ReceivedAfterAck(opcode)),
         }
     }
 
