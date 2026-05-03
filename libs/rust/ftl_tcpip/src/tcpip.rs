@@ -103,7 +103,7 @@ impl<I: Io> TcpIp<I> {
             }
         }
 
-        self.sockets.register_dhcp_client(local, client).unwrap();
+        self.sockets.register_dhcp_client(iface_id, local.port, client).unwrap();
     }
 
     pub fn tcp_listen(

@@ -81,7 +81,7 @@ impl DhcpClient {
         let mut client_mac = [0; 16];
         client_mac[..6].copy_from_slice(self.mac.as_bytes());
 
-        let state = self.state.lock();
+        let mut state = self.state.lock();
         match *state {
             State::Init => {
                 let header = DhcpHeader {
@@ -117,6 +117,7 @@ impl DhcpClient {
                 pkt.write_back_bytes(&[0xff])
                     .map_err(TxError::PacketWrite)?; // End
 
+                *state = State::SentDiscover;
                 Ok(Some(Tx {
                     local_ip: Ipv4Addr::UNSPECIFIED,
                     remote_ip: Ipv4Addr::BROADCAST,

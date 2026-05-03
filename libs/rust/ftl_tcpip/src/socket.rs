@@ -4,6 +4,7 @@ use hashbrown::HashMap;
 
 use crate::OutOfMemoryError;
 use crate::dhcp::DhcpClient;
+use crate::interface::InterfaceId;
 use crate::io::Instant;
 use crate::io::Io;
 use crate::ip::IpAddr;
@@ -37,11 +38,17 @@ struct UdpSocketKey {
     pub local: Endpoint,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct DhcpClientKey {
+    pub iface_id: InterfaceId,
+    pub local_port: Port,
+}
+
 pub struct SocketMap<I: Io> {
     actives: HashMap<TcpConnKey, Arc<TcpConn<I>>>,
     listeners: HashMap<TcpListenerKey, Arc<TcpListener<I>>>,
     udp_sockets: HashMap<UdpSocketKey, Arc<UdpSocket<I>>>,
-    dhcp_clients: HashMap<UdpSocketKey, DhcpClient>,
+    dhcp_clients: HashMap<DhcpClientKey, DhcpClient>,
 }
 
 impl<I: Io> SocketMap<I> {
@@ -149,16 +156,17 @@ impl<I: Io> SocketMap<I> {
 
     pub(crate) fn register_dhcp_client(
         &mut self,
-        local: Endpoint,
+        iface_id: InterfaceId,
+        local_port: Port,
         client: DhcpClient,
     ) -> Result<(), OutOfMemoryError> {
-        let key = UdpSocketKey { local };
+        let key = DhcpClientKey { iface_id, local_port };
         self.dhcp_clients.reserve_and_insert(key, client)?;
         Ok(())
     }
 
-    pub(crate) fn get_dhcp_client_mut(&mut self, local: &Endpoint) -> Option<&mut DhcpClient> {
-        let key = UdpSocketKey { local: *local };
+    pub(crate) fn get_dhcp_client_mut(&mut self, iface_id: InterfaceId, local_port: Port) -> Option<&mut DhcpClient> {
+        let key = DhcpClientKey { iface_id, local_port };
         self.dhcp_clients.get_mut(&key)
     }
 }

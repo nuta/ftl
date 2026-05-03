@@ -181,11 +181,11 @@ pub(crate) fn handle_rx<I: Io>(
     let header = pkt.read::<UdpHeader>().map_err(RxError::PacketRead)?;
     let local = Endpoint {
         addr: local,
-        port: Port::from(header.src_port),
+        port: Port::from(header.dst_port),
     };
     let remote = Endpoint {
         addr: remote,
-        port: Port::from(header.dst_port),
+        port: Port::from(header.src_port),
     };
 
     let socket = match tcpip.sockets().get_udp_socket(&local) {
@@ -198,7 +198,7 @@ pub(crate) fn handle_rx<I: Io>(
 
     socket.handle_rx(pkt, remote)?;
 
-    if let Some(client) = tcpip.sockets_mut().get_dhcp_client_mut(&local) {
+    if let Some(client) = tcpip.sockets_mut().get_dhcp_client_mut(iface_id, socket.local_port) {
         client.handle_rx(pkt.slice()).map_err(RxError::DhcpRx)?;
         if let Some(tx) = client.poll_tx().map_err(RxError::DhcpTx)? {
             let iface = tcpip.interfaces_mut().get_mut(iface_id).unwrap();
