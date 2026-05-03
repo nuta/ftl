@@ -3,6 +3,7 @@ use core::fmt;
 
 use crate::OutOfMemoryError;
 use crate::dhcp::DhcpClient;
+use crate::interface::Device;
 use crate::interface::Interface;
 use crate::interface::InterfaceId;
 use crate::interface::InterfaceMap;
@@ -73,7 +74,8 @@ impl<I: Io> TcpIp<I> {
         let socket = self.sockets.create_udp_socket(local).unwrap();
 
         let iface = self.interfaces.get_mut(iface_id).unwrap();
-        let mut client = DhcpClient::new();
+        let mac = *iface.device_mut().mac_addr();
+        let mut client = DhcpClient::new(mac);
         match client.poll_tx() {
             Ok(Some(tx)) => {
                 socket.send_from_v4(iface, tx.local_ip, tx.remote_ip, tx.remote_port, tx.remote_ip, tx.pkt.slice()).unwrap();

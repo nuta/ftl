@@ -1,5 +1,5 @@
 use crate::endian::Ne;
-use crate::ethernet::EthernetHeader;
+use crate::ethernet::{EthernetHeader, MacAddr};
 use crate::ip::Ipv4Addr;
 use crate::ip::ipv4::Ipv4Header;
 use crate::packet::{self, WriteableToPacket};
@@ -55,18 +55,23 @@ enum State {
 
 pub(crate) struct DhcpClient {
     state: spin::Mutex<State>,
+    mac: MacAddr,
 }
 
 impl DhcpClient {
-    pub fn new() -> Self {
+    pub fn new(mac: MacAddr) -> Self {
         Self {
             state: spin::Mutex::new(State::Init),
+            mac,
         }
     }
 
     pub fn poll_tx(
         &mut self,
     ) -> Result<Option<Tx>, TxError> {
+        let mut client_mac = [0; 16];
+        client_mac[..6].copy_from_slice(self.mac.as_bytes());
+
         let state = self.state.lock();
         match *state {
             State::Init => {
@@ -82,7 +87,7 @@ impl DhcpClient {
                     your_ip: 0.into(),
                     server_ip: 0.into(),
                     gateway_ip: 0.into(),
-                    client_mac: [0; 16],
+                    client_mac,
                     server_name: [0; 64],
                     file: [0; 128],
                     magic: MAGIC_COOKIE.into(),
@@ -90,7 +95,7 @@ impl DhcpClient {
 
                 let head_room = size_of::<EthernetHeader>() + size_of::<Ipv4Header>() + size_of::<UdpHeader>();
                 let mut pkt = Packet::new(size_of::<DhcpHeader>(), head_room).map_err(TxError::PacketAlloc)?;
-                pkt.write_front(header).map_err(TxError::PacketWrite)?;
+                pkt.write_back(header).map_err(TxError::PacketWrite)?;
 
                 Ok(Some(Tx {
                     local_ip: Ipv4Addr::UNSPECIFIED,

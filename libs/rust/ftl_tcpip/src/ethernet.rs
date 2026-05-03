@@ -22,6 +22,10 @@ impl MacAddr {
     pub const fn new(addr: [u8; 6]) -> Self {
         Self(addr)
     }
+
+    pub fn as_bytes(&self) -> &[u8; 6] {
+        &self.0
+    }
 }
 
 impl fmt::Debug for MacAddr {
