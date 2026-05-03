@@ -61,9 +61,7 @@ impl<I: Io> TcpIp<I> {
     }
 
     pub fn udp_open(&mut self, local: Endpoint) -> Result<UdpHandle<I>, OutOfMemoryError> {
-        self.sockets
-            .create_udp_socket(local)
-            .map(UdpHandle)
+        self.sockets.create_udp_socket(local).map(UdpHandle)
     }
 
     pub fn tcp_listen(
