@@ -12,6 +12,7 @@ use crate::packet;
 use crate::packet::Packet;
 use crate::packet::WriteableToPacket;
 use crate::transport;
+use crate::transport::Protocol;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Ipv4Addr(u32);
@@ -210,6 +211,7 @@ pub enum RxError {
     BadHeaderLength(u8),
     UnsupportedProtocol(u8),
     Tcp(crate::tcp::RxError),
+    Udp(crate::udp::RxError),
 }
 
 pub(crate) fn handle_rx<I: Io>(tcpip: &mut TcpIp<I>, pkt: &mut Packet) -> Result<(), RxError> {
@@ -238,8 +240,11 @@ pub(crate) fn handle_rx<I: Io>(tcpip: &mut TcpIp<I>, pkt: &mut Packet) -> Result
     pkt.truncate(payload_len);
 
     match protocol {
-        0x06 => {
+        _ if protocol == Protocol::Tcp as u8 => {
             crate::tcp::handle_rx::<I>(tcpip, pkt, remote, IpAddr::V4(dst)).map_err(RxError::Tcp)
+        }
+        _ if protocol == Protocol::Udp as u8 => {
+            crate::udp::handle_rx::<I>(tcpip, pkt, remote, IpAddr::V4(dst)).map_err(RxError::Udp)
         }
         protocol => Err(RxError::UnsupportedProtocol(protocol)),
     }

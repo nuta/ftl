@@ -14,6 +14,7 @@ use crate::socket::Endpoint;
 use crate::socket::SocketMap;
 use crate::tcp::TcpConn;
 use crate::tcp::TcpListener;
+use crate::udp::UdpHandle;
 
 pub struct TcpIp<I: Io> {
     io: I,
@@ -57,6 +58,12 @@ impl<I: Io> TcpIp<I> {
 
     pub fn add_route(&mut self, route: Route) -> Result<(), OutOfMemoryError> {
         self.routes.add(route)
+    }
+
+    pub fn udp_open(&mut self, local: Endpoint) -> Result<UdpHandle<I>, OutOfMemoryError> {
+        self.sockets
+            .create_udp_socket(local)
+            .map(UdpHandle)
     }
 
     pub fn tcp_listen(

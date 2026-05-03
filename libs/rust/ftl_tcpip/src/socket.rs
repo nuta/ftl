@@ -11,6 +11,7 @@ use crate::tcp::TcpConn;
 use crate::tcp::TcpListener;
 use crate::tcp::TimeoutResult;
 use crate::transport::Port;
+use crate::udp::UdpSocket;
 use crate::utils::HashMapExt;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -30,9 +31,15 @@ struct TcpListenerKey {
     pub local: Endpoint,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct UdpSocketKey {
+    pub local: Endpoint,
+}
+
 pub struct SocketMap<I: Io> {
     actives: HashMap<TcpConnKey, Arc<TcpConn<I>>>,
     listeners: HashMap<TcpListenerKey, Arc<TcpListener<I>>>,
+    udp_sockets: HashMap<UdpSocketKey, Arc<UdpSocket<I>>>,
 }
 
 impl<I: Io> SocketMap<I> {
@@ -40,6 +47,7 @@ impl<I: Io> SocketMap<I> {
         Self {
             actives: HashMap::new(),
             listeners: HashMap::new(),
+            udp_sockets: HashMap::new(),
         }
     }
 
@@ -113,6 +121,16 @@ impl<I: Io> SocketMap<I> {
         let key = TcpListenerKey { local };
         let socket = Arc::new(TcpListener::new(local.port));
         self.listeners.reserve_and_insert(key, socket.clone())?;
+        Ok(socket)
+    }
+
+    pub(crate) fn create_udp_socket(
+        &mut self,
+        local: Endpoint,
+    ) -> Result<Arc<UdpSocket<I>>, OutOfMemoryError> {
+        let key = UdpSocketKey { local };
+        let socket = Arc::new(UdpSocket::new(local.port));
+        self.udp_sockets.reserve_and_insert(key, socket.clone())?;
         Ok(socket)
     }
 }
