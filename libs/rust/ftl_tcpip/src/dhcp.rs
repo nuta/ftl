@@ -105,15 +105,17 @@ impl DhcpClient {
                 let type_option = DhcpMessageTypeOption {
                     type_: 53, // DHCP Message Type
                     length: 1, // in bytes
-                    value: 1, // DHCPDISCOVER
+                    value: 1,  // DHCPDISCOVER
                 };
 
                 let len = size_of::<DhcpHeader>() + size_of::<DhcpMessageTypeOption>() + 1;
-                let head_room = size_of::<EthernetHeader>() + size_of::<Ipv4Header>() + size_of::<UdpHeader>();
+                let head_room =
+                    size_of::<EthernetHeader>() + size_of::<Ipv4Header>() + size_of::<UdpHeader>();
                 let mut pkt = Packet::new(len, head_room).map_err(TxError::PacketAlloc)?;
                 pkt.write_back(header).map_err(TxError::PacketWrite)?;
                 pkt.write_back(type_option).map_err(TxError::PacketWrite)?;
-                pkt.write_back_bytes(&[0xff]).map_err(TxError::PacketWrite)?; // End
+                pkt.write_back_bytes(&[0xff])
+                    .map_err(TxError::PacketWrite)?; // End
 
                 Ok(Some(Tx {
                     local_ip: Ipv4Addr::UNSPECIFIED,
