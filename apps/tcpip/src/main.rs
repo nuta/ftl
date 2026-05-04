@@ -241,6 +241,13 @@ impl ftl_tcpip::tcp::Read for TcpRead {
             buf.len()
         });
     }
+
+    fn abort(self, error: ftl_tcpip::tcp::Error) {
+        let error = match error {
+            ftl_tcpip::tcp::Error::Closed => ErrorCode::PeerClosed,
+        };
+        self.0.reply_error(error);
+    }
 }
 
 pub struct TcpAccept {

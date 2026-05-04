@@ -67,6 +67,9 @@ pub(crate) fn handle_rx<I: Io>(
     match tcpip.sockets().get_tcp_conn(&local, &remote) {
         Some(conn) => {
             conn.handle_rx(tcpip, rx, pkt);
+            if conn.is_closed() {
+                tcpip.sockets_mut().destroy_tcp_conn(&local, &remote);
+            }
         }
         None => {
             match tcpip.sockets().get_tcp_listener(&local) {
@@ -87,6 +90,8 @@ pub(crate) fn handle_rx<I: Io>(
 #[cfg(test)]
 mod tests {
     use alloc::sync::Arc;
+    use core::sync::atomic::AtomicBool;
+    use core::sync::atomic::Ordering;
     use core::time::Duration;
 
     use super::*;
@@ -102,6 +107,8 @@ mod tests {
     use crate::tcp::TcpConn;
     use crate::tcp::TimeoutResult;
     use crate::tcp::Write;
+
+    static READ_ABORTED: AtomicBool = AtomicBool::new(false);
 
     #[derive(Clone, Copy)]
     struct TestInstant;
@@ -138,6 +145,11 @@ mod tests {
     struct TestRead;
     impl Read for TestRead {
         fn complete(self, _rx_buffer: &mut TcpBuffer) {}
+
+        fn abort(self, error: Error) {
+            assert!(matches!(error, Error::Closed));
+            READ_ABORTED.store(true, Ordering::SeqCst);
+        }
     }
 
     struct TestWrite;
@@ -174,11 +186,21 @@ mod tests {
     }
 
     fn tcp_packet(flags: TcpFlags, src_port: Port, dst_port: Port) -> Packet {
+        tcp_packet_with_seq(flags, src_port, dst_port, 1, 0)
+    }
+
+    fn tcp_packet_with_seq(
+        flags: TcpFlags,
+        src_port: Port,
+        dst_port: Port,
+        seq: u32,
+        ack: u32,
+    ) -> Packet {
         let header = TcpHeader {
             src_port: src_port.into(),
             dst_port: dst_port.into(),
-            seq: 1.into(),
-            ack: 0.into(),
+            seq: seq.into(),
+            ack: ack.into(),
             window_size: 0.into(),
             flags,
             header_len: 5 << 4,
@@ -212,5 +234,42 @@ mod tests {
             conn.handle_timeout(&TestInstant),
             TimeoutResult::Closed
         ));
+    }
+
+    #[test]
+    fn fin_aborts_pending_read_and_closed_ack_removes_socket() {
+        READ_ABORTED.store(false, Ordering::SeqCst);
+
+        let local = endpoint(1, 80);
+        let remote = endpoint(2, 49152);
+        let conn = Arc::new(TcpConn::new_listen(local.port));
+        conn.open_passively(remote, 1000, 2000, 1024, TcpBuffer::new());
+
+        let mut tcpip = TcpIp::<TestIo>::new(TestIo);
+        tcpip
+            .sockets_mut()
+            .establish_tcp_conn(remote, local, conn.clone())
+            .unwrap();
+
+        conn.read(TestRead);
+
+        let mut pkt = tcp_packet_with_seq(
+            TcpFlags::FIN | TcpFlags::ACK,
+            remote.port,
+            local.port,
+            2000,
+            1001,
+        );
+        handle_rx(&mut tcpip, &mut pkt, remote.addr, local.addr).unwrap();
+
+        assert!(READ_ABORTED.load(Ordering::SeqCst));
+        assert!(tcpip.sockets().get_tcp_conn(&local, &remote).is_some());
+
+        conn.close(&mut tcpip);
+
+        let mut pkt = tcp_packet_with_seq(TcpFlags::ACK, remote.port, local.port, 2001, 1002);
+        handle_rx(&mut tcpip, &mut pkt, remote.addr, local.addr).unwrap();
+
+        assert!(tcpip.sockets().get_tcp_conn(&local, &remote).is_none());
     }
 }

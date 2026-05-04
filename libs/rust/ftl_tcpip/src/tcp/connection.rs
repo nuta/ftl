@@ -9,6 +9,7 @@ use crate::io::Instant;
 use crate::io::Io;
 use crate::packet::Packet;
 use crate::socket::Endpoint;
+use crate::tcp::Error;
 use crate::tcp::Read;
 use crate::tcp::Write;
 use crate::tcp::header::TcpFlags;
@@ -132,6 +133,10 @@ impl<I: Io> TcpConn<I> {
         }
     }
 
+    pub(crate) fn is_closed(&self) -> bool {
+        matches!(self.mutable.lock().state, State::Closed)
+    }
+
     pub(crate) fn reset(&self) {
         let mut mutable = self.mutable.lock();
         mutable.state = State::Closed;
@@ -141,7 +146,7 @@ impl<I: Io> TcpConn<I> {
         let rx_len = mutable.rx_buffer.readable_len();
         mutable.rx_buffer.consume_bytes(rx_len);
         mutable.pending_writes.clear();
-        mutable.pending_reads.clear();
+        abort_pending_reads(&mut mutable);
     }
 
     pub fn write(&self, tcpip: &mut TcpIp<I>, req: I::TcpWrite) {
@@ -159,7 +164,11 @@ impl<I: Io> TcpConn<I> {
     pub fn read(&self, req: I::TcpRead) {
         let mut mutable = self.mutable.lock();
         if mutable.rx_buffer.is_empty() {
-            mutable.pending_reads.push_back(req);
+            if is_receive_closed(&mutable.state) {
+                req.abort(Error::Closed);
+            } else {
+                mutable.pending_reads.push_back(req);
+            }
         } else {
             req.complete(&mut mutable.rx_buffer);
         }
@@ -260,6 +269,10 @@ impl<I: Io> TcpConn<I> {
                 State::FinWait2 => mutable.state = time_wait(tcpip.io_mut()),
                 _ => {}
             }
+
+            if mutable.rx_buffer.is_empty() {
+                abort_pending_reads(&mut mutable);
+            }
         }
 
         if should_ack {
@@ -357,6 +370,19 @@ impl<I: Io> TcpConn<I> {
             | State::TimeWait { .. }
             | State::Closed => {}
         }
+    }
+}
+
+fn is_receive_closed<I: Io>(state: &State<I>) -> bool {
+    matches!(
+        state,
+        State::CloseWait | State::LastAck | State::Closing | State::TimeWait { .. } | State::Closed
+    )
+}
+
+fn abort_pending_reads<I: Io>(mutable: &mut Mutable<I>) {
+    while let Some(req) = mutable.pending_reads.pop_front() {
+        req.abort(Error::Closed);
     }
 }
 

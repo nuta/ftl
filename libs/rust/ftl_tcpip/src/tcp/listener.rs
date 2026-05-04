@@ -368,6 +368,8 @@ mod tests {
     struct TestRead;
     impl Read for TestRead {
         fn complete(self, _rx_buffer: &mut TcpBuffer) {}
+
+        fn abort(self, _error: Error) {}
     }
 
     struct TestWrite;
