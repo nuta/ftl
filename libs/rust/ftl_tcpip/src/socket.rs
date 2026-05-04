@@ -101,8 +101,7 @@ impl<I: Io> SocketMap<I> {
             match conn.handle_timeout(&now) {
                 TimeoutResult::Ok => true,
                 TimeoutResult::ResetTimer(next) => {
-                    let skip = matches!(earliest, Some(e) if e.is_before(&next));
-                    if !skip {
+                    if !matches!(earliest, Some(e) if e.is_before(&next)) {
                         earliest = Some(next);
                     }
 
@@ -114,6 +113,14 @@ impl<I: Io> SocketMap<I> {
                 }
             }
         });
+
+        for listener in self.listeners.values() {
+            if let Some(next) = listener.handle_timeout(now)
+                && !matches!(earliest, Some(e) if e.is_before(&next))
+            {
+                earliest = Some(next);
+            }
+        }
 
         trace!(
             "{} active sockets, {} listener sockets",

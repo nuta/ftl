@@ -1,10 +1,12 @@
 use alloc::collections::VecDeque;
 use alloc::sync::Arc;
 use core::fmt;
+use core::time::Duration;
 
 use hashbrown::HashMap;
 
 use crate::TcpIp;
+use crate::io::Instant;
 use crate::io::Io;
 use crate::ip::IpAddr;
 use crate::packet::Packet;
@@ -20,13 +22,17 @@ use crate::tcp::tx::transmit_segment;
 use crate::transport::Port;
 use crate::utils::HashMapExt;
 
-struct Handshake {
+const SYN_RECEIVED_TIMEOUT: Duration = Duration::from_secs(3);
+const MAX_LISTEN_BACKLOG: usize = 256;
+
+struct Handshake<I: Io> {
     remote: Endpoint,
     local_ip: IpAddr,
     local_iss: u32,
     remote_rcv_nxt: u32,
     remote_rcv_wnd: u16,
     rx_buffer: TcpBuffer,
+    expires_at: I::Instant,
 }
 
 struct PendingAccept<I: Io> {
@@ -36,7 +42,7 @@ struct PendingAccept<I: Io> {
 
 struct Mutable<I: Io> {
     /// Handshakes that we have sent SYN+ACK, and are waiting for an ACK.
-    inflight_handshakes: HashMap<Endpoint, Handshake>,
+    inflight_handshakes: HashMap<Endpoint, Handshake<I>>,
     /// Handshakes that we have received an ACK for. Established connections.
     finished_handshakes: VecDeque<Arc<TcpConn<I>>>,
     pending_accepts: VecDeque<PendingAccept<I>>,
@@ -76,15 +82,40 @@ impl<I: Io> TcpListener<I> {
         }
     }
 
+    pub(crate) fn handle_timeout(&self, now: &I::Instant) -> Option<I::Instant> {
+        let mut next: Option<I::Instant> = None;
+        let mut expired = 0;
+        let mut mutable = self.mutable.lock();
+        mutable.inflight_handshakes.retain(|_, handshake| {
+            if now.is_before(&handshake.expires_at) {
+                if !matches!(next, Some(current) if current.is_before(&handshake.expires_at)) {
+                    next = Some(handshake.expires_at);
+                }
+
+                true
+            } else {
+                expired += 1;
+                false
+            }
+        });
+        drop(mutable);
+
+        if expired > 0 {
+            trace!("TCP: expired {} inflight handshakes", expired);
+        }
+
+        next
+    }
+
     fn start_handshake(self: &Arc<Self>, tcpip: &mut TcpIp<I>, rx: RxHeader) {
         let our_iss = 1234; // TODO: generate a random ISS.
-
-        // TODO: Backlog limit: ensure mutable.handshakes.len() + mutable.finished_handshakes.len() <= MAX_BACKLOG.
 
         let remote = Endpoint {
             addr: rx.remote_ip,
             port: rx.src_port,
         };
+        let now = tcpip.io_mut().now();
+        let expires_at = now.checked_add(SYN_RECEIVED_TIMEOUT).unwrap();
 
         let handshake = Handshake {
             remote,
@@ -93,6 +124,7 @@ impl<I: Io> TcpListener<I> {
             remote_rcv_nxt: rx.seq.wrapping_add(1),
             remote_rcv_wnd: rx.window_size,
             rx_buffer: TcpBuffer::new(),
+            expires_at,
         };
 
         let header = TcpHeader {
@@ -108,15 +140,29 @@ impl<I: Io> TcpListener<I> {
         };
 
         let mut mutable = self.mutable.lock();
-        if let Err(err) = mutable
-            .inflight_handshakes
-            .reserve_and_insert(remote, handshake)
-        {
-            warn!("TCP: failed to insert handshake: {:?}", err);
-            // TODO: RST the connection.
-            return;
+        if mutable.inflight_handshakes.contains_key(&remote) {
+            mutable.inflight_handshakes.insert(remote, handshake);
+        } else {
+            let backlog_len = mutable.inflight_handshakes.len() + mutable.finished_handshakes.len();
+            if backlog_len >= MAX_LISTEN_BACKLOG {
+                debug!(
+                    "TCP: listen backlog full; dropping handshake from {}",
+                    remote.addr
+                );
+                return;
+            }
+
+            if let Err(err) = mutable
+                .inflight_handshakes
+                .reserve_and_insert(remote, handshake)
+            {
+                warn!("TCP: failed to insert handshake: {:?}", err);
+                // TODO: RST the connection.
+                return;
+            }
         }
         drop(mutable);
+        tcpip.io_mut().set_timer(expires_at);
 
         if let Err(err) = transmit_segment::<I>(tcpip, header, rx.remote_ip, &[]) {
             warn!("TCP: failed to reply to SYN: {:?}", err);
@@ -249,5 +295,154 @@ impl<I: Io> TcpListener<I> {
 impl<I: Io> fmt::Debug for TcpListener<I> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("TcpListener").finish()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use core::time::Duration;
+
+    use super::*;
+    use crate::ethernet::MacAddr;
+    use crate::interface::Device;
+    use crate::ip::Ipv4Addr;
+    use crate::packet::Packet;
+    use crate::tcp::Accept;
+    use crate::tcp::Error;
+    use crate::tcp::Read;
+    use crate::tcp::Write;
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    struct TestInstant(u64);
+
+    impl Instant for TestInstant {
+        fn checked_add(&self, duration: Duration) -> Option<Self> {
+            Some(Self(
+                self.0.checked_add(duration.as_nanos().try_into().ok()?)?,
+            ))
+        }
+
+        fn now(&self) -> Self {
+            *self
+        }
+
+        fn is_before(&self, other: &Self) -> bool {
+            self.0 < other.0
+        }
+
+        fn elapsed_since(&self, other: &Self) -> Duration {
+            Duration::from_nanos(self.0 - other.0)
+        }
+    }
+
+    struct TestDevice;
+
+    impl Device for TestDevice {
+        fn mac_addr(&self) -> &MacAddr {
+            static MAC: MacAddr = MacAddr::new([0; 6]);
+            &MAC
+        }
+
+        fn transmit(&mut self, _pkt: &mut Packet) {}
+    }
+
+    struct TestRead;
+    impl Read for TestRead {
+        fn complete(self, _rx_buffer: &mut TcpBuffer) {}
+    }
+
+    struct TestWrite;
+    impl Write for TestWrite {
+        fn complete(self, _tx_buffer: &mut TcpBuffer) {}
+    }
+
+    struct TestAccept;
+    impl Accept for TestAccept {
+        fn complete(self, _result: Result<(), Error>) {}
+    }
+
+    struct TestIo;
+
+    impl Io for TestIo {
+        type Device = TestDevice;
+        type TcpWrite = TestWrite;
+        type TcpRead = TestRead;
+        type TcpAccept = TestAccept;
+        type Instant = TestInstant;
+
+        fn now(&self) -> Self::Instant {
+            TestInstant(0)
+        }
+
+        fn set_timer(&mut self, _at: Self::Instant) {}
+    }
+
+    fn endpoint(port: u16) -> Endpoint {
+        Endpoint {
+            addr: IpAddr::V4(Ipv4Addr::new(192, 0, 2, (port & 0xff) as u8)),
+            port: Port::new(port),
+        }
+    }
+
+    fn handshake(expires_at: u64) -> Handshake<TestIo> {
+        Handshake {
+            remote: endpoint(1),
+            local_ip: IpAddr::V4(Ipv4Addr::new(192, 0, 2, 254)),
+            local_iss: 0,
+            remote_rcv_nxt: 0,
+            remote_rcv_wnd: DEFAULT_RCV_WND,
+            rx_buffer: TcpBuffer::new(),
+            expires_at: TestInstant(expires_at),
+        }
+    }
+
+    #[test]
+    fn handle_timeout_keeps_earliest_inflight_handshake() {
+        let listener = TcpListener::<TestIo>::new(Port::new(80));
+        {
+            let mut mutable = listener.mutable.lock();
+            mutable
+                .inflight_handshakes
+                .insert(endpoint(10), handshake(10));
+            mutable
+                .inflight_handshakes
+                .insert(endpoint(20), handshake(20));
+        }
+
+        assert_eq!(
+            listener.handle_timeout(&TestInstant(5)),
+            Some(TestInstant(10))
+        );
+        assert_eq!(listener.mutable.lock().inflight_handshakes.len(), 2);
+    }
+
+    #[test]
+    fn handle_timeout_expires_inflight_handshakes() {
+        let listener = TcpListener::<TestIo>::new(Port::new(80));
+        {
+            let mut mutable = listener.mutable.lock();
+            mutable
+                .inflight_handshakes
+                .insert(endpoint(10), handshake(10));
+            mutable
+                .inflight_handshakes
+                .insert(endpoint(20), handshake(20));
+        }
+
+        assert_eq!(
+            listener.handle_timeout(&TestInstant(10)),
+            Some(TestInstant(20))
+        );
+        assert!(
+            !listener
+                .mutable
+                .lock()
+                .inflight_handshakes
+                .contains_key(&endpoint(10))
+        );
+        assert_eq!(listener.mutable.lock().inflight_handshakes.len(), 1);
+
+        assert_eq!(listener.handle_timeout(&TestInstant(20)), None);
+        assert!(listener.mutable.lock().inflight_handshakes.is_empty());
     }
 }

@@ -51,10 +51,16 @@ impl Timer {
         let now = arch::read_timer();
 
         let mut mutable = self.mutable.lock();
-        if expires_at.is_before(&now) {
-            // The timer has already expired, notify the listener immediately.
+        if !now.is_before(&expires_at) {
+            // The timer has already expired, make it readable immediately.
+            let old_state = mem::replace(&mut mutable.state, State::Expired);
             if let Some(ref notifier) = mutable.notifier {
                 notifier.notify();
+            }
+            drop(mutable);
+
+            if matches!(old_state, State::Pending(_)) {
+                GLOBAL_TIMER.lock().remove(self);
             }
 
             return Ok(());
@@ -139,6 +145,11 @@ impl GlobalTimer {
 
     fn add(&mut self, timer: SharedRef<Timer>) {
         self.actives.push(timer);
+        self.reschedule();
+    }
+
+    fn remove(&mut self, timer: &SharedRef<Timer>) {
+        self.actives.retain(|active| !SharedRef::eq(active, timer));
         self.reschedule();
     }
 
