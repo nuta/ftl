@@ -169,6 +169,21 @@ impl<I: Io> TcpListener<I> {
         }
     }
 
+    fn reset_handshake(&self, rx: RxHeader) {
+        let remote = Endpoint {
+            addr: rx.remote_ip,
+            port: rx.src_port,
+        };
+
+        let mut mutable = self.mutable.lock();
+        if mutable.inflight_handshakes.remove(&remote).is_some() {
+            trace!(
+                "TCP: reset inflight handshake from {}:{}",
+                remote.addr, remote.port
+            );
+        }
+    }
+
     fn finish_handshake(
         self: &Arc<Self>,
         tcpip: &mut TcpIp<I>,
@@ -278,6 +293,9 @@ impl<I: Io> TcpListener<I> {
         payload: &mut Packet,
     ) {
         match rx.flags {
+            _ if rx.flags.contains(TcpFlags::RST) => {
+                self.reset_handshake(rx);
+            }
             _ if rx.flags.contains(TcpFlags::SYN) => {
                 self.start_handshake(tcpip, rx);
             }
@@ -300,6 +318,7 @@ impl<I: Io> fmt::Debug for TcpListener<I> {
 
 #[cfg(test)]
 mod tests {
+    use alloc::sync::Arc;
     use core::time::Duration;
 
     use super::*;
@@ -444,5 +463,42 @@ mod tests {
 
         assert_eq!(listener.handle_timeout(&TestInstant(20)), None);
         assert!(listener.mutable.lock().inflight_handshakes.is_empty());
+    }
+
+    #[test]
+    fn rst_removes_inflight_handshake() {
+        let listener = Arc::new(TcpListener::<TestIo>::new(Port::new(80)));
+        let remote = endpoint(10);
+        let mut handshake = handshake(10);
+        handshake.remote = remote;
+        {
+            let mut mutable = listener.mutable.lock();
+            mutable.inflight_handshakes.insert(remote, handshake);
+        }
+
+        let mut tcpip = TcpIp::<TestIo>::new(TestIo);
+        let mut payload = Packet::new(0, 0).unwrap();
+        listener.handle_rx(
+            &mut tcpip,
+            RxHeader {
+                remote_ip: remote.addr,
+                local_ip: IpAddr::V4(Ipv4Addr::new(192, 0, 2, 254)),
+                src_port: remote.port,
+                dst_port: Port::new(80),
+                flags: TcpFlags::RST,
+                seq: 0,
+                ack: 0,
+                window_size: 0,
+            },
+            &mut payload,
+        );
+
+        assert!(
+            !listener
+                .mutable
+                .lock()
+                .inflight_handshakes
+                .contains_key(&remote)
+        );
     }
 }

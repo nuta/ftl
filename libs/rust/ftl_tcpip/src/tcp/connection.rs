@@ -132,6 +132,18 @@ impl<I: Io> TcpConn<I> {
         }
     }
 
+    pub(crate) fn reset(&self) {
+        let mut mutable = self.mutable.lock();
+        mutable.state = State::Closed;
+        mutable.close_requested = true;
+        let tx_len = mutable.tx_buffer.readable_len();
+        mutable.tx_buffer.consume_bytes(tx_len);
+        let rx_len = mutable.rx_buffer.readable_len();
+        mutable.rx_buffer.consume_bytes(rx_len);
+        mutable.pending_writes.clear();
+        mutable.pending_reads.clear();
+    }
+
     pub fn write(&self, tcpip: &mut TcpIp<I>, req: I::TcpWrite) {
         let mut mutable = self.mutable.lock();
         if mutable.tx_buffer.writeable_len() == 0 {

@@ -95,6 +95,20 @@ impl<I: Io> SocketMap<I> {
         Ok(())
     }
 
+    pub(crate) fn destroy_tcp_conn(&mut self, local: &Endpoint, remote: &Endpoint) -> bool {
+        let key = TcpConnKey {
+            local: *local,
+            remote: *remote,
+        };
+        let Some(conn) = self.actives.remove(&key) else {
+            return false;
+        };
+
+        trace!("destroying a socket: {:?}", key);
+        conn.reset();
+        true
+    }
+
     pub(crate) fn handle_timeout(&mut self, now: &I::Instant) -> Option<I::Instant> {
         let mut earliest: Option<I::Instant> = None;
         self.actives.retain(|key, conn| {
