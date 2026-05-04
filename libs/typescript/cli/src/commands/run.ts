@@ -5,6 +5,7 @@ export async function main(args: string[]) {
     await build.main([]);
 
     const qemu = await startQemu({
+        enableGDB: true,
         portForwarding: [
             // HTTP server
             {

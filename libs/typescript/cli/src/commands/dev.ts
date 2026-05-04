@@ -72,6 +72,7 @@ export async function main(args: string[]) {
                 await qemu.exited;
             }
             qemu = await startQemu({
+                enableGDB: true,
                 portForwarding: [
                     // HTTP server
                     {

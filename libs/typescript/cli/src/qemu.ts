@@ -7,6 +7,7 @@ export interface PortForward {
 }
 
 export interface QemuParams {
+    enableGDB?: boolean;
     portForwarding?: PortForward[];
     stdio: [QemuStdio, QemuStdio, QemuStdio];
 }
@@ -20,7 +21,6 @@ export async function startQemu(params: QemuParams) {
         "-nographic",
         "-serial", "mon:stdio",
         "--no-reboot",
-        "-gdb", "tcp::7778",
         "-d", "cpu_reset,unimp,guest_errors,int",
         "-D", "qemu.log",
         "-device", "virtio-net-pci,netdev=net0",
@@ -36,6 +36,10 @@ export async function startQemu(params: QemuParams) {
         args.push("-netdev", `user,id=net0,hostfwd=${hostfwds.join(',')}`);
     } else {
         args.push("-netdev", "user,id=net0");
+    }
+
+    if (params.enableGDB) {
+        args.push("-gdb", "tcp::7778");
     }
 
     return Bun.spawn(["qemu-system-x86_64", ...args], { stdio: params.stdio });
