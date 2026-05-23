@@ -75,3 +75,42 @@ impl fmt::Display for VAddr {
         write!(f, "{self:?}")
     }
 }
+
+/// A user virtual address.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[repr(transparent)]
+pub struct UAddr(usize);
+
+impl UAddr {
+    pub const fn new(addr: usize) -> Self {
+        Self(addr)
+    }
+
+    pub const fn as_usize(self) -> usize {
+        self.0
+    }
+
+    pub fn add(self, offset: usize) -> Option<Self> {
+        self.0.checked_add(offset).map(Self)
+    }
+
+    pub fn is_aligned_to(self, alignment: usize) -> bool {
+        is_aligned(self.0, alignment)
+    }
+}
+
+impl fmt::Debug for UAddr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if cfg!(target_pointer_width = "64") {
+            write!(f, "0x{:016x}", self.0)
+        } else {
+            write!(f, "0x{:08x}", self.0)
+        }
+    }
+}
+
+impl fmt::Display for UAddr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{self:?}")
+    }
+}

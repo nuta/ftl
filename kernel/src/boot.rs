@@ -23,25 +23,8 @@ pub struct BootInfo {
 
 pub fn boot(bootinfo: BootInfo) -> ! {
     crate::memory::init(&bootinfo);
+    crate::cpuvar::init(0);
 
-    let mut v = alloc::collections::BTreeMap::new();
-    v.insert('a', 'b');
-    v.insert('c', 'd');
-    v.insert('e', 'f');
-    v.insert('g', 'h');
-    v.insert('i', 'j');
-    v.insert('k', 'l');
-    v.insert('m', 'n');
-    v.insert('o', 'p');
-    v.insert('q', 'r');
-    v.insert('s', 't');
-    v.insert('u', 'v');
-    v.insert('w', 'x');
-    v.insert('y', 'z');
-    println!("{:?}", v);
-
-    let s = crate::shared_ref::SharedRef::new("hello");
-    println!("{:?}", s);
-
-    panic!("boot complete");
+    let world = crate::lx::World::new();
+    crate::thread::return_to_user();
 }

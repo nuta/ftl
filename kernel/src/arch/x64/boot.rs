@@ -62,6 +62,8 @@ extern "C" fn rust_boot(multiboot_magic: u32, start_info: u32) -> ! {
     let cpu_id = 0;
     let tss_base = write_tss(cpu_id);
     init_gdt(cpu_id, tss_base);
+    super::idt::init();
+    super::pic::init();
 
     let bootinfo = if multiboot_magic == 0x36d76289 {
         multiboot::parse_multiboot2_info(PAddr::new(start_info as usize))

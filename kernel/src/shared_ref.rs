@@ -13,6 +13,8 @@ use core::sync::atomic;
 use core::sync::atomic::AtomicUsize;
 use core::sync::atomic::Ordering;
 
+use crate::error::ErrorCode;
+
 /// The storage for a reference-counted object.
 ///
 /// `SharedRef<T>`s store a pointer to this struct.
@@ -37,9 +39,6 @@ impl<T> RefCounted<T> {
         }
     }
 }
-
-#[derive(Debug)]
-pub struct AllocError;
 
 /// A reference-counted object.
 ///
@@ -68,11 +67,11 @@ pub struct SharedRef<T: ?Sized> {
 
 impl<T> SharedRef<T> {
     /// Creates a new reference-counted object.
-    pub fn new(value: T) -> Result<Self, AllocError> {
+    pub fn new(value: T) -> Result<Self, ErrorCode> {
         let layout = Layout::new::<RefCounted<T>>();
         let ptr = unsafe { alloc(layout) as *mut RefCounted<T> };
         if ptr.is_null() {
-            return Err(AllocError);
+            return Err(ErrorCode::OutOfMemory);
         }
 
         unsafe {

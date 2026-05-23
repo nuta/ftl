@@ -22,5 +22,9 @@ else
     target="debug"
 fi
 
+zig cc -target x86_64-linux-gnu -nostdlib -ffreestanding \
+  kernel/src/hello.S -o kernel/src/hello.elf
+llvm-objcopy -O binary kernel/src/hello.elf kernel/src/hello.bin
+
 cargo build "${CARGOFLAGS[@]}"
 cp target/kernel/$target/kernel ftl.elf
