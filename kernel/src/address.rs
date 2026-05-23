@@ -54,6 +54,10 @@ impl VAddr {
     pub const fn as_usize(self) -> usize {
         self.0
     }
+
+    pub const fn as_mut_ptr<T>(self) -> *mut T {
+        self.0 as *mut T
+    }
 }
 
 impl fmt::Debug for VAddr {

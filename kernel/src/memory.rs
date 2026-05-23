@@ -18,13 +18,7 @@ use crate::boot::FreeRam;
 use crate::boot::NUM_MODULES_MAX;
 use crate::spinlock::SpinLock;
 
-/// A wrapper struct to make a type page-aligned.
-#[repr(align(4096))]
-struct PageAligned<T>(T);
-
-/// A temporary boot-time RAM area for the kernel's global allocator.
-static mut EARLY_RAM: PageAligned<[u8; EARLY_RAM_SIZE]> = PageAligned([0; EARLY_RAM_SIZE]);
-const EARLY_RAM_SIZE: usize = 128 * 1024; // 128 KB
+const MALLOC_CHUNK_SIZE: usize = 128 * 1024; // 128 KB
 
 #[global_allocator]
 static GLOBAL_ALLOCATOR: GlobalAllocator = GlobalAllocator::new();
@@ -49,16 +43,37 @@ impl GlobalAllocator {
 
 unsafe impl GlobalAlloc for GlobalAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        match self.inner.lock().malloc(layout.size(), layout.align()) {
-            Some(ptr) => ptr,
-            None => {
-                panic!(
-                    "failed to malloc: size={}, align={}",
-                    layout.size(),
-                    layout.align()
-                );
-            }
+        let mut inner = self.inner.lock();
+        if let Some(ptr) = inner.malloc(layout.size(), layout.align()) {
+            return ptr;
         }
+
+        // The global allocator is out of memory. Try to allocate more from the
+        // page allocator.
+        let Some(paddr) = PAGE_ALLOCATOR.alloc(MALLOC_CHUNK_SIZE, PageType::Dirty) else {
+            panic!(
+                "out of memory: size={}, align={}",
+                layout.size(),
+                layout.align()
+            );
+        };
+
+        let ptr = arch::paddr2vaddr(paddr).as_mut_ptr();
+        // SAFETY: The page allocator returns a valid pointer.
+        unsafe {
+            inner.add_chunk(ptr, MALLOC_CHUNK_SIZE);
+        }
+
+        // Try to allocate from the new chunk.
+        if let Some(ptr) = inner.malloc(layout.size(), layout.align()) {
+            return ptr;
+        }
+
+        panic!(
+            "failed to malloc from new chunk: size={}, align={}",
+            layout.size(),
+            layout.align()
+        );
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, _layout: Layout) {
@@ -71,7 +86,12 @@ unsafe impl GlobalAlloc for GlobalAllocator {
 /// The physical memory allocator.
 pub static PAGE_ALLOCATOR: PageAllocator = PageAllocator::new();
 
+/// The type of pages to allocate.
 pub enum PageType {
+    /// The pages don't need to be zeroed. The caller is responsible for
+    /// initializing the memory.
+    Dirty,
+    /// The pages need to be zeroed.
     Zeroed,
 }
 
@@ -110,6 +130,9 @@ impl PageAllocator {
                 let paddr = PAddr::new(addr);
 
                 match page_type {
+                    PageType::Dirty => {
+                        // Do nothing.
+                    }
                     PageType::Zeroed => {
                         let vaddr = arch::paddr2vaddr(paddr);
                         let ptr = vaddr.as_usize() as *mut u8;
@@ -184,11 +207,6 @@ where
 }
 
 pub fn init(bootinfo: &BootInfo) {
-    unsafe {
-        let ptr = &raw mut EARLY_RAM.0 as *mut _ as *mut u8;
-        GLOBAL_ALLOCATOR.add_region(ptr, EARLY_RAM_SIZE);
-    }
-
     // Collect the reserved regions that we can't allocate from.
     let mut reserved_regions = ArrayVec::<Range<PAddr>, { NUM_MODULES_MAX + 1 }>::new();
     reserved_regions.try_push(kernel_reserved_range()).unwrap();
