@@ -40,5 +40,8 @@ pub fn boot(bootinfo: BootInfo) -> ! {
     v.insert('y', 'z');
     println!("{:?}", v);
 
+    let s = crate::shared_ref::SharedRef::new("hello");
+    println!("{:?}", s);
+
     panic!("boot complete");
 }
