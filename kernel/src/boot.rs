@@ -13,9 +13,11 @@ pub struct Module {
     pub end: PAddr,
 }
 
+pub const NUM_MODULES_MAX: usize = 8;
+
 pub struct BootInfo {
     #[allow(unused)]
-    pub modules: ArrayVec<Module, 8>,
+    pub modules: ArrayVec<Module, NUM_MODULES_MAX>,
     pub free_rams: ArrayVec<FreeRam, 8>,
 }
 

@@ -89,8 +89,5 @@ pub fn parse_start_info(start_info: PAddr) -> BootInfo {
         }
     }
 
-    BootInfo {
-        free_rams,
-        modules: ArrayVec::new(),
-    }
+    BootInfo { free_rams, modules }
 }

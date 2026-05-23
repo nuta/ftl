@@ -1,10 +1,13 @@
 use crate::address::PAddr;
 use crate::address::VAddr;
 
+pub const MIN_PAGE_SIZE: usize = 4096;
 pub const KERNEL_BASE: usize = 0xffff_8000_0000_0000;
 
 const ENTRIES_PER_TABLE: usize = 512;
 const GIGA_PAGE_SIZE: usize = 1024 * 1024 * 1024;
+const DIRECT_MAP_SIZE: usize = 4 * GIGA_PAGE_SIZE;
+pub const DIRECT_MAP_END: PAddr = PAddr::new(DIRECT_MAP_SIZE);
 
 // Page table entry flags.
 const PTE_V: u64 = 1 << 0;
@@ -21,7 +24,7 @@ pub(super) static BOOT_PDPT: Table = {
     // Map the first 4GiB of physical memory. It should be plenty enough to
     // boot the kernel.
     let mut i = 0;
-    while i < 4 {
+    while i < DIRECT_MAP_SIZE / GIGA_PAGE_SIZE {
         pdpt.0[i] = Pte::new(PAddr::new(i * GIGA_PAGE_SIZE), PTE_V | PTE_W | PTE_HUGE);
         i += 1;
     }
@@ -48,4 +51,8 @@ impl Pte {
 
 pub fn paddr2vaddr(paddr: PAddr) -> VAddr {
     VAddr::new(paddr.as_usize() | KERNEL_BASE)
+}
+
+pub fn vaddr2paddr(vaddr: VAddr) -> PAddr {
+    PAddr::new(vaddr.as_usize() & !KERNEL_BASE)
 }

@@ -53,6 +53,7 @@ struct Multiboot2Module {
 
 pub const MULTIBOOT2_TAG_MODULE: u32 = 3;
 pub const MULTIBOOT2_TAG_MEMORY_MAP: u32 = 6;
+const MULTIBOOT2_MEMORY_AVAILABLE: u32 = 1;
 
 // The multiboot2 header.
 //https://www.gnu.org/software/grub/manual/multiboot2/multiboot.html#Header-layout
@@ -114,7 +115,7 @@ pub(super) fn parse_multiboot2_info(info_addr: PAddr) -> BootInfo {
                     let size = entry.length as usize;
                     let type_ = entry.type_;
 
-                    if type_ == 1 {
+                    if type_ != MULTIBOOT2_MEMORY_AVAILABLE {
                         // Not a free RAM region.
                         continue;
                     }

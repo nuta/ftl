@@ -8,3 +8,4 @@ edition.workspace = true
 ftl_utils = { workspace = true }
 ftl_arrayvec = { workspace = true }
 ftl_malloc = { workspace = true }
+ftl_bump_allocator = { workspace = true }

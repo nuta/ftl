@@ -29,6 +29,7 @@ name = "kernel"
 version = "0.0.0"
 dependencies = [
  "ftl_arrayvec",
+ "ftl_bump_allocator",
  "ftl_malloc",
  "ftl_utils",
 ]
