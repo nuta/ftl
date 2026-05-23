@@ -1,9 +1,0 @@
-[package]
-name = "virtio_net"
-version.workspace = true
-authors.workspace = true
-edition.workspace = true
-
-[dependencies]
-ftl = { workspace = true }
-ftl_virtio = { workspace = true }

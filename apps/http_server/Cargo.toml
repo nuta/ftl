@@ -1,9 +1,0 @@
-[package]
-name = "http_server"
-version.workspace = true
-authors.workspace = true
-edition.workspace = true
-
-[dependencies]
-ftl = { workspace = true }
-httparse = { workspace = true }

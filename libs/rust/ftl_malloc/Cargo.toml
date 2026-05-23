@@ -1,10 +1,8 @@
 [package]
-name = "kernel"
+name = "ftl_malloc"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
 
 [dependencies]
 ftl_utils = { workspace = true }
-ftl_arrayvec = { workspace = true }
-ftl_malloc = { workspace = true }

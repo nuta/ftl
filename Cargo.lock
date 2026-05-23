@@ -3,47 +3,6 @@
 version = 4
 
 [[package]]
-name = "allocator-api2"
-version = "0.2.21"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
-
-[[package]]
-name = "bootstrap"
-version = "0.0.0"
-dependencies = [
- "ftl",
- "ftl_types",
- "ftl_utils",
-]
-
-[[package]]
-name = "equivalent"
-version = "1.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "877a4ace8713b0bcf2a4e7eec82529c029f1d0619886d18145fea96c3ffe5c0f"
-
-[[package]]
-name = "foldhash"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "77ce24cb58228fbb8aa041425bb1050850ac19177686ea6e0f41a70416f56fdb"
-
-[[package]]
-name = "ftl"
-version = "0.0.0"
-dependencies = [
- "ftl_arrayvec",
- "ftl_macros",
- "ftl_types",
- "ftl_utils",
- "hashbrown",
- "log",
- "spin",
- "talc",
-]
-
-[[package]]
 name = "ftl_arrayvec"
 version = "0.0.0"
 
@@ -55,142 +14,21 @@ dependencies = [
 ]
 
 [[package]]
-name = "ftl_macros"
-version = "0.0.0"
-
-[[package]]
-name = "ftl_tcpip"
+name = "ftl_malloc"
 version = "0.0.0"
 dependencies = [
- "hashbrown",
- "log",
- "spin",
+ "ftl_utils",
 ]
-
-[[package]]
-name = "ftl_types"
-version = "0.0.0"
 
 [[package]]
 name = "ftl_utils"
 version = "0.0.0"
 
 [[package]]
-name = "ftl_virtio"
-version = "0.0.0"
-dependencies = [
- "ftl",
- "ftl_utils",
-]
-
-[[package]]
-name = "hashbrown"
-version = "0.16.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "841d1cc9bed7f9236f321df977030373f4a4163ae1a7dbfe1a51a2c1a51d9100"
-dependencies = [
- "allocator-api2",
- "equivalent",
- "foldhash",
-]
-
-[[package]]
-name = "hello"
-version = "0.0.0"
-dependencies = [
- "ftl",
-]
-
-[[package]]
-name = "http_server"
-version = "0.0.0"
-dependencies = [
- "ftl",
- "httparse",
-]
-
-[[package]]
-name = "httparse"
-version = "1.10.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6dbf3de79e51f3d586ab4cb9d5c3e2c14aa28ed23d180cf89b4df0454a69cc87"
-
-[[package]]
 name = "kernel"
 version = "0.0.0"
 dependencies = [
  "ftl_arrayvec",
- "ftl_bump_allocator",
- "ftl_types",
+ "ftl_malloc",
  "ftl_utils",
- "talc",
-]
-
-[[package]]
-name = "lock_api"
-version = "0.4.14"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "224399e74b87b5f3557511d98dff8b14089b3dadafcab6bb93eab67d3aace965"
-dependencies = [
- "scopeguard",
-]
-
-[[package]]
-name = "log"
-version = "0.4.29"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5e5032e24019045c762d3c0f28f5b6b8bbf38563a65908389bf7978758920897"
-
-[[package]]
-name = "ping"
-version = "0.0.0"
-dependencies = [
- "ftl",
-]
-
-[[package]]
-name = "pong"
-version = "0.0.0"
-dependencies = [
- "ftl",
-]
-
-[[package]]
-name = "scopeguard"
-version = "1.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
-
-[[package]]
-name = "spin"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d5fe4ccb98d9c292d56fec89a5e07da7fc4cf0dc11e156b41793132775d3e591"
-dependencies = [
- "lock_api",
-]
-
-[[package]]
-name = "talc"
-version = "4.4.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a3ae828aa394de34c7de08f522d1b86bd1c182c668d27da69caadda00590f26d"
-dependencies = [
- "lock_api",
-]
-
-[[package]]
-name = "tcpip"
-version = "0.0.0"
-dependencies = [
- "ftl",
- "ftl_tcpip",
-]
-
-[[package]]
-name = "virtio_net"
-version = "0.0.0"
-dependencies = [
- "ftl",
- "ftl_virtio",
 ]

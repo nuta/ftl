@@ -36,22 +36,6 @@ const COM1_MCR: u16 = COM1_DATA + 4;
 /// Line Status Register.
 const COM1_LSR: u16 = COM1_DATA + 5;
 
-pub(super) const SERIAL_IRQ: u8 = 4;
-
-pub(super) fn handle_interrupt() {
-    loop {
-        let ch = unsafe { in8(COM1_DATA) };
-        if ch == 0 {
-            break;
-        }
-
-        trace!("serial interrupt: \x1b[1;91m{}\x1b[0m", ch as char);
-    }
-
-    let cpuvar = super::get_cpuvar();
-    cpuvar.arch.local_apic.acknowledge_irq();
-}
-
 /// Initializes the serial port.
 pub(super) fn init() {
     // Based on "Initialization" section in https://wiki.osdev.org/Serial_Ports
@@ -69,7 +53,5 @@ pub(super) fn init() {
         out8(COM1_FCR, 0xc7);
         // Enable Data Terminal Ready (DTR) and Request to Send (RTS).
         out8(COM1_MCR, 0x03);
-        // Enable RX interrupt.
-        out8(COM1_IER, 0x01);
     }
 }

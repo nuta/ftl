@@ -22,31 +22,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v5
-    - uses: oven-sh/setup-bun@v2
-    - uses: actions/cache@v4
-      with:
-        path: |
-          ~/.rustup/
-          ~/.cargo/registry/
-          target
-        key: build-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
-        restore-keys: build-${{ runner.os }}-
     - name: Build World
-      run: bin/ftl build
+      run: ./build.sh
 
   macos_build:
     name: "Build (macOS)"
     runs-on: macos-latest
     steps:
     - uses: actions/checkout@v5
-    - uses: oven-sh/setup-bun@v2
-    - uses: actions/cache@v4
-      with:
-        path: |
-          ~/.rustup/
-          ~/.cargo/registry/
-          target
-        key: build-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
-        restore-keys: build-${{ runner.os }}-
     - name: Build World
-      run: bin/ftl build
+      run: ./build.sh

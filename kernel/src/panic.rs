@@ -1,9 +1,6 @@
-use core::panic::PanicInfo;
-
-use crate::arch;
-
+#[cfg(target_os = "none")]
 #[panic_handler]
-fn panic(info: &PanicInfo) -> ! {
+fn panic(info: &core::panic::PanicInfo) -> ! {
     println!("kernel panic: {info}");
-    arch::halt();
+    loop {}
 }

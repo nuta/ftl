@@ -1,196 +1,24 @@
-use core::arch::asm;
 use core::arch::global_asm;
 use core::arch::naked_asm;
-use core::mem::MaybeUninit;
-use core::mem::offset_of;
+
+use ftl_arrayvec::ArrayVec;
 
 use super::vmspace::BOOT_PDPT;
 use super::vmspace::BOOT_PML4;
 use super::vmspace::KERNEL_BASE;
-use crate::address::PAddr;
-use crate::address::VAddr;
-use crate::arch::NUM_CPUS_MAX;
-use crate::arch::x64::console::SERIAL_IRQ;
-use crate::arch::x64::io_apic::use_ioapic;
-use crate::arch::x64::multiboot;
-use crate::arch::x64::pvh;
+use crate::boot::BootInfo;
 
-pub(super) const NUM_GDT_ENTRIES: usize = 8;
-pub(super) const GDT_KERNEL_CS: u16 = 8;
-pub(super) const GDT_USER_DS: u16 = (4 * 8) | 3;
-pub(super) const GDT_USER_CS: u16 = (5 * 8) | 3;
-const GDT_TSS: u16 = 6 * 8;
-
-#[repr(C, packed)]
-struct Gdtr {
-    limit: u16,
-    base: u64,
-}
-
-#[repr(C, packed)]
-pub(super) struct Tss {
-    reserved0: u32,
-    rsp0: u64,
-    rsp1: u64,
-    rsp2: u64,
-    reserved1: u64,
-    ist: [u64; 7],
-    reserved2: u64,
-    reserved3: u16,
-    iomap_offset: u16,
-    /// The I/O permission map.
-    ///
-    /// - Each bit corresponds to an I/O port. If set, the port is not accessible.
-    /// - The last byte must be `0xff`.
-    io_permission_map: [u8; 8192],
-}
-
-static mut GDT_ENTRIES: [MaybeUninit<[u64; NUM_GDT_ENTRIES]>; NUM_CPUS_MAX] =
-    [const { MaybeUninit::uninit() }; NUM_CPUS_MAX];
-
-static mut TSS_ENTRIES: [MaybeUninit<Tss>; NUM_CPUS_MAX] =
-    [const { MaybeUninit::uninit() }; NUM_CPUS_MAX];
-
-const MSR_IA32_STAR: u32 = 0xc000_0081;
-const MSR_IA32_LSTAR: u32 = 0xc000_0082;
-const MSR_IA32_FMASK: u32 = 0xc000_0084;
-const MSR_IA32_EFER: u32 = 0xc000_0080;
-const EFER_SCE: u64 = 1 << 0;
-const SYSCALL_FMASK: u64 = 1 << 9; // Clear IF on SYSCALL entry.
-
-unsafe fn rdmsr(msr: u32) -> u64 {
-    let low: u32;
-    let high: u32;
-    unsafe {
-        asm!(
-            "rdmsr",
-            in("ecx") msr,
-            out("eax") low,
-            out("edx") high,
-        );
-    }
-    ((high as u64) << 32) | (low as u64)
-}
-
-unsafe fn wrmsr(msr: u32, value: u64) {
-    unsafe {
-        asm!(
-            "wrmsr",
-            in("ecx") msr,
-            in("eax") value as u32,
-            in("edx") (value >> 32) as u32,
-        );
-    }
-}
-
-extern "C" fn rust_boot(multiboot_magic: u32, start_info: PAddr) -> ! {
+extern "C" fn rust_boot(_multiboot_magic: u32, _start_info: u32) -> ! {
     super::console::init();
 
     // SeaBIOS prints an escape sequence which disables line wrapping, and messes up
     // your terminal. Revert it.
-    trace!("\x1b[?7h\n");
+    println!("\x1b[?7h");
 
     trace!("Booting FTL...");
-
-    // Enable FS/GS base.
-    unsafe {
-        asm!(
-            "mov rax, cr4",
-            "or rax, 1 << 16",
-            "mov cr4, rax",
-            out("rax") _,
-        );
-    }
-
-    let cpu_id = 0; // FIXME:
-
-    // The interrupt stack.
-    let ist1 = kernel_stack_top(cpu_id);
-
-    // Build a TSS.
-    let tss_vaddr = unsafe {
-        let tss = &mut TSS_ENTRIES[cpu_id];
-        tss.write(Tss {
-            reserved0: 0,
-            rsp0: 0,
-            rsp1: 0,
-            rsp2: 0,
-            reserved1: 0,
-            ist: [ist1, 0, 0, 0, 0, 0, 0],
-            reserved2: 0,
-            reserved3: 0,
-            iomap_offset: offset_of!(Tss, io_permission_map) as u16,
-            io_permission_map: [0xff; 8192],
-        });
-
-        VAddr::new(tss.as_ptr() as usize)
-    };
-
-    // Build a 64-bit TSS descriptor.
-    let tss_base = tss_vaddr.as_usize() as u64;
-    let mut tss_low = 0x0000890000000000;
-    tss_low |= (size_of::<Tss>() - 1) as u64; // limit (size - 1)
-    tss_low |= (tss_base & 0x00ff_ffff) << 16; // base[0:23]
-    tss_low |= (tss_base & 0xff00_0000) << 32; // base[24:31]
-    let tss_high = tss_base >> 32; // base[32:63]
-
-    // Build a GDT.
-    let gdt_vaddr = unsafe {
-        let table = &mut GDT_ENTRIES[cpu_id];
-        table.write([
-            0x0000000000000000, // null
-            0x00af9a000000ffff, // kernel_cs
-            0x00af92000000ffff, // kernel_ds
-            0x0000000000000000, // user_cs32
-            0x008ff2000000ffff, // user_ds
-            0x00affa000000ffff, // user_cs64
-            tss_low,            // tss_low
-            tss_high,           // tss_high
-        ]);
-        VAddr::new(table.as_ptr() as usize)
-    };
-
-    // Build a GDTR.
-    let gdt_base = gdt_vaddr.as_usize() as u64;
-    let gdtr = Gdtr {
-        limit: (NUM_GDT_ENTRIES * size_of::<u64>() - 1) as u16,
-        base: gdt_base,
-    };
-
-    unsafe {
-        asm!("lgdt [{}]", in(reg) &gdtr);
-        asm!("ltr ax", in("ax") GDT_TSS);
-    }
-
-    // Configure SYSCALL instructions. SYSRET (STAR[63:48]) is not set because
-    // we always use IRET.
-    unsafe {
-        let syscall_handler = super::syscall::user_syscall_handler as *const () as usize as u64;
-        wrmsr(MSR_IA32_EFER, rdmsr(MSR_IA32_EFER) | EFER_SCE);
-        wrmsr(MSR_IA32_STAR, (GDT_KERNEL_CS as u64) << 32);
-        wrmsr(MSR_IA32_LSTAR, syscall_handler);
-        wrmsr(MSR_IA32_FMASK, SYSCALL_FMASK);
-    }
-
-    super::idt::init();
-    super::pic::init();
-    super::mp_table::init();
-    super::timer::init();
-
-    use_ioapic(|ioapic| {
-        ioapic
-            .enable_irq(SERIAL_IRQ)
-            .expect("failed to enable serial IRQ");
+    crate::boot::boot(&BootInfo {
+        free_rams: ArrayVec::new(),
     });
-
-    let bootinfo = if multiboot_magic == 0x36d76289 {
-        trace!("multiboot2 magic detected");
-        multiboot::parse_multiboot2_info(start_info)
-    } else {
-        trace!("parsing as PVH");
-        pvh::parse_start_info(start_info)
-    };
-    crate::boot::boot(&bootinfo);
 }
 
 // Defines a temporary GDT to boot a CPU. Another per-CPU GDT will be set up later.
@@ -223,16 +51,12 @@ gdt_end:
 /// The per-CPU kernel stack size.
 pub(super) const KERNEL_STACK_SIZE: usize = 1024 * 1024;
 
+// In .bss (not stored in the ELF). MaybeUninit lands in .rodata under LTO.
 #[repr(align(16))]
-struct Stack(#[allow(unused)] [u8; KERNEL_STACK_SIZE]);
+struct Stack(#[allow(dead_code)] [u8; KERNEL_STACK_SIZE]);
 
-#[unsafe(link_section = ".data")]
-static BSP_STACK: MaybeUninit<Stack> = MaybeUninit::uninit();
-
-pub(super) fn kernel_stack_top(cpu_id: usize) -> u64 {
-    assert_eq!(cpu_id, 0); // TODO: SMP support
-    BSP_STACK.as_ptr() as u64 + KERNEL_STACK_SIZE as u64
-}
+#[unsafe(link_section = ".bss")]
+static BSP_STACK: Stack = Stack([0; KERNEL_STACK_SIZE]);
 
 #[unsafe(no_mangle)]
 #[unsafe(naked)]

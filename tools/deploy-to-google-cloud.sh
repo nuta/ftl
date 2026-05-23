@@ -15,7 +15,7 @@ BUCKET_PATH="gs://$1/ftl.tar.gz"
 # brew install i686-elf-grub
 GRUB_MKRESCUE=/opt/homebrew/opt/i686-elf-grub/bin/i686-elf-grub-mkrescue
 
-bin/ftl build
+ARCH=x64 ./build.sh
 
 mkdir -p isofiles/boot/grub
 cp kernel/src/arch/x64/grub.cfg isofiles/boot/grub/

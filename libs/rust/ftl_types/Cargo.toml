@@ -1,7 +1,0 @@
-[package]
-name = "ftl_types"
-version.workspace = true
-authors.workspace = true
-edition.workspace = true
-
-[dependencies]

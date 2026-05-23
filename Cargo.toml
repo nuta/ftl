@@ -6,31 +6,23 @@ edition = "2024"
 [workspace]
 resolver = "2"
 members = [
-    "apps/hello",
-    "apps/ping",
-    "apps/pong",
-    "apps/tcpip",
-    "apps/virtio_net",
-    "apps/http_server",
     "kernel",
     "libs/rust/*",
-    "apps/bootstrap",
 ]
 
 [workspace.dependencies]
-log = "0"
-talc = "4.4.3"
-spin = "0.10.0"
-hashbrown = "0.16.1"
-httparse = { version = "1.10.1", default-features = false }
-
 ftl = { path = "libs/rust/ftl" }
-ftl_types = { path = "libs/rust/ftl_types" }
 ftl_utils = { path = "libs/rust/ftl_utils" }
 ftl_bump_allocator = { path = "libs/rust/ftl_bump_allocator" }
 ftl_arrayvec = { path = "libs/rust/ftl_arrayvec" }
-ftl_virtio = { path = "libs/rust/ftl_virtio" }
-ftl_tcpip = { path = "libs/rust/ftl_tcpip", default-features = false }
+ftl_malloc = { path = "libs/rust/ftl_malloc" }
 
 [profile.dev]
 panic = "abort"
+
+[profile.release]
+panic = "abort"
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = "debuginfo"

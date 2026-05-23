@@ -1,8 +1,0 @@
-[package]
-name = "ftl_macros"
-version.workspace = true
-authors.workspace = true
-edition.workspace = true
-
-[lib]
-proc-macro = true

@@ -1,9 +1,0 @@
-[package]
-name = "tcpip"
-version.workspace = true
-authors.workspace = true
-edition.workspace = true
-
-[dependencies]
-ftl = { workspace = true }
-ftl_tcpip = { workspace = true }
