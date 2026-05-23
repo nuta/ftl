@@ -3,20 +3,24 @@ use ftl_arrayvec::ArrayVec;
 use crate::address::PAddr;
 
 pub struct FreeRam {
+    pub addr: PAddr,
+    pub size: usize,
+}
+
+#[allow(unused)]
+pub struct Module {
     pub start: PAddr,
     pub end: PAddr,
 }
 
 pub struct BootInfo {
+    #[allow(unused)]
+    pub modules: ArrayVec<Module, 8>,
     pub free_rams: ArrayVec<FreeRam, 8>,
 }
 
-pub fn boot(bootinfo: &BootInfo) -> ! {
-    for ram in &bootinfo.free_rams {
-        info!("free ram: {} - {}", ram.start, ram.end);
-    }
-
-    crate::memory::init();
+pub fn boot(bootinfo: BootInfo) -> ! {
+    crate::memory::init(&bootinfo);
 
     let mut v = alloc::collections::BTreeMap::new();
     v.insert('a', 'b');

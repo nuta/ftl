@@ -1,14 +1,14 @@
 use core::arch::global_asm;
 use core::arch::naked_asm;
 
-use ftl_arrayvec::ArrayVec;
-
+use super::multiboot;
+use super::pvh;
 use super::vmspace::BOOT_PDPT;
 use super::vmspace::BOOT_PML4;
 use super::vmspace::KERNEL_BASE;
-use crate::boot::BootInfo;
+use crate::address::PAddr;
 
-extern "C" fn rust_boot(_multiboot_magic: u32, _start_info: u32) -> ! {
+extern "C" fn rust_boot(multiboot_magic: u32, start_info: u32) -> ! {
     super::console::init();
 
     // SeaBIOS prints an escape sequence which disables line wrapping, and messes up
@@ -16,9 +16,13 @@ extern "C" fn rust_boot(_multiboot_magic: u32, _start_info: u32) -> ! {
     println!("\x1b[?7h");
 
     trace!("Booting FTL...");
-    crate::boot::boot(&BootInfo {
-        free_rams: ArrayVec::new(),
-    });
+    let bootinfo = if multiboot_magic == 0x36d76289 {
+        multiboot::parse_multiboot2_info(PAddr::new(start_info as usize))
+    } else {
+        pvh::parse_start_info(PAddr::new(start_info as usize))
+    };
+
+    crate::boot::boot(bootinfo);
 }
 
 // Defines a temporary GDT to boot a CPU. Another per-CPU GDT will be set up later.

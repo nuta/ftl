@@ -1,7 +1,12 @@
-use core::alloc::{GlobalAlloc, Layout};
+use core::alloc::GlobalAlloc;
+use core::alloc::Layout;
 
 use ftl_malloc::LinkedListAllocator;
+use ftl_utils::formatter::ByteSize;
 
+use crate::address::PAddr;
+use crate::boot::BootInfo;
+use crate::boot::FreeRam;
 use crate::spinlock::SpinLock;
 
 /// A wrapper struct to make a type page-aligned.
@@ -38,7 +43,11 @@ unsafe impl GlobalAlloc for GlobalAllocator {
         match self.inner.lock().malloc(layout.size(), layout.align()) {
             Some(ptr) => ptr,
             None => {
-                panic!("failed to malloc: size={}, align={}", layout.size(), layout.align());
+                panic!(
+                    "failed to malloc: size={}, align={}",
+                    layout.size(),
+                    layout.align()
+                );
             }
         }
     }
@@ -50,9 +59,19 @@ unsafe impl GlobalAlloc for GlobalAllocator {
     }
 }
 
-pub fn init() {
+pub fn init(bootinfo: &BootInfo) {
     unsafe {
         let ptr = &raw mut EARLY_RAM.0 as *mut _ as *mut u8;
         GLOBAL_ALLOCATOR.add_region(ptr, EARLY_RAM_SIZE);
+    }
+
+    for FreeRam { addr, size } in &bootinfo.free_rams {
+        let end = PAddr::new(addr.as_usize() + size);
+        // TODO: exclude kernel memory range
+
+        // QEMU does not exclude module regions from the free RAM regions. Exclude
+        // them manually so that the kernel won't try to allocate from them.
+
+        trace!("RAM: {addr} - {end} ({})", ByteSize(*size));
     }
 }

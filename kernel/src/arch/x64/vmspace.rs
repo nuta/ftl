@@ -1,4 +1,5 @@
 use crate::address::PAddr;
+use crate::address::VAddr;
 
 pub const KERNEL_BASE: usize = 0xffff_8000_0000_0000;
 
@@ -43,4 +44,8 @@ impl Pte {
 
         Self(paddr.as_u64() | flags)
     }
+}
+
+pub fn paddr2vaddr(paddr: PAddr) -> VAddr {
+    VAddr::new(paddr.as_usize() | KERNEL_BASE)
 }
