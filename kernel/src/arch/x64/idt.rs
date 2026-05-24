@@ -36,9 +36,9 @@ const INTERRUPT_HANDLER_SIZE: u64 = 16;
 
 const IDT_ENTRY_DEFAULT: IdtEntry = IdtEntry {
     offset0: 0,
-    selector: GDT_KERNEL_CS,
-    ist: 1,          // Use IST1 for all exception/interrupt handlers
-    gate_type: 0x8e, // interrupt gate
+    selector: 0,
+    ist: 0,
+    gate_type: 0,
     offset1: 0,
     offset2: 0,
     reserved: 0,
@@ -204,6 +204,9 @@ pub(super) fn init() {
     for i in 0..NUM_IDT_ENTRIES {
         let handler = handler_base + i as u64 * INTERRUPT_HANDLER_SIZE;
         idt[i].offset0 = handler as u16;
+        idt[i].selector = GDT_KERNEL_CS;
+        idt[i].ist = 1; // Use IST1 for all exception/interrupt handlers.
+        idt[i].gate_type = 0x8e; // Interrupt gate.
         idt[i].offset1 = (handler >> 16) as u16;
         idt[i].offset2 = (handler >> 32) as u32;
     }
