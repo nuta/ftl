@@ -4,12 +4,17 @@ mod cpuvar;
 mod gdt;
 mod idle;
 mod idt;
+mod io_apic;
 mod ioport;
+mod local_apic;
+mod mp_table;
+mod msr;
 mod multiboot;
 mod pic;
 mod pvh;
 mod syscall;
 mod thread;
+mod timer;
 mod vmspace;
 
 pub const NUM_CPUS_MAX: usize = 8;

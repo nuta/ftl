@@ -4,7 +4,9 @@ use core::arch::naked_asm;
 use core::mem::offset_of;
 
 use super::gdt::GDT_KERNEL_CS;
+use super::io_apic::IRQ_VECTOR_BASE;
 use super::thread::Thread;
+use super::timer::TIMER_IRQ;
 use crate::address::VAddr;
 use crate::cpuvar::CpuVar;
 use crate::spinlock::SpinLock;
@@ -172,27 +174,28 @@ extern "C" fn interrupt_entry() -> ! {
 
 extern "C" fn handle_interrupt(vector: u8, error_code: u64) -> ! {
     let vector_str = match vector {
-        0 => "Divide Error",
-        1 => "Debug",
-        3 => "Breakpoint",
-        4 => "Overflow",
-        5 => "BOUND Range Exceeded",
-        6 => "Invalid Opcode",
-        7 => "Device Not Available",
-        8 => "Double Fault",
-        10 => "Invalid TSS",
-        11 => "Segment Not Present",
-        12 => "Stack Segment Fault",
-        13 => "General Protection",
-        14 => "Page Fault",
-        16 => "Floating-Point Error",
-        17 => "Alignment Check",
-        18 => "Machine Check",
-        19 => "SIMD Floating-Point Numeric Error",
-        _ => "Unknown Exception",
+        14 => {
+            let cr2: u64;
+            unsafe {
+                asm!("mov {cr2}, cr2", cr2 = out(reg) cr2);
+            }
+
+            trace!("Page Fault (CR2={:x})", cr2);
+        }
+        vector if vector >= IRQ_VECTOR_BASE => {
+            let irq = vector - IRQ_VECTOR_BASE;
+            if irq == TIMER_IRQ {
+                trace!("timer interrupt");
+                super::timer::handle_interrupt();
+            } else {
+                trace!("unhandled interrupt ({vector}), error_code={error_code:#x}");
+            }
+        }
+        _ => {
+            panic!("unhandled exception ({vector}), error_code={error_code:#x}");
+        }
     };
 
-    trace!("unhandled interrupt ({vector}): {vector_str}, error_code={error_code:#x}");
     crate::thread::return_to_user();
 }
 

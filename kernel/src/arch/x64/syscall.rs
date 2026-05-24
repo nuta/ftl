@@ -1,33 +1,9 @@
-use core::arch::asm;
 use core::arch::naked_asm;
 use core::mem::offset_of;
 
 use super::gdt::GDT_KERNEL_CS;
-
-unsafe fn rdmsr(msr: u32) -> u64 {
-    let low: u32;
-    let high: u32;
-    unsafe {
-        asm!(
-            "rdmsr",
-            in("ecx") msr,
-            out("eax") low,
-            out("edx") high,
-        );
-    }
-    ((high as u64) << 32) | (low as u64)
-}
-
-unsafe fn wrmsr(msr: u32, value: u64) {
-    unsafe {
-        asm!(
-            "wrmsr",
-            in("ecx") msr,
-            in("eax") value as u32,
-            in("edx") (value >> 32) as u32,
-        );
-    }
-}
+use super::msr::rdmsr;
+use super::msr::wrmsr;
 
 fn handle_syscall() -> ! {
     panic!("syscall handler not implemented");

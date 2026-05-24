@@ -2,6 +2,7 @@ use core::arch::asm;
 use core::mem::MaybeUninit;
 
 use super::NUM_CPUS_MAX;
+use super::local_apic::LocalApic;
 
 const MAGIC: u64 = 0xc12c_12c1_2c12_c12c;
 
@@ -13,6 +14,7 @@ static mut CPU_VARS: [MaybeUninit<crate::cpuvar::CpuVar>; NUM_CPUS_MAX] =
 pub struct CpuVar {
     magic: u64,
     pub(super) kernel_rsp: u64,
+    pub(super) local_apic: LocalApic,
 }
 
 impl CpuVar {
@@ -26,6 +28,7 @@ impl CpuVar {
         Self {
             magic: MAGIC,
             kernel_rsp,
+            local_apic: LocalApic::init(),
         }
     }
 }
