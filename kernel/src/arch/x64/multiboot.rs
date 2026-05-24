@@ -73,7 +73,7 @@ multiboot2:
     // terminator
     .word 0 // type
     .word 0 // flags
-    .word 0 // checksum
+    .long 8 // size
 multiboot2_end:
 
 .popsection
