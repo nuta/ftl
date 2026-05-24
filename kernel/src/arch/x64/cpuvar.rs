@@ -12,11 +12,21 @@ static mut CPU_VARS: [MaybeUninit<crate::cpuvar::CpuVar>; NUM_CPUS_MAX] =
 #[repr(C)]
 pub struct CpuVar {
     magic: u64,
+    pub(super) kernel_rsp: u64,
 }
 
 impl CpuVar {
     pub fn new(cpu_id: usize) -> Self {
-        Self { magic: MAGIC }
+        let kernel_rsp = if cpu_id == 0 {
+            super::boot::bsp_stack_top()
+        } else {
+            todo!()
+        };
+
+        Self {
+            magic: MAGIC,
+            kernel_rsp,
+        }
     }
 }
 

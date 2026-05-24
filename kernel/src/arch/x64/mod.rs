@@ -7,6 +7,7 @@ mod ioport;
 mod multiboot;
 mod pic;
 mod pvh;
+mod syscall;
 mod thread;
 mod vmspace;
 
