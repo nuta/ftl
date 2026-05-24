@@ -3,9 +3,8 @@ use core::arch::global_asm;
 use core::arch::naked_asm;
 use core::mem::offset_of;
 
-use super::PageAttrs;
-use super::Thread;
-use super::boot::GDT_KERNEL_CS;
+use super::gdt::GDT_KERNEL_CS;
+use super::thread::Thread;
 use crate::address::VAddr;
 use crate::cpuvar::CpuVar;
 use crate::spinlock::SpinLock;

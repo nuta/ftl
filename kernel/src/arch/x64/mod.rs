@@ -1,6 +1,7 @@
 mod boot;
 mod console;
 mod cpuvar;
+mod gdt;
 mod idle;
 mod idt;
 mod ioport;

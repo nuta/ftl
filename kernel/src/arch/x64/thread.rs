@@ -1,8 +1,8 @@
 use core::arch::asm;
 use core::mem::offset_of;
 
-use super::boot::GDT_USER_CS;
-use super::boot::GDT_USER_DS;
+use super::gdt::GDT_USER_CS;
+use super::gdt::GDT_USER_DS;
 use crate::address::UAddr;
 
 #[derive(Default)]

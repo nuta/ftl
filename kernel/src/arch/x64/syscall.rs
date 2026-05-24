@@ -2,8 +2,7 @@ use core::arch::asm;
 use core::arch::naked_asm;
 use core::mem::offset_of;
 
-use super::boot::GDT_KERNEL_CS;
-use super::cpuvar::CpuVar;
+use super::gdt::GDT_KERNEL_CS;
 
 unsafe fn rdmsr(msr: u32) -> u64 {
     let low: u32;
