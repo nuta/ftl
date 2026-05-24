@@ -206,6 +206,24 @@ where
     }
 }
 
+/// A simple bubble sort implementation.
+///
+/// This is used because `sort_unstable_by_key` is a big function in .text,
+/// and free RAM regions are usually not many.
+fn bubble_sort<T, F>(slice: &mut [T], mut f: F)
+where
+    F: FnMut(&T, &T) -> bool,
+{
+    let len = slice.len();
+    for i in 0..len {
+        for j in 0..len - i - 1 {
+            if f(&slice[j], &slice[j + 1]) {
+                slice.swap(j, j + 1);
+            }
+        }
+    }
+}
+
 pub fn init(bootinfo: &BootInfo) {
     // Collect the reserved regions that we can't allocate from.
     let mut reserved_regions = ArrayVec::<Range<PAddr>, { NUM_MODULES_MAX + 1 }>::new();
@@ -215,9 +233,8 @@ pub fn init(bootinfo: &BootInfo) {
             .try_push(module.start..module.end)
             .expect("too many reserved regions");
     }
-    reserved_regions
-        .as_slice_mut()
-        .sort_unstable_by_key(|range| range.start);
+
+    bubble_sort(reserved_regions.as_slice_mut(), |a, b| a.start > b.start);
 
     // Visit the free RAM regions and add them to the page allocator.
     for FreeRam { addr, size } in &bootinfo.free_rams {
