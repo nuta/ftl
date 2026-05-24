@@ -4,9 +4,13 @@ use core::mem::offset_of;
 use super::gdt::GDT_KERNEL_CS;
 use super::msr::rdmsr;
 use super::msr::wrmsr;
+use super::thread::Thread;
+use crate::cpuvar::CpuVar;
 
-fn handle_syscall() -> ! {
-    panic!("syscall handler not implemented");
+extern "C" fn handle_syscall() -> ! {
+    trace!("syscall handler");
+
+    crate::thread::return_to_user();
 }
 
 #[unsafe(naked)]
@@ -17,12 +21,60 @@ extern "C" fn syscall_handler() -> ! {
         "swapgs",
         "cld",
 
-        // TODO: Save registers.
+        // Save RAX temporarily.
+        "mov gs:[{scratch_offset}], rax",
+
+        // Save registers.
+        "mov rax, gs:[{current_thread_offset}]",
+        "mov [rax + {rip_offset}], rcx",
+        "mov [rax + {rflags_offset}], r11",
+        "mov [rax + {rbx_offset}], rbx",
+        "mov [rax + {rcx_offset}], rcx",
+        "mov [rax + {rdx_offset}], rdx",
+        "mov [rax + {rdi_offset}], rdi",
+        "mov [rax + {rsi_offset}], rsi",
+        "mov [rax + {rbp_offset}], rbp",
+        "mov [rax + {r8_offset}], r8",
+        "mov [rax + {r9_offset}], r9",
+        "mov [rax + {r10_offset}], r10",
+        "mov [rax + {r11_offset}], r11",
+        "mov [rax + {r12_offset}], r12",
+        "mov [rax + {r13_offset}], r13",
+        "mov [rax + {r14_offset}], r14",
+        "mov [rax + {r15_offset}], r15",
+        "mov [rax + {rsp_offset}], rsp",
+
+        // Save RAX to the thread struct.
+        "mov rdi, gs:[{scratch_offset}]",
+        "mov [rax + {rax_offset}], rdi",
+
+        // Switch to the kernel stack.
         "mov rsp, gs:[{kernel_rsp_offset}]",
 
+        // Call the syscall handler.
         "jmp {handle_syscall}",
         handle_syscall = sym handle_syscall,
-        kernel_rsp_offset = const offset_of!(crate::cpuvar::CpuVar, arch.kernel_rsp),
+        current_thread_offset = const offset_of!(CpuVar, current_thread),
+        scratch_offset = const offset_of!(CpuVar, arch.scratch),
+        kernel_rsp_offset = const offset_of!(CpuVar, arch.kernel_rsp),
+        rip_offset = const offset_of!(Thread, rip),
+        rflags_offset = const offset_of!(Thread, rflags),
+        rax_offset = const offset_of!(Thread, rax),
+        rbx_offset = const offset_of!(Thread, rbx),
+        rcx_offset = const offset_of!(Thread, rcx),
+        rdx_offset = const offset_of!(Thread, rdx),
+        rdi_offset = const offset_of!(Thread, rdi),
+        rsi_offset = const offset_of!(Thread, rsi),
+        rsp_offset = const offset_of!(Thread, rsp),
+        rbp_offset = const offset_of!(Thread, rbp),
+        r8_offset = const offset_of!(Thread, r8),
+        r9_offset = const offset_of!(Thread, r9),
+        r10_offset = const offset_of!(Thread, r10),
+        r11_offset = const offset_of!(Thread, r11),
+        r12_offset = const offset_of!(Thread, r12),
+        r13_offset = const offset_of!(Thread, r13),
+        r14_offset = const offset_of!(Thread, r14),
+        r15_offset = const offset_of!(Thread, r15),
     );
 }
 

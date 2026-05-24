@@ -4,4 +4,7 @@
 .global _start
 _start:
     syscall
-    ud2
+    syscall
+    syscall
+1:
+    jmp 1b
