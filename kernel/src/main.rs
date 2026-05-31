@@ -15,6 +15,7 @@ mod arch;
 mod boot;
 mod cpuvar;
 mod error;
+mod initfs;
 mod loader;
 mod memory;
 mod panic;

@@ -6,6 +6,8 @@ use ftl_utils::alignment::align_up;
 
 use crate::arch;
 use crate::arch::MIN_PAGE_SIZE;
+use crate::boot::BootInfo;
+use crate::initfs;
 use crate::memory::PAGE_ALLOCATOR;
 use crate::memory::PageType;
 
@@ -70,13 +72,14 @@ fn load_elf(elf_file: &[u8]) {
     }
 }
 
-#[repr(align(4096))]
-struct PageAligned<T>(T);
-
-static HELLO_ELF: PageAligned<[u8; include_bytes!("../../target/server/debug/libhello.so").len()]> =
-    PageAligned(*include_bytes!("../../target/server/debug/libhello.so"));
-
-pub fn init() {
-    trace!("Loading hello.elf");
-    load_elf(&HELLO_ELF.0);
+pub fn init(bootinfo: &BootInfo) {
+    for module in &bootinfo.modules {
+        let initfs = initfs::InitFsLoader::new(module);
+        for file in initfs {
+            if file.name.starts_with(b"servers/") && file.name.ends_with(b".elf") {
+                trace!("loading {}...", core::str::from_utf8(file.name).unwrap());
+                load_elf(file.data);
+            }
+        }
+    }
 }

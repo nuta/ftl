@@ -1,6 +1,7 @@
 #!/bin/bash
 set -eu
 
+SERVERS=(hello)
 RELEASE=${RELEASE:-}
 ARCH=${ARCH:-x64}
 
@@ -19,9 +20,24 @@ else
     target="debug"
 fi
 
-cargo build "${CARGOFLAGS[@]}" --target libs/rust/ftl_api/src/arch/$ARCH/server.json \
-  --manifest-path servers/hello/Cargo.toml
+echo -n > initfs.list
+mkdir -p initfs/servers
+
+# Build servers.
+for server in "${SERVERS[@]}"; do
+  cargo build "${CARGOFLAGS[@]}" --target libs/rust/ftl_api/src/arch/$ARCH/server.json \
+    --manifest-path servers/$server/Cargo.toml
+
+  cp target/server/$target/lib$server.so initfs/servers/$server.elf
+  printf 'servers/%s.elf\0' "$server" >> initfs.list
+done
+
+# Build initfs.
+pushd initfs
+cpio -o -H newc -0 < ../initfs.list > ../initfs.cpio
+popd
+
+# Build kernel.
 cargo build "${CARGOFLAGS[@]}" --target kernel/src/arch/$ARCH/kernel.json \
   --manifest-path kernel/Cargo.toml
-
 cp target/kernel/$target/kernel ftl.elf
