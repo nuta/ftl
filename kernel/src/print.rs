@@ -28,6 +28,13 @@ macro_rules! warn {
 }
 
 #[macro_export]
+macro_rules! error {
+    ($($arg:tt)+) => {{
+        $crate::println!("[kernel    ] \x1b[31mERROR\x1b[0m  {}", format_args!($($arg)+));
+    }};
+}
+
+#[macro_export]
 macro_rules! trace {
     ($($arg:tt)+) => {{
         $crate::println!("[kernel    ] {}", format_args!($($arg)+));

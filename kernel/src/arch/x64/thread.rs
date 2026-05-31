@@ -5,7 +5,7 @@ use super::gdt::GDT_USER_CS;
 use super::gdt::GDT_USER_DS;
 use crate::address::UAddr;
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 #[repr(C, packed)]
 pub struct Thread {
     // IRET frame. The order is important!

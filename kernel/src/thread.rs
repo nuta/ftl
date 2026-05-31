@@ -1,3 +1,4 @@
+use alloc::boxed::Box;
 use core::cell::UnsafeCell;
 use core::mem::offset_of;
 
@@ -9,7 +10,6 @@ use crate::error::ErrorCode;
 use crate::scheduler::SCHEDULER;
 use crate::shared_ref::SharedRef;
 use crate::spinlock::SpinLock;
-use crate::vmspace::VmSpace;
 
 #[derive(Debug, PartialEq, Eq)]
 enum State {
@@ -25,15 +25,10 @@ struct Mutable {
 pub struct Thread {
     arch: arch::Thread,
     mutable: SpinLock<Mutable>,
-    vmspace: SharedRef<VmSpace>,
 }
 
 impl Thread {
-    pub fn new(
-        vmspace: SharedRef<VmSpace>,
-        entry: UAddr,
-        sp: UAddr,
-    ) -> Result<SharedRef<Self>, ErrorCode> {
+    pub fn new(entry: UAddr, sp: UAddr) -> Result<SharedRef<Self>, ErrorCode> {
         let mutable = Mutable {
             state: State::Created,
         };
@@ -41,14 +36,13 @@ impl Thread {
         let thread = SharedRef::new(Thread {
             mutable: SpinLock::new(mutable),
             arch: arch::Thread::new(entry, sp),
-            vmspace,
         })?;
 
         Ok(thread)
     }
 
-    pub fn vmspace(&self) -> &SharedRef<VmSpace> {
-        &self.vmspace
+    pub fn arch(&self) -> &arch::Thread {
+        &self.arch
     }
 
     pub fn start(self: &SharedRef<Self>) -> Result<(), ErrorCode> {
@@ -172,9 +166,6 @@ pub fn return_to_user() -> ! {
         // No threads to run. Enter the idle loop.
         arch::idle();
     };
-
-    // Switch the address space.
-    thread.vmspace().switch();
 
     // Update the current thread.
     let arch_thread = current.update(thread);

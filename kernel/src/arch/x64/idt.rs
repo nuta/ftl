@@ -173,7 +173,7 @@ extern "C" fn interrupt_entry() -> ! {
 }
 
 extern "C" fn handle_interrupt(vector: u8, error_code: u64) -> ! {
-    let vector_str = match vector {
+    match vector {
         14 => {
             let cr2: u64;
             unsafe {
@@ -185,7 +185,7 @@ extern "C" fn handle_interrupt(vector: u8, error_code: u64) -> ! {
         vector if vector >= IRQ_VECTOR_BASE => {
             let irq = vector - IRQ_VECTOR_BASE;
             if irq == TIMER_IRQ {
-                trace!("timer interrupt");
+                // trace!("timer interrupt");
                 super::timer::handle_interrupt();
             } else {
                 trace!("unhandled interrupt ({vector}), error_code={error_code:#x}");
@@ -194,7 +194,7 @@ extern "C" fn handle_interrupt(vector: u8, error_code: u64) -> ! {
         _ => {
             panic!("unhandled exception ({vector}), error_code={error_code:#x}");
         }
-    };
+    }
 
     crate::thread::return_to_user();
 }

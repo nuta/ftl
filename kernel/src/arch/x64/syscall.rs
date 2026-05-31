@@ -7,12 +7,6 @@ use super::msr::wrmsr;
 use super::thread::Thread;
 use crate::cpuvar::CpuVar;
 
-extern "C" fn handle_syscall() -> ! {
-    trace!("syscall handler");
-
-    crate::thread::return_to_user();
-}
-
 #[unsafe(naked)]
 #[unsafe(no_mangle)]
 extern "C" fn syscall_handler() -> ! {
@@ -53,7 +47,7 @@ extern "C" fn syscall_handler() -> ! {
 
         // Call the syscall handler.
         "jmp {handle_syscall}",
-        handle_syscall = sym handle_syscall,
+        handle_syscall = sym crate::syscall::handle_syscall,
         current_thread_offset = const offset_of!(CpuVar, current_thread),
         scratch_offset = const offset_of!(CpuVar, arch.scratch),
         kernel_rsp_offset = const offset_of!(CpuVar, arch.kernel_rsp),
