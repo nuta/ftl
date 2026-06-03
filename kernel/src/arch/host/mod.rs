@@ -92,6 +92,10 @@ pub fn set_cpuvar(_cpu_id: usize, _cpuvar: crate::cpuvar::CpuVar) {
     todo!()
 }
 
+pub fn semihosting_exit() -> ! {
+    todo!()
+}
+
 pub fn main() -> ! {
     crate::boot::boot(BootInfo {
         free_rams: ArrayVec::new(),
