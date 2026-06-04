@@ -1,5 +1,5 @@
 [package]
-name = "hello"
+name = "lx"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true

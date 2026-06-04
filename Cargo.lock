@@ -33,13 +33,6 @@ name = "ftl_utils"
 version = "0.0.0"
 
 [[package]]
-name = "hello"
-version = "0.0.0"
-dependencies = [
- "ftl_api",
-]
-
-[[package]]
 name = "kernel"
 version = "0.0.0"
 dependencies = [
@@ -48,4 +41,11 @@ dependencies = [
  "ftl_elf",
  "ftl_malloc",
  "ftl_utils",
+]
+
+[[package]]
+name = "lx"
+version = "0.0.0"
+dependencies = [
+ "ftl_api",
 ]
