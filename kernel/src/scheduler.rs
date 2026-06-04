@@ -79,9 +79,6 @@ pub fn return_to_user() -> ! {
         arch::idle();
     };
 
-    // Update the current thread.
-    let arch_thread = current.update(thread);
-
-    // Note: Drop references before calling this; this function never returns.
-    arch::Thread::enter(arch_thread);
+    // Switch to the new thread.
+    current.enter(thread);
 }

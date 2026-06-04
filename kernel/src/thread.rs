@@ -9,6 +9,7 @@ use crate::error::ErrorCode;
 use crate::scheduler::SCHEDULER;
 use crate::shared_ref::SharedRef;
 use crate::spinlock::SpinLock;
+use crate::vmspace::VmSpace;
 
 #[derive(Debug, PartialEq, Eq)]
 enum State {
@@ -23,18 +24,24 @@ struct Mutable {
 #[repr(C)]
 pub struct Thread {
     arch: arch::Thread,
+    vmspace: SharedRef<VmSpace>,
     mutable: SpinLock<Mutable>,
 }
 
 impl Thread {
-    pub fn new(entry: UAddr, sp: UAddr) -> Result<SharedRef<Self>, ErrorCode> {
+    pub fn new(
+        vmspace: SharedRef<VmSpace>,
+        entry: UAddr,
+        sp: UAddr,
+    ) -> Result<SharedRef<Self>, ErrorCode> {
         let mutable = Mutable {
             state: State::Suspended,
         };
 
         let thread = SharedRef::new(Thread {
-            mutable: SpinLock::new(mutable),
             arch: arch::Thread::new(entry, sp),
+            vmspace,
+            mutable: SpinLock::new(mutable),
         })?;
 
         Ok(thread)
@@ -44,6 +51,10 @@ impl Thread {
         // TODO: Avoid locking the spin lock.
         let mutable = self.mutable.lock();
         matches!(mutable.state, State::Runnable)
+    }
+
+    pub fn vmspace(&self) -> &SharedRef<VmSpace> {
+        &self.vmspace
     }
 
     pub fn arch(&self) -> &arch::Thread {
@@ -88,23 +99,6 @@ impl CurrentThread {
         }
     }
 
-    /// Updates the current thread.
-    pub fn update(&self, next: SharedRef<Thread>) -> *const arch::Thread {
-        let new_ptr = next.into_raw();
-
-        // SAFETY: Data races should not happen because this is CPU-local and
-        //         interrupts are disabled.
-        let old_ptr = unsafe { self.ptr.replace(new_ptr) };
-
-        // Decrement the ref count of the current thread.
-        if !old_ptr.is_null() {
-            drop(unsafe { SharedRef::from_raw(old_ptr) });
-        }
-
-        // SAFETY: We've set the new pointer and SharedRef is always non-null.
-        unsafe { self.arch_thread() }
-    }
-
     /// Clears the current thread.
     pub fn clear(&self) {
         unsafe { self.ptr.replace(core::ptr::null()) };
@@ -138,5 +132,37 @@ impl CurrentThread {
 
         // SAFETY: The static_assert above guarantees arch::Thread is at the offset 0.
         unsafe { *self.ptr.get() as *mut arch::Thread }
+    }
+
+    /// Updates the current thread.
+    fn update(&self, next: SharedRef<Thread>) {
+        let new_ptr = next.into_raw();
+
+        // SAFETY: Data races should not happen because this is CPU-local and
+        //         interrupts are disabled.
+        let old_ptr = unsafe { self.ptr.replace(new_ptr) };
+
+        // Decrement the ref count of the current thread.
+        if !old_ptr.is_null() {
+            drop(unsafe { SharedRef::from_raw(old_ptr) });
+        }
+    }
+
+    /// Switches into a new thread.
+    ///
+    /// # Warning
+    ///
+    /// Drop reference counters and lock guards before calling this; this
+    /// function never returns.
+    pub fn enter(&self, new_thread: SharedRef<Thread>) -> ! {
+        // Switch to the new thread's virtual memory space.
+        new_thread.vmspace().switch();
+
+        self.update(new_thread);
+
+        // SAFETY: We've set the new pointer and SharedRef is always non-null.
+        let arch_thread = unsafe { self.arch_thread() };
+
+        arch::Thread::enter(arch_thread);
     }
 }
