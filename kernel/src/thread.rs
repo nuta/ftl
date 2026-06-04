@@ -68,9 +68,7 @@ impl Thread {
         }
 
         mutable.state = State::Runnable;
-        if let Err(e) = SCHEDULER.push_front(self.clone()) {
-            return Err(e);
-        }
+        SCHEDULER.push_front(self.clone())?;
 
         Ok(())
     }

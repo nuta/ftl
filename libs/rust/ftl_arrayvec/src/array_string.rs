@@ -15,6 +15,12 @@ pub struct ArrayString<const N: usize> {
     inner: ArrayVec<u8, N>,
 }
 
+impl<const N: usize> Default for ArrayString<N> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<const N: usize> ArrayString<N> {
     pub const fn new() -> Self {
         Self {

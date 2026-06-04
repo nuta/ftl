@@ -74,6 +74,12 @@ pub struct LinkedListAllocator {
     head: Option<NonNull<Header>>,
 }
 
+impl Default for LinkedListAllocator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl LinkedListAllocator {
     pub const fn new() -> Self {
         Self { head: None }

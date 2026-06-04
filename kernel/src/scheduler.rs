@@ -60,14 +60,13 @@ pub fn return_to_user() -> ! {
     let cpuvar = arch::get_cpuvar();
     let current = &cpuvar.current_thread;
 
-    if let Some(current) = current.thread() {
-        if current.is_runnable() {
+    if let Some(current) = current.thread()
+        && current.is_runnable() {
             // The current thread is runnable. Push it back to the scheduler.
             SCHEDULER
                 .push_front(current)
                 .expect("out of memory in runqueue"); // FIXME:
         }
-    }
 
     let Some(thread) = SCHEDULER.pop() else {
         // Clear the current thread. Otherwise, the interrupt handler would

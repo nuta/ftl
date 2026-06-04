@@ -111,7 +111,6 @@ impl PageAllocator {
         let allocator = BumpAllocator::new(start.as_usize(), end.as_usize());
         if regions.try_push(allocator).is_err() {
             trace!("too many free RAM regions");
-            return;
         }
     }
 

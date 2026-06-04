@@ -52,7 +52,7 @@ impl<T, const N: usize> ArrayVec<T, N> {
         }
 
         // SAFETY: index < self.len guarantees that the slot is initialized.
-        Some(unsafe { &self.elems[index].assume_init_ref() })
+        Some(unsafe { self.elems[index].assume_init_ref() })
     }
 
     pub const fn as_slice(&self) -> &[T] {
