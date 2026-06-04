@@ -16,6 +16,7 @@ pub struct Module {
 pub const NUM_MODULES_MAX: usize = 8;
 
 pub struct BootInfo {
+    pub cmdline: &'static [u8],
     #[allow(unused)]
     pub modules: ArrayVec<Module, NUM_MODULES_MAX>,
     pub free_rams: ArrayVec<FreeRam, 8>,

@@ -1,5 +1,7 @@
 //! PVH boot protocol.
 
+use core::slice;
+
 use ftl_arrayvec::ArrayVec;
 use ftl_utils::formatter::ByteSize;
 
@@ -44,6 +46,22 @@ struct HvmMemoryMapEntry {
     reserved: u32,
 }
 
+fn cstr2slice(paddr: PAddr) -> &'static [u8] {
+    if paddr.as_usize() == 0 {
+        return b"";
+    }
+
+    let ptr: *const u8 = paddr2vaddr(paddr).as_ptr();
+    let mut len = 0;
+    unsafe {
+        while *ptr.add(len) != 0 {
+            len += 1;
+        }
+
+        slice::from_raw_parts(ptr, len)
+    }
+}
+
 pub fn parse_start_info(start_info: PAddr) -> BootInfo {
     let start_info = unsafe { &*(paddr2vaddr(start_info).as_usize() as *const HvmStartInfo) };
     if start_info.magic != [b'x', b'E' | 0x80, b'n', b'3'] {
@@ -52,6 +70,8 @@ pub fn parse_start_info(start_info: PAddr) -> BootInfo {
             start_info.magic
         );
     }
+
+    let cmdline = cstr2slice(PAddr::new(start_info.cmdline_paddr as usize));
 
     let modlist_paddr = PAddr::new(start_info.modlist_paddr as usize);
     let modlist = unsafe {
@@ -89,5 +109,9 @@ pub fn parse_start_info(start_info: PAddr) -> BootInfo {
         }
     }
 
-    BootInfo { free_rams, modules }
+    BootInfo {
+        cmdline,
+        free_rams,
+        modules,
+    }
 }

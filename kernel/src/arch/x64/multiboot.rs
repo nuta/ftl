@@ -4,6 +4,7 @@
 
 use core::arch::global_asm;
 use core::mem::size_of;
+use core::slice;
 
 use ftl_arrayvec::ArrayVec;
 use ftl_utils::formatter::ByteSize;
@@ -51,8 +52,9 @@ struct Multiboot2Module {
     mod_end: u32,
 }
 
-pub const MULTIBOOT2_TAG_MODULE: u32 = 3;
-pub const MULTIBOOT2_TAG_MEMORY_MAP: u32 = 6;
+const MULTIBOOT2_TAG_CMDLINE: u32 = 1;
+const MULTIBOOT2_TAG_MODULE: u32 = 3;
+const MULTIBOOT2_TAG_MEMORY_MAP: u32 = 6;
 const MULTIBOOT2_MEMORY_AVAILABLE: u32 = 1;
 
 // The multiboot2 header.
@@ -94,10 +96,22 @@ pub(super) fn parse_multiboot2_info(info_addr: PAddr) -> BootInfo {
     let mut offset = size_of::<Multiboot2BootInfoHeader>();
     let mut free_rams = ArrayVec::<FreeRam, 8>::new();
     let mut modules = ArrayVec::<Module, 8>::new();
+    let mut cmdline: &'static [u8] = b"";
     while offset < total_size {
         let tag_header: &Multiboot2TagHeader = unsafe { paddr2ptr(info_addr + offset) };
 
         match tag_header.type_ {
+            MULTIBOOT2_TAG_CMDLINE => {
+                let start = info_addr + offset + size_of::<Multiboot2TagHeader>();
+                let len =
+                    (tag_header.size as usize).saturating_sub(size_of::<Multiboot2TagHeader>());
+                let cmdline_with_null = unsafe { slice::from_raw_parts(paddr2ptr(start), len) };
+                cmdline = if let Some(null_index) = cmdline_with_null.iter().position(|b| *b == 0) {
+                    &cmdline_with_null[..null_index]
+                } else {
+                    cmdline_with_null
+                };
+            }
             MULTIBOOT2_TAG_MEMORY_MAP => {
                 let mmap: &Multiboot2MemoryMapHeader = unsafe { paddr2ptr(info_addr + offset) };
 
@@ -150,5 +164,9 @@ pub(super) fn parse_multiboot2_info(info_addr: PAddr) -> BootInfo {
         offset += (tag_header.size as usize + 7) & !7;
     }
 
-    BootInfo { free_rams, modules }
+    BootInfo {
+        cmdline,
+        free_rams,
+        modules,
+    }
 }

@@ -98,6 +98,7 @@ pub fn semihosting_exit() -> ! {
 
 pub fn main() -> ! {
     crate::boot::boot(BootInfo {
+        cmdline: b"",
         free_rams: ArrayVec::new(),
         modules: ArrayVec::new(),
     });
