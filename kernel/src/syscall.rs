@@ -1,5 +1,4 @@
 use crate::arch::get_cpuvar;
-use crate::thread::return_to_user;
 
 pub extern "C" fn handle_syscall() -> ! {
     let current = {
@@ -8,5 +7,5 @@ pub extern "C" fn handle_syscall() -> ! {
     };
 
     todo!("handle syscall");
-    return_to_user();
+    crate::scheduler::return_to_user();
 }

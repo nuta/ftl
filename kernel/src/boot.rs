@@ -26,5 +26,5 @@ pub fn boot(bootinfo: BootInfo) -> ! {
     crate::cpuvar::init(0);
     crate::loader::init(&bootinfo);
     crate::arch::semihosting_exit();
-    crate::thread::return_to_user();
+    crate::scheduler::return_to_user();
 }

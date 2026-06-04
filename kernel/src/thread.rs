@@ -1,4 +1,3 @@
-use alloc::boxed::Box;
 use core::cell::UnsafeCell;
 use core::mem::offset_of;
 
@@ -13,7 +12,7 @@ use crate::spinlock::SpinLock;
 
 #[derive(Debug, PartialEq, Eq)]
 enum State {
-    Created,
+    Suspended,
     Runnable,
 }
 
@@ -30,7 +29,7 @@ pub struct Thread {
 impl Thread {
     pub fn new(entry: UAddr, sp: UAddr) -> Result<SharedRef<Self>, ErrorCode> {
         let mutable = Mutable {
-            state: State::Created,
+            state: State::Suspended,
         };
 
         let thread = SharedRef::new(Thread {
@@ -41,13 +40,19 @@ impl Thread {
         Ok(thread)
     }
 
+    pub fn is_runnable(&self) -> bool {
+        // TODO: Avoid locking the spin lock.
+        let mutable = self.mutable.lock();
+        matches!(mutable.state, State::Runnable)
+    }
+
     pub fn arch(&self) -> &arch::Thread {
         &self.arch
     }
 
     pub fn start(self: &SharedRef<Self>) -> Result<(), ErrorCode> {
         let mut mutable = self.mutable.lock();
-        if mutable.state != State::Created {
+        if mutable.state != State::Suspended {
             return Err(ErrorCode::InvalidState);
         }
 
@@ -84,8 +89,7 @@ impl CurrentThread {
     }
 
     /// Updates the current thread.
-    ///
-    fn update(&self, next: SharedRef<Thread>) -> *const arch::Thread {
+    pub fn update(&self, next: SharedRef<Thread>) -> *const arch::Thread {
         let new_ptr = next.into_raw();
 
         // SAFETY: Data races should not happen because this is CPU-local and
@@ -135,41 +139,4 @@ impl CurrentThread {
         // SAFETY: The static_assert above guarantees arch::Thread is at the offset 0.
         unsafe { *self.ptr.get() as *mut arch::Thread }
     }
-}
-
-/// Jumps to a thread.
-///
-/// In other words, it leaves the kernel. The kernel will be resumed when
-/// an exception or interrupt occurs.
-///
-/// Unlike traditional operating systems, this function never returns because of
-/// the single kernel stack design.
-pub fn return_to_user() -> ! {
-    let cpuvar = arch::get_cpuvar();
-    let current = &cpuvar.current_thread;
-
-    if let Some(current) = current.thread() {
-        if matches!(current.mutable.lock().state, State::Runnable) {
-            // The current thread is runnable. Push it back to the scheduler.
-            SCHEDULER
-                .push_front(current)
-                .expect("out of memory in runqueue"); // FIXME:
-        }
-    }
-
-    let Some(thread) = SCHEDULER.pop() else {
-        // Clear the current thread. Otherwise, the interrupt handler would
-        // overwrite the user's system call context (registers) with the idle
-        // thread's context.
-        current.clear();
-
-        // No threads to run. Enter the idle loop.
-        arch::idle();
-    };
-
-    // Update the current thread.
-    let arch_thread = current.update(thread);
-
-    // Note: Drop references before calling this; this function never returns.
-    arch::Thread::enter(arch_thread);
 }
