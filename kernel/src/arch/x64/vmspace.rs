@@ -1,5 +1,6 @@
 use core::arch::asm;
 use core::ops::BitOr;
+use core::ops::Range;
 
 use ftl_utils::alignment::is_aligned;
 
@@ -237,10 +238,10 @@ unsafe extern "C" {
     static __kernel_memory_end: u8;
 }
 
-pub fn kernel_reserved_range() -> Range<PAddr> {
+pub fn get_kernel_reserved_range() -> Range<PAddr> {
     let start = VAddr::new(&raw const __kernel_memory as usize);
     let end = VAddr::new(&raw const __kernel_memory_end as usize);
-    let start_paddr = arch::vaddr2paddr(start);
-    let end_paddr = arch::vaddr2paddr(end);
+    let start_paddr = vaddr2paddr(start);
+    let end_paddr = vaddr2paddr(end);
     start_paddr..end_paddr
 }

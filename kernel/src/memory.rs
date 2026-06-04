@@ -213,7 +213,7 @@ pub fn init(bootinfo: &BootInfo) {
     // Collect the reserved regions that we can't allocate from.
     let mut reserved_regions = ArrayVec::<Range<PAddr>, { NUM_MODULES_MAX + 1 }>::new();
     reserved_regions
-        .try_push(arch::get_kernel_memory_range())
+        .try_push(arch::get_kernel_reserved_range())
         .unwrap();
     for module in &bootinfo.modules {
         reserved_regions

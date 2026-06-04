@@ -22,10 +22,6 @@ pub fn paddr2vaddr(_paddr: PAddr) -> VAddr {
     todo!()
 }
 
-pub fn vaddr2paddr(_vaddr: VAddr) -> PAddr {
-    todo!()
-}
-
 #[derive(Clone, Copy)]
 pub struct PageAttrs(usize);
 
@@ -97,7 +93,7 @@ pub fn semihosting_exit() -> ! {
     todo!()
 }
 
-pub fn get_kernel_memory_range() -> Range<PAddr> {
+pub fn get_kernel_reserved_range() -> Range<PAddr> {
     todo!()
 }
 
