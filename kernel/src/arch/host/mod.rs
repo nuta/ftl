@@ -1,4 +1,5 @@
 use core::ops::BitOr;
+use std::ops::Range;
 
 use ftl_arrayvec::ArrayVec;
 
@@ -96,6 +97,11 @@ pub fn semihosting_exit() -> ! {
     todo!()
 }
 
+pub fn get_kernel_memory_range() -> Range<PAddr> {
+    todo!()
+}
+
+#[unsafe(no_mangle)]
 pub fn main() -> ! {
     crate::boot::boot(BootInfo {
         cmdline: b"",

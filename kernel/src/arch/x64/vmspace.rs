@@ -231,3 +231,16 @@ impl VmSpace {
         Ok(())
     }
 }
+
+unsafe extern "C" {
+    static __kernel_memory: u8;
+    static __kernel_memory_end: u8;
+}
+
+pub fn kernel_reserved_range() -> Range<PAddr> {
+    let start = VAddr::new(&raw const __kernel_memory as usize);
+    let end = VAddr::new(&raw const __kernel_memory_end as usize);
+    let start_paddr = arch::vaddr2paddr(start);
+    let end_paddr = arch::vaddr2paddr(end);
+    start_paddr..end_paddr
+}

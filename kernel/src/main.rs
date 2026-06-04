@@ -1,9 +1,10 @@
-#![no_std]
+#![cfg_attr(target_os = "none", no_std)]
 #![no_main]
 #![feature(coerce_unsized)]
 #![feature(unsize)]
 #![feature(unsafe_cell_access)]
 #![feature(arbitrary_self_types)]
+#![allow(dead_code)]
 
 extern crate alloc;
 
@@ -26,8 +27,3 @@ mod syscall;
 mod thread;
 mod vmarea;
 mod vmspace;
-
-#[cfg(not(target_os = "none"))]
-pub fn main() {
-    crate::arch::host::main();
-}

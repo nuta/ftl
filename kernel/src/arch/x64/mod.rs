@@ -31,5 +31,6 @@ pub use vmspace::DIRECT_MAP_END;
 pub use vmspace::MIN_PAGE_SIZE;
 pub use vmspace::PageAttrs;
 pub use vmspace::VmSpace;
+pub use vmspace::get_kernel_memory_range;
 pub use vmspace::paddr2vaddr;
 pub use vmspace::vaddr2paddr;

@@ -10,7 +10,6 @@ use ftl_utils::alignment::is_aligned;
 use ftl_utils::formatter::ByteSize;
 
 use crate::address::PAddr;
-use crate::address::VAddr;
 use crate::arch;
 use crate::arch::MIN_PAGE_SIZE;
 use crate::boot::BootInfo;
@@ -150,19 +149,6 @@ impl PageAllocator {
     }
 }
 
-unsafe extern "C" {
-    static __kernel_memory: u8;
-    static __kernel_memory_end: u8;
-}
-
-fn kernel_reserved_range() -> Range<PAddr> {
-    let start = VAddr::new(&raw const __kernel_memory as usize);
-    let end = VAddr::new(&raw const __kernel_memory_end as usize);
-    let start_paddr = arch::vaddr2paddr(start);
-    let end_paddr = arch::vaddr2paddr(end);
-    start_paddr..end_paddr
-}
-
 /// Calls `f` for each unused region between `addr` and `end`, excluding
 /// the reserved regions and memory outside the direct map.
 ///
@@ -227,7 +213,9 @@ where
 pub fn init(bootinfo: &BootInfo) {
     // Collect the reserved regions that we can't allocate from.
     let mut reserved_regions = ArrayVec::<Range<PAddr>, { NUM_MODULES_MAX + 1 }>::new();
-    reserved_regions.try_push(kernel_reserved_range()).unwrap();
+    reserved_regions
+        .try_push(arch::get_kernel_memory_range())
+        .unwrap();
     for module in &bootinfo.modules {
         reserved_regions
             .try_push(module.start..module.end)
