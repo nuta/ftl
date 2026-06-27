@@ -1,12 +1,12 @@
 use alloc::vec::Vec;
 
 use ftl_api::start::StartInfo;
+use ftl_utils::spinlock::SpinLock;
 
 use crate::arch;
 use crate::boot::BootInfo;
 use crate::initfs;
 use crate::loader::LoadedElf;
-use crate::spinlock::SpinLock;
 
 const START_INFO: &StartInfo = &StartInfo {
     print: |bytes| {

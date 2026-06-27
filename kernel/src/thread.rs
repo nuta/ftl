@@ -1,6 +1,7 @@
 use core::cell::UnsafeCell;
 use core::mem::offset_of;
 
+use ftl_utils::spinlock::SpinLock;
 use ftl_utils::static_assert;
 
 use crate::address::UAddr;
@@ -8,7 +9,6 @@ use crate::arch;
 use crate::error::ErrorCode;
 use crate::scheduler::SCHEDULER;
 use crate::shared_ref::SharedRef;
-use crate::spinlock::SpinLock;
 use crate::vmspace::VmSpace;
 
 #[derive(Debug, PartialEq, Eq)]

@@ -1,9 +1,10 @@
 use alloc::collections::vec_deque::VecDeque;
 
+use ftl_utils::spinlock::SpinLock;
+
 use crate::arch;
 use crate::error::ErrorCode;
 use crate::shared_ref::SharedRef;
-use crate::spinlock::SpinLock;
 use crate::thread::Thread;
 
 pub static SCHEDULER: Scheduler = Scheduler::new();
@@ -61,12 +62,13 @@ pub fn return_to_user() -> ! {
     let current = &cpuvar.current_thread;
 
     if let Some(current) = current.thread()
-        && current.is_runnable() {
-            // The current thread is runnable. Push it back to the scheduler.
-            SCHEDULER
-                .push_front(current)
-                .expect("out of memory in runqueue"); // FIXME:
-        }
+        && current.is_runnable()
+    {
+        // The current thread is runnable. Push it back to the scheduler.
+        SCHEDULER
+            .push_front(current)
+            .expect("out of memory in runqueue"); // FIXME:
+    }
 
     let Some(thread) = SCHEDULER.pop() else {
         // Clear the current thread. Otherwise, the interrupt handler would

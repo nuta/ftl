@@ -3,6 +3,7 @@ use core::ops::BitOr;
 use core::ops::Range;
 
 use ftl_utils::alignment::is_aligned;
+use ftl_utils::spinlock::SpinLock;
 
 use crate::address::PAddr;
 use crate::address::UAddr;
@@ -10,7 +11,6 @@ use crate::address::VAddr;
 use crate::error::ErrorCode;
 use crate::memory::PAGE_ALLOCATOR;
 use crate::memory::PageType;
-use crate::spinlock::SpinLock;
 
 pub const MIN_PAGE_SIZE: usize = 4096;
 pub const KERNEL_BASE: usize = 0xffff_8000_0000_0000;

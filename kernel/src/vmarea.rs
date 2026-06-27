@@ -3,6 +3,7 @@ use core::cmp::min;
 use core::ptr;
 
 use ftl_utils::alignment::is_aligned;
+use ftl_utils::spinlock::SpinLock;
 
 use crate::address::PAddr;
 use crate::arch;
@@ -11,7 +12,6 @@ use crate::error::ErrorCode;
 use crate::memory::PAGE_ALLOCATOR;
 use crate::memory::PageType;
 use crate::shared_ref::SharedRef;
-use crate::spinlock::SpinLock;
 
 /// A physical memory page.
 struct Page {

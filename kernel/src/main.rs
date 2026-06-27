@@ -23,7 +23,6 @@ mod panic;
 mod scheduler;
 mod server;
 mod shared_ref;
-mod spinlock;
 mod syscall;
 mod thread;
 mod vmarea;

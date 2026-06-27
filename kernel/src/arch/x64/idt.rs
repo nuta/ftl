@@ -3,13 +3,14 @@ use core::arch::global_asm;
 use core::arch::naked_asm;
 use core::mem::offset_of;
 
+use ftl_utils::spinlock::SpinLock;
+
 use super::gdt::GDT_KERNEL_CS;
 use super::io_apic::IRQ_VECTOR_BASE;
 use super::thread::Thread;
 use super::timer::TIMER_IRQ;
 use crate::address::VAddr;
 use crate::cpuvar::CpuVar;
-use crate::spinlock::SpinLock;
 
 #[derive(Debug, Clone, Copy)]
 #[repr(C, packed)]

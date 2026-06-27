@@ -8,6 +8,7 @@ use ftl_bump_allocator::BumpAllocator;
 use ftl_malloc::LinkedListAllocator;
 use ftl_utils::alignment::is_aligned;
 use ftl_utils::formatter::ByteSize;
+use ftl_utils::spinlock::SpinLock;
 
 use crate::address::PAddr;
 use crate::arch;
@@ -15,7 +16,6 @@ use crate::arch::MIN_PAGE_SIZE;
 use crate::boot::BootInfo;
 use crate::boot::FreeRam;
 use crate::boot::NUM_MODULES_MAX;
-use crate::spinlock::SpinLock;
 
 const MALLOC_CHUNK_SIZE: usize = 128 * 1024; // 128 KB
 

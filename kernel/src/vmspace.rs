@@ -1,12 +1,13 @@
 use alloc::vec::Vec;
 
+use ftl_utils::spinlock::SpinLock;
+
 use crate::address::UAddr;
 use crate::arch;
 use crate::arch::MIN_PAGE_SIZE;
 use crate::arch::PageAttrs;
 use crate::error::ErrorCode;
 use crate::shared_ref::SharedRef;
-use crate::spinlock::SpinLock;
 use crate::vmarea::VmArea;
 
 struct Mapping {
