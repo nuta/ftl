@@ -30,8 +30,9 @@ zig cc -O2 -target x86_64-linux-musl apps/hello/hello.S -ffreestanding -nostdlib
 
 # Build servers.
 for server in "${SERVERS[@]}"; do
-  cargo build "${CARGOFLAGS[@]}" --target libs/rust/ftl_api/src/arch/$ARCH/server.json \
-    --manifest-path servers/$server/Cargo.toml
+  FTL_LOG_PREFIX="[$(printf '%-10s' "$server")] " \
+    cargo build "${CARGOFLAGS[@]}" --target libs/rust/ftl_api/src/arch/$ARCH/server.json \
+      --manifest-path servers/$server/Cargo.toml
 
   cp target/server/$target/lib$server.so initfs/servers/$server.elf
   printf 'servers/%s.elf\0' "$server" >> initfs.list

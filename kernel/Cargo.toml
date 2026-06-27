@@ -10,3 +10,4 @@ ftl_arrayvec = { workspace = true }
 ftl_malloc = { workspace = true }
 ftl_bump_allocator = { workspace = true }
 ftl_elf = { workspace = true }
+ftl_api = { workspace = true, features = ["kernel"] }

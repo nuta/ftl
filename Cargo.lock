@@ -36,6 +36,7 @@ version = "0.0.0"
 name = "kernel"
 version = "0.0.0"
 dependencies = [
+ "ftl_api",
  "ftl_arrayvec",
  "ftl_bump_allocator",
  "ftl_elf",

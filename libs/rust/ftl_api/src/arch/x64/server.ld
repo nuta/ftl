@@ -1,4 +1,4 @@
-ENTRY(init)
+ENTRY(server_start)
 
 /*
  * Define the program headers explicitly to drop unused ones such as
@@ -9,6 +9,7 @@ PHDRS {
     rodata PT_LOAD;
     data PT_LOAD;
     bss PT_LOAD;
+    dynamic PT_DYNAMIC;
 }
 
 SECTIONS {
@@ -28,7 +29,7 @@ SECTIONS {
         *(.bss .bss.*)
     } : bss
 
-    ASSERT(DEFINED(init), "server entry symbol init must be defined")
-    ASSERT(SIZEOF(.rel.dyn) == 0, "server image must not contain REL relocations")
-    ASSERT(SIZEOF(.rela.dyn) == 0, "server image must not contain RELA relocations")
+    .dynamic : {
+        *(.dynamic)
+    } : bss : dynamic
 }

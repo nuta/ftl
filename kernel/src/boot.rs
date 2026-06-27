@@ -25,6 +25,6 @@ pub struct BootInfo {
 pub fn boot(bootinfo: BootInfo) -> ! {
     crate::memory::init(&bootinfo);
     crate::cpuvar::init(0);
-    crate::loader::init(&bootinfo);
+    crate::server::init(&bootinfo);
     crate::scheduler::return_to_user();
 }

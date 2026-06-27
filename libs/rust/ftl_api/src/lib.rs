@@ -1,14 +1,21 @@
 #![no_std]
 
-#[inline(never)]
-pub fn foo() {
-    unsafe {
-        core::arch::asm!("nop");
-    }
+#[macro_use]
+pub mod print;
+
+pub mod error;
+pub mod start;
+
+pub type Result<T> = core::result::Result<T, error::ErrorCode>;
+
+pub struct Spec {
+    pub name: &'static [u8],
+    pub start: fn(),
 }
 
-#[cfg(target_os = "none")]
-#[panic_handler]
-fn panic(_info: &core::panic::PanicInfo) -> ! {
-    loop {}
+pub fn start<R, F: Fn() -> R>(ctor: F) {
+    ctor();
 }
+
+#[cfg(not(feature = "kernel"))]
+mod panic;

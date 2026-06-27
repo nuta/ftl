@@ -12,7 +12,9 @@
   "pre-link-args": {
     "ld.lld": [
       "-T",
-      "libs/rust/ftl_api/src/arch/x64/server.ld"
+      "libs/rust/ftl_api/src/arch/x64/server.ld",
+      "-Bsymbolic",
+      "--no-undefined"
     ]
   },
   "llvm-target": "x86_64-unknown-none-elf",

@@ -58,6 +58,44 @@ pub const PF_W: u32 = 0x2;
 /// Readable segment.
 pub const PF_R: u32 = 0x4;
 
+#[derive(Debug, Clone, Copy)]
+#[repr(C)]
+pub struct Dyn64 {
+    pub d_tag: i64,
+    pub d_val: u64,
+}
+
+#[cfg(target_pointer_width = "64")]
+pub type Dyn = Dyn64;
+
+pub const DT_NULL: i64 = 0;
+pub const DT_RELA: i64 = 7;
+pub const DT_RELASZ: i64 = 8;
+
+#[derive(Debug, Clone, Copy)]
+#[repr(C)]
+pub struct Rela64 {
+    pub r_offset: u64,
+    pub r_info: u64,
+    pub r_addend: i64,
+}
+
+#[cfg(target_pointer_width = "64")]
+pub type Rela = Rela64;
+
+impl Rela {
+    pub fn r_sym(&self) -> u32 {
+        (self.r_info >> 32) as u32
+    }
+
+    pub fn r_type(&self) -> u32 {
+        self.r_info as u32
+    }
+}
+
+#[cfg(target_arch = "x86_64")]
+pub const R_X86_64_RELATIVE: u32 = 8;
+
 #[derive(Debug)]
 #[repr(C)]
 pub struct Phdr64 {
