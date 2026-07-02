@@ -5,6 +5,8 @@ authors.workspace = true
 edition.workspace = true
 
 [dependencies]
+ftl_malloc = { workspace = true }
+ftl_utils = { workspace = true }
 
 [features]
 kernel = []

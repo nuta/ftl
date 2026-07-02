@@ -19,3 +19,6 @@ pub fn start<R, F: Fn() -> R>(ctor: F) {
 
 #[cfg(not(feature = "kernel"))]
 mod panic;
+
+#[cfg(not(feature = "kernel"))]
+pub mod allocator;

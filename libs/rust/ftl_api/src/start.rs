@@ -4,6 +4,7 @@ use core::sync::atomic::Ordering;
 static START_INFO: AtomicUsize = AtomicUsize::new(0);
 
 pub struct StartInfo {
+    pub malloc: fn(size: usize) -> crate::Result<*mut u8>,
     pub print: fn(bytes: &[u8]),
     pub panic: fn(),
 }

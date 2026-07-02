@@ -1,5 +1,9 @@
 #![cfg_attr(target_os = "none", no_std)]
 
+extern crate alloc;
+
+use alloc::vec::Vec;
+
 use ftl_api::Spec;
 use ftl_api::info;
 
@@ -9,6 +13,10 @@ impl Server {
     fn new() -> Self {
         // TODO: Get initfs from environment
         info!("Server::new()");
+        let mut v = Vec::new();
+        v.push(123);
+        v.push(456);
+        info!("v: {:?}", v);
         Self {}
     }
 }

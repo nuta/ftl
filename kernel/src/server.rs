@@ -1,5 +1,6 @@
 use alloc::vec::Vec;
 
+use ftl_api::error::ErrorCode;
 use ftl_api::start::StartInfo;
 use ftl_utils::spinlock::SpinLock;
 
@@ -7,8 +8,18 @@ use crate::arch;
 use crate::boot::BootInfo;
 use crate::initfs;
 use crate::loader::LoadedElf;
+use crate::memory::PAGE_ALLOCATOR;
+use crate::memory::PageType;
 
 const START_INFO: &StartInfo = &StartInfo {
+    malloc: |size| {
+        let paddr = PAGE_ALLOCATOR
+            .alloc(size, PageType::Dirty)
+            .ok_or(ErrorCode::OUT_OF_MEMORY)?;
+
+        let ptr = arch::paddr2vaddr(paddr).as_mut_ptr();
+        Ok(ptr)
+    },
     print: |bytes| {
         arch::console_write(bytes);
     },
