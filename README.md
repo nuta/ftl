@@ -3,16 +3,16 @@
 FTL is a hybrid kernel operating system aiming to be the drop-in third choice for *NIX-like environments, after Linux and BSD. It aims to be:
 
 - **Secure:** Eliminate or mitigate vulnerabilities with minimal core, capabilities-based security, language-enforced safety (Rust), and more proactive security measures.
-- **Updatable:** Update or patch the OS without rebooting. Per-container kernels and microkernel-like OS servers.
-- **Lightweight:** Keep its footprint small to run even on constrained devices, and to develop and test quickly.
+- **Updatable:** Per-container kernels and microkernel-like OS servers enable OS updates/patching without rebooting.
+- **Lightweight:** Keep its footprint small to run even on constrained devices, and to develop and test the OS quickly.
 
 ## Running locally
 
 Install Rust toolchain, LLVM tools, and QEMU:
 
 ```
-brew install rustup llvm qemu       # macOS
-apt install rustup llvm qemu-system # Ubuntu
+brew install rustup llvm qemu        # macOS
+apt  install rustup llvm qemu-system # Ubuntu
 ```
 
 Build and run:
@@ -27,24 +27,26 @@ FTL is a hybrid kernel. It has a small core (like microkernel), but also include
 
 ### Per-container kernels
 
-FTL implements Linux ABI as one of OS interfaces (personality) on top of the kernel core, similar to FreeBSD's [Linuxulator](https://wiki.freebsd.org/Linuxulator), Windows Subsystem for Linux (WSL 1), and Linux's [personality (2)](https://man7.org/linux/man-pages/man2/personality.2.html)/[Wine](https://www.winehq.org)/[Darling](https://github.com/darlinghq/darling). Multiple personalities can coexist.
+FTL implements Linux ABI as an isolated OS component. This lets you run Linux containers on their own isolated Linux-like kernels, similar to [gVisor](https://github.com/google/gvisor), but without the overhead of system call hooking.
 
-This lets you run Linux containers on their own isolated Linux-like kernels, similar to [gVisor](https://github.com/google/gvisor), but without the overhead of system call hooking. You can also update the Linux-like kernel simply by starting a new container, without rebooting the machine.
+You can also update the Linux-like kernel simply by starting a new container, without rebooting the machine.
 
-### Thin TCP/IP and file system multiplexing
+Foreign binary support (ABI emulation) is a well-established technique that can be seen in modern operating systems. Windows Subsystem for Linux (WSL 1), FreeBSD's [Linuxulator](https://wiki.freebsd.org/Linuxulator), and old Linux's [personality (2)](https://man7.org/linux/man-pages/man2/personality.2.html), for example. The key difference in FTL is that each container has its own isolated Linux-like kernel, implemented on top of a minimum core.
 
-Unlike microkernels where everything is implemented as user-space processes, FTL has a thin multiplexer of file system and TCP/IP inside the kernel. This is similar to Exokernel, but FTL does not aim to expose the raw hardware details.
+### Secure kernel without compromise
 
-This design allows per-container kernels to safely access shared resources such as TCP ports and files, and ultimately aims to improve resiliency against faulty device and file system drivers like [MINIX3](https://wiki.minix3.org/doku.php?id=www:documentation:reliability).
+Similar to microkernels, most of OS services such as device drivers, file systems, and network stacks, and Linux compatibility layer are implemented as isolated OS services (servers) on top of the kernel.
+
+Servers coexist in the kernel space with language-based isolation, relying on Rust's safety guarantees and sound and securely designed API for OS services. Language-based isolation is weaker than hardware-based ones used in traditional microkernels, but it enables _good-enough_ security without sacrificing performance.
 
 ### Interceptors (planned)
 
 Interceptor is a planned feature to control the behavior of OS components at runtime, just like middlewares in web frameworks. Rate limiting, security auditing, network packet routing, live patching, will be implemented as interceptors.
 
-### Language-based in-kernel isolation
-
-FTL kernel is written entirely in Rust to leverage its aliasing XOR mutability principle, good type system, and memory safety guarantees to make it robust against bugs and security vulnerabilities.
-
 ### Batteries included
 
-FTL will be more similar to BSD than Linux. We plan to provide FTL as a minimalistic OS with userspace utilities integrated nicely. This will include at least: kernel, OS servers, init system, container management, and some basic utilities like shell.
+FTL will be more similar to BSD than Linux. We plan to provide FTL as a minimalistic OS with userspace utilities integrated nicely. This will include at least: kernel, OS servers, init system, container management, cloud platform integration, and some basic utilities like shell.
+
+## License
+
+FTL is dual-licensed under the MIT and Apache 2.0 licenses.
