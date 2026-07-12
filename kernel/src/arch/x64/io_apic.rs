@@ -6,7 +6,7 @@ use super::get_cpuvar;
 use super::paddr2vaddr;
 use crate::address::PAddr;
 use crate::address::VAddr;
-use crate::error::ErrorCode;
+use ftl_api::error::ErrorCode;
 
 static IOAPIC: SpinLock<Option<IoApic>> = SpinLock::new(None);
 
@@ -58,7 +58,7 @@ impl IoApic {
 
     pub(super) fn enable_irq_at(&mut self, redir_index: u8, irq: u8) -> Result<(), ErrorCode> {
         if redir_index >= self.num_entries {
-            return Err(ErrorCode::OutOfBounds);
+            return Err(ErrorCode::OUT_OF_BOUNDS);
         }
 
         let vector = IRQ_VECTOR_BASE + irq;

@@ -1,12 +1,12 @@
 use alloc::vec::Vec;
 
+use ftl_api::error::ErrorCode;
 use ftl_utils::spinlock::SpinLock;
 
 use crate::address::UAddr;
 use crate::arch;
 use crate::arch::MIN_PAGE_SIZE;
 use crate::arch::PageAttrs;
-use crate::error::ErrorCode;
 use crate::shared_ref::SharedRef;
 use crate::vmarea::VmArea;
 
@@ -55,10 +55,10 @@ impl VmSpace {
         attrs: PageAttrs,
     ) -> Result<(), ErrorCode> {
         if !uaddr.is_aligned_to(MIN_PAGE_SIZE) {
-            return Err(ErrorCode::InvalidArgument);
+            return Err(ErrorCode::INVALID_ARG);
         }
 
-        let end = uaddr.add(vmarea.len()).ok_or(ErrorCode::OutOfBounds)?;
+        let end = uaddr.add(vmarea.len()).ok_or(ErrorCode::OUT_OF_BOUNDS)?;
 
         let mut mutable = self.mutable.lock();
         if mutable
@@ -66,13 +66,13 @@ impl VmSpace {
             .iter()
             .any(|mapping| mapping.overlaps_with(uaddr, end))
         {
-            return Err(ErrorCode::AlreadyExists);
+            return Err(ErrorCode::ALREADY_EXISTS);
         }
 
         mutable
             .mappings
             .try_reserve(1)
-            .map_err(|_| ErrorCode::OutOfMemory)?;
+            .map_err(|_| ErrorCode::OUT_OF_MEMORY)?;
 
         // Map the VM area to the virtual address space.
         // TODO: Map lazily when pages are accessed.

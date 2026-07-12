@@ -13,7 +13,7 @@ use core::sync::atomic;
 use core::sync::atomic::AtomicUsize;
 use core::sync::atomic::Ordering;
 
-use crate::error::ErrorCode;
+use ftl_api::error::ErrorCode;
 
 /// The storage for a reference-counted object.
 ///
@@ -71,7 +71,7 @@ impl<T> SharedRef<T> {
         let layout = Layout::new::<RefCounted<T>>();
         let ptr = unsafe { alloc(layout) as *mut RefCounted<T> };
         if ptr.is_null() {
-            return Err(ErrorCode::OutOfMemory);
+            return Err(ErrorCode::OUT_OF_MEMORY);
         }
 
         unsafe {

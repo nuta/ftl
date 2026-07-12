@@ -1,12 +1,12 @@
 use core::cell::UnsafeCell;
 use core::mem::offset_of;
 
+use ftl_api::error::ErrorCode;
 use ftl_utils::spinlock::SpinLock;
 use ftl_utils::static_assert;
 
 use crate::address::UAddr;
 use crate::arch;
-use crate::error::ErrorCode;
 use crate::scheduler::SCHEDULER;
 use crate::shared_ref::SharedRef;
 use crate::vmspace::VmSpace;
@@ -64,7 +64,7 @@ impl Thread {
     pub fn start(self: &SharedRef<Self>) -> Result<(), ErrorCode> {
         let mut mutable = self.mutable.lock();
         if mutable.state != State::Suspended {
-            return Err(ErrorCode::InvalidState);
+            return Err(ErrorCode::INVALID_STATE);
         }
 
         mutable.state = State::Runnable;

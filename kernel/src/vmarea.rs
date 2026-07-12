@@ -2,13 +2,13 @@ use alloc::vec::Vec;
 use core::cmp::min;
 use core::ptr;
 
+use ftl_api::error::ErrorCode;
 use ftl_utils::alignment::is_aligned;
 use ftl_utils::spinlock::SpinLock;
 
 use crate::address::PAddr;
 use crate::arch;
 use crate::arch::MIN_PAGE_SIZE;
-use crate::error::ErrorCode;
 use crate::memory::PAGE_ALLOCATOR;
 use crate::memory::PageType;
 use crate::shared_ref::SharedRef;
@@ -34,7 +34,7 @@ impl Mutable {
         if page.is_none() {
             let paddr = PAGE_ALLOCATOR
                 .alloc(MIN_PAGE_SIZE, PageType::Zeroed)
-                .ok_or(ErrorCode::OutOfMemory)?;
+                .ok_or(ErrorCode::OUT_OF_MEMORY)?;
             *page = Some(Page { paddr });
         }
 
@@ -53,14 +53,14 @@ pub struct VmArea {
 impl VmArea {
     pub fn new_anonymous(len: usize) -> Result<SharedRef<Self>, ErrorCode> {
         if len == 0 || !is_aligned(len, MIN_PAGE_SIZE) {
-            return Err(ErrorCode::InvalidArgument);
+            return Err(ErrorCode::INVALID_ARG);
         }
 
         //　Mark all pages as empty.
         let mut pages = Vec::new();
         let n = len / MIN_PAGE_SIZE;
         if pages.try_reserve_exact(n).is_err() {
-            return Err(ErrorCode::OutOfMemory);
+            return Err(ErrorCode::OUT_OF_MEMORY);
         }
         pages.resize_with(n, Default::default);
 
@@ -78,7 +78,7 @@ impl VmArea {
     pub fn ensure_page(&self, index: usize) -> Result<PAddr, ErrorCode> {
         let mut mutable = self.mutable.lock();
         if index >= mutable.pages.len() {
-            return Err(ErrorCode::OutOfBounds);
+            return Err(ErrorCode::OUT_OF_BOUNDS);
         }
 
         let page = mutable.get_or_fill(index)?;
@@ -88,9 +88,9 @@ impl VmArea {
     pub fn write(&self, mut offset: usize, mut data: &[u8]) -> Result<(), ErrorCode> {
         let offset_end = offset
             .checked_add(data.len())
-            .ok_or(ErrorCode::OutOfBounds)?;
+            .ok_or(ErrorCode::OUT_OF_BOUNDS)?;
         if offset_end > self.len {
-            return Err(ErrorCode::OutOfBounds);
+            return Err(ErrorCode::OUT_OF_BOUNDS);
         }
 
         let mut mutable = self.mutable.lock();

@@ -1,9 +1,9 @@
 use alloc::collections::vec_deque::VecDeque;
 
+use ftl_api::error::ErrorCode;
 use ftl_utils::spinlock::SpinLock;
 
 use crate::arch;
-use crate::error::ErrorCode;
 use crate::shared_ref::SharedRef;
 use crate::thread::Thread;
 
@@ -31,7 +31,7 @@ impl Scheduler {
     pub fn push_back(&self, thread: SharedRef<Thread>) -> Result<(), ErrorCode> {
         let mut runqueue = self.runqueue.lock();
         if runqueue.try_reserve(1).is_err() {
-            return Err(ErrorCode::OutOfMemory);
+            return Err(ErrorCode::OUT_OF_MEMORY);
         }
 
         runqueue.push_back(thread);
@@ -43,7 +43,7 @@ impl Scheduler {
     pub fn push_front(&self, thread: SharedRef<Thread>) -> Result<(), ErrorCode> {
         let mut runqueue = self.runqueue.lock();
         if runqueue.try_reserve(1).is_err() {
-            return Err(ErrorCode::OutOfMemory);
+            return Err(ErrorCode::OUT_OF_MEMORY);
         }
 
         runqueue.push_front(thread);

@@ -1,13 +1,13 @@
 use core::ops::BitOr;
 use std::ops::Range;
 
+use ftl_api::error::ErrorCode;
 use ftl_arrayvec::ArrayVec;
 
 use crate::address::PAddr;
 use crate::address::UAddr;
 use crate::address::VAddr;
 use crate::boot::BootInfo;
-use crate::error::ErrorCode;
 
 pub const MIN_PAGE_SIZE: usize = 4096;
 pub const DIRECT_MAP_END: PAddr = PAddr::new(usize::MAX);
