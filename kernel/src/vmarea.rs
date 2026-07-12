@@ -3,6 +3,7 @@ use core::cmp::min;
 use core::ptr;
 
 use ftl_api::error::ErrorCode;
+use ftl_api::handle::HandleRight;
 use ftl_utils::alignment::is_aligned;
 use ftl_utils::spinlock::SpinLock;
 
@@ -11,6 +12,7 @@ use crate::arch;
 use crate::arch::MIN_PAGE_SIZE;
 use crate::memory::PAGE_ALLOCATOR;
 use crate::memory::PageType;
+use crate::shared_ref::Handleable;
 use crate::shared_ref::SharedRef;
 
 /// A physical memory page.
@@ -113,4 +115,9 @@ impl VmArea {
 
         Ok(())
     }
+}
+
+impl Handleable for VmArea {
+    const DEFAULT_RIGHT: HandleRight =
+        HandleRight::READ.or(HandleRight::WRITE).or(HandleRight::MAP);
 }

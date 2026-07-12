@@ -1,12 +1,14 @@
 use alloc::vec::Vec;
 
 use ftl_api::error::ErrorCode;
+use ftl_api::handle::HandleRight;
 use ftl_utils::spinlock::SpinLock;
 
 use crate::address::UAddr;
 use crate::arch;
 use crate::arch::MIN_PAGE_SIZE;
 use crate::arch::PageAttrs;
+use crate::shared_ref::Handleable;
 use crate::shared_ref::SharedRef;
 use crate::vmarea::VmArea;
 
@@ -94,4 +96,9 @@ impl VmSpace {
         });
         Ok(())
     }
+}
+
+impl Handleable for VmSpace {
+    const DEFAULT_RIGHT: HandleRight =
+        HandleRight::READ.or(HandleRight::WRITE).or(HandleRight::MAP);
 }

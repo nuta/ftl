@@ -5,6 +5,7 @@ use alloc::boxed::Box;
 use core::fmt;
 use core::marker::Unsize;
 use core::mem;
+use core::mem::ManuallyDrop;
 use core::mem::offset_of;
 use core::ops::CoerceUnsized;
 use core::ops::Deref;
@@ -14,6 +15,8 @@ use core::sync::atomic::AtomicUsize;
 use core::sync::atomic::Ordering;
 
 use ftl_api::error::ErrorCode;
+use ftl_api::handle::Handle;
+use ftl_api::handle::HandleRight;
 
 /// The storage for a reference-counted object.
 ///
@@ -130,6 +133,74 @@ impl<T> SharedRef<T> {
                 ptr: NonNull::new_unchecked(ref_counted),
             }
         }
+    }
+
+    /// Clones a reference-counted object from a raw pointer, created by
+    /// `SharedRef::into_raw`.
+    ///
+    /// # Safety
+    ///
+    /// The raw pointer must have been previously returned by a call to
+    /// `SharedRef::into_raw`.
+    pub unsafe fn clone_from_raw(ptr: *const T) -> Self {
+        // SAFETY: The caller must ensure SharedRef::from_raw's safety
+        //         conditions.
+        let borrowed = ManuallyDrop::new(unsafe { Self::from_raw(ptr) });
+
+        // Self::from_raw does not increment the reference count. Do it manually,
+        // and avoid triggering the destructor (decrement the count) by using
+        // ManuallyDrop.
+        SharedRef::clone(&borrowed)
+    }
+
+    /// Unwraps a borrowed handle into a reference to the kernel object.
+    pub fn from_borrowed_handle(
+        handle: &Handle,
+        action: HandleRight,
+    ) -> Result<SharedRef<T>, ErrorCode>
+    where
+        T: 'static,
+    {
+        // TODO: Is it safe to skip this check, assuming that ftl_api
+        // guarantees that the handle has the correct type?
+        if !handle.is_type::<T>() {
+            return Err(ErrorCode::INVALID_TYPE);
+        }
+
+        if !handle.authorize(action) {
+            return Err(ErrorCode::NOT_ALLOWED);
+        }
+
+        // SAFETY: &Handle ensures that the object is still alive,
+        //         and we checked the handle has the correct type.
+        Ok(unsafe { Self::clone_from_raw(handle.raw() as *const T) })
+    }
+
+    /// Unwraps an owned handle into a reference to the kernel object.
+    pub fn from_moved_handle(handle: Handle) -> Result<SharedRef<T>, ErrorCode>
+    where
+        T: 'static,
+    {
+        if !handle.is_type::<T>() {
+            // TODO: Free the shared reference to the object.
+            //
+            // TODO: Is it safe to skip this check, assuming that ftl_api
+            // guarantees that the handle has the correct type?
+            return Err(ErrorCode::INVALID_TYPE);
+        }
+
+        let ptr = handle.raw() as *const T;
+        Ok(unsafe { Self::from_raw(ptr) })
+    }
+}
+
+/// A kernel object that can be exposed to servers as a [`Handle`].
+pub trait Handleable: Sized + 'static {
+    const DEFAULT_RIGHT: HandleRight;
+
+    fn into_handle(self: SharedRef<Self>) -> Handle {
+        let raw = self.into_raw() as usize;
+        Handle::new::<Self>(raw, Self::DEFAULT_RIGHT)
     }
 }
 

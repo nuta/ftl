@@ -4,6 +4,7 @@
 pub mod print;
 
 pub mod error;
+pub mod handle;
 pub mod start;
 
 pub type Result<T> = core::result::Result<T, error::ErrorCode>;
