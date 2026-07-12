@@ -1,8 +1,8 @@
 use core::arch::asm;
-use core::ops::BitOr;
 use core::ops::Range;
 
 use ftl_api::error::ErrorCode;
+use ftl_api::vmspace::PageAttrs;
 use ftl_utils::alignment::is_aligned;
 use ftl_utils::spinlock::SpinLock;
 
@@ -25,30 +25,6 @@ const PTE_V: u64 = 1 << 0;
 const PTE_W: u64 = 1 << 1;
 const PTE_U: u64 = 1 << 2;
 const PTE_HUGE: u64 = 1 << 7;
-
-#[derive(Debug, Clone, Copy)]
-#[repr(transparent)]
-pub struct PageAttrs(u64);
-
-impl PageAttrs {
-    pub const READ: Self = Self(0); // No "readable" flag in x86_64.
-    pub const WRITE: Self = Self(1 << 1);
-    pub const EXEC: Self = Self(1 << 2);
-}
-
-impl PageAttrs {
-    pub const fn as_u64(self) -> u64 {
-        self.0
-    }
-}
-
-impl BitOr<Self> for PageAttrs {
-    type Output = Self;
-
-    fn bitor(self, rhs: Self) -> Self::Output {
-        Self(self.0 | rhs.0)
-    }
-}
 
 /// The boot-time PML4. The boot code will populate this.
 pub(super) static mut BOOT_PML4: Table = Table([Pte(0); ENTRIES_PER_TABLE]);
@@ -228,7 +204,7 @@ impl VmSpace {
             return Err(ErrorCode::ALREADY_EXISTS);
         }
 
-        *entry = Pte::new(paddr, PTE_V | PTE_U | attrs.as_u64());
+        *entry = Pte::new(paddr, PTE_V | PTE_U | attrs.as_raw());
         Ok(())
     }
 }

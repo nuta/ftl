@@ -1,15 +1,21 @@
 use alloc::vec::Vec;
 
 use ftl_api::error::ErrorCode;
+use ftl_api::handle::HandleRight;
 use ftl_api::start::StartInfo;
 use ftl_utils::spinlock::SpinLock;
 
+use crate::address::UAddr;
 use crate::arch;
 use crate::boot::BootInfo;
 use crate::initfs;
 use crate::loader::LoadedElf;
 use crate::memory::PAGE_ALLOCATOR;
 use crate::memory::PageType;
+use crate::shared_ref::Handleable;
+use crate::shared_ref::SharedRef;
+use crate::vmarea::VmArea;
+use crate::vmspace::VmSpace;
 
 const START_INFO: &StartInfo = &StartInfo {
     malloc: |size| {
@@ -25,6 +31,25 @@ const START_INFO: &StartInfo = &StartInfo {
     },
     panic: || {
         panic!("server panicked");
+    },
+    vmspace_create: || {
+        let vmspace = VmSpace::new()?;
+        let handle = SharedRef::new(vmspace)?.into_handle();
+        Ok(handle)
+    },
+    vmarea_allocate: |len| {
+        let vmarea = VmArea::new_anonymous(len)?;
+        let handle = vmarea.into_handle();
+        Ok(handle)
+    },
+    vmarea_write: |vmarea, offset, data| {
+        let vmarea = SharedRef::<VmArea>::from_borrowed_handle(vmarea, HandleRight::WRITE)?;
+        vmarea.write(offset, data)
+    },
+    vmspace_map: |vmspace, vmarea, uaddr, attrs| {
+        let vmspace = SharedRef::<VmSpace>::from_borrowed_handle(vmspace, HandleRight::MAP)?;
+        let vmarea = SharedRef::<VmArea>::from_borrowed_handle(vmarea, HandleRight::MAP)?;
+        vmspace.map(vmarea, UAddr::new(uaddr), attrs)
     },
 };
 

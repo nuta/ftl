@@ -1,7 +1,7 @@
-use core::ops::BitOr;
 use std::ops::Range;
 
 use ftl_api::error::ErrorCode;
+use ftl_api::vmspace::PageAttrs;
 use ftl_arrayvec::ArrayVec;
 
 use crate::address::PAddr;
@@ -20,23 +20,6 @@ pub fn console_write(_bytes: &[u8]) {}
 
 pub fn paddr2vaddr(_paddr: PAddr) -> VAddr {
     todo!()
-}
-
-#[derive(Clone, Copy)]
-pub struct PageAttrs(usize);
-
-impl PageAttrs {
-    pub const READ: Self = Self(1 << 0);
-    pub const WRITE: Self = Self(1 << 1);
-    pub const EXEC: Self = Self(1 << 2);
-}
-
-impl BitOr<Self> for PageAttrs {
-    type Output = Self;
-
-    fn bitor(self, rhs: Self) -> Self::Output {
-        Self(self.0 | rhs.0)
-    }
 }
 
 pub struct VmSpace {}
