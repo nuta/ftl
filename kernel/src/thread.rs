@@ -140,7 +140,12 @@ impl CurrentThread {
 
     /// Clears the current thread.
     pub fn clear(&self) {
-        unsafe { self.ptr.replace(core::ptr::null()) };
+        let old_ptr = unsafe { self.ptr.replace(core::ptr::null()) };
+
+        // Release the ref count of the previous thread.
+        if !old_ptr.is_null() {
+            drop(unsafe { SharedRef::from_raw(old_ptr) });
+        }
     }
 
     /// Returns the current thread.
