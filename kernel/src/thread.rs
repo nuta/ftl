@@ -2,19 +2,22 @@ use core::cell::UnsafeCell;
 use core::mem::offset_of;
 
 use ftl_api::error::ErrorCode;
+use ftl_api::handle::HandleRight;
+use ftl_api::thread::ContextData;
+use ftl_api::thread::ContextKind;
 use ftl_utils::spinlock::SpinLock;
 use ftl_utils::static_assert;
 
-use crate::address::UAddr;
 use crate::arch;
 use crate::scheduler::SCHEDULER;
+use crate::shared_ref::Handleable;
 use crate::shared_ref::SharedRef;
 use crate::vmspace::VmSpace;
 
 #[derive(Debug, PartialEq, Eq)]
 enum State {
-    Suspended,
     Runnable,
+    Blocked,
 }
 
 struct Mutable {
@@ -29,17 +32,13 @@ pub struct Thread {
 }
 
 impl Thread {
-    pub fn new(
-        vmspace: SharedRef<VmSpace>,
-        entry: UAddr,
-        sp: UAddr,
-    ) -> Result<SharedRef<Self>, ErrorCode> {
+    pub fn new(vmspace: SharedRef<VmSpace>) -> Result<SharedRef<Self>, ErrorCode> {
         let mutable = Mutable {
-            state: State::Suspended,
+            state: State::Blocked,
         };
 
         let thread = SharedRef::new(Thread {
-            arch: arch::Thread::new(entry, sp),
+            arch: arch::Thread::new(),
             vmspace,
             mutable: SpinLock::new(mutable),
         })?;
@@ -61,17 +60,59 @@ impl Thread {
         &self.arch
     }
 
-    pub fn start(self: &SharedRef<Self>) -> Result<(), ErrorCode> {
+    /// Marks the thread as blocked. It will not be scheduled for execution
+    /// until [`Self::unblock`] is called.
+    pub fn block(self: &SharedRef<Self>) -> Result<(), ErrorCode> {
         let mut mutable = self.mutable.lock();
-        if mutable.state != State::Suspended {
+        if mutable.state != State::Runnable {
             return Err(ErrorCode::INVALID_STATE);
         }
 
+        mutable.state = State::Blocked;
+        Ok(())
+    }
+
+    /// Resumes the thread.
+    pub fn unblock(self: &SharedRef<Self>) -> Result<(), ErrorCode> {
+        let mut mutable = self.mutable.lock();
+        if mutable.state != State::Blocked {
+            return Err(ErrorCode::INVALID_STATE);
+        }
+
+        SCHEDULER.push_back(self.clone())?;
         mutable.state = State::Runnable;
-        SCHEDULER.push_front(self.clone())?;
 
         Ok(())
     }
+
+    /// Reads the thread's context such as general-purpose registers.
+    pub fn read_context(&self, kind: ContextKind, regs: &mut ContextData) -> Result<(), ErrorCode> {
+        let mutable = self.mutable.lock();
+        if mutable.state != State::Blocked {
+            return Err(ErrorCode::INVALID_STATE);
+        }
+
+        self.arch.read_context(kind, regs);
+        Ok(())
+    }
+
+    /// Writes the thread's context such as general-purpose registers.
+    pub fn write_context(&self, kind: ContextKind, regs: &ContextData) -> Result<(), ErrorCode> {
+        let mutable = self.mutable.lock();
+        if mutable.state != State::Blocked {
+            return Err(ErrorCode::INVALID_STATE);
+        }
+
+        unsafe {
+            // FIXME: Use UnsafeCell?
+            (*(&self.arch as *const arch::Thread as *mut arch::Thread)).write_context(kind, regs)
+        }
+        Ok(())
+    }
+}
+
+impl Handleable for Thread {
+    const DEFAULT_RIGHT: HandleRight = HandleRight::READ.or(HandleRight::WRITE);
 }
 
 /// The current thread.

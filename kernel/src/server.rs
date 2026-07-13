@@ -14,6 +14,7 @@ use crate::memory::PAGE_ALLOCATOR;
 use crate::memory::PageType;
 use crate::shared_ref::Handleable;
 use crate::shared_ref::SharedRef;
+use crate::thread::Thread;
 use crate::vmarea::VmArea;
 use crate::vmspace::VmSpace;
 
@@ -50,6 +51,23 @@ const START_INFO: &StartInfo = &StartInfo {
         let vmspace = SharedRef::<VmSpace>::from_borrowed_handle(vmspace, HandleRight::MAP)?;
         let vmarea = SharedRef::<VmArea>::from_borrowed_handle(vmarea, HandleRight::MAP)?;
         vmspace.map(vmarea, UAddr::new(uaddr), attrs)
+    },
+    thread_create: |vmspace| {
+        let vmspace = SharedRef::<VmSpace>::from_borrowed_handle(vmspace, HandleRight::MAP)?;
+        let thread = Thread::new(vmspace)?;
+        Ok(thread.into_handle())
+    },
+    thread_get_context: |thread, kind, regs| {
+        let thread = SharedRef::<Thread>::from_borrowed_handle(thread, HandleRight::READ)?;
+        thread.read_context(kind, regs)
+    },
+    thread_set_context: |thread, kind, regs| {
+        let thread = SharedRef::<Thread>::from_borrowed_handle(thread, HandleRight::WRITE)?;
+        thread.write_context(kind, regs)
+    },
+    thread_unblock: |thread| {
+        let thread = SharedRef::<Thread>::from_borrowed_handle(thread, HandleRight::WRITE)?;
+        thread.unblock()
     },
 };
 

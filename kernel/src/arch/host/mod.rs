@@ -1,6 +1,8 @@
 use std::ops::Range;
 
 use ftl_api::error::ErrorCode;
+use ftl_api::thread::ContextData;
+use ftl_api::thread::ContextKind;
 use ftl_api::vmspace::PageAttrs;
 use ftl_arrayvec::ArrayVec;
 
@@ -47,7 +49,15 @@ impl VmSpace {
 pub struct Thread {}
 
 impl Thread {
-    pub fn new(_entry: UAddr, _sp: UAddr) -> Self {
+    pub fn new() -> Self {
+        todo!()
+    }
+
+    pub fn read_context(&self, _kind: ContextKind, _regs: &mut ContextData) {
+        todo!()
+    }
+
+    pub fn write_context(&mut self, _kind: ContextKind, _regs: &ContextData) {
         todo!()
     }
 

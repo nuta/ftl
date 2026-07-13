@@ -6,6 +6,7 @@ pub mod print;
 pub mod error;
 pub mod handle;
 pub mod start;
+pub mod thread;
 pub mod vmarea;
 pub mod vmspace;
 

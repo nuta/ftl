@@ -1,9 +1,14 @@
 use core::arch::asm;
 use core::mem::offset_of;
 
+use ftl_api::thread::ContextData;
+use ftl_api::thread::ContextKind;
+use ftl_api::thread::InitRegs;
+use ftl_api::thread::SyscallArgs;
+use ftl_api::thread::Sysret;
+
 use super::gdt::GDT_USER_CS;
 use super::gdt::GDT_USER_DS;
-use crate::address::UAddr;
 
 #[derive(Default, Debug)]
 #[repr(C, packed)]
@@ -34,14 +39,60 @@ pub struct Thread {
 }
 
 impl Thread {
-    pub fn new(entry: UAddr, sp: UAddr) -> Self {
+    pub fn new() -> Self {
         Self {
-            rip: entry.as_usize() as u64,
             cs: GDT_USER_CS as u64,
             rflags: 0x202, // interrupts enabled
-            rsp: sp.as_usize() as u64,
             ss: GDT_USER_DS as u64,
             ..Default::default()
+        }
+    }
+
+    pub fn read_context(&self, kind: ContextKind, regs: &mut ContextData) {
+        match kind {
+            ContextKind::SyscallArgs => {
+                regs.syscall_args = SyscallArgs {
+                    n: self.rax,
+                    arg0: self.rdi,
+                    arg1: self.rsi,
+                    arg2: self.rdx,
+                    arg3: self.r10,
+                    arg4: self.r8,
+                    arg5: self.r9,
+                };
+            }
+            ContextKind::Sysret => {
+                regs.sysret = Sysret { retval: self.rax };
+            }
+            ContextKind::InitRegs => {
+                regs.init_regs = InitRegs {
+                    pc: self.rip,
+                    sp: self.rsp,
+                };
+            }
+        }
+    }
+
+    pub fn write_context(&mut self, kind: ContextKind, regs: &ContextData) {
+        match kind {
+            ContextKind::SyscallArgs => {
+                let args = unsafe { regs.syscall_args };
+                self.rax = args.n;
+                self.rdi = args.arg0;
+                self.rsi = args.arg1;
+                self.rdx = args.arg2;
+                self.r10 = args.arg3;
+                self.r8 = args.arg4;
+                self.r9 = args.arg5;
+            }
+            ContextKind::Sysret => {
+                self.rax = unsafe { regs.sysret.retval };
+            }
+            ContextKind::InitRegs => {
+                let init_regs = unsafe { regs.init_regs };
+                self.rip = init_regs.pc;
+                self.rsp = init_regs.sp;
+            }
         }
     }
 
