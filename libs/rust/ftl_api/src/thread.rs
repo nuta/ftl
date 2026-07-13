@@ -1,5 +1,9 @@
+use alloc::sync::Arc;
+
 use crate::handle::Handle;
 use crate::start::start_info;
+use crate::upcall::Upcall;
+use crate::upcall::UserData;
 use crate::vmspace::VmSpace;
 
 /// The kind of thread context.
@@ -50,15 +54,36 @@ pub struct Sysret {
     pub retval: u64,
 }
 
+pub enum UpcallArg {
+    Syscall,
+}
+
+pub trait Handler: Send + Sync {
+    fn syscall(&self, thread: &Thread);
+}
+
+fn upcall_entry<H: Handler + 'static>(user_data: usize, arg: UpcallArg) {
+    let user_data = unsafe { &*(user_data as *const UserData<Arc<Thread>, H>) };
+    match arg {
+        UpcallArg::Syscall => user_data.handler.syscall(&user_data.ctx),
+    }
+}
+
 pub struct Thread {
     handle: Handle,
 }
 
 impl Thread {
-    pub fn create(vmspace: &VmSpace) -> crate::Result<Self> {
+    pub fn create<H: Handler + 'static>(
+        vmspace: &VmSpace,
+        handler: H,
+    ) -> crate::Result<Arc<Thread>> {
         let start_info = start_info();
-        let handle = (start_info.thread_create)(vmspace.handle())?;
-        Ok(Self { handle })
+
+        Upcall::new(upcall_entry::<H>, handler, |upcall| {
+            let handle = (start_info.thread_create)(vmspace.handle(), upcall)?;
+            Ok(Arc::new(Thread { handle }))
+        })
     }
 
     pub fn get_context(&self, kind: ContextKind, regs: &mut ContextData) -> crate::Result<()> {

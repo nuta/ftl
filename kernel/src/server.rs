@@ -52,9 +52,9 @@ const START_INFO: &StartInfo = &StartInfo {
         let vmarea = SharedRef::<VmArea>::from_borrowed_handle(vmarea, HandleRight::MAP)?;
         vmspace.map(vmarea, UAddr::new(uaddr), attrs)
     },
-    thread_create: |vmspace| {
+    thread_create: |vmspace, upcall| {
         let vmspace = SharedRef::<VmSpace>::from_borrowed_handle(vmspace, HandleRight::MAP)?;
-        let thread = Thread::new(vmspace)?;
+        let thread = Thread::new(vmspace, upcall)?;
         Ok(thread.into_handle())
     },
     thread_get_context: |thread, kind, regs| {

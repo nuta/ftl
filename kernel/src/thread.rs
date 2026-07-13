@@ -5,6 +5,8 @@ use ftl_api::error::ErrorCode;
 use ftl_api::handle::HandleRight;
 use ftl_api::thread::ContextData;
 use ftl_api::thread::ContextKind;
+use ftl_api::thread::UpcallArg;
+use ftl_api::upcall::Upcall;
 use ftl_utils::spinlock::SpinLock;
 use ftl_utils::static_assert;
 
@@ -27,12 +29,16 @@ struct Mutable {
 #[repr(C)]
 pub struct Thread {
     arch: arch::Thread,
+    upcall: Upcall<UpcallArg>,
     vmspace: SharedRef<VmSpace>,
     mutable: SpinLock<Mutable>,
 }
 
 impl Thread {
-    pub fn new(vmspace: SharedRef<VmSpace>) -> Result<SharedRef<Self>, ErrorCode> {
+    pub fn new(
+        vmspace: SharedRef<VmSpace>,
+        upcall: Upcall<UpcallArg>,
+    ) -> Result<SharedRef<Self>, ErrorCode> {
         let mutable = Mutable {
             state: State::Blocked,
         };
@@ -40,6 +46,7 @@ impl Thread {
         let thread = SharedRef::new(Thread {
             arch: arch::Thread::new(),
             vmspace,
+            upcall,
             mutable: SpinLock::new(mutable),
         })?;
 
@@ -58,6 +65,10 @@ impl Thread {
 
     pub fn arch(&self) -> &arch::Thread {
         &self.arch
+    }
+
+    pub fn upcall(&self, arg: UpcallArg) {
+        self.upcall.invoke(arg);
     }
 
     /// Marks the thread as blocked. It will not be scheduled for execution

@@ -70,16 +70,24 @@ pub fn return_to_user() -> ! {
             .expect("out of memory in runqueue"); // FIXME:
     }
 
-    let Some(thread) = SCHEDULER.pop() else {
-        // Clear the current thread. Otherwise, the interrupt handler would
-        // overwrite the user's system call context (registers) with the idle
-        // thread's context.
-        current.clear();
+    let next = loop {
+        let Some(thread) = SCHEDULER.pop() else {
+            // Clear the current thread. Otherwise, the interrupt handler would
+            // overwrite the user's system call context (registers) with the idle
+            // thread's context.
+            current.clear();
 
-        // No threads to run. Enter the idle loop.
-        arch::idle();
+            // No threads to run. Enter the idle loop.
+            arch::idle();
+        };
+
+        // The thread can be blocked while in the runqueue. Make sure it
+        // is still runnable.
+        if thread.is_runnable() {
+            break thread;
+        }
     };
 
     // Switch to the new thread.
-    current.enter(thread);
+    current.enter(next);
 }

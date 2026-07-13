@@ -1,5 +1,7 @@
 #![no_std]
 
+extern crate alloc;
+
 #[macro_use]
 pub mod print;
 
@@ -7,6 +9,7 @@ pub mod error;
 pub mod handle;
 pub mod start;
 pub mod thread;
+pub mod upcall;
 pub mod vmarea;
 pub mod vmspace;
 

@@ -2,8 +2,10 @@ use core::sync::atomic::AtomicUsize;
 use core::sync::atomic::Ordering;
 
 use crate::handle::Handle;
-use crate::thread::ContextKind;
 use crate::thread::ContextData;
+use crate::thread::ContextKind;
+use crate::thread::UpcallArg;
+use crate::upcall::Upcall;
 use crate::vmspace::PageAttrs;
 
 static START_INFO: AtomicUsize = AtomicUsize::new(0);
@@ -17,7 +19,7 @@ pub struct StartInfo {
     pub vmarea_write: fn(vmarea: &Handle, offset: usize, data: &[u8]) -> crate::Result<()>,
     pub vmspace_map:
         fn(vmspace: &Handle, vmarea: &Handle, uaddr: usize, attrs: PageAttrs) -> crate::Result<()>,
-    pub thread_create: fn(vmspace: &Handle) -> crate::Result<Handle>,
+    pub thread_create: fn(vmspace: &Handle, upcall: Upcall<UpcallArg>) -> crate::Result<Handle>,
     pub thread_get_context:
         fn(thread: &Handle, kind: ContextKind, regs: &mut ContextData) -> crate::Result<()>,
     pub thread_set_context:
