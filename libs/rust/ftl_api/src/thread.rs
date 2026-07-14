@@ -48,11 +48,31 @@ pub struct SyscallArgs {
     pub arg5: u64,
 }
 
+impl SyscallArgs {
+    pub const fn zeroed() -> Self {
+        Self {
+            n: 0,
+            arg0: 0,
+            arg1: 0,
+            arg2: 0,
+            arg3: 0,
+            arg4: 0,
+            arg5: 0,
+        }
+    }
+}
+
 /// General-purpose register(s) for system call return value.
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct Sysret {
     pub retval: u64,
+}
+
+impl Sysret {
+    pub const fn zeroed() -> Self {
+        Self { retval: 0 }
+    }
 }
 
 pub enum UpcallArg {
