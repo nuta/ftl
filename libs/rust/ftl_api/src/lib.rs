@@ -2,6 +2,8 @@
 
 extern crate alloc;
 
+use alloc::boxed::Box;
+
 #[macro_use]
 pub mod print;
 
@@ -21,7 +23,9 @@ pub struct Spec {
 }
 
 pub fn start<R, F: Fn() -> R>(ctor: F) {
-    ctor();
+    // FIXME: Free the box when the server is stopped.
+    // FIXME: Should we increment the server's ref count when registering a upcall?
+    Box::leak(Box::new(ctor()));
 }
 
 #[cfg(not(feature = "kernel"))]
