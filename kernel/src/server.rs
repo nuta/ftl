@@ -76,7 +76,12 @@ const START_INFO: &StartInfo = &StartInfo {
         let thread = SharedRef::<Thread>::from_borrowed_handle(thread, HandleRight::WRITE)?;
         thread.terminate()
     },
-    thread_destroy: |thread| SharedRef::<Thread>::destroy_handle(thread),
+    thread_destroy: |thread| {
+        let sref = SharedRef::<Thread>::from_moved_handle(thread)?;
+        // Decrement the ref count.
+        drop(sref);
+        Ok(())
+    },
 };
 
 static SERVERS: SpinLock<Vec<Server>> = SpinLock::new(Vec::new());

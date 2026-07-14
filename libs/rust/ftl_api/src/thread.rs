@@ -139,8 +139,12 @@ impl Thread {
 
 impl Drop for Thread {
     fn drop(&mut self) {
+        // SAFETY: Handle does not implement Drop, and we won't use it after
+        //         the thread_destroy call below.
+        let handle = unsafe { core::ptr::read(&self.handle) };
+
         let start_info = start_info();
-        if let Err(err) = (start_info.thread_destroy)(&self.handle) {
+        if let Err(err) = (start_info.thread_destroy)(handle) {
             error!("failed to destroy thread: {:?}", err);
         }
     }
