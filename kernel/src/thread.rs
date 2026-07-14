@@ -34,11 +34,23 @@ struct Mutable {
 
 #[repr(C)]
 pub struct Thread {
-    arch: arch::Thread,
+    /// The arch-specific CPU registers and other state.
+    ///
+    /// This is an [`UnsafeCell`] because the interrupt handler updates this
+    /// field directly.
+    arch: UnsafeCell<arch::Thread>,
     upcall: Upcall<UpcallArg>,
     vmspace: SharedRef<VmSpace>,
     mutable: SpinLock<Mutable>,
 }
+
+/// SAFETY: The `arch` field is accessed when:
+///
+/// - The CPU is currently running the thread. No other CPUs can run the same
+///   thread.
+/// - When the thread is blocked (i.e. not running), the mutable lock must be
+///   held to prevent concurrent access.
+unsafe impl Sync for Thread {}
 
 impl Thread {
     pub fn new(
@@ -51,7 +63,7 @@ impl Thread {
         };
 
         let thread = SharedRef::new(Thread {
-            arch: arch::Thread::new(),
+            arch: UnsafeCell::new(arch::Thread::new()),
             vmspace,
             upcall,
             mutable: SpinLock::new(mutable),
@@ -68,10 +80,6 @@ impl Thread {
 
     pub fn vmspace(&self) -> &SharedRef<VmSpace> {
         &self.vmspace
-    }
-
-    pub fn arch(&self) -> &arch::Thread {
-        &self.arch
     }
 
     /// Upcalls the syscall handler.
@@ -151,7 +159,10 @@ impl Thread {
             return Err(ErrorCode::INVALID_STATE);
         }
 
-        self.arch.read_context(kind, regs);
+        // SAFETY: The thread is blocked and we hold the `mutable` lock.
+        unsafe {
+            (*self.arch.get()).read_context(kind, regs);
+        }
         Ok(())
     }
 
@@ -162,9 +173,9 @@ impl Thread {
             return Err(ErrorCode::INVALID_STATE);
         }
 
+        // SAFETY: The thread is blocked and we hold the `mutable` lock.
         unsafe {
-            // FIXME: Use UnsafeCell?
-            (*(&self.arch as *const arch::Thread as *mut arch::Thread)).write_context(kind, regs)
+            (*self.arch.get()).write_context(kind, regs);
         }
         Ok(())
     }
