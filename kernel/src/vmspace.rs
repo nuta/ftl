@@ -1,4 +1,5 @@
 use alloc::vec::Vec;
+use core::cmp::min;
 
 use ftl_api::error::ErrorCode;
 use ftl_api::handle::HandleRight;
@@ -26,6 +27,7 @@ impl Mapping {
 }
 
 struct Mutable {
+    /// The mapping sorted by the start address.
     mappings: Vec<Mapping>,
 }
 
@@ -88,17 +90,66 @@ impl VmSpace {
             uaddr = uaddr.add(MIN_PAGE_SIZE).unwrap();
         }
 
-        mutable.mappings.push(Mapping {
-            start,
-            end,
-            vmarea,
-            attrs,
-        });
+        // Insert the mapping at the correct position to keep mappings sorted.
+        let insert_at = mutable
+            .mappings
+            .partition_point(|mapping| mapping.start < start);
+
+        mutable.mappings.insert(
+            insert_at,
+            Mapping {
+                start,
+                end,
+                vmarea,
+                attrs,
+            },
+        );
+        Ok(())
+    }
+
+    pub fn read_bytes(&self, mut uaddr: UAddr, mut buf: &mut [u8]) -> Result<(), ErrorCode> {
+        if buf.is_empty() {
+            return Ok(());
+        }
+
+        // Check if the read is out of bounds.
+        let _uaddr_end = uaddr.add(buf.len()).ok_or(ErrorCode::OUT_OF_BOUNDS)?;
+
+        let mutable = self.mutable.lock();
+
+        // Do a binary search to find the first mapping.
+        let index = mutable
+            .mappings
+            .partition_point(|mapping| mapping.start <= uaddr)
+            .checked_sub(1)
+            .ok_or(ErrorCode::OUT_OF_BOUNDS)?;
+
+        // Copy bytes from each vmarea.
+        let mut iter = mutable.mappings.iter().skip(index);
+        while !buf.is_empty()
+            && let Some(mapping) = iter.next()
+        {
+            if !(mapping.start..mapping.end).contains(&uaddr) {
+                return Err(ErrorCode::OUT_OF_BOUNDS);
+            }
+
+            let copy_len = min(buf.len(), mapping.end.as_usize() - uaddr.as_usize());
+            let (chunk, rest) = buf.split_at_mut(copy_len);
+            mapping
+                .vmarea
+                .read(uaddr.as_usize() - mapping.start.as_usize(), chunk)?;
+
+            // SAFETY: the overflow check above guarantees `uaddr + len` fits.
+            uaddr = uaddr.add(copy_len).unwrap();
+            buf = rest;
+        }
+
         Ok(())
     }
 }
 
 impl Handleable for VmSpace {
-    const DEFAULT_RIGHT: HandleRight =
-        HandleRight::READ.or(HandleRight::WRITE).or(HandleRight::MAP);
+    const DEFAULT_RIGHT: HandleRight = HandleRight::READ
+        .or(HandleRight::WRITE)
+        .or(HandleRight::MAP);
 }

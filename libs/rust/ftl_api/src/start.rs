@@ -19,6 +19,7 @@ pub struct StartInfo {
     pub vmarea_write: fn(vmarea: &Handle, offset: usize, data: &[u8]) -> crate::Result<()>,
     pub vmspace_map:
         fn(vmspace: &Handle, vmarea: &Handle, uaddr: usize, attrs: PageAttrs) -> crate::Result<()>,
+    pub vmspace_read: fn(vmspace: &Handle, uaddr: usize, buf: &mut [u8]) -> crate::Result<()>,
     pub thread_create: fn(vmspace: &Handle, upcall: Upcall<UpcallArg>) -> crate::Result<Handle>,
     pub thread_get_context:
         fn(thread: &Handle, kind: ContextKind, regs: &mut ContextData) -> crate::Result<()>,

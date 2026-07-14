@@ -115,9 +115,43 @@ impl VmArea {
 
         Ok(())
     }
+
+    /// Reads bytes into the buffer.
+    ///
+    /// The lazily-allocated pages are filled on demand.
+    pub fn read(&self, mut offset: usize, mut buf: &mut [u8]) -> Result<(), ErrorCode> {
+        let offset_end = offset
+            .checked_add(buf.len())
+            .ok_or(ErrorCode::OUT_OF_BOUNDS)?;
+
+        if offset_end > self.len {
+            return Err(ErrorCode::OUT_OF_BOUNDS);
+        }
+
+        let mut mutable = self.mutable.lock();
+        while !buf.is_empty() {
+            let index = offset / MIN_PAGE_SIZE;
+            let offset_in_page = offset % MIN_PAGE_SIZE;
+
+            let page = mutable.get_or_fill(index)?;
+            let vaddr = arch::paddr2vaddr(page.paddr);
+
+            let copy_len = min(buf.len(), MIN_PAGE_SIZE - offset_in_page);
+            unsafe {
+                let src = vaddr.as_ptr::<u8>().add(offset_in_page);
+                ptr::copy_nonoverlapping(src, buf.as_mut_ptr(), copy_len);
+            }
+
+            buf = &mut buf[copy_len..];
+            offset += copy_len;
+        }
+
+        Ok(())
+    }
 }
 
 impl Handleable for VmArea {
-    const DEFAULT_RIGHT: HandleRight =
-        HandleRight::READ.or(HandleRight::WRITE).or(HandleRight::MAP);
+    const DEFAULT_RIGHT: HandleRight = HandleRight::READ
+        .or(HandleRight::WRITE)
+        .or(HandleRight::MAP);
 }

@@ -20,6 +20,11 @@ impl VmSpace {
         (start_info.vmspace_map)(&self.handle, vmarea.handle(), uaddr, attrs)
     }
 
+    pub fn read_bytes(&self, uaddr: usize, buf: &mut [u8]) -> crate::Result<()> {
+        let start_info = start_info();
+        (start_info.vmspace_read)(&self.handle, uaddr, buf)
+    }
+
     pub fn handle(&self) -> &Handle {
         &self.handle
     }
