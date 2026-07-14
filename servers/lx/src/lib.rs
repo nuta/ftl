@@ -1,36 +1,38 @@
 #![cfg_attr(target_os = "none", no_std)]
 
+mod errno;
+mod process;
+mod syscall;
+
 extern crate alloc;
 
+use alloc::sync::Arc;
 use alloc::vec::Vec;
 
 use ftl_api::Spec;
-use ftl_api::info;
+use process::Process;
 
-struct Server {}
+struct Server {
+    processes: Vec<Arc<Process>>,
+}
 
 impl Server {
     fn new() -> Self {
         // TODO: Get initfs from environment
-        info!("Server::new()");
-        let mut v = Vec::new();
-        v.push(123);
-        v.push(456);
-        info!("v: {:?}", v);
-        Self {}
+        let elf_file = HELLO_ELF.0.as_slice();
+        let (process, init_regs) = Process::create(elf_file).expect("failed to create process");
+        process.start(init_regs).expect("failed to start process");
+        Self {
+            processes: alloc::vec![process],
+        }
     }
 }
 
-const HELLO_ELF: &[u8] = include_bytes!("../../../initfs/bin/hello");
+#[repr(align(8))]
+struct AlignedBytes<const N: usize>([u8; N]);
 
-fn start_init_process() -> ftl_api::Result<()> {
-    // TODO: Create vmspace
-    // TODO: Read ELF header
-    // TODO: Copy ELF segments into vmareas
-    // TODO: Create thread
-    // TODO: Start thread
-    Ok(())
-}
+pub static HELLO_ELF: AlignedBytes<{ include_bytes!("../../../initfs/bin/hello").len() }> =
+    AlignedBytes(*include_bytes!("../../../initfs/bin/hello"));
 
 #[unsafe(no_mangle)]
 pub static SPEC: Spec = Spec {

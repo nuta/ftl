@@ -53,4 +53,6 @@ name = "lx"
 version = "0.0.0"
 dependencies = [
  "ftl_api",
+ "ftl_elf",
+ "ftl_utils",
 ]

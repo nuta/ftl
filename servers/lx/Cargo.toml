@@ -9,3 +9,5 @@ crate-type = ["cdylib"]
 
 [dependencies]
 ftl_api = { workspace = true }
+ftl_elf = { workspace = true }
+ftl_utils = { workspace = true }
