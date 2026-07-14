@@ -197,10 +197,27 @@ impl<T> SharedRef<T> {
 /// A kernel object that can be exposed to servers as a [`Handle`].
 pub trait Handleable: Sized + 'static {
     const DEFAULT_RIGHT: HandleRight;
+}
 
-    fn into_handle(self: SharedRef<Self>) -> Handle {
+impl<T: Handleable> SharedRef<T> {
+    pub fn into_handle(self) -> Handle {
         let raw = self.into_raw() as usize;
-        Handle::new::<Self>(raw, Self::DEFAULT_RIGHT)
+        Handle::new::<T>(raw, T::DEFAULT_RIGHT)
+    }
+
+    pub fn destroy_handle(handle: &Handle) -> Result<(), ErrorCode> {
+        if !handle.is_type::<T>() {
+            return Err(ErrorCode::INVALID_TYPE);
+        }
+
+        // SAFETY: The kernel creates a Handle from SharedRef::into_handle,
+        //         and it is restored here.
+        let sref = unsafe { Self::from_raw(handle.raw() as *const T) };
+
+        // Decrement the reference count.
+        drop(sref);
+
+        Ok(())
     }
 }
 

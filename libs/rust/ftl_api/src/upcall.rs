@@ -3,17 +3,31 @@ use core::marker::PhantomPinned;
 use core::mem::MaybeUninit;
 
 pub(crate) struct UserData<C: 'static, H: 'static> {
-    pub ctx: C,
+    pub object: C,
     pub handler: H,
     // Kernel holds a pointer to this, so it must be moved to somewhere else.
     _pin: PhantomPinned,
 }
 
-type Dispatcher<T> = extern "Rust" fn(user_data: usize, arg: T);
+impl<C, H> UserData<C, H> {
+    pub(crate) unsafe fn borrow<'a>(ctx: UpCallCtx) -> &'a Self {
+        unsafe { &*(ctx.0 as *const Self) }
+    }
+
+    pub(crate) unsafe fn reclaim(ctx: UpCallCtx) -> Self {
+        let user_data = unsafe { Box::from_raw(ctx.0 as *mut Self) };
+        *user_data
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct UpCallCtx(usize);
+
+type Dispatcher<T> = extern "Rust" fn(ctx: UpCallCtx, arg: T);
 
 pub struct Upcall<T> {
     dispatch: Dispatcher<T>,
-    user_data: usize,
+    ctx: UpCallCtx,
 }
 
 unsafe impl<T> Send for Upcall<T> {}
@@ -32,7 +46,7 @@ impl<T> Upcall<T> {
 
         let upcall = Upcall {
             dispatch,
-            user_data: ptr as usize,
+            ctx: UpCallCtx(ptr as usize),
         };
 
         // Call the constructor to create a kernel object with the upcall.
@@ -49,7 +63,7 @@ impl<T> Upcall<T> {
         // FIXME: How can we guarantee that the kernel object won't access the handler?
         unsafe {
             ptr.write(UserData {
-                ctx: ctx.clone(),
+                object: ctx.clone(),
                 handler,
                 _pin: PhantomPinned,
             });
@@ -61,6 +75,6 @@ impl<T> Upcall<T> {
 
 impl<T> Upcall<T> {
     pub fn invoke(&self, arg: T) {
-        (self.dispatch)(self.user_data, arg)
+        (self.dispatch)(self.ctx, arg)
     }
 }

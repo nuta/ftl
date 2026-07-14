@@ -44,6 +44,7 @@ cpio -o -H newc -0 < ../initfs.list > ../initfs.cpio
 popd
 
 # Build kernel.
-cargo build "${CARGOFLAGS[@]}" --target kernel/src/arch/$ARCH/kernel.json \
-  --manifest-path kernel/Cargo.toml
+FTL_LOG_PREFIX="[$(printf '%-10s' "kernel")] " \
+  cargo build "${CARGOFLAGS[@]}" --target kernel/src/arch/$ARCH/kernel.json \
+    --manifest-path kernel/Cargo.toml
 cp target/kernel/$target/kernel ftl.elf

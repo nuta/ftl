@@ -20,10 +20,16 @@ use crate::vmspace::VmSpace;
 enum State {
     Runnable,
     Blocked,
+    Terminated,
 }
 
 struct Mutable {
     state: State,
+    /// The number of in-flight syscall upcalls.
+    ///
+    /// While in_upcalls > 0, the thread must not be terminated since it frees
+    /// the upcall's user data while it is being referenced.
+    in_upcalls: usize,
 }
 
 #[repr(C)]
@@ -41,6 +47,7 @@ impl Thread {
     ) -> Result<SharedRef<Self>, ErrorCode> {
         let mutable = Mutable {
             state: State::Blocked,
+            in_upcalls: 0,
         };
 
         let thread = SharedRef::new(Thread {
@@ -67,19 +74,60 @@ impl Thread {
         &self.arch
     }
 
-    pub fn upcall(&self, arg: UpcallArg) {
-        self.upcall.invoke(arg);
-    }
+    /// Upcalls the syscall handler.
+    ///
+    /// System call registers are not passed to this method because they can be
+    /// read by the [`Self::read_context`] method.
+    pub fn handle_syscall(&self) {
+        // Mark the thread as blocked and mark it as being referenced
+        // (in_upcalls > 0).
+        {
+            let mut mutable = self.mutable.lock();
+            if mutable.state == State::Terminated {
+                return;
+            }
 
-    /// Marks the thread as blocked. It will not be scheduled for execution
-    /// until [`Self::unblock`] is called.
-    pub fn block(self: &SharedRef<Self>) -> Result<(), ErrorCode> {
-        let mut mutable = self.mutable.lock();
-        if mutable.state != State::Runnable {
-            return Err(ErrorCode::INVALID_STATE);
+            assert_eq!(mutable.state, State::Runnable);
+            mutable.state = State::Blocked;
+            mutable.in_upcalls += 1;
         }
 
-        mutable.state = State::Blocked;
+        self.upcall.invoke(UpcallArg::Syscall);
+
+        // Check if the thread is safe to terminate.
+        let terminate_now = {
+            let mut mutable = self.mutable.lock();
+            debug_assert!(mutable.in_upcalls > 0);
+            mutable.in_upcalls -= 1;
+            mutable.in_upcalls == 0 && mutable.state == State::Terminated
+        };
+
+        if terminate_now {
+            self.upcall.invoke(UpcallArg::Terminated);
+        }
+    }
+
+    /// Asks the kernel to terminate a thread.
+    ///
+    /// When the thread becomes safe to terminate, the kernel will do an
+    /// upcall with [`UpcallArg::Terminated`].
+    pub fn terminate(&self) -> Result<(), ErrorCode> {
+        let terminate_now = {
+            let mut mutable = self.mutable.lock();
+            if mutable.state == State::Terminated {
+                return Err(ErrorCode::INVALID_STATE);
+            }
+
+            mutable.state = State::Terminated;
+
+            // We can't terminate right now while it is being processed in
+            // an upcall handler.
+            mutable.in_upcalls == 0
+        };
+
+        if terminate_now {
+            self.upcall.invoke(UpcallArg::Terminated);
+        }
         Ok(())
     }
 

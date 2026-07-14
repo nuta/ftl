@@ -25,6 +25,8 @@ pub struct StartInfo {
     pub thread_set_context:
         fn(thread: &Handle, kind: ContextKind, regs: &ContextData) -> crate::Result<()>,
     pub thread_unblock: fn(thread: &Handle) -> crate::Result<()>,
+    pub thread_terminate: fn(thread: &Handle) -> crate::Result<()>,
+    pub thread_destroy: fn(thread: &Handle) -> crate::Result<()>,
 }
 
 pub fn start_info() -> &'static StartInfo {

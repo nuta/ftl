@@ -2,6 +2,7 @@ use alloc::sync::Arc;
 
 use crate::handle::Handle;
 use crate::start::start_info;
+use crate::upcall::UpCallCtx;
 use crate::upcall::Upcall;
 use crate::upcall::UserData;
 use crate::vmspace::VmSpace;
@@ -56,16 +57,24 @@ pub struct Sysret {
 
 pub enum UpcallArg {
     Syscall,
+    Terminated,
 }
 
 pub trait Handler: Send + Sync {
     fn syscall(&self, thread: &Thread);
+    fn terminated(&self, thread: &Thread);
 }
 
-fn upcall_entry<H: Handler + 'static>(user_data: usize, arg: UpcallArg) {
-    let user_data = unsafe { &*(user_data as *const UserData<Arc<Thread>, H>) };
+fn upcall_entry<H: Handler + 'static>(ctx: UpCallCtx, arg: UpcallArg) {
     match arg {
-        UpcallArg::Syscall => user_data.handler.syscall(&user_data.ctx),
+        UpcallArg::Syscall => {
+            let user_data = unsafe { UserData::<Arc<Thread>, H>::borrow(ctx) };
+            user_data.handler.syscall(&user_data.object);
+        }
+        UpcallArg::Terminated => {
+            let user_data = unsafe { UserData::<Arc<Thread>, H>::reclaim(ctx) };
+            user_data.handler.terminated(&user_data.object);
+        }
     }
 }
 
@@ -99,5 +108,20 @@ impl Thread {
     pub fn unblock(&self) -> crate::Result<()> {
         let start_info = start_info();
         (start_info.thread_unblock)(&self.handle)
+    }
+
+    /// Stops the thread permanently. Safe to call from its syscall handler.
+    pub fn terminate(&self) -> crate::Result<()> {
+        let start_info = start_info();
+        (start_info.thread_terminate)(&self.handle)
+    }
+}
+
+impl Drop for Thread {
+    fn drop(&mut self) {
+        let start_info = start_info();
+        if let Err(err) = (start_info.thread_destroy)(&self.handle) {
+            error!("failed to destroy thread: {:?}", err);
+        }
     }
 }

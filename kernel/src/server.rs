@@ -12,7 +12,6 @@ use crate::initfs;
 use crate::loader::LoadedElf;
 use crate::memory::PAGE_ALLOCATOR;
 use crate::memory::PageType;
-use crate::shared_ref::Handleable;
 use crate::shared_ref::SharedRef;
 use crate::thread::Thread;
 use crate::vmarea::VmArea;
@@ -69,6 +68,11 @@ const START_INFO: &StartInfo = &StartInfo {
         let thread = SharedRef::<Thread>::from_borrowed_handle(thread, HandleRight::WRITE)?;
         thread.unblock()
     },
+    thread_terminate: |thread| {
+        let thread = SharedRef::<Thread>::from_borrowed_handle(thread, HandleRight::WRITE)?;
+        thread.terminate()
+    },
+    thread_destroy: |thread| SharedRef::<Thread>::destroy_handle(thread),
 };
 
 static SERVERS: SpinLock<Vec<Server>> = SpinLock::new(Vec::new());
