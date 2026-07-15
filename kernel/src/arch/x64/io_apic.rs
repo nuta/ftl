@@ -1,12 +1,12 @@
 use core::ptr;
 
+use ftl_api::error::ErrorCode;
 use ftl_utils::spinlock::SpinLock;
 
 use super::get_cpuvar;
 use super::paddr2vaddr;
 use crate::address::PAddr;
 use crate::address::VAddr;
-use ftl_api::error::ErrorCode;
 
 static IOAPIC: SpinLock<Option<IoApic>> = SpinLock::new(None);
 
