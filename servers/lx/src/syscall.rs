@@ -46,5 +46,5 @@ fn sys_write(process: &Process, fd: u64, uaddr: isize, count: isize) -> Result<i
         remaining -= n;
     }
 
-    Ok(count as isize)
+    Ok(count)
 }
