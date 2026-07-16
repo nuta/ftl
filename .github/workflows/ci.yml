@@ -22,6 +22,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v5
+    # TODO: Remove Zig once we don't need hello.c program for testing
+    - run: sudo apt-get update && sudo apt-get install -y zig
     - name: Build World
       run: ./build.sh
 
@@ -30,5 +32,7 @@ jobs:
     runs-on: macos-latest
     steps:
     - uses: actions/checkout@v5
+    # TODO: Remove Zig once we don't need hello.c program for testing
+    - run: brew install zig
     - name: Build World
       run: ./build.sh
