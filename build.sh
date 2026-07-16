@@ -26,7 +26,7 @@ mkdir -p initfs/servers
 
 # Build apps.
 mkdir -p initfs/bin
-zig cc -O2 -target x86_64-linux-musl apps/hello/hello.S -ffreestanding -nostdlib -o initfs/bin/hello
+zig cc -O2 -target x86_64-linux-musl -static -no-pie apps/hello/hello.c -o initfs/bin/hello
 
 # Build servers.
 for server in "${SERVERS[@]}"; do
