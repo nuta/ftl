@@ -29,8 +29,8 @@ Build and run:
   - [x] Kernel: thread and memory management
   - [x] Language-based server isolation
   - [x] System call emulation: Hello World from Linux
+  - [x] musl libc support
   - [ ] Virtual file system
-  - [ ] musl support
   - [ ] fork/exec
   - [ ] signal
   - [ ] tty
