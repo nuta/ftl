@@ -1,6 +1,6 @@
 # FTL
 
-FTL is a microkernel-based operating system aiming to be the drop-in third choice for *NIX-like environments, after Linux and BSDs. It aims to be:
+FTL is a microkernel-based operating system aiming to be the drop-in third choice, after Linux and BSDs.
 
 - **Secure:** Microkernel based on language-based isolation, capabilities-based security, per-container application kernels, and more proactive security measures.
 - **Ergonomic:** Programmable and observable with interceptors (planned), easy-to-understand and testable codebase, handy end-to-end testing with TypeScript (planned), and quick edit-compile-run cycle.
@@ -25,7 +25,7 @@ Build and run:
 
 > :warning: This project is currently in pre-alpha stage.
 
-- [ ] **Milestone: Make shell work (work-in-progress)**
+- **Milestone: Make shell work (work-in-progress)**
   - [x] Kernel: thread and memory management
   - [x] Language-based server isolation
   - [x] System call emulation: Hello World from Linux
@@ -37,14 +37,14 @@ Build and run:
   - [ ] pipe
   - [ ] shell
   - [ ] e2e testing with TypeScript
-- [ ] **Milestone: Run FTL's own website on FTL [like this](https://seiya.me/blog/new-microkernel-os-in-10-days)**
+- **Milestone: Run FTL's own website on FTL [like this](https://seiya.me/blog/new-microkernel-os-in-10-days)**
   - [ ] Device driver framework
-  - [ ] Virtio-netfutexz
+  - [ ] Virtio-net
   - [ ] TCP/IP networking
   - [ ] Google Compute Engine support
-- [ ] **Milestone: Support modern software**
+- **Milestone: Support modern software**
   - [ ] Node.js (epoll, futex, ...)
-- [ ] **Milestone: Make it operational**
+- **Milestone: Make it operational**
   - [ ] Good sysadmin tools for FTL
   - [ ] Interceptors
 
@@ -52,9 +52,9 @@ Build and run:
 
 ### Secure kernel without compromise
 
-Similar to microkernels, most of OS services such as device drivers, file systems, and network stacks, and Linux compatibility layer are implemented as isolated OS services (servers) on top of the kernel.
+Similar to microkernels, most OS services, such as device drivers, file systems, network stacks, and Linux compatibility layer, are implemented as isolated OS services (servers) on top of the kernel.
 
-Servers coexist in the kernel space with language-based isolation, relying on Rust's safety guarantees and sound and securely designed API for OS services.  [TockOS](https://dl.acm.org/doi/10.1145/3131672.3136988), [RedLeaf](https://www.usenix.org/conference/osdi20/presentation/narayanan-vikram), and [framekernel](https://www.usenix.org/conference/atc25/presentation/peng-yuke) are examples of this approach.
+Servers coexist in the kernel space with language-based isolation, relying on Rust's safety guarantees and a sound, securely designed API for OS services. [TockOS](https://dl.acm.org/doi/10.1145/3131672.3136988), [RedLeaf](https://www.usenix.org/conference/osdi20/presentation/narayanan-vikram), and [framekernel](https://www.usenix.org/conference/atc25/presentation/peng-yuke) are examples of this approach.
 
 Language-based isolation is weaker than hardware-based ones used in traditional microkernels, but it enables _good-enough_ security without sacrificing performance.
 
@@ -70,7 +70,7 @@ The application kernel is implemented as a Rust library crate, with a clear inte
 
 FTL is designed to support multiple personalities. The primary personality is the Linux compatibility layer, which allows running Linux binaries without any modifications.
 
-Foreign binary support (ABI emulation) is a well-established technique that can be seen in modern operating systems. Windows Subsystem for Linux (WSL 1), FreeBSD's [Linuxulator](https://wiki.freebsd.org/Linuxulator), [OSv](https://osv.io/), to name a few.
+Foreign binary support (ABI emulation) is a well-established technique that can be seen in modern operating systems, such as Windows Subsystem for Linux (WSL 1), FreeBSD's [Linuxulator](https://wiki.freebsd.org/Linuxulator), and [OSv](https://osv.io/), to name a few.
 
 The key difference in FTL is that each container has its own isolated Linux-like application kernel, implemented on top of a small kernel core.
 
@@ -78,7 +78,7 @@ We also aim to add our own personality to offer experimental system calls and fe
 
 ### Interceptors (planned)
 
-Interceptor is a planned feature to control the behavior of OS components at runtime, just like middlewares in web frameworks. Rate limiting, security auditing, network packet routing, live patching, will be implemented as interceptors.
+Interceptor is a planned feature to control the behavior of OS components at runtime, just like middlewares in web frameworks. Rate limiting, security auditing, network packet routing, and live patching will be implemented as interceptors.
 
 ### Batteries included
 
