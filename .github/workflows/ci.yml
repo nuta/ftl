@@ -19,7 +19,7 @@ concurrency:
 jobs:
   ubuntu_build:
     name: "Build (Ubuntu)"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
     - uses: actions/checkout@v5
     # TODO: Remove Zig once we don't need hello.c program for testing
