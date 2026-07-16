@@ -19,11 +19,14 @@ use ftl_utils::alignment::align_down;
 use ftl_utils::alignment::align_up;
 use ftl_utils::spinlock::SpinLock;
 
+use crate::elf::STACK_BASE;
+use crate::elf::STACK_SIZE;
+use crate::elf::build_initial_stack;
 use crate::errno::Errno;
+use crate::syscall::SyscallOutput;
 
-const PAGE_SIZE: usize = 4096;
-const STACK_BASE: usize = 0x0000_7000_0000_0000;
-const STACK_SIZE: usize = 64 * 1024;
+// TODO: should we use MIN_PAGE_SIZE in FTL?
+pub const PAGE_SIZE: usize = 4096;
 
 struct Mutable {
     threads: Vec<Weak<Thread>>,
@@ -44,9 +47,21 @@ impl Process {
         let vmspace = VmSpace::create()?;
 
         // Copy the ELF segments into vmareas and map them.
+        let e_phoff = elf.ehdr.e_phoff;
+        let mut phdr_uaddr = None;
         for phdr in elf.phdrs {
             if phdr.p_type != PhdrType::Load as u32 {
                 continue;
+            }
+
+            // If the segment contains the program header table, store its uaddr
+            // for AT_PHDR.
+            if phdr_uaddr.is_none()
+                && phdr.p_offset <= e_phoff
+                && e_phoff < phdr.p_offset + phdr.p_filesz
+            {
+                let offset_in_segment = e_phoff - phdr.p_offset;
+                phdr_uaddr = Some(phdr.p_vaddr + offset_in_segment);
             }
 
             let vaddr = phdr.p_vaddr as usize;
@@ -71,10 +86,17 @@ impl Process {
             vmspace.map(&vmarea, mapped_vaddr, attrs)?;
         }
 
+        // https://xkcd.com/221/
+        // FIXME: Use a real random value.
+        let random = b"4444444444444444";
+        let argv: &[&[u8]] = &[b"hello\0"];
+        let env: &[&[u8]] = &[];
+
         // Prepare the initial stack.
         let stack = VmArea::allocate(STACK_SIZE)?;
+        let sp = build_initial_stack(&stack, &elf, argv, env, phdr_uaddr, random)
+            .expect("TODO: proper error handling");
         vmspace.map(&stack, STACK_BASE, PageAttrs::READ | PageAttrs::WRITE)?;
-        let sp = STACK_BASE + STACK_SIZE;
 
         let process = Arc::new(Process {
             vmspace,
@@ -130,21 +152,25 @@ impl ftl_api::thread::Handler for ThreadContext {
             .expect("get_context failed");
         let args = unsafe { regs.syscall_args };
 
-        let result = crate::syscall::handle_syscall(&self.process, thread, args);
-
-        // Set the return value.
-        let retval = result.unwrap_or_else(Errno::to_retval);
-        thread
-            .set_context(
-                ContextKind::Sysret,
-                &ContextData {
-                    sysret: Sysret {
-                        retval: retval as u64,
-                    },
-                },
-            )
-            .expect("set_context failed");
-        thread.unblock().expect("unblock failed");
+        match crate::syscall::handle_syscall(&self.process, thread, args) {
+            SyscallOutput::Exit => {
+            }
+            SyscallOutput::Done(result) => {
+                // Set the return value.
+                let retval = result.unwrap_or_else(Errno::to_retval);
+                thread
+                    .set_context(
+                        ContextKind::Sysret,
+                        &ContextData {
+                            sysret: Sysret {
+                                retval: retval as u64,
+                            },
+                        },
+                    )
+                    .expect("set_context failed");
+                thread.unblock().expect("unblock failed");
+            }
+        }
     }
 
     fn terminated(&self, _thread: &Thread) {}
