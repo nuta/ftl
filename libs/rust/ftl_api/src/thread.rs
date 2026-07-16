@@ -17,6 +17,7 @@ pub enum ContextKind {
     SyscallArgs = 0,
     Sysret = 1,
     InitRegs = 2,
+    Fsbase = 3,
 }
 
 #[repr(C)]
@@ -25,6 +26,7 @@ pub union ContextData {
     pub syscall_args: SyscallArgs,
     pub sysret: Sysret,
     pub init_regs: InitRegs,
+    pub fsbase: FsBase,
 }
 
 /// The initial registers for a thread.
@@ -73,6 +75,15 @@ impl Sysret {
     pub const fn zeroed() -> Self {
         Self { retval: 0 }
     }
+}
+
+/// The x86-64 fsbase.
+///
+/// In Linux, `arch_prctl(ARCH_(SET|GET)_FS)` is the equivalent.
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct FsBase {
+    pub base: u64,
 }
 
 pub enum UpcallArg {

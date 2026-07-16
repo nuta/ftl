@@ -3,6 +3,7 @@ use core::mem::offset_of;
 
 use ftl_api::thread::ContextData;
 use ftl_api::thread::ContextKind;
+use ftl_api::thread::FsBase;
 use ftl_api::thread::InitRegs;
 use ftl_api::thread::SyscallArgs;
 use ftl_api::thread::Sysret;
@@ -36,6 +37,7 @@ pub struct Thread {
     pub(super) r14: u64,
     pub(super) r15: u64,
     pub(super) gsbase: u64,
+    pub(super) fsbase: u64,
 }
 
 impl Thread {
@@ -70,6 +72,9 @@ impl Thread {
                     sp: self.rsp,
                 };
             }
+            ContextKind::Fsbase => {
+                regs.fsbase = FsBase { base: self.fsbase };
+            }
         }
     }
 
@@ -93,6 +98,9 @@ impl Thread {
                 self.rip = init_regs.pc;
                 self.rsp = init_regs.sp;
             }
+            ContextKind::Fsbase => {
+                self.fsbase = unsafe { regs.fsbase }.base;
+            }
         }
     }
 
@@ -103,6 +111,8 @@ impl Thread {
                 "swapgs",
                 "mov rax, [rsp + {gsbase_offset}]",
                 "wrgsbase rax",
+                "mov rax, [rsp + {fsbase_offset}]",
+                "wrfsbase rax",
                 "mov rax, [rsp + {rax_offset}]",
                 "mov rbx, [rsp + {rbx_offset}]",
                 "mov rcx, [rsp + {rcx_offset}]",
@@ -132,6 +142,7 @@ impl Thread {
                 "iretq",
                 in(reg) thread,
                 gsbase_offset = const offset_of!(Thread, gsbase),
+                fsbase_offset = const offset_of!(Thread, fsbase),
                 rax_offset = const offset_of!(Thread, rax),
                 rbx_offset = const offset_of!(Thread, rbx),
                 rcx_offset = const offset_of!(Thread, rcx),
