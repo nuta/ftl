@@ -17,6 +17,7 @@ extern "C" fn rust_boot(multiboot_magic: u32, start_info: u32) -> ! {
 
     trace!("Booting FTL...");
     enable_fsgsbase();
+    enable_sse();
 
     let cpu_id = 0;
     super::gdt::init(cpu_id);
@@ -41,6 +42,24 @@ fn enable_fsgsbase() {
         asm!(
             "mov rax, cr4",
             "or rax, 1 << 16",
+            "mov cr4, rax",
+            out("rax") _,
+        );
+    }
+}
+
+fn enable_sse() {
+    unsafe {
+        asm!(
+            // Do not cause #UD when executing FPU/SSE instructions.
+            "mov rax, cr0",
+            "and rax, ~(1 << 2)",
+            "or  rax, 1 << 1",
+            "mov cr0, rax",
+
+            // Enable FPU/SSE instructions.
+            "mov rax, cr4",
+            "or  rax, (1 << 9) | (1 << 10)", // OSFXSR | OSXMMEXCPT
             "mov cr4, rax",
             out("rax") _,
         );
