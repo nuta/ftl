@@ -1,6 +1,6 @@
 # FTL
 
-FTL is a hybrid kernel operating system aiming to be the drop-in third choice for *NIX-like environments, after Linux and BSDs. It aims to be:
+FTL is a microkernel-based operating system aiming to be the drop-in third choice for *NIX-like environments, after Linux and BSDs. It aims to be:
 
 - **Secure:** Microkernel based on language-based isolation, capabilities-based security, per-container application kernels, and more proactive security measures.
 - **Ergonomic:** Programmable and observable with interceptors (planned), easy-to-understand and testable codebase, handy end-to-end testing with TypeScript (planned), and quick edit-compile-run cycle.
@@ -50,13 +50,13 @@ Build and run:
 
 ## Design
 
-FTL is a hybrid kernel. It has a small core (like microkernel) with language-isolated OS components (like [TockOS](https://dl.acm.org/doi/10.1145/3131672.3136988), [RedLeaf](https://www.usenix.org/conference/osdi20/presentation/narayanan-vikram), and [framekernel](https://www.usenix.org/conference/atc25/presentation/peng-yuke)).
-
 ### Secure kernel without compromise
 
 Similar to microkernels, most of OS services such as device drivers, file systems, and network stacks, and Linux compatibility layer are implemented as isolated OS services (servers) on top of the kernel.
 
-Servers coexist in the kernel space with language-based isolation, relying on Rust's safety guarantees and sound and securely designed API for OS services. Language-based isolation is weaker than hardware-based ones used in traditional microkernels, but it enables _good-enough_ security without sacrificing performance.
+Servers coexist in the kernel space with language-based isolation, relying on Rust's safety guarantees and sound and securely designed API for OS services.  [TockOS](https://dl.acm.org/doi/10.1145/3131672.3136988), [RedLeaf](https://www.usenix.org/conference/osdi20/presentation/narayanan-vikram), and [framekernel](https://www.usenix.org/conference/atc25/presentation/peng-yuke) are examples of this approach.
+
+Language-based isolation is weaker than hardware-based ones used in traditional microkernels, but it enables _good-enough_ security without sacrificing performance.
 
 ### Per-container kernels
 
