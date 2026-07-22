@@ -2,6 +2,8 @@ name: CI
 
 on:
   push:
+    branches:
+      - main
   pull_request:
     branches:
       - main
@@ -11,6 +13,7 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -20,8 +23,12 @@ jobs:
   ubuntu_build:
     name: "Build (Ubuntu)"
     runs-on: ubuntu-26.04
+    timeout-minutes: 30
     steps:
     - uses: actions/checkout@v7
+      with:
+        persist-credentials: false
+    - uses: ./.github/actions/cargo-cache
     # TODO: Remove Zig once we don't need hello.c program for testing
     - run: sudo apt-get update && sudo apt-get install -y zig
     - name: Build World
@@ -30,8 +37,12 @@ jobs:
   macos_build:
     name: "Build (macOS)"
     runs-on: macos-latest
+    timeout-minutes: 30
     steps:
     - uses: actions/checkout@v7
+      with:
+        persist-credentials: false
+    - uses: ./.github/actions/cargo-cache
     # TODO: Remove Zig once we don't need hello.c program for testing
     - run: brew install zig
     - name: Build World

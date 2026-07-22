@@ -1,0 +1,17 @@
+name: "Cargo cache"
+description: "Caches Cargo dependencies and build artifacts. Avoid using this action for release builds and build from scratch instead!"
+
+runs:
+  using: composite
+  steps:
+  - uses: actions/cache@v5
+    with:
+      path: |
+        ~/.cargo/registry/index
+        ~/.cargo/registry/cache
+        ~/.cargo/git/db
+        target
+      key: cargo-${{ runner.os }}-${{ github.ref_name }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
+      restore-keys: |
+        cargo-${{ runner.os }}-${{ github.ref_name }}-
+        cargo-${{ runner.os }}-main-
