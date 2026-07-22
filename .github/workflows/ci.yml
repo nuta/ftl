@@ -27,7 +27,7 @@ jobs:
   ubuntu_build:
     name: "Build (Ubuntu)"
     runs-on: ubuntu-26.04
-    timeout-minutes: 30
+    timeout-minutes: 15
     steps:
     - uses: actions/checkout@v7
       with:
@@ -41,7 +41,7 @@ jobs:
   macos_build:
     name: "Build (macOS)"
     runs-on: macos-latest
-    timeout-minutes: 30
+    timeout-minutes: 15
     steps:
     - uses: actions/checkout@v7
       with:
