@@ -9,12 +9,15 @@ runs:
   - uses: actions/cache@v6
     with:
       path: ~/.rustup/toolchains/nightly-*
-      key: rustup-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml') }}
+      key: toolchain-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml') }}
 
   - uses: actions/cache@v6
     with:
-      path: target
-      key: cargo-${{ runner.os }}-${{ github.ref_name }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
+      path: |
+        ~/.cargo/registry/index
+        ~/.cargo/registry/cache
+        target
+      key: build-${{ runner.os }}-${{ github.ref_name }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
       restore-keys: |
-        cargo-${{ runner.os }}-${{ github.ref_name }}-
-        cargo-${{ runner.os }}-main-
+        build-${{ runner.os }}-${{ github.ref_name }}-
+        build-${{ runner.os }}-main-
