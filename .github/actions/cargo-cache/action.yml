@@ -4,7 +4,7 @@ description: "Caches Cargo dependencies and build artifacts. Avoid using this ac
 runs:
   using: composite
   steps:
-  - uses: actions/cache@v5
+  - uses: actions/cache@v6
     with:
       path: |
         ~/.cargo/registry/index
