@@ -21,7 +21,7 @@ jobs:
     name: "Build (Ubuntu)"
     runs-on: ubuntu-26.04
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v7
     # TODO: Remove Zig once we don't need hello.c program for testing
     - run: sudo apt-get update && sudo apt-get install -y zig
     - name: Build World
@@ -31,7 +31,7 @@ jobs:
     name: "Build (macOS)"
     runs-on: macos-latest
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v7
     # TODO: Remove Zig once we don't need hello.c program for testing
     - run: brew install zig
     - name: Build World
