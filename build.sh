@@ -1,7 +1,6 @@
 #!/bin/bash
 set -eu
 
-APPS=(hello)
 SERVERS=(lx)
 RELEASE=${RELEASE:-}
 ARCH=${ARCH:-x64}
