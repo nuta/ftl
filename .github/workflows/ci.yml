@@ -1,9 +1,13 @@
+# CI workflow.
+#
+# You should NEVER use artifacts from this workflow for releases - this
+# workflow is optimized for speed (like caching), not for reproducibility.
 name: CI
 
 on:
   push:
     branches:
-      - main
+      - '**' # "*" does not match names with slashes
   pull_request:
     branches:
       - main
