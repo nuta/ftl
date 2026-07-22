@@ -25,7 +25,7 @@ pub use cpuvar::CpuVar;
 pub use cpuvar::get_cpuvar;
 pub use cpuvar::set_cpuvar;
 pub use idle::idle;
-pub use semihosting::semihosting_exit;
+// pub use semihosting::semihosting_exit;
 pub use thread::Thread;
 pub use vmspace::DIRECT_MAP_END;
 pub use vmspace::MIN_PAGE_SIZE;

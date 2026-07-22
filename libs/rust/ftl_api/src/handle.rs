@@ -4,8 +4,10 @@ use core::ops::BitOr;
 /// A reference to a kernel object, with allowed actions.
 pub struct Handle {
     /// An opaque pointer to the kernel memory.
+    #[cfg_attr(not(feature = "kernel"), allow(unused))]
     raw: usize,
     /// The type of the kernel object.
+    #[cfg_attr(not(feature = "kernel"), allow(unused))]
     type_id: TypeId,
     /// The rights granted to the handle. Also known as *capability*.
     right: HandleRight,

@@ -13,6 +13,7 @@ use ftl_api::Spec;
 use process::Process;
 
 struct Server {
+    #[allow(unused)]
     processes: Vec<Arc<Process>>,
 }
 
@@ -29,7 +30,7 @@ impl Server {
 }
 
 #[repr(align(8))]
-struct AlignedBytes<const N: usize>([u8; N]);
+pub struct AlignedBytes<const N: usize>([u8; N]);
 
 pub static HELLO_ELF: AlignedBytes<{ include_bytes!("../../../initfs/bin/hello").len() }> =
     AlignedBytes(*include_bytes!("../../../initfs/bin/hello"));

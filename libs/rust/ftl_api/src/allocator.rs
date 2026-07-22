@@ -21,12 +21,6 @@ impl GlobalAllocator {
             inner: SpinLock::new(LinkedListAllocator::new()),
         }
     }
-
-    pub fn add_region(&self, ptr: *mut u8, size: usize) {
-        unsafe {
-            self.inner.lock().add_chunk(ptr, size);
-        }
-    }
 }
 
 unsafe impl GlobalAlloc for GlobalAllocator {
@@ -45,7 +39,11 @@ unsafe impl GlobalAlloc for GlobalAllocator {
             }
         };
 
-        inner.add_chunk(ptr, MALLOC_CHUNK_SIZE);
+        // SAFETY: malloc is guaranteed to return a valid pointer
+        //         when it returns Ok(ptr).
+        unsafe {
+            inner.add_chunk(ptr, MALLOC_CHUNK_SIZE);
+        }
 
         // Try to allocate from the new chunk.
         if let Some(ptr) = inner.malloc(layout.size(), layout.align()) {
@@ -65,5 +63,3 @@ unsafe impl GlobalAlloc for GlobalAllocator {
         }
     }
 }
-
-pub(crate) fn init() {}
