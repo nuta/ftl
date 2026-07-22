@@ -8,11 +8,12 @@ runs:
   steps:
   - uses: actions/cache@v6
     with:
-      path: |
-        ~/.cargo/registry/index
-        ~/.cargo/registry/cache
-        ~/.cargo/git/db
-        target
+      path: ~/.rustup/toolchains/nightly-*
+      key: rustup-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml') }}
+
+  - uses: actions/cache@v6
+    with:
+      path: target
       key: cargo-${{ runner.os }}-${{ github.ref_name }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
       restore-keys: |
         cargo-${{ runner.os }}-${{ github.ref_name }}-
