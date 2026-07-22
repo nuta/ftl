@@ -153,8 +153,7 @@ impl ftl_api::thread::Handler for ThreadContext {
         let args = unsafe { regs.syscall_args };
 
         match crate::syscall::handle_syscall(&self.process, thread, args) {
-            SyscallOutput::Exit => {
-            }
+            SyscallOutput::Exit => {}
             SyscallOutput::Done(result) => {
                 // Set the return value.
                 let retval = result.unwrap_or_else(Errno::to_retval);
