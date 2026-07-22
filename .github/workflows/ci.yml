@@ -1,7 +1,13 @@
+# CI workflow.
+#
+# You should NEVER use artifacts from this workflow for releases - this
+# workflow is optimized for speed (like caching), not for reproducibility.
 name: CI
 
 on:
   push:
+    branches:
+      - '**' # "*" does not match names with slashes
   pull_request:
     branches:
       - main
@@ -11,6 +17,7 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -20,8 +27,13 @@ jobs:
   ubuntu_build:
     name: "Build (Ubuntu)"
     runs-on: ubuntu-26.04
+    timeout-minutes: 15
     steps:
     - uses: actions/checkout@v7
+      with:
+        persist-credentials: false
+    - name: Use build cache
+      uses: ./.github/actions/build-cache
     # TODO: Remove Zig once we don't need hello.c program for testing
     - run: sudo apt-get update && sudo apt-get install -y zig
     - name: Build World
@@ -30,8 +42,13 @@ jobs:
   macos_build:
     name: "Build (macOS)"
     runs-on: macos-latest
+    timeout-minutes: 15
     steps:
     - uses: actions/checkout@v7
+      with:
+        persist-credentials: false
+    - name: Use build cache
+      uses: ./.github/actions/build-cache
     # TODO: Remove Zig once we don't need hello.c program for testing
     - run: brew install zig
     - name: Build World

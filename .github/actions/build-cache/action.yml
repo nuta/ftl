@@ -1,0 +1,23 @@
+# Caches Cargo dependencies and build artifacts.
+#
+# Avoid using this action for release builds and build from scratch instead!
+name: "Cargo cache"
+
+runs:
+  using: composite
+  steps:
+  - uses: actions/cache@v6
+    with:
+      path: ~/.rustup/toolchains/nightly-*
+      key: toolchain-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml') }}
+
+  - uses: actions/cache@v6
+    with:
+      path: |
+        ~/.cargo/registry/index
+        ~/.cargo/registry/cache
+        target
+      key: build-${{ runner.os }}-${{ github.ref_name }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
+      restore-keys: |
+        build-${{ runner.os }}-${{ github.ref_name }}-
+        build-${{ runner.os }}-main-
