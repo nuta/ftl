@@ -1,3 +1,3 @@
-pub fn unreachable() {
-    loop {}
+pub fn unreachable() -> ! {
+    panic!("unreachable");
 }

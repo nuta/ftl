@@ -14,6 +14,9 @@ fn syscall1(n: Syscall, a0: usize) {
             out("r11") _,
         );
     }
+
+    #[cfg(not(target_os = "none"))]
+    panic!("syscall1(0x{:x}, {a0:x}) is not implemented", n as usize);
 }
 
 fn syscall2(n: Syscall, a0: usize, a1: usize) {
@@ -30,6 +33,12 @@ fn syscall2(n: Syscall, a0: usize, a1: usize) {
             out("r11") _,
         );
     }
+
+    #[cfg(not(target_os = "none"))]
+    panic!(
+        "syscall2(0x{:x}, {a0:x}, {a1:x}) is not implemented",
+        n as usize
+    );
 }
 
 pub fn print(bytes: &[u8]) {

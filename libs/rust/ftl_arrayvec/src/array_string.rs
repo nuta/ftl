@@ -119,7 +119,7 @@ impl<const N: usize> Eq for ArrayString<N> {}
 
 impl<const N: usize> PartialOrd for ArrayString<N> {
     fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
-        self.as_str().partial_cmp(other.as_str())
+        Some(self.cmp(other))
     }
 }
 

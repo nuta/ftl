@@ -55,7 +55,7 @@ fn load_elf(vmspace: &SharedRef<VmSpace>, elf_file: &[u8]) -> usize {
 
 fn find_file<'a>(bootinfo: &'a BootInfo, name: &[u8]) -> File<'a> {
     for module in &bootinfo.modules {
-        let initfs = InitFsLoader::new(&module);
+        let initfs = InitFsLoader::new(module);
         for file in initfs {
             if file.name == name {
                 return file;

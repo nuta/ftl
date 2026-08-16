@@ -11,7 +11,7 @@ use crate::address::VAddr;
 use crate::boot::BootInfo;
 
 pub const MIN_PAGE_SIZE: usize = 4096;
-pub const USER_ADDR_END: usize = usize::MAX;
+pub const USER_ADDR_END: usize = 0x8000_0000;
 pub const DIRECT_MAP_END: PAddr = PAddr::new(usize::MAX);
 
 pub fn idle() -> ! {

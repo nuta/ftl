@@ -3,6 +3,8 @@ use core::fmt;
 use ftl_types::error::ErrorCode;
 use ftl_utils::alignment::is_aligned;
 
+use crate::arch::USER_ADDR_END;
+
 /// A physical memory address.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(transparent)]
@@ -135,7 +137,7 @@ impl USlice {
             return Err(ErrorCode::INVALID_ARG);
         };
 
-        if end.as_usize() > crate::arch::USER_ADDR_END {
+        if end.as_usize() > USER_ADDR_END {
             return Err(ErrorCode::NOT_ALLOWED);
         }
 

@@ -9,7 +9,7 @@ const MALLOC_CHUNK_SIZE: usize = 128 * 1024; // 128 KB
 #[global_allocator]
 static GLOBAL_ALLOCATOR: GlobalAllocator = GlobalAllocator::new();
 
-fn sys_malloc(size: usize) -> Result<*mut u8, ()> {
+fn sys_malloc(_size: usize) -> Result<*mut u8, ()> {
     todo!()
 }
 

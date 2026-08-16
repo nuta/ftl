@@ -5,6 +5,8 @@ use core::ops::DerefMut;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering;
 
+pub struct TryLockError;
+
 /// A simple spinlock.
 pub struct SpinLock<T: ?Sized> {
     lock: AtomicBool,
@@ -20,13 +22,13 @@ impl<T> SpinLock<T> {
     }
 
     #[track_caller]
-    pub fn try_lock(&self) -> Result<SpinLockGuard<'_, T>, ()> {
+    pub fn try_lock(&self) -> Result<SpinLockGuard<'_, T>, TryLockError> {
         if self
             .lock
             .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
             .is_err()
         {
-            return Err(());
+            return Err(TryLockError);
         }
 
         Ok(SpinLockGuard { this: self })

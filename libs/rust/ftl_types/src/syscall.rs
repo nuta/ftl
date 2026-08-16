@@ -1,6 +1,6 @@
-const SYS_NUMBER_BASE: usize = usize::MAX - 0xfff;
+const SYS_NUMBER_BASE: i32 = i32::MAX - 0xfff;
 
-#[repr(usize)]
+#[repr(i32)]
 pub enum Syscall {
     Print = SYS_NUMBER_BASE + 1,
     VCpuExit = SYS_NUMBER_BASE + 2,
