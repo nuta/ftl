@@ -55,8 +55,9 @@ impl VCpu {
             state: State::Blocked,
         };
 
+        let arch_vcpu = arch::VCpu::new(pc, sp)?;
         let thread = SharedRef::new(VCpu {
-            arch: UnsafeCell::new(arch::VCpu::new(pc, sp)),
+            arch: UnsafeCell::new(arch_vcpu),
             isolate,
             vmspace,
             mutable: SpinLock::new(mutable),

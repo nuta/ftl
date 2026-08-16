@@ -9,6 +9,7 @@ use super::gdt::GDT_KERNEL_CS;
 use super::io_apic::IRQ_VECTOR_BASE;
 use super::timer::TIMER_IRQ;
 use super::vcpu::VCpu;
+use super::vcpu::XSTATE_MASK;
 use crate::address::VAddr;
 use crate::cpuvar::CpuVar;
 
@@ -209,6 +210,14 @@ extern "C" fn interrupt_entry() -> ! {
         "mov [rax + {r14_offset}], r14",
         "mov [rax + {r15_offset}], r15",
 
+        // Save the user XSTATE.
+        "push rax",
+        "mov rdi, [rax + {xsave_ptr_offset}]",
+        "mov eax, {xstate_mask_lo}",
+        "mov edx, {xstate_mask_hi}",
+        "xsaveopt64 [rdi]",
+        "pop rax",
+
         // Save RAX too.
         "pop rbx",
         "mov [rax + {rax_offset}], rbx",
@@ -229,6 +238,9 @@ extern "C" fn interrupt_entry() -> ! {
 
         "jmp {handle_user_interrupt}",
         current_vcpu_offset = const offset_of!(CpuVar, current_vcpu),
+        xstate_mask_lo = const XSTATE_MASK & 0xffff_ffff,
+        xstate_mask_hi = const XSTATE_MASK >> 32,
+        xsave_ptr_offset = const offset_of!(VCpu, xsave_ptr),
         rip_offset = const offset_of!(VCpu, rip),
         rflags_offset = const offset_of!(VCpu, rflags),
         rax_offset = const offset_of!(VCpu, rax),

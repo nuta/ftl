@@ -54,7 +54,7 @@ impl VmSpace {
 pub struct VCpu {}
 
 impl VCpu {
-    pub fn new(_pc: usize, _sp: usize) -> Self {
+    pub fn new(_pc: usize, _sp: usize) -> Result<Self, ErrorCode> {
         todo!()
     }
 

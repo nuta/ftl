@@ -5,6 +5,7 @@ use super::gdt::GDT_KERNEL_CS;
 use super::msr::rdmsr;
 use super::msr::wrmsr;
 use super::vcpu::VCpu;
+use super::vcpu::XSTATE_MASK;
 use crate::cpuvar::CpuVar;
 
 #[unsafe(naked)]
@@ -42,6 +43,12 @@ extern "C" fn syscall_handler() -> ! {
         "mov rdi, gs:[{scratch_offset}]",
         "mov [rax + {rax_offset}], rdi",
 
+        // Save the user XSTATE.
+        "mov rdi, [rax + {xsave_ptr_offset}]",
+        "mov eax, {xstate_mask_lo}",
+        "mov edx, {xstate_mask_hi}",
+        "xsaveopt64 [rdi]",
+
         // Switch to the kernel stack.
         "mov rsp, gs:[{kernel_rsp_offset}]",
 
@@ -49,6 +56,9 @@ extern "C" fn syscall_handler() -> ! {
         "jmp {handle_syscall}",
         handle_syscall = sym crate::syscall::handle_syscall,
         current_vcpu_offset = const offset_of!(CpuVar, current_vcpu),
+        xstate_mask_lo = const XSTATE_MASK & 0xffff_ffff,
+        xstate_mask_hi = const XSTATE_MASK >> 32,
+        xsave_ptr_offset = const offset_of!(VCpu, xsave_ptr),
         scratch_offset = const offset_of!(CpuVar, arch.scratch),
         kernel_rsp_offset = const offset_of!(CpuVar, arch.kernel_rsp),
         rip_offset = const offset_of!(VCpu, rip),

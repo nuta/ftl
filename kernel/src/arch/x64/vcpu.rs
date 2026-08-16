@@ -1,10 +1,17 @@
 use core::arch::asm;
 use core::mem::offset_of;
 
+use ftl_types::error::ErrorCode;
 use ftl_types::vcpu::SyscallRegs;
 
 use super::gdt::GDT_USER_CS;
 use super::gdt::GDT_USER_DS;
+use crate::arch;
+use crate::arch::MIN_PAGE_SIZE;
+use crate::memory::PAGE_ALLOCATOR;
+use crate::memory::PageType;
+
+pub(super) const XSTATE_MASK: u64 = (1 << 0) | (1 << 1); // x87 | SSE
 
 #[derive(Default, Debug)]
 #[repr(C, packed)]
@@ -33,18 +40,24 @@ pub struct VCpu {
     pub(super) r15: u64,
     pub(super) gsbase: u64,
     pub(super) fsbase: u64,
+    pub(super) xsave_ptr: u64,
 }
 
 impl VCpu {
-    pub fn new(pc: usize, sp: usize) -> Self {
-        Self {
+    pub fn new(pc: usize, sp: usize) -> Result<Self, ErrorCode> {
+        let paddr = PAGE_ALLOCATOR
+            .alloc(MIN_PAGE_SIZE, PageType::Zeroed)
+            .ok_or(ErrorCode::OUT_OF_MEMORY)?;
+
+        Ok(Self {
             cs: GDT_USER_CS as u64,
             rflags: 0x202, // interrupts enabled
             ss: GDT_USER_DS as u64,
             rip: pc as u64,
             rsp: sp as u64,
+            xsave_ptr: arch::paddr2vaddr(paddr).as_usize() as u64,
             ..Default::default()
-        }
+        })
     }
 
     pub fn get_syscall_regs(&self) -> SyscallRegs {
@@ -66,6 +79,10 @@ impl VCpu {
         unsafe {
             asm!(
                 "mov rsp, {}",
+                "mov rdi, [rsp + {xsave_ptr_offset}]",
+                "mov eax, {xstate_mask_lo}",
+                "mov edx, {xstate_mask_hi}",
+                "xrstor64 [rdi]",
                 "swapgs",
                 "mov rax, [rsp + {gsbase_offset}]",
                 "wrgsbase rax",
@@ -99,6 +116,9 @@ impl VCpu {
                 // > 7.14.3 IRET in IA-32e Mode
                 "iretq",
                 in(reg) vcpu,
+                xstate_mask_lo = const XSTATE_MASK & 0xffff_ffff,
+                xstate_mask_hi = const XSTATE_MASK >> 32,
+                xsave_ptr_offset = const offset_of!(VCpu, xsave_ptr),
                 gsbase_offset = const offset_of!(VCpu, gsbase),
                 fsbase_offset = const offset_of!(VCpu, fsbase),
                 rax_offset = const offset_of!(VCpu, rax),

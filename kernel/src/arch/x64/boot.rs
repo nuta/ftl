@@ -3,6 +3,7 @@ use core::arch::naked_asm;
 
 use super::multiboot;
 use super::pvh;
+use super::vcpu::XSTATE_MASK;
 use super::vmspace::BOOT_PDPT;
 use super::vmspace::BOOT_PML4;
 use super::vmspace::KERNEL_BASE;
@@ -53,15 +54,25 @@ fn enable_sse() {
         asm!(
             // Do not cause #UD when executing FPU/SSE instructions.
             "mov rax, cr0",
-            "and rax, ~(1 << 2)",
+            "and rax, ~((1 << 2) | (1 << 3))", // Clear EM and TS
             "or  rax, 1 << 1",
             "mov cr0, rax",
 
             // Enable FPU/SSE instructions.
             "mov rax, cr4",
-            "or  rax, (1 << 9) | (1 << 10)", // OSFXSR | OSXMMEXCPT
+            "or  rax, (1 << 9) | (1 << 10) | (1 << 18)", // OSFXSR | OSXMMEXCPT | OSXSAVE
             "mov cr4, rax",
+
+            // Enable the selected XSTATE features.
+            "mov ecx, 0", // XCR0
+            "mov eax, {xstate_mask_lo}",
+            "mov edx, {xstate_mask_hi}",
+            "xsetbv",
+            xstate_mask_lo = const XSTATE_MASK & 0xffff_ffff,
+            xstate_mask_hi = const XSTATE_MASK >> 32,
             out("rax") _,
+            out("rcx") _,
+            out("rdx") _,
         );
     }
 }
