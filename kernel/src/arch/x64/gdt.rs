@@ -75,11 +75,11 @@ fn write_tss(cpu_id: usize) -> u64 {
         let tss = &mut TSS_ENTRIES[cpu_id];
         tss.write(Tss {
             reserved0: 0,
-            rsp0: 0,
+            rsp0: super::boot::bsp_stack_top(),
             rsp1: 0,
             rsp2: 0,
             reserved1: 0,
-            ist: [super::boot::bsp_stack_top(), 0, 0, 0, 0, 0, 0],
+            ist: [0; 7],
             reserved2: 0,
             reserved3: 0,
             iomap_offset: offset_of!(Tss, io_permission_map) as u16,

@@ -1,55 +1,24 @@
-use core::mem::size_of;
-use core::slice;
-
-use ftl_api::start::StartInfo;
-use ftl_elf::DT_NULL;
-use ftl_elf::DT_RELA;
-use ftl_elf::DT_RELASZ;
-use ftl_elf::Dyn;
 use ftl_elf::Elf;
+use ftl_elf::PF_R;
+use ftl_elf::PF_W;
+use ftl_elf::PF_X;
 use ftl_elf::PhdrType;
-use ftl_elf::Rela;
+use ftl_types::vmspace::PageAttrs;
 use ftl_utils::alignment::align_up;
 
-use crate::arch;
+use crate::address::UAddr;
 use crate::arch::MIN_PAGE_SIZE;
-use crate::memory::PAGE_ALLOCATOR;
-use crate::memory::PageType;
+use crate::boot::BootInfo;
+use crate::initfs::File;
+use crate::initfs::InitFsLoader;
+use crate::isolate::Isolate;
+use crate::shared_ref::SharedRef;
+use crate::vcpu::VCpu;
+use crate::vmobject::VmObject;
+use crate::vmspace::VmSpace;
 
-pub type EntryFn = extern "Rust" fn(start_info: *const StartInfo);
-
-pub struct LoadedElf {
-    pub image: *const u8,
-    pub entry_fn: EntryFn,
-}
-
-#[derive(Debug)]
-pub enum Error {
-    ParseElf,
-    OutOfMemory,
-    BadRelocType,
-    BadRelocOffset,
-    BadRelocSize,
-}
-
-pub fn load_elf(elf_file: &[u8]) -> Result<LoadedElf, Error> {
-    let elf = Elf::parse(elf_file, ftl_elf::ET_DYN).map_err(|_| Error::ParseElf)?;
-
-    // Find the end of the image to calculate the size of the memory it needs.
-    let mut image_size = 0;
-    for phdr in elf.phdrs {
-        if phdr.p_type == PhdrType::Load as u32 {
-            image_size = image_size.max(phdr.p_vaddr + phdr.p_memsz);
-        }
-    }
-
-    let image_size = align_up(image_size as usize, MIN_PAGE_SIZE);
-    let image_paddr = PAGE_ALLOCATOR
-        .alloc(image_size, PageType::Zeroed)
-        .ok_or(Error::OutOfMemory)?;
-
-    let image_ptr: *mut u8 = arch::paddr2vaddr(image_paddr).as_mut_ptr();
-    let image = unsafe { slice::from_raw_parts_mut(image_ptr, image_size) };
+fn load_elf(vmspace: &SharedRef<VmSpace>, elf_file: &[u8]) -> usize {
+    let elf = Elf::parse(elf_file, ftl_elf::ET_EXEC).expect("failed to parse ELF file");
 
     // Load the segments into the allocated memory.
     for phdr in elf.phdrs {
@@ -59,88 +28,63 @@ pub fn load_elf(elf_file: &[u8]) -> Result<LoadedElf, Error> {
 
         // Copy the file contents to the allocated memory.
         let src_off = phdr.p_offset as usize;
-        let dst_off = phdr.p_vaddr as usize;
         let copy_len = phdr.p_filesz as usize;
-        let src = &elf_file[src_off..src_off + copy_len];
-        let dst = &mut image[dst_off..dst_off + copy_len];
-        dst.copy_from_slice(src);
+        let region_len = align_up(phdr.p_memsz as usize, MIN_PAGE_SIZE);
+        let bytes = &elf_file[src_off..src_off + copy_len];
 
-        // Zero the remaining memory.
-        let zeroed_off = dst_off + copy_len;
-        let zeroed_len = phdr.p_memsz as usize - copy_len;
-        if zeroed_len > 0 {
-            let zeroed_range = (zeroed_off)..(zeroed_off + zeroed_len);
-            image[zeroed_range].fill(0);
+        let mut attrs = PageAttrs::EMPTY;
+        if phdr.p_flags & PF_X != 0 {
+            attrs |= PageAttrs::EXEC;
         }
+        if phdr.p_flags & PF_W != 0 {
+            attrs |= PageAttrs::WRITE;
+        }
+        if phdr.p_flags & PF_R != 0 {
+            attrs |= PageAttrs::READ;
+        }
+
+        let vmo = VmObject::new_anonymous(region_len).unwrap();
+        vmo.write(0, bytes).unwrap();
+        vmspace
+            .map(vmo, UAddr::new(phdr.p_vaddr as usize), attrs)
+            .unwrap();
     }
 
-    // Find the relocation table.
-    let mut rela_addr = 0;
-    let mut rela_size = 0;
-    for phdr in elf.phdrs {
-        if phdr.p_type != PhdrType::Dynamic as u32 {
-            continue;
-        }
+    elf.ehdr.e_entry as usize
+}
 
-        let dynamic = unsafe {
-            slice::from_raw_parts(
-                image.as_ptr().add(phdr.p_vaddr as usize) as *const Dyn,
-                phdr.p_memsz as usize / size_of::<Dyn>(),
-            )
-        };
-
-        for entry in dynamic {
-            match entry.d_tag {
-                DT_NULL => break,
-                DT_RELA => rela_addr = entry.d_val as usize,
-                DT_RELASZ => rela_size = entry.d_val as usize,
-                _ => {}
+fn find_file<'a>(bootinfo: &'a BootInfo, name: &[u8]) -> File<'a> {
+    for module in &bootinfo.modules {
+        let initfs = InitFsLoader::new(&module);
+        for file in initfs {
+            if file.name == name {
+                return file;
             }
         }
     }
 
-    // Apply relocations.
-    if rela_addr != 0 && rela_size > 0 {
-        if rela_size % size_of::<Rela>() != 0 {
-            return Err(Error::BadRelocSize);
-        }
+    panic!("ELF file not found in initfs");
+}
 
-        let relocations = unsafe {
-            slice::from_raw_parts(
-                image.as_ptr().add(rela_addr) as *const Rela,
-                rela_size / size_of::<Rela>(),
-            )
-        };
+fn prepare_stack(vmspace: &SharedRef<VmSpace>) -> usize {
+    let stack_size = 256 * 1024;
+    let vmo = VmObject::new_anonymous(stack_size).unwrap();
 
-        for rela in relocations {
-            let target_off = rela.r_offset as usize;
-            if rela.r_sym() != 0 {
-                return Err(Error::BadRelocType);
-            }
+    let start = UAddr::new(0x100000 - stack_size); // TODO: find an empty region in vmspace
 
-            #[cfg(target_arch = "x86_64")]
-            if rela.r_type() != ftl_elf::R_X86_64_RELATIVE {
-                return Err(Error::BadRelocType);
-            }
+    vmspace
+        .map(vmo, start, PageAttrs::READ | PageAttrs::WRITE)
+        .unwrap();
+    start.as_usize() + stack_size
+}
 
-            let target_end = match target_off.checked_add(size_of::<u64>()) {
-                Some(end) if end <= image.len() => end,
-                _ => return Err(Error::BadRelocOffset),
-            };
+pub fn load(bootinfo: &BootInfo) {
+    let elf_file = find_file(bootinfo, b"lx.elf");
+    let vmspace = VmSpace::new().and_then(SharedRef::new).unwrap();
+    let entry = load_elf(&vmspace, elf_file.data);
+    let sp = prepare_stack(&vmspace);
 
-            let base = image.as_ptr() as u64;
-            let value = base.wrapping_add(rela.r_addend as u64);
-            image[target_off..target_end].copy_from_slice(&value.to_le_bytes());
-        }
-    }
-
-    let entry_fn = unsafe {
-        let entry_ptr = image.as_ptr().add(elf.ehdr.e_entry as usize);
-        core::mem::transmute::<*const u8, extern "Rust" fn(start_info: *const StartInfo)>(entry_ptr)
-    };
-
-    Ok(LoadedElf {
-        image: image.as_ptr(),
-        entry_fn,
-    })
+    let isolate = SharedRef::new(Isolate::new()).unwrap();
+    let vcpu = VCpu::new(isolate, vmspace, entry, sp).unwrap();
+    vcpu.unblock().unwrap();
 }

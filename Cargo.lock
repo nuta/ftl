@@ -3,10 +3,11 @@
 version = 4
 
 [[package]]
-name = "ftl_api"
+name = "ftl"
 version = "0.0.0"
 dependencies = [
  "ftl_malloc",
+ "ftl_types",
  "ftl_utils",
 ]
 
@@ -33,6 +34,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "ftl_types"
+version = "0.0.0"
+
+[[package]]
 name = "ftl_utils"
 version = "0.0.0"
 
@@ -40,11 +45,11 @@ version = "0.0.0"
 name = "kernel"
 version = "0.0.0"
 dependencies = [
- "ftl_api",
  "ftl_arrayvec",
  "ftl_bump_allocator",
  "ftl_elf",
  "ftl_malloc",
+ "ftl_types",
  "ftl_utils",
 ]
 
@@ -52,7 +57,5 @@ dependencies = [
 name = "lx"
 version = "0.0.0"
 dependencies = [
- "ftl_api",
- "ftl_elf",
- "ftl_utils",
+ "ftl",
 ]

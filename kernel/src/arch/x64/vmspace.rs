@@ -1,8 +1,8 @@
 use core::arch::asm;
 use core::ops::Range;
 
-use ftl_api::error::ErrorCode;
-use ftl_api::vmspace::PageAttrs;
+use ftl_types::error::ErrorCode;
+use ftl_types::vmspace::PageAttrs;
 use ftl_utils::alignment::is_aligned;
 use ftl_utils::spinlock::SpinLock;
 
@@ -14,6 +14,7 @@ use crate::memory::PageType;
 
 pub const MIN_PAGE_SIZE: usize = 4096;
 pub const KERNEL_BASE: usize = 0xffff_8000_0000_0000;
+pub const USER_ADDR_END: usize = 0x0000_8000_0000_0000;
 
 const ENTRIES_PER_TABLE: usize = 512;
 const GIGA_PAGE_SIZE: usize = 1024 * 1024 * 1024;

@@ -1,8 +1,8 @@
 # FTL
 
-FTL is a microkernel-based operating system aiming to be the drop-in third choice, after Linux and BSDs.
+FTL is a hybrid kernel-based operating system aiming to be the drop-in third choice, after Linux and BSDs.
 
-- **Secure:** Microkernel based on language-based isolation, capabilities-based security, per-container application kernels, and more proactive security measures.
+- **Secure:** Simple and small kernel which implements hypervisor-shaped minimalistic system calls, per-container userspace OS, and more proactive security measures.
 - **Ergonomic:** Programmable and observable with interceptors (planned), easy-to-understand and testable codebase, handy end-to-end testing with TypeScript (planned), and quick edit-compile-run cycle.
 - **Lightweight:** Keep its footprint small to run even on constrained devices, and develop the OS quickly.
 
@@ -26,10 +26,9 @@ Build and run:
 > :warning: This project is currently in pre-alpha stage.
 
 - **Milestone: Make shell work (work-in-progress)**
-  - [x] Kernel: thread and memory management
-  - [x] Language-based server isolation
-  - [x] System call emulation: Hello World from Linux
-  - [x] musl libc support
+  - [x] Kernel: vCPU and memory management
+  - [ ] System call emulation: Hello World from Linux binary
+  - [ ] musl libc support
   - [ ] Virtual file system
   - [ ] fork/exec
   - [ ] signal
@@ -50,21 +49,13 @@ Build and run:
 
 ## Design
 
-### Secure kernel without compromise
+### Per-container userspace OS
 
-Similar to microkernels, most OS services, such as device drivers, file systems, network stacks, and Linux compatibility layer, are implemented as isolated OS services (servers) on top of the kernel.
+FTL kernel provides only hypervisor-like interfaces such as vCPU and VM space (virtual address space). Most of OS features such as the concept of process is implemented in a userspace library, which we call *userspace OS*.
 
-Servers coexist in the kernel space with language-based isolation, relying on Rust's safety guarantees and a sound, securely designed API for OS services. [TockOS](https://dl.acm.org/doi/10.1145/3131672.3136988), [RedLeaf](https://www.usenix.org/conference/osdi20/presentation/narayanan-vikram), and [framekernel](https://www.usenix.org/conference/atc25/presentation/peng-yuke) are examples of this approach.
+Each container instance has its own isolated userspace OS. This lets you run Linux containers on their own isolated Linux-like application kernels, similar to [gVisor](https://github.com/google/gvisor).
 
-Language-based isolation is weaker than hardware-based ones used in traditional microkernels, but it enables _good-enough_ security without sacrificing performance.
-
-### Per-container kernels
-
-FTL implements OS personality as a server. This lets you run Linux containers on their own isolated Linux-like application kernels, similar to [gVisor](https://github.com/google/gvisor), but without the overhead of system call hooking.
-
-You can also update the Linux-like application kernel simply by starting a new container, without rebooting the machine.
-
-The application kernel is implemented as a Rust library crate, with a clear interface for interacting with the kernel core. We hope this will enable complicated features such as process snapshotting and container live migration in the future.
+You can upgrade, add your own features, inject `printf`s for debugging, or optimize the userspace OS by simply starting a new container, without rebooting the machine. We hope this will enable complicated features such as process snapshotting and container live migration in the future.
 
 ### Linux compatibility layer
 

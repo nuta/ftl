@@ -1,13 +1,10 @@
 [package]
-name = "kernel"
+name = "ftl"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
 
 [dependencies]
-ftl_utils = { workspace = true }
-ftl_arrayvec = { workspace = true }
 ftl_malloc = { workspace = true }
-ftl_bump_allocator = { workspace = true }
-ftl_elf = { workspace = true }
+ftl_utils = { workspace = true }
 ftl_types = { workspace = true }

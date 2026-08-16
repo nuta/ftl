@@ -5,7 +5,7 @@ edition = "2024"
 
 [workspace]
 resolver = "2"
-members = ["kernel", "libs/rust/*", "servers/*"]
+members = ["kernel", "libs/rust/*", "lx"]
 
 [workspace.dependencies]
 ftl = { path = "libs/rust/ftl" }
@@ -14,7 +14,7 @@ ftl_bump_allocator = { path = "libs/rust/ftl_bump_allocator" }
 ftl_arrayvec = { path = "libs/rust/ftl_arrayvec" }
 ftl_malloc = { path = "libs/rust/ftl_malloc" }
 ftl_elf = { path = "libs/rust/ftl_elf" }
-ftl_api = { path = "libs/rust/ftl_api" }
+ftl_types = { path = "libs/rust/ftl_types" }
 
 [profile.dev]
 panic = "abort"

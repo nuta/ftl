@@ -7,8 +7,8 @@ use ftl_utils::spinlock::SpinLock;
 
 use super::gdt::GDT_KERNEL_CS;
 use super::io_apic::IRQ_VECTOR_BASE;
-use super::thread::Thread;
 use super::timer::TIMER_IRQ;
+use super::vcpu::VCpu;
 use crate::address::VAddr;
 use crate::cpuvar::CpuVar;
 
@@ -32,6 +32,8 @@ pub struct Idtr {
 
 unsafe extern "C" {
     static idt_handlers: u8;
+    static usercopy0: u8;
+    static usercopy0_recover: u8;
 }
 
 const NUM_IDT_ENTRIES: usize = 256;
@@ -49,6 +51,34 @@ const IDT_ENTRY_DEFAULT: IdtEntry = IdtEntry {
 
 static IDT: SpinLock<[IdtEntry; NUM_IDT_ENTRIES]> =
     SpinLock::new([IDT_ENTRY_DEFAULT; NUM_IDT_ENTRIES]);
+
+const EXCEPTION_PAGE_FAULT: u8 = 14;
+
+#[repr(C)]
+struct InterruptFrame {
+    r15: u64,
+    r14: u64,
+    r13: u64,
+    r12: u64,
+    r11: u64,
+    r10: u64,
+    r9: u64,
+    r8: u64,
+    rbp: u64,
+    rdi: u64,
+    rsi: u64,
+    rdx: u64,
+    rcx: u64,
+    rbx: u64,
+    rax: u64,
+    vector: u64,
+    error_code: u64,
+    rip: u64,
+    cs: u64,
+    rflags: u64,
+    rsp: u64,
+    ss: u64,
+}
 
 // Define interrupt handlers.
 global_asm!(
@@ -100,22 +130,70 @@ idt_handlers:
 #[unsafe(no_mangle)]
 extern "C" fn interrupt_entry() -> ! {
     naked_asm!(
-        // TODO: SWAPGS is tricky and error-prone. If a double exception
-        //       occurs, SWAPGS will switch to the user's one. Typically,
-        //       a interrupt handler checks RFLAGS.CPL or CS, but in FTL
-        //       applications can run in the kernel mode.
-        //
-        //       We could use RFLAGS.IF to determine if we are in the
-        //       kernel context (assuming interrupts are disabled).
+        // RFLAGS are already saved in the IRET frame. It's safe to change it.
+        "cld",
+
+        // Happened in user mode?
+        "test byte ptr [rsp + 24], 3",
+        "jnz 2f",
+
+        // An exception from the kernel mode.
+        "push rax",
+        "push rbx",
+        "push rcx",
+        "push rdx",
+        "push rsi",
+        "push rdi",
+        "push rbp",
+        "push r8",
+        "push r9",
+        "push r10",
+        "push r11",
+        "push r12",
+        "push r13",
+        "push r14",
+        "push r15",
+
+        // The argument for handle_kernel_interrupt.
+        "mov rdi, rsp",
+
+        // Save RSP to RBX (a callee-saved register), since we need to align the
+        // RSP to 16-bytes as mandated by ABI.
+        "mov rbx, rsp",
+        "and rsp, 0xfffffffffffffff0",
+
+        "call {handle_kernel_interrupt}",
+
+        // Restore RSP, and other registers.
+        "mov rsp, rbx",
+        "pop r15",
+        "pop r14",
+        "pop r13",
+        "pop r12",
+        "pop r11",
+        "pop r10",
+        "pop r9",
+        "pop r8",
+        "pop rbp",
+        "pop rdi",
+        "pop rsi",
+        "pop rdx",
+        "pop rcx",
+        "pop rbx",
+        "pop rax",
+        "add rsp, 16", // Skip vector and error code
+        "iretq",
+
+        // An exception from the user mode.
+        "2:",
         "cli",
         "swapgs",
-        "cld",
         "push rax",
 
         // thread = CpuVar.current_thread
-        "mov rax, gs:[{current_thread_offset}]",
+        "mov rax, gs:[{current_vcpu_offset}]",
 
-        // Save registers to the thread.
+        // Save registers to the vCPU.
         "mov [rax + {rbx_offset}], rbx",
         "mov [rax + {rcx_offset}], rcx",
         "mov [rax + {rdx_offset}], rdx",
@@ -149,33 +227,72 @@ extern "C" fn interrupt_entry() -> ! {
         "mov [rax + {rsp_offset}], rbx",
         "pop rbx",
 
-        "jmp {handle_interrupt}",
-        current_thread_offset = const offset_of!(CpuVar, current_thread),
-        rip_offset = const offset_of!(Thread, rip),
-        rflags_offset = const offset_of!(Thread, rflags),
-        rax_offset = const offset_of!(Thread, rax),
-        rbx_offset = const offset_of!(Thread, rbx),
-        rcx_offset = const offset_of!(Thread, rcx),
-        rdx_offset = const offset_of!(Thread, rdx),
-        rsi_offset = const offset_of!(Thread, rsi),
-        rdi_offset = const offset_of!(Thread, rdi),
-        rsp_offset = const offset_of!(Thread, rsp),
-        rbp_offset = const offset_of!(Thread, rbp),
-        r8_offset = const offset_of!(Thread, r8),
-        r9_offset = const offset_of!(Thread, r9),
-        r10_offset = const offset_of!(Thread, r10),
-        r11_offset = const offset_of!(Thread, r11),
-        r12_offset = const offset_of!(Thread, r12),
-        r13_offset = const offset_of!(Thread, r13),
-        r14_offset = const offset_of!(Thread, r14),
-        r15_offset = const offset_of!(Thread, r15),
-        handle_interrupt = sym handle_interrupt,
+        "jmp {handle_user_interrupt}",
+        current_vcpu_offset = const offset_of!(CpuVar, current_vcpu),
+        rip_offset = const offset_of!(VCpu, rip),
+        rflags_offset = const offset_of!(VCpu, rflags),
+        rax_offset = const offset_of!(VCpu, rax),
+        rbx_offset = const offset_of!(VCpu, rbx),
+        rcx_offset = const offset_of!(VCpu, rcx),
+        rdx_offset = const offset_of!(VCpu, rdx),
+        rsi_offset = const offset_of!(VCpu, rsi),
+        rdi_offset = const offset_of!(VCpu, rdi),
+        rsp_offset = const offset_of!(VCpu, rsp),
+        rbp_offset = const offset_of!(VCpu, rbp),
+        r8_offset = const offset_of!(VCpu, r8),
+        r9_offset = const offset_of!(VCpu, r9),
+        r10_offset = const offset_of!(VCpu, r10),
+        r11_offset = const offset_of!(VCpu, r11),
+        r12_offset = const offset_of!(VCpu, r12),
+        r13_offset = const offset_of!(VCpu, r13),
+        r14_offset = const offset_of!(VCpu, r14),
+        r15_offset = const offset_of!(VCpu, r15),
+        handle_kernel_interrupt = sym handle_kernel_interrupt,
+        handle_user_interrupt = sym handle_user_interrupt,
     )
 }
 
-extern "C" fn handle_interrupt(vector: u8, error_code: u64) -> ! {
+fn is_usercopy_fault(rip: u64) -> Option<u64> {
+    let addr0 = &raw const usercopy0 as u64;
+    let recover0 = &raw const usercopy0_recover as u64;
+    if rip == addr0 {
+        return Some(recover0);
+    }
+
+    None
+}
+
+extern "C" fn handle_kernel_interrupt(frame: &mut InterruptFrame) {
+    match frame.vector as u8 {
+        EXCEPTION_PAGE_FAULT => {
+            if let Some(recover_rip) = is_usercopy_fault(frame.rip) {
+                frame.rip = recover_rip;
+                frame.rax = 1;
+                return;
+            }
+
+            // Unknown kernel page fault. This is a bug.
+            let cr2: u64;
+            unsafe {
+                asm!("mov {cr2}, cr2", cr2 = out(reg) cr2);
+            }
+            panic!(
+                "kernel page fault (CR2={cr2:#x}, RIP={:#x}, error_code={:#x})",
+                frame.rip, frame.error_code
+            );
+        }
+        vector => {
+            panic!(
+                "unhandled kernel exception ({vector}), error_code={:#x}",
+                frame.error_code
+            )
+        }
+    }
+}
+
+extern "C" fn handle_user_interrupt(vector: u8, error_code: u64) -> ! {
     match vector {
-        14 => {
+        EXCEPTION_PAGE_FAULT => {
             let cr2: u64;
             unsafe {
                 asm!("mov {cr2}, cr2", cr2 = out(reg) cr2);
@@ -209,7 +326,7 @@ pub(super) fn init() {
         let handler = handler_base + i as u64 * INTERRUPT_HANDLER_SIZE;
         idt[i].offset0 = handler as u16;
         idt[i].selector = GDT_KERNEL_CS;
-        idt[i].ist = 1; // Use IST1 for all exception/interrupt handlers.
+        idt[i].ist = 0;
         idt[i].gate_type = 0x8e; // Interrupt gate.
         idt[i].offset1 = (handler >> 16) as u16;
         idt[i].offset2 = (handler >> 32) as u32;

@@ -1,10 +1,9 @@
 use std::ops::Range;
 
-use ftl_api::error::ErrorCode;
-use ftl_api::thread::ContextData;
-use ftl_api::thread::ContextKind;
-use ftl_api::vmspace::PageAttrs;
 use ftl_arrayvec::ArrayVec;
+use ftl_types::error::ErrorCode;
+use ftl_types::vcpu::SyscallRegs;
+use ftl_types::vmspace::PageAttrs;
 
 use crate::address::PAddr;
 use crate::address::UAddr;
@@ -12,6 +11,7 @@ use crate::address::VAddr;
 use crate::boot::BootInfo;
 
 pub const MIN_PAGE_SIZE: usize = 4096;
+pub const USER_ADDR_END: usize = usize::MAX;
 pub const DIRECT_MAP_END: PAddr = PAddr::new(usize::MAX);
 
 pub fn idle() -> ! {
@@ -19,6 +19,11 @@ pub fn idle() -> ! {
 }
 
 pub fn console_write(_bytes: &[u8]) {}
+
+pub unsafe fn usercopy_read(src: UAddr, dst: *mut u8, len: usize) -> Result<(), ErrorCode> {
+    unsafe { core::ptr::copy_nonoverlapping(src.as_usize() as *const u8, dst, len) }
+    Ok(())
+}
 
 pub fn paddr2vaddr(_paddr: PAddr) -> VAddr {
     todo!()
@@ -46,22 +51,22 @@ impl VmSpace {
     }
 }
 
-pub struct Thread {}
+pub struct VCpu {}
 
-impl Thread {
-    pub fn new() -> Self {
+impl VCpu {
+    pub fn new(_pc: usize, _sp: usize) -> Self {
         todo!()
     }
 
-    pub fn read_context(&self, _kind: ContextKind, _regs: &mut ContextData) {
+    pub fn get_syscall_regs(&self) -> SyscallRegs {
         todo!()
     }
 
-    pub fn write_context(&mut self, _kind: ContextKind, _regs: &ContextData) {
+    pub fn set_syscall_retval(&mut self, _retval: usize) {
         todo!()
     }
 
-    pub fn enter(_thread: *const Thread) -> ! {
+    pub fn enter(_vcpu: *const VCpu) -> ! {
         todo!()
     }
 }

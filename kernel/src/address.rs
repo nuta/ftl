@@ -1,5 +1,6 @@
 use core::fmt;
 
+use ftl_types::error::ErrorCode;
 use ftl_utils::alignment::is_aligned;
 
 /// A physical memory address.
@@ -94,8 +95,11 @@ impl UAddr {
         self.0
     }
 
-    pub fn add(self, offset: usize) -> Option<Self> {
-        self.0.checked_add(offset).map(Self)
+    pub const fn add(self, offset: usize) -> Option<Self> {
+        match self.0.checked_add(offset) {
+            Some(addr) => Some(Self(addr)),
+            None => None,
+        }
     }
 
     pub fn is_aligned_to(self, alignment: usize) -> bool {
@@ -116,5 +120,37 @@ impl fmt::Debug for UAddr {
 impl fmt::Display for UAddr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{self:?}")
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct USlice {
+    addr: UAddr,
+    len: usize,
+}
+
+impl USlice {
+    pub const fn new(addr: UAddr, len: usize) -> Result<Self, ErrorCode> {
+        let Some(end) = addr.add(len) else {
+            return Err(ErrorCode::INVALID_ARG);
+        };
+
+        if end.as_usize() > crate::arch::USER_ADDR_END {
+            return Err(ErrorCode::NOT_ALLOWED);
+        }
+
+        Ok(Self { addr, len })
+    }
+
+    pub fn read(self, dst: &mut [u8]) -> Result<(), ErrorCode> {
+        if self.len != dst.len() {
+            return Err(ErrorCode::INVALID_ARG);
+        }
+
+        unsafe {
+            crate::arch::usercopy_read(self.addr, dst.as_mut_ptr(), self.len)?;
+        }
+
+        Ok(())
     }
 }

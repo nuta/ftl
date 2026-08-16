@@ -1,16 +1,16 @@
 use alloc::collections::vec_deque::VecDeque;
 
-use ftl_api::error::ErrorCode;
+use ftl_types::error::ErrorCode;
 use ftl_utils::spinlock::SpinLock;
 
 use crate::arch;
 use crate::shared_ref::SharedRef;
-use crate::thread::Thread;
+use crate::vcpu::VCpu;
 
 pub static SCHEDULER: Scheduler = Scheduler::new();
 
 pub struct Scheduler {
-    runqueue: SpinLock<VecDeque<SharedRef<Thread>>>,
+    runqueue: SpinLock<VecDeque<SharedRef<VCpu>>>,
 }
 
 impl Scheduler {
@@ -21,14 +21,14 @@ impl Scheduler {
     }
 
     /// Picks the next thread to run.
-    pub fn pop(&self) -> Option<SharedRef<Thread>> {
+    pub fn pop(&self) -> Option<SharedRef<VCpu>> {
         let mut runqueue = self.runqueue.lock();
         let thread = runqueue.pop_front()?;
         Some(thread)
     }
 
     /// Pushes a runnable thread to the runqueue.
-    pub fn push_back(&self, thread: SharedRef<Thread>) -> Result<(), ErrorCode> {
+    pub fn push_back(&self, thread: SharedRef<VCpu>) -> Result<(), ErrorCode> {
         let mut runqueue = self.runqueue.lock();
         if runqueue.try_reserve(1).is_err() {
             return Err(ErrorCode::OUT_OF_MEMORY);
@@ -40,7 +40,7 @@ impl Scheduler {
 
     /// Pushes a runnable thread to the front of the runqueue, so that it willl
     /// be picked first.
-    pub fn push_front(&self, thread: SharedRef<Thread>) -> Result<(), ErrorCode> {
+    pub fn push_front(&self, thread: SharedRef<VCpu>) -> Result<(), ErrorCode> {
         let mut runqueue = self.runqueue.lock();
         if runqueue.try_reserve(1).is_err() {
             return Err(ErrorCode::OUT_OF_MEMORY);
@@ -59,9 +59,9 @@ impl Scheduler {
 /// the single kernel stack design.
 pub fn return_to_user() -> ! {
     let cpuvar = arch::get_cpuvar();
-    let current = &cpuvar.current_thread;
+    let current = &cpuvar.current_vcpu;
 
-    if let Some(current) = current.thread()
+    if let Some(current) = current.vcpu()
         && current.is_runnable()
     {
         // The current thread is runnable. Push it back to the scheduler.

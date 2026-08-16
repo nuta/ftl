@@ -1,6 +1,6 @@
 use core::ptr;
 
-use ftl_api::error::ErrorCode;
+use ftl_types::error::ErrorCode;
 use ftl_utils::spinlock::SpinLock;
 
 use super::get_cpuvar;

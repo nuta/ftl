@@ -22,21 +22,18 @@ else
 fi
 
 echo -n > initfs.list
-mkdir -p initfs/servers
+mkdir -p initfs
 
 # Build apps.
 mkdir -p initfs/bin
 zig cc -O2 -target x86_64-linux-musl -static -no-pie apps/hello/hello.c -o initfs/bin/hello
 
 # Build servers.
-for server in "${SERVERS[@]}"; do
-  FTL_LOG_PREFIX="[$(printf '%-10s' "$server")] " \
-    cargo build "${CARGOFLAGS[@]}" --target libs/rust/ftl_api/src/arch/$ARCH/server.json \
-      --manifest-path servers/$server/Cargo.toml
-
-  cp target/server/$target/lib$server.so initfs/servers/$server.elf
-  printf 'servers/%s.elf\0' "$server" >> initfs.list
-done
+FTL_LOG_PREFIX="[$(printf '%-10s' "lx")] " \
+    cargo build "${CARGOFLAGS[@]}" --target libs/rust/ftl/src/arch/$ARCH/user.json \
+       --manifest-path lx/Cargo.toml
+cp target/user/$target/lx initfs/lx.elf
+printf 'lx.elf\0' >> initfs.list
 
 # Build initfs.
 pushd initfs

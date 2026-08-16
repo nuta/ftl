@@ -1,9 +1,8 @@
 use alloc::vec::Vec;
-use core::cmp::min;
 
-use ftl_api::error::ErrorCode;
-use ftl_api::handle::HandleRight;
-use ftl_api::vmspace::PageAttrs;
+use ftl_types::error::ErrorCode;
+use ftl_types::handle::HandleRight;
+use ftl_types::vmspace::PageAttrs;
 use ftl_utils::spinlock::SpinLock;
 
 use crate::address::UAddr;
@@ -11,12 +10,12 @@ use crate::arch;
 use crate::arch::MIN_PAGE_SIZE;
 use crate::shared_ref::Handleable;
 use crate::shared_ref::SharedRef;
-use crate::vmarea::VmArea;
+use crate::vmobject::VmObject;
 
 struct Mapping {
     start: UAddr,
     end: UAddr,
-    vmarea: SharedRef<VmArea>,
+    vmo: SharedRef<VmObject>,
     attrs: PageAttrs,
 }
 
@@ -54,7 +53,7 @@ impl VmSpace {
 
     pub fn map(
         &self,
-        vmarea: SharedRef<VmArea>,
+        vmo: SharedRef<VmObject>,
         uaddr: UAddr,
         attrs: PageAttrs,
     ) -> Result<(), ErrorCode> {
@@ -62,7 +61,7 @@ impl VmSpace {
             return Err(ErrorCode::INVALID_ARG);
         }
 
-        let end = uaddr.add(vmarea.len()).ok_or(ErrorCode::OUT_OF_BOUNDS)?;
+        let end = uaddr.add(vmo.len()).ok_or(ErrorCode::OUT_OF_BOUNDS)?;
 
         let mut mutable = self.mutable.lock();
         if mutable
@@ -80,11 +79,11 @@ impl VmSpace {
 
         // Map the VM area to the virtual address space.
         // TODO: Map lazily when pages are accessed.
-        let num_pages = vmarea.len() / MIN_PAGE_SIZE;
+        let num_pages = vmo.len() / MIN_PAGE_SIZE;
         let start = uaddr;
         let mut uaddr = uaddr;
         for index in 0..num_pages {
-            let paddr = vmarea.ensure_page(index)?;
+            let paddr = vmo.ensure_page(index)?;
             self.arch.map(uaddr, paddr, MIN_PAGE_SIZE, attrs)?;
             // SAFETY: `end` guarantees that `uaddr` will not overflow.
             uaddr = uaddr.add(MIN_PAGE_SIZE).unwrap();
@@ -100,50 +99,10 @@ impl VmSpace {
             Mapping {
                 start,
                 end,
-                vmarea,
+                vmo,
                 attrs,
             },
         );
-        Ok(())
-    }
-
-    pub fn read_bytes(&self, mut uaddr: UAddr, mut buf: &mut [u8]) -> Result<(), ErrorCode> {
-        if buf.is_empty() {
-            return Ok(());
-        }
-
-        // Check if the read is out of bounds.
-        let _uaddr_end = uaddr.add(buf.len()).ok_or(ErrorCode::OUT_OF_BOUNDS)?;
-
-        let mutable = self.mutable.lock();
-
-        // Do a binary search to find the first mapping.
-        let index = mutable
-            .mappings
-            .partition_point(|mapping| mapping.start <= uaddr)
-            .checked_sub(1)
-            .ok_or(ErrorCode::OUT_OF_BOUNDS)?;
-
-        // Copy bytes from each vmarea.
-        let mut iter = mutable.mappings.iter().skip(index);
-        while !buf.is_empty()
-            && let Some(mapping) = iter.next()
-        {
-            if !(mapping.start..mapping.end).contains(&uaddr) {
-                return Err(ErrorCode::OUT_OF_BOUNDS);
-            }
-
-            let copy_len = min(buf.len(), mapping.end.as_usize() - uaddr.as_usize());
-            let (chunk, rest) = buf.split_at_mut(copy_len);
-            mapping
-                .vmarea
-                .read(uaddr.as_usize() - mapping.start.as_usize(), chunk)?;
-
-            // SAFETY: the overflow check above guarantees `uaddr + len` fits.
-            uaddr = uaddr.add(copy_len).unwrap();
-            buf = rest;
-        }
-
         Ok(())
     }
 }
