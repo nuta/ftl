@@ -3,17 +3,23 @@ use core::cmp::min;
 use core::ptr;
 
 use ftl_types::error::ErrorCode;
+use ftl_types::handle::HandleId;
 use ftl_types::handle::HandleRight;
+use ftl_types::vcpu::SyscallRegs;
 use ftl_utils::alignment::is_aligned;
 use ftl_utils::spinlock::SpinLock;
 
 use crate::address::PAddr;
 use crate::arch;
 use crate::arch::MIN_PAGE_SIZE;
+use crate::handle::Handle;
+use crate::handle::Handleable;
+use crate::isolate::Isolate;
 use crate::memory::PAGE_ALLOCATOR;
 use crate::memory::PageType;
-use crate::shared_ref::Handleable;
 use crate::shared_ref::SharedRef;
+use crate::syscall::SyscallOutput;
+use crate::vcpu::VCpu;
 
 /// A physical memory page.
 struct Page {
@@ -150,8 +156,24 @@ impl VmObject {
     }
 }
 
-impl Handleable for VmObject {
-    const DEFAULT_RIGHT: HandleRight = HandleRight::READ
-        .or(HandleRight::WRITE)
-        .or(HandleRight::MAP);
+impl Handleable for VmObject {}
+
+pub fn sys_vmo_create(
+    current: &SharedRef<VCpu>,
+    ctx: &SyscallRegs,
+) -> Result<SyscallOutput, ErrorCode> {
+    let id = HandleId::new(ctx.a0);
+    let len = ctx.a1;
+
+    let isolate = current
+        .isolate()
+        .handles()
+        .lock()
+        .get::<Isolate>(id, HandleRight::WRITE)?;
+
+    let vmo = VmObject::new_anonymous(len)?;
+    let rights = HandleRight::READ | HandleRight::WRITE | HandleRight::MAP;
+    let handle = Handle::new(vmo, rights);
+    let id = isolate.handles().lock().insert(handle)?;
+    Ok(SyscallOutput::Done(id.as_usize()))
 }

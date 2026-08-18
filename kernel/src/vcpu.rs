@@ -2,14 +2,13 @@ use core::cell::UnsafeCell;
 use core::mem::offset_of;
 
 use ftl_types::error::ErrorCode;
-use ftl_types::handle::HandleRight;
 use ftl_utils::spinlock::SpinLock;
 use ftl_utils::static_assert;
 
 use crate::arch;
+use crate::handle::Handleable;
 use crate::isolate::Isolate;
 use crate::scheduler::SCHEDULER;
-use crate::shared_ref::Handleable;
 use crate::shared_ref::SharedRef;
 use crate::vmspace::VmSpace;
 
@@ -80,6 +79,10 @@ impl VCpu {
         &self.vmspace
     }
 
+    pub fn isolate(&self) -> &SharedRef<Isolate> {
+        &self.isolate
+    }
+
     /// Resumes the vCPU.
     pub fn unblock(self: &SharedRef<Self>) -> Result<(), ErrorCode> {
         let mut mutable = self.mutable.lock();
@@ -94,9 +97,7 @@ impl VCpu {
     }
 }
 
-impl Handleable for VCpu {
-    const DEFAULT_RIGHT: HandleRight = HandleRight::READ.or(HandleRight::WRITE);
-}
+impl Handleable for VCpu {}
 
 /// The current vCPU.
 ///

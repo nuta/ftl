@@ -3,12 +3,15 @@ use ftl_elf::PF_R;
 use ftl_elf::PF_W;
 use ftl_elf::PF_X;
 use ftl_elf::PhdrType;
+use ftl_types::handle::HandleId;
+use ftl_types::handle::HandleRight;
 use ftl_types::vmspace::PageAttrs;
 use ftl_utils::alignment::align_up;
 
 use crate::address::UAddr;
 use crate::arch::MIN_PAGE_SIZE;
 use crate::boot::BootInfo;
+use crate::handle::Handle;
 use crate::initfs::File;
 use crate::initfs::InitFsLoader;
 use crate::isolate::Isolate;
@@ -85,6 +88,16 @@ pub fn load(bootinfo: &BootInfo) {
     let sp = prepare_stack(&vmspace);
 
     let isolate = SharedRef::new(Isolate::new()).unwrap();
+    {
+        let mut handles = isolate.handles().lock();
+        let isolate_handle = Handle::new(isolate.clone(), HandleRight::WRITE);
+        let vmspace_handle = Handle::new(
+            vmspace.clone(),
+            HandleRight::READ | HandleRight::WRITE | HandleRight::MAP,
+        );
+        handles.insert_at(HandleId::new(1), isolate_handle).unwrap();
+        handles.insert_at(HandleId::new(2), vmspace_handle).unwrap();
+    }
     let vcpu = VCpu::new(isolate, vmspace, entry, sp).unwrap();
     vcpu.unblock().unwrap();
 }

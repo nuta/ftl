@@ -4,7 +4,7 @@ use crate::arch::get_cpuvar;
 use crate::scheduler;
 
 pub enum SyscallOutput {
-    Done(isize),
+    Done(usize),
 }
 
 fn do_handle_syscall() {
@@ -21,15 +21,20 @@ fn do_handle_syscall() {
         n if n == Syscall::VCpuExit as usize => {
             todo!()
         }
+        n if n == Syscall::VmoCreate as usize => crate::vmobject::sys_vmo_create(&vcpu, &regs),
         _ => todo!(),
     };
 
-    let raw_retval = match retval {
+    let retval = match retval {
+        Ok(SyscallOutput::Done(retval)) if retval > isize::MAX as usize => {
+            // TODO: Prevent this.
+            unreachable!();
+        }
         Ok(SyscallOutput::Done(retval)) => retval,
-        Err(err) => err.as_isize(),
+        Err(err) => err.as_usize(),
     };
 
-    arch_vcpu.set_syscall_retval(raw_retval as usize);
+    arch_vcpu.set_syscall_retval(retval);
 }
 
 pub extern "C" fn handle_syscall() -> ! {

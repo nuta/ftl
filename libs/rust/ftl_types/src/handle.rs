@@ -1,5 +1,18 @@
 use core::ops::BitOr;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct HandleId(usize);
+
+impl HandleId {
+    pub const fn new(id: usize) -> Self {
+        Self(id)
+    }
+
+    pub const fn as_usize(&self) -> usize {
+        self.0
+    }
+}
+
 /// A set of allowed actions on a kernel object.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct HandleRight(usize);

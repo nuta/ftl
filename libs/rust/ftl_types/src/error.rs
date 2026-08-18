@@ -13,6 +13,7 @@ impl ErrorCode {
     pub const OUT_OF_BOUNDS: Self = Self::from_name(b" OOB");
     pub const PAGE_FAULT: Self = Self::from_name(b"PFLT");
     pub const UNSUPPORTED: Self = Self::from_name(b"UNSP");
+    pub const TOO_MANY_HANDLES: Self = Self::from_name(b"TMHD");
 
     const fn from_name(name: &'static [u8]) -> Self {
         if name.len() != 4 {
@@ -34,10 +35,13 @@ impl ErrorCode {
         Self(raw | (1 << 31))
     }
 
-    pub fn as_isize(&self) -> isize {
-        let raw = self.0 as isize;
-        debug_assert!(raw.is_negative());
-        raw
+    pub const fn from_usize(rax: usize) -> Self {
+        Self(rax as i32)
+    }
+
+    pub fn as_usize(&self) -> usize {
+        debug_assert!(self.0.is_negative());
+        self.0 as usize
     }
 }
 

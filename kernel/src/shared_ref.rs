@@ -2,6 +2,7 @@
 use alloc::alloc::Layout;
 use alloc::alloc::alloc;
 use alloc::boxed::Box;
+use core::any::Any;
 use core::fmt;
 use core::marker::Unsize;
 use core::mem;
@@ -15,7 +16,8 @@ use core::sync::atomic::AtomicUsize;
 use core::sync::atomic::Ordering;
 
 use ftl_types::error::ErrorCode;
-use ftl_types::handle::HandleRight;
+
+use crate::handle::Handleable;
 
 /// The storage for a reference-counted object.
 ///
@@ -153,11 +155,6 @@ impl<T> SharedRef<T> {
     }
 }
 
-/// A kernel object that can be exposed to servers as a [`Handle`].
-pub trait Handleable: Sized + 'static {
-    const DEFAULT_RIGHT: HandleRight;
-}
-
 impl<T: ?Sized> SharedRef<T> {
     /// Returns a reference to the inner object.
     fn inner(&self) -> &RefCounted<T> {
@@ -222,6 +219,18 @@ where
         f.debug_tuple("SharedRef")
             .field(&self.inner().value)
             .finish()
+    }
+}
+
+impl SharedRef<dyn Handleable> {
+    pub fn downcast<T: Handleable>(self) -> Result<SharedRef<T>, Self> {
+        if <dyn Any>::is::<T>(&self.inner().value) {
+            let ptr = self.ptr.cast();
+            mem::forget(self);
+            Ok(SharedRef { ptr })
+        } else {
+            Err(self)
+        }
     }
 }
 

@@ -1,51 +1,21 @@
+use ftl_types::error::ErrorCode;
+use ftl_types::handle::HandleId;
 use ftl_types::syscall::Syscall;
 use ftl_types::vcpu::ExitReason;
 
-fn syscall1(n: Syscall, a0: usize) {
-    #[cfg(target_arch = "x86_64")]
-    unsafe {
-        use core::arch::asm;
-
-        asm!(
-            "syscall",
-            in("rax") n as usize,
-            in("rdi") a0,
-            out("rcx") _,
-            out("r11") _,
-        );
-    }
-
-    #[cfg(not(target_os = "none"))]
-    panic!("syscall1(0x{:x}, {a0:x}) is not implemented", n as usize);
-}
-
-fn syscall2(n: Syscall, a0: usize, a1: usize) {
-    #[cfg(target_arch = "x86_64")]
-    unsafe {
-        use core::arch::asm;
-
-        asm!(
-            "syscall",
-            in("rax") n as usize,
-            in("rdi") a0,
-            in("rsi") a1,
-            out("rcx") _,
-            out("r11") _,
-        );
-    }
-
-    #[cfg(not(target_os = "none"))]
-    panic!(
-        "syscall2(0x{:x}, {a0:x}, {a1:x}) is not implemented",
-        n as usize
-    );
-}
+use crate::arch::syscall1;
+use crate::arch::syscall2;
 
 pub fn print(bytes: &[u8]) {
-    crate::syscall::syscall2(Syscall::Print, bytes.as_ptr() as usize, bytes.len());
+    let _ = syscall2(Syscall::Print, bytes.as_ptr() as usize, bytes.len());
 }
 
 pub fn vcpu_exit(reason: ExitReason) -> ! {
-    crate::syscall::syscall1(Syscall::VCpuExit, reason as usize);
+    let _ = syscall1(Syscall::VCpuExit, reason as usize);
     crate::arch::unreachable();
+}
+
+pub fn vmo_create(isolate: HandleId, len: usize) -> Result<HandleId, ErrorCode> {
+    let ret = syscall2(Syscall::VmoCreate, isolate.as_usize(), len)?;
+    Ok(HandleId::new(ret))
 }
