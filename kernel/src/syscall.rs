@@ -22,6 +22,7 @@ fn do_handle_syscall() {
             todo!()
         }
         n if n == Syscall::VmoCreate as usize => crate::vmobject::sys_vmo_create(&thread, &regs),
+        n if n == Syscall::VmoWrite as usize => crate::vmobject::sys_vmo_write(&thread, &regs),
         _ => todo!(),
     };
 

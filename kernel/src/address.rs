@@ -4,6 +4,7 @@ use ftl_types::error::ErrorCode;
 use ftl_utils::alignment::is_aligned;
 
 use crate::arch::USER_ADDR_END;
+use crate::arch::usercopy_read;
 
 /// A physical memory address.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -135,6 +136,7 @@ impl fmt::Display for UAddr {
 #[derive(Clone, Copy)]
 pub struct USlice {
     addr: UAddr,
+    // TODO: should we keep the end address instead of the length? Does it make checks simpler?
     len: usize,
 }
 
@@ -151,13 +153,26 @@ impl USlice {
         Ok(Self { addr, len })
     }
 
+    pub const fn len(self) -> usize {
+        self.len
+    }
+
     pub fn read(self, dst: &mut [u8]) -> Result<(), ErrorCode> {
-        if self.len != dst.len() {
-            return Err(ErrorCode::INVALID_ARG);
+        self.read_at(0, dst)
+    }
+
+    pub fn read_at(self, offset: usize, dst: &mut [u8]) -> Result<(), ErrorCode> {
+        let end = offset
+            .checked_add(dst.len())
+            .ok_or(ErrorCode::OUT_OF_BOUNDS)?;
+
+        if end > self.len {
+            return Err(ErrorCode::OUT_OF_BOUNDS);
         }
 
+        let addr = self.addr.add(offset).ok_or(ErrorCode::OUT_OF_BOUNDS)?;
         unsafe {
-            crate::arch::usercopy_read(self.addr, dst.as_mut_ptr(), self.len)?;
+            usercopy_read(addr, dst.as_mut_ptr(), dst.len())?;
         }
 
         Ok(())

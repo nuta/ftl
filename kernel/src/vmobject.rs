@@ -10,6 +10,8 @@ use ftl_utils::alignment::is_aligned;
 use ftl_utils::spinlock::SpinLock;
 
 use crate::address::PAddr;
+use crate::address::UAddr;
+use crate::address::USlice;
 use crate::address::VAddr;
 use crate::arch;
 use crate::arch::MIN_PAGE_SIZE;
@@ -103,6 +105,17 @@ impl VmObject {
                 ptr::copy_nonoverlapping(src, dst, len);
             }
             buf_offset += len;
+            Ok(())
+        })
+    }
+
+    pub fn write_user(&self, offset: usize, uslice: USlice) -> Result<(), ErrorCode> {
+        let mut buf_offset = 0;
+        self.read_write(offset, uslice.len(), |vaddr, len| {
+            let dst = unsafe { core::slice::from_raw_parts_mut(vaddr.as_mut_ptr(), len) };
+            uslice.read_at(buf_offset, dst)?;
+            buf_offset += len;
+            Ok(())
         })
     }
 
@@ -118,6 +131,7 @@ impl VmObject {
                 ptr::copy_nonoverlapping(src, dst, len);
             }
             buf_offset += len;
+            Ok(())
         })
     }
 
@@ -131,7 +145,7 @@ impl VmObject {
         mut f: F,
     ) -> Result<(), ErrorCode>
     where
-        F: FnMut(VAddr, usize),
+        F: FnMut(VAddr, usize) -> Result<(), ErrorCode>,
     {
         let end = vmo_offset
             .checked_add(copy_len)
@@ -153,7 +167,7 @@ impl VmObject {
                 .add(page_offset)
                 .ok_or(ErrorCode::OUT_OF_BOUNDS)?;
 
-            f(vaddr, len);
+            f(vaddr, len)?;
 
             vmo_offset += len;
             remaining -= len;
@@ -183,4 +197,28 @@ pub fn sys_vmo_create(
     let handle = Handle::new(vmo, rights);
     let id = isolate.handles().lock().insert(handle)?;
     Ok(SyscallOutput::Done(id.as_usize()))
+}
+
+pub fn sys_vmo_write(
+    current: &SharedRef<Thread>,
+    ctx: &SyscallRegs,
+) -> Result<SyscallOutput, ErrorCode> {
+    let id = HandleId::new(ctx.a0);
+    let offset = ctx.a1;
+    let uaddr = UAddr::new(ctx.a2);
+    let len = ctx.a3;
+
+    let uslice = USlice::new(uaddr, len)?;
+    let isolate = current
+        .isolate()
+        .handles()
+        .lock()
+        .get::<Isolate>(id, HandleRight::WRITE)?;
+
+    let vmo = isolate
+        .handles()
+        .lock()
+        .get::<VmObject>(id, HandleRight::WRITE)?;
+    vmo.write_user(offset, uslice)?;
+    Ok(SyscallOutput::Done(0))
 }

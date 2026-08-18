@@ -5,4 +5,5 @@ pub enum Syscall {
     Print = SYS_NUMBER_BASE + 1,
     ThreadExit = SYS_NUMBER_BASE + 2,
     VmoCreate = SYS_NUMBER_BASE + 3,
+    VmoWrite = SYS_NUMBER_BASE + 4,
 }
