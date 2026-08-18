@@ -3,5 +3,5 @@
 pub mod error;
 pub mod handle;
 pub mod syscall;
-pub mod vcpu;
+pub mod thread;
 pub mod vmspace;

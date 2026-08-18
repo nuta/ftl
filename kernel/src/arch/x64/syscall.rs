@@ -4,8 +4,8 @@ use core::mem::offset_of;
 use super::gdt::GDT_KERNEL_CS;
 use super::msr::rdmsr;
 use super::msr::wrmsr;
-use super::vcpu::VCpu;
-use super::vcpu::XSTATE_MASK;
+use super::thread::Thread;
+use super::thread::XSTATE_MASK;
 use crate::cpuvar::CpuVar;
 
 #[unsafe(naked)]
@@ -20,7 +20,7 @@ extern "C" fn syscall_handler() -> ! {
         "mov gs:[{scratch_offset}], rax",
 
         // Save registers.
-        "mov rax, gs:[{current_vcpu_offset}]",
+        "mov rax, gs:[{current_thread_offset}]",
         "mov [rax + {rip_offset}], rcx",
         "mov [rax + {rflags_offset}], r11",
         "mov [rax + {rbx_offset}], rbx",
@@ -39,7 +39,7 @@ extern "C" fn syscall_handler() -> ! {
         "mov [rax + {r15_offset}], r15",
         "mov [rax + {rsp_offset}], rsp",
 
-        // Save RAX to the vCPU struct.
+        // Save RAX to the thread struct.
         "mov rdi, gs:[{scratch_offset}]",
         "mov [rax + {rax_offset}], rdi",
 
@@ -55,30 +55,30 @@ extern "C" fn syscall_handler() -> ! {
         // Call the syscall handler.
         "jmp {handle_syscall}",
         handle_syscall = sym crate::syscall::handle_syscall,
-        current_vcpu_offset = const offset_of!(CpuVar, current_vcpu),
+        current_thread_offset = const offset_of!(CpuVar, current_thread),
         xstate_mask_lo = const XSTATE_MASK & 0xffff_ffff,
         xstate_mask_hi = const XSTATE_MASK >> 32,
-        xsave_ptr_offset = const offset_of!(VCpu, xsave_ptr),
+        xsave_ptr_offset = const offset_of!(Thread, xsave_ptr),
         scratch_offset = const offset_of!(CpuVar, arch.scratch),
         kernel_rsp_offset = const offset_of!(CpuVar, arch.kernel_rsp),
-        rip_offset = const offset_of!(VCpu, rip),
-        rflags_offset = const offset_of!(VCpu, rflags),
-        rax_offset = const offset_of!(VCpu, rax),
-        rbx_offset = const offset_of!(VCpu, rbx),
-        rcx_offset = const offset_of!(VCpu, rcx),
-        rdx_offset = const offset_of!(VCpu, rdx),
-        rdi_offset = const offset_of!(VCpu, rdi),
-        rsi_offset = const offset_of!(VCpu, rsi),
-        rsp_offset = const offset_of!(VCpu, rsp),
-        rbp_offset = const offset_of!(VCpu, rbp),
-        r8_offset = const offset_of!(VCpu, r8),
-        r9_offset = const offset_of!(VCpu, r9),
-        r10_offset = const offset_of!(VCpu, r10),
-        r11_offset = const offset_of!(VCpu, r11),
-        r12_offset = const offset_of!(VCpu, r12),
-        r13_offset = const offset_of!(VCpu, r13),
-        r14_offset = const offset_of!(VCpu, r14),
-        r15_offset = const offset_of!(VCpu, r15),
+        rip_offset = const offset_of!(Thread, rip),
+        rflags_offset = const offset_of!(Thread, rflags),
+        rax_offset = const offset_of!(Thread, rax),
+        rbx_offset = const offset_of!(Thread, rbx),
+        rcx_offset = const offset_of!(Thread, rcx),
+        rdx_offset = const offset_of!(Thread, rdx),
+        rdi_offset = const offset_of!(Thread, rdi),
+        rsi_offset = const offset_of!(Thread, rsi),
+        rsp_offset = const offset_of!(Thread, rsp),
+        rbp_offset = const offset_of!(Thread, rbp),
+        r8_offset = const offset_of!(Thread, r8),
+        r9_offset = const offset_of!(Thread, r9),
+        r10_offset = const offset_of!(Thread, r10),
+        r11_offset = const offset_of!(Thread, r11),
+        r12_offset = const offset_of!(Thread, r12),
+        r13_offset = const offset_of!(Thread, r13),
+        r14_offset = const offset_of!(Thread, r14),
+        r15_offset = const offset_of!(Thread, r15),
     );
 }
 

@@ -26,7 +26,7 @@ Build and run:
 > :warning: This project is currently in pre-alpha stage.
 
 - **Milestone: Make shell work (work-in-progress)**
-  - [x] Kernel: vCPU and memory management
+  - [x] Kernel: thread and memory management
   - [ ] System call emulation: Hello World from Linux binary
   - [ ] musl libc support
   - [ ] Virtual file system
@@ -51,7 +51,7 @@ Build and run:
 
 ### Per-container userspace OS
 
-FTL kernel provides only hypervisor-like interfaces such as vCPU and VM space (virtual address space). Most of OS features such as the concept of process is implemented in a userspace library, which we call *userspace OS*.
+FTL kernel provides only hypervisor-like minimalistic interfaces. Most of OS features such as the concept of process is implemented in a userspace library, which we call *userspace OS*.
 
 Each container instance has its own isolated userspace OS. This lets you run Linux containers on their own isolated Linux-like application kernels, similar to [gVisor](https://github.com/google/gvisor).
 

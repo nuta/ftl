@@ -16,7 +16,7 @@ use crate::initfs::File;
 use crate::initfs::InitFsLoader;
 use crate::isolate::Isolate;
 use crate::shared_ref::SharedRef;
-use crate::vcpu::VCpu;
+use crate::thread::Thread;
 use crate::vmobject::VmObject;
 use crate::vmspace::VmSpace;
 
@@ -98,6 +98,6 @@ pub fn load(bootinfo: &BootInfo) {
         handles.insert_at(HandleId::new(1), isolate_handle).unwrap();
         handles.insert_at(HandleId::new(2), vmspace_handle).unwrap();
     }
-    let vcpu = VCpu::new(isolate, vmspace, entry, sp).unwrap();
-    vcpu.unblock().unwrap();
+    let thread = Thread::new(isolate, vmspace, entry, sp).unwrap();
+    thread.unblock().unwrap();
 }

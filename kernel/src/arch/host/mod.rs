@@ -2,7 +2,7 @@ use std::ops::Range;
 
 use ftl_arrayvec::ArrayVec;
 use ftl_types::error::ErrorCode;
-use ftl_types::vcpu::SyscallRegs;
+use ftl_types::thread::SyscallRegs;
 use ftl_types::vmspace::PageAttrs;
 
 use crate::address::PAddr;
@@ -51,9 +51,9 @@ impl VmSpace {
     }
 }
 
-pub struct VCpu {}
+pub struct Thread {}
 
-impl VCpu {
+impl Thread {
     pub fn new(_pc: usize, _sp: usize) -> Result<Self, ErrorCode> {
         todo!()
     }
@@ -66,7 +66,7 @@ impl VCpu {
         todo!()
     }
 
-    pub fn enter(_vcpu: *const VCpu) -> ! {
+    pub fn enter(_thread: *const Thread) -> ! {
         todo!()
     }
 }

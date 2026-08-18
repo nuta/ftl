@@ -5,12 +5,12 @@ use ftl_utils::spinlock::SpinLock;
 
 use crate::arch;
 use crate::shared_ref::SharedRef;
-use crate::vcpu::VCpu;
+use crate::thread::Thread;
 
 pub static SCHEDULER: Scheduler = Scheduler::new();
 
 pub struct Scheduler {
-    runqueue: SpinLock<VecDeque<SharedRef<VCpu>>>,
+    runqueue: SpinLock<VecDeque<SharedRef<Thread>>>,
 }
 
 impl Scheduler {
@@ -21,14 +21,14 @@ impl Scheduler {
     }
 
     /// Picks the next thread to run.
-    pub fn pop(&self) -> Option<SharedRef<VCpu>> {
+    pub fn pop(&self) -> Option<SharedRef<Thread>> {
         let mut runqueue = self.runqueue.lock();
         let thread = runqueue.pop_front()?;
         Some(thread)
     }
 
     /// Pushes a runnable thread to the runqueue.
-    pub fn push_back(&self, thread: SharedRef<VCpu>) -> Result<(), ErrorCode> {
+    pub fn push_back(&self, thread: SharedRef<Thread>) -> Result<(), ErrorCode> {
         let mut runqueue = self.runqueue.lock();
         if runqueue.try_reserve(1).is_err() {
             return Err(ErrorCode::OUT_OF_MEMORY);
@@ -40,7 +40,7 @@ impl Scheduler {
 
     /// Pushes a runnable thread to the front of the runqueue, so that it willl
     /// be picked first.
-    pub fn push_front(&self, thread: SharedRef<VCpu>) -> Result<(), ErrorCode> {
+    pub fn push_front(&self, thread: SharedRef<Thread>) -> Result<(), ErrorCode> {
         let mut runqueue = self.runqueue.lock();
         if runqueue.try_reserve(1).is_err() {
             return Err(ErrorCode::OUT_OF_MEMORY);
@@ -59,9 +59,9 @@ impl Scheduler {
 /// the single kernel stack design.
 pub fn return_to_user() -> ! {
     let cpuvar = arch::get_cpuvar();
-    let current = &cpuvar.current_vcpu;
+    let current = &cpuvar.current_thread;
 
-    if let Some(current) = current.vcpu()
+    if let Some(current) = current.thread()
         && current.is_runnable()
     {
         // The current thread is runnable. Push it back to the scheduler.

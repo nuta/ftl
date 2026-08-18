@@ -7,9 +7,9 @@ use ftl_utils::spinlock::SpinLock;
 
 use super::gdt::GDT_KERNEL_CS;
 use super::io_apic::IRQ_VECTOR_BASE;
+use super::thread::Thread;
+use super::thread::XSTATE_MASK;
 use super::timer::TIMER_IRQ;
-use super::vcpu::VCpu;
-use super::vcpu::XSTATE_MASK;
 use crate::address::VAddr;
 use crate::cpuvar::CpuVar;
 
@@ -192,9 +192,9 @@ extern "C" fn interrupt_entry() -> ! {
         "push rax",
 
         // thread = CpuVar.current_thread
-        "mov rax, gs:[{current_vcpu_offset}]",
+        "mov rax, gs:[{current_thread_offset}]",
 
-        // Save registers to the vCPU.
+        // Save registers to the thread.
         "mov [rax + {rbx_offset}], rbx",
         "mov [rax + {rcx_offset}], rcx",
         "mov [rax + {rdx_offset}], rdx",
@@ -237,28 +237,28 @@ extern "C" fn interrupt_entry() -> ! {
         "pop rbx",
 
         "jmp {handle_user_interrupt}",
-        current_vcpu_offset = const offset_of!(CpuVar, current_vcpu),
+        current_thread_offset = const offset_of!(CpuVar, current_thread),
         xstate_mask_lo = const XSTATE_MASK & 0xffff_ffff,
         xstate_mask_hi = const XSTATE_MASK >> 32,
-        xsave_ptr_offset = const offset_of!(VCpu, xsave_ptr),
-        rip_offset = const offset_of!(VCpu, rip),
-        rflags_offset = const offset_of!(VCpu, rflags),
-        rax_offset = const offset_of!(VCpu, rax),
-        rbx_offset = const offset_of!(VCpu, rbx),
-        rcx_offset = const offset_of!(VCpu, rcx),
-        rdx_offset = const offset_of!(VCpu, rdx),
-        rsi_offset = const offset_of!(VCpu, rsi),
-        rdi_offset = const offset_of!(VCpu, rdi),
-        rsp_offset = const offset_of!(VCpu, rsp),
-        rbp_offset = const offset_of!(VCpu, rbp),
-        r8_offset = const offset_of!(VCpu, r8),
-        r9_offset = const offset_of!(VCpu, r9),
-        r10_offset = const offset_of!(VCpu, r10),
-        r11_offset = const offset_of!(VCpu, r11),
-        r12_offset = const offset_of!(VCpu, r12),
-        r13_offset = const offset_of!(VCpu, r13),
-        r14_offset = const offset_of!(VCpu, r14),
-        r15_offset = const offset_of!(VCpu, r15),
+        xsave_ptr_offset = const offset_of!(Thread, xsave_ptr),
+        rip_offset = const offset_of!(Thread, rip),
+        rflags_offset = const offset_of!(Thread, rflags),
+        rax_offset = const offset_of!(Thread, rax),
+        rbx_offset = const offset_of!(Thread, rbx),
+        rcx_offset = const offset_of!(Thread, rcx),
+        rdx_offset = const offset_of!(Thread, rdx),
+        rsi_offset = const offset_of!(Thread, rsi),
+        rdi_offset = const offset_of!(Thread, rdi),
+        rsp_offset = const offset_of!(Thread, rsp),
+        rbp_offset = const offset_of!(Thread, rbp),
+        r8_offset = const offset_of!(Thread, r8),
+        r9_offset = const offset_of!(Thread, r9),
+        r10_offset = const offset_of!(Thread, r10),
+        r11_offset = const offset_of!(Thread, r11),
+        r12_offset = const offset_of!(Thread, r12),
+        r13_offset = const offset_of!(Thread, r13),
+        r14_offset = const offset_of!(Thread, r14),
+        r15_offset = const offset_of!(Thread, r15),
         handle_kernel_interrupt = sym handle_kernel_interrupt,
         handle_user_interrupt = sym handle_user_interrupt,
     )

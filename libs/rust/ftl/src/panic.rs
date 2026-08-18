@@ -1,8 +1,8 @@
 #[cfg(target_os = "none")]
 #[panic_handler]
 fn panic(info: &core::panic::PanicInfo) -> ! {
-    use ftl_types::vcpu::ExitReason;
+    use ftl_types::thread::ExitReason;
 
     error!("server panic: {info}");
-    crate::syscall::vcpu_exit(ExitReason::Panic);
+    crate::syscall::thread_exit(ExitReason::Panic);
 }

@@ -2,7 +2,7 @@ use core::cmp::min;
 use core::fmt;
 
 use ftl_types::error::ErrorCode;
-use ftl_types::vcpu::SyscallRegs;
+use ftl_types::thread::SyscallRegs;
 
 use crate::address::UAddr;
 use crate::address::USlice;

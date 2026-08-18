@@ -5,7 +5,7 @@ use core::ptr;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use ftl_types::handle::HandleRight;
-use ftl_types::vcpu::SyscallRegs;
+use ftl_types::thread::SyscallRegs;
 use ftl_utils::alignment::is_aligned;
 use ftl_utils::spinlock::SpinLock;
 
@@ -19,7 +19,7 @@ use crate::memory::PAGE_ALLOCATOR;
 use crate::memory::PageType;
 use crate::shared_ref::SharedRef;
 use crate::syscall::SyscallOutput;
-use crate::vcpu::VCpu;
+use crate::thread::Thread;
 
 /// A physical memory page.
 struct Page {
@@ -159,7 +159,7 @@ impl VmObject {
 impl Handleable for VmObject {}
 
 pub fn sys_vmo_create(
-    current: &SharedRef<VCpu>,
+    current: &SharedRef<Thread>,
     ctx: &SyscallRegs,
 ) -> Result<SyscallOutput, ErrorCode> {
     let id = HandleId::new(ctx.a0);

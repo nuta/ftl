@@ -2,7 +2,7 @@ use core::arch::asm;
 use core::mem::offset_of;
 
 use ftl_types::error::ErrorCode;
-use ftl_types::vcpu::SyscallRegs;
+use ftl_types::thread::SyscallRegs;
 
 use super::gdt::GDT_USER_CS;
 use super::gdt::GDT_USER_DS;
@@ -15,7 +15,7 @@ pub(super) const XSTATE_MASK: u64 = (1 << 0) | (1 << 1); // x87 | SSE
 
 #[derive(Default, Debug)]
 #[repr(C, packed)]
-pub struct VCpu {
+pub struct Thread {
     // IRET frame. The order is important!
     pub(super) rip: u64,
     pub(super) cs: u64,
@@ -43,7 +43,7 @@ pub struct VCpu {
     pub(super) xsave_ptr: u64,
 }
 
-impl VCpu {
+impl Thread {
     pub fn new(pc: usize, sp: usize) -> Result<Self, ErrorCode> {
         let paddr = PAGE_ALLOCATOR
             .alloc(MIN_PAGE_SIZE, PageType::Zeroed)
@@ -75,7 +75,7 @@ impl VCpu {
         self.rax = retval as u64;
     }
 
-    pub fn enter(vcpu: *const VCpu) -> ! {
+    pub fn enter(thread: *const Thread) -> ! {
         unsafe {
             asm!(
                 "mov rsp, {}",
@@ -103,7 +103,7 @@ impl VCpu {
                 "mov r13, [rsp + {r13_offset}]",
                 "mov r14, [rsp + {r14_offset}]",
                 "mov r15, [rsp + {r15_offset}]",
-                // The RSP points to the beginning of *const VCpu, which is
+                // The RSP points to the beginning of *const Thread, which is
                 // the beginning of an IRET stack frame.
                 //
                 // The instruction will restore RIP, RFLAGS, RSP, and segment
@@ -115,27 +115,27 @@ impl VCpu {
                 // >
                 // > 7.14.3 IRET in IA-32e Mode
                 "iretq",
-                in(reg) vcpu,
+                in(reg) thread,
                 xstate_mask_lo = const XSTATE_MASK & 0xffff_ffff,
                 xstate_mask_hi = const XSTATE_MASK >> 32,
-                xsave_ptr_offset = const offset_of!(VCpu, xsave_ptr),
-                gsbase_offset = const offset_of!(VCpu, gsbase),
-                fsbase_offset = const offset_of!(VCpu, fsbase),
-                rax_offset = const offset_of!(VCpu, rax),
-                rbx_offset = const offset_of!(VCpu, rbx),
-                rcx_offset = const offset_of!(VCpu, rcx),
-                rdx_offset = const offset_of!(VCpu, rdx),
-                rsi_offset = const offset_of!(VCpu, rsi),
-                rdi_offset = const offset_of!(VCpu, rdi),
-                rbp_offset = const offset_of!(VCpu, rbp),
-                r8_offset = const offset_of!(VCpu, r8),
-                r9_offset = const offset_of!(VCpu, r9),
-                r10_offset = const offset_of!(VCpu, r10),
-                r11_offset = const offset_of!(VCpu, r11),
-                r12_offset = const offset_of!(VCpu, r12),
-                r13_offset = const offset_of!(VCpu, r13),
-                r14_offset = const offset_of!(VCpu, r14),
-                r15_offset = const offset_of!(VCpu, r15),
+                xsave_ptr_offset = const offset_of!(Thread, xsave_ptr),
+                gsbase_offset = const offset_of!(Thread, gsbase),
+                fsbase_offset = const offset_of!(Thread, fsbase),
+                rax_offset = const offset_of!(Thread, rax),
+                rbx_offset = const offset_of!(Thread, rbx),
+                rcx_offset = const offset_of!(Thread, rcx),
+                rdx_offset = const offset_of!(Thread, rdx),
+                rsi_offset = const offset_of!(Thread, rsi),
+                rdi_offset = const offset_of!(Thread, rdi),
+                rbp_offset = const offset_of!(Thread, rbp),
+                r8_offset = const offset_of!(Thread, r8),
+                r9_offset = const offset_of!(Thread, r9),
+                r10_offset = const offset_of!(Thread, r10),
+                r11_offset = const offset_of!(Thread, r11),
+                r12_offset = const offset_of!(Thread, r12),
+                r13_offset = const offset_of!(Thread, r13),
+                r14_offset = const offset_of!(Thread, r14),
+                r15_offset = const offset_of!(Thread, r15),
                 options(noreturn)
             );
         }

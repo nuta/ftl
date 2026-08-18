@@ -24,12 +24,12 @@ struct Mutable {
 }
 
 #[repr(C)]
-pub struct VCpu {
+pub struct Thread {
     /// The arch-specific CPU registers and other state.
     ///
     /// This is an [`UnsafeCell`] because the interrupt handler updates this
     /// field directly.
-    arch: UnsafeCell<arch::VCpu>,
+    arch: UnsafeCell<arch::Thread>,
     isolate: SharedRef<Isolate>,
     vmspace: SharedRef<VmSpace>,
     mutable: SpinLock<Mutable>,
@@ -41,9 +41,9 @@ pub struct VCpu {
 ///   thread.
 /// - When the thread is blocked (i.e. not running), the mutable lock must be
 ///   held to prevent concurrent access.
-unsafe impl Sync for VCpu {}
+unsafe impl Sync for Thread {}
 
-impl VCpu {
+impl Thread {
     pub fn new(
         isolate: SharedRef<Isolate>,
         vmspace: SharedRef<VmSpace>,
@@ -54,9 +54,9 @@ impl VCpu {
             state: State::Blocked,
         };
 
-        let arch_vcpu = arch::VCpu::new(pc, sp)?;
-        let thread = SharedRef::new(VCpu {
-            arch: UnsafeCell::new(arch_vcpu),
+        let arch_thread = arch::Thread::new(pc, sp)?;
+        let thread = SharedRef::new(Thread {
+            arch: UnsafeCell::new(arch_thread),
             isolate,
             vmspace,
             mutable: SpinLock::new(mutable),
@@ -65,7 +65,7 @@ impl VCpu {
         Ok(thread)
     }
 
-    pub fn arch(&self) -> &UnsafeCell<arch::VCpu> {
+    pub fn arch(&self) -> &UnsafeCell<arch::Thread> {
         &self.arch
     }
 
@@ -83,7 +83,7 @@ impl VCpu {
         &self.isolate
     }
 
-    /// Resumes the vCPU.
+    /// Resumes the thread.
     pub fn unblock(self: &SharedRef<Self>) -> Result<(), ErrorCode> {
         let mut mutable = self.mutable.lock();
         if mutable.state != State::Blocked {
@@ -97,25 +97,25 @@ impl VCpu {
     }
 }
 
-impl Handleable for VCpu {}
+impl Handleable for Thread {}
 
-/// The current vCPU.
+/// The current thread.
 ///
-/// This is a special struct replacing SharedRef<VCpu> for the current
-/// vCPU to implement its tricky properties:
+/// This is a special struct replacing SharedRef<Thread> for the current
+/// thread to implement its tricky properties:
 ///
-/// - The offset 0 of this struct is the pointer to `VCpu` and `arch::VCpu`
-///   This allows accessing the `arch::VCpu` struct from assembly code to save
+/// - The offset 0 of this struct is the pointer to `Thread` and `arch::Thread`
+///   This allows accessing the `arch::Thread` struct from assembly code to save
 ///   general-purpose registers.
 ///
-/// - The vCPU running on a CPU should never be dropped. This struct owns a
-///   reference count of SharedRef<VCpu>.
+/// - The thread running on a CPU should never be dropped. This struct owns a
+///   reference count of SharedRef<Thread>.
 #[repr(transparent)]
-pub struct CurrentVCpu {
-    ptr: UnsafeCell<*const VCpu>,
+pub struct CurrentThread {
+    ptr: UnsafeCell<*const Thread>,
 }
 
-impl CurrentVCpu {
+impl CurrentThread {
     pub fn new() -> Self {
         Self {
             ptr: UnsafeCell::new(core::ptr::null()),
@@ -126,14 +126,14 @@ impl CurrentVCpu {
     pub fn clear(&self) {
         let old_ptr = unsafe { self.ptr.replace(core::ptr::null()) };
 
-        // Release the ref count of the previous vCPU.
+        // Release the ref count of the previous thread.
         if !old_ptr.is_null() {
             drop(unsafe { SharedRef::from_raw(old_ptr) });
         }
     }
 
-    /// Returns the current vCPU.
-    pub fn vcpu(&self) -> Option<SharedRef<VCpu>> {
+    /// Returns the current thread.
+    pub fn thread(&self) -> Option<SharedRef<Thread>> {
         unsafe {
             let ptr = *self.ptr.get();
             if ptr.is_null() {
@@ -154,43 +154,43 @@ impl CurrentVCpu {
     /// # Safety
     ///
     /// The caller must ensure the current thread is set.
-    unsafe fn arch_vcpu(&self) -> *mut arch::VCpu {
-        static_assert!(offset_of!(VCpu, arch) == 0);
+    unsafe fn arch_thread(&self) -> *mut arch::Thread {
+        static_assert!(offset_of!(Thread, arch) == 0);
         debug_assert!(!unsafe { *self.ptr.get() }.is_null());
 
-        // SAFETY: The static_assert above guarantees arch::VCpu is at the offset 0.
-        unsafe { *self.ptr.get() as *mut arch::VCpu }
+        // SAFETY: The static_assert above guarantees arch::Thread is at the offset 0.
+        unsafe { *self.ptr.get() as *mut arch::Thread }
     }
 
-    /// Updates the current vCPU.
-    fn update(&self, next: SharedRef<VCpu>) {
+    /// Updates the current thread.
+    fn update(&self, next: SharedRef<Thread>) {
         let new_ptr = next.into_raw();
 
         // SAFETY: Data races should not happen because this is CPU-local and
         //         interrupts are disabled.
         let old_ptr = unsafe { self.ptr.replace(new_ptr) };
 
-        // Decrement the ref count of the current vCPU.
+        // Decrement the ref count of the current thread.
         if !old_ptr.is_null() {
             drop(unsafe { SharedRef::from_raw(old_ptr) });
         }
     }
 
-    /// Switches into a new vCPU.
+    /// Switches into a new thread.
     ///
     /// # Warning
     ///
     /// Drop reference counters and lock guards before calling this; this
     /// function never returns.
-    pub fn enter(&self, new_vcpu: SharedRef<VCpu>) -> ! {
-        // Switch to the new vCPU's virtual memory space.
-        new_vcpu.vmspace().switch();
+    pub fn enter(&self, new_thread: SharedRef<Thread>) -> ! {
+        // Switch to the new thread's virtual memory space.
+        new_thread.vmspace().switch();
 
-        self.update(new_vcpu);
+        self.update(new_thread);
 
         // SAFETY: We've set the new pointer and SharedRef is always non-null.
-        let arch_vcpu = unsafe { self.arch_vcpu() };
+        let arch_thread = unsafe { self.arch_thread() };
 
-        arch::VCpu::enter(arch_vcpu);
+        arch::Thread::enter(arch_thread);
     }
 }

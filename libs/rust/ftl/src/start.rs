@@ -1,4 +1,4 @@
-use ftl_types::vcpu::ExitReason;
+use ftl_types::thread::ExitReason;
 
 unsafe extern "Rust" {
     fn main();
@@ -10,5 +10,5 @@ pub extern "C" fn start() {
         main();
     }
 
-    crate::syscall::vcpu_exit(ExitReason::Success);
+    crate::syscall::thread_exit(ExitReason::Success);
 }

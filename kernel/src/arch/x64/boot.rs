@@ -3,7 +3,7 @@ use core::arch::naked_asm;
 
 use super::multiboot;
 use super::pvh;
-use super::vcpu::XSTATE_MASK;
+use super::thread::XSTATE_MASK;
 use super::vmspace::BOOT_PDPT;
 use super::vmspace::BOOT_PML4;
 use super::vmspace::KERNEL_BASE;

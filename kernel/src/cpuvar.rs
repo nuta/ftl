@@ -1,11 +1,11 @@
 use crate::arch;
-use crate::vcpu::CurrentVCpu;
+use crate::thread::CurrentThread;
 
 pub struct CpuVar {
     pub arch: arch::CpuVar,
     // Note: Do not wrap this field. The assembly assumes it is pointer to
-    //       `arch::VCpu`.
-    pub current_vcpu: CurrentVCpu,
+    //       `arch::Thread`.
+    pub current_thread: CurrentThread,
 }
 
 pub fn init(cpu_id: usize) {
@@ -13,7 +13,7 @@ pub fn init(cpu_id: usize) {
         cpu_id,
         CpuVar {
             arch: arch::CpuVar::new(cpu_id),
-            current_vcpu: CurrentVCpu::new(),
+            current_thread: CurrentThread::new(),
         },
     );
 }

@@ -24,6 +24,6 @@ mod panic;
 mod scheduler;
 mod shared_ref;
 mod syscall;
-mod vcpu;
+mod thread;
 mod vmobject;
 mod vmspace;
