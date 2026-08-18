@@ -65,6 +65,13 @@ impl VAddr {
     pub const fn as_mut_ptr<T>(self) -> *mut T {
         self.0 as *mut T
     }
+
+    pub const fn add(self, offset: usize) -> Option<Self> {
+        match self.0.checked_add(offset) {
+            Some(addr) => Some(Self(addr)),
+            None => None,
+        }
+    }
 }
 
 impl fmt::Debug for VAddr {

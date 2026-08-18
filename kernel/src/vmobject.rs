@@ -10,6 +10,7 @@ use ftl_utils::alignment::is_aligned;
 use ftl_utils::spinlock::SpinLock;
 
 use crate::address::PAddr;
+use crate::address::VAddr;
 use crate::arch;
 use crate::arch::MIN_PAGE_SIZE;
 use crate::handle::Handle;
@@ -93,63 +94,69 @@ impl VmObject {
         Ok(page.paddr)
     }
 
-    pub fn write(&self, mut offset: usize, mut data: &[u8]) -> Result<(), ErrorCode> {
-        let offset_end = offset
-            .checked_add(data.len())
-            .ok_or(ErrorCode::OUT_OF_BOUNDS)?;
-        if offset_end > self.len {
-            return Err(ErrorCode::OUT_OF_BOUNDS);
-        }
-
-        let mut mutable = self.mutable.lock();
-        while !data.is_empty() {
-            let index = offset / MIN_PAGE_SIZE;
-            let page_offset = offset % MIN_PAGE_SIZE;
-            let copy_len = min(data.len(), MIN_PAGE_SIZE - page_offset);
-
-            let page = mutable.get_or_fill(index)?;
-            let vaddr = arch::paddr2vaddr(page.paddr);
-
+    pub fn write(&self, offset: usize, buf: &[u8]) -> Result<(), ErrorCode> {
+        let mut buf_offset = 0;
+        self.read_write(offset, buf.len(), |vaddr, len| {
             unsafe {
-                let dst = vaddr.as_mut_ptr::<u8>().add(page_offset);
-                ptr::copy_nonoverlapping(data.as_ptr(), dst, copy_len);
+                let dst = vaddr.as_mut_ptr::<u8>();
+                let src = buf.as_ptr().add(buf_offset);
+                ptr::copy_nonoverlapping(src, dst, len);
             }
-
-            data = &data[copy_len..];
-            offset += copy_len;
-        }
-
-        Ok(())
+            buf_offset += len;
+        })
     }
 
     /// Reads bytes into the buffer.
     ///
     /// The lazily-allocated pages are filled on demand.
-    pub fn read(&self, mut offset: usize, mut buf: &mut [u8]) -> Result<(), ErrorCode> {
-        let offset_end = offset
-            .checked_add(buf.len())
+    pub fn read(&self, offset: usize, buf: &mut [u8]) -> Result<(), ErrorCode> {
+        let mut buf_offset = 0;
+        self.read_write(offset, buf.len(), |vaddr, len| {
+            unsafe {
+                let src = vaddr.as_ptr::<u8>();
+                let dst = buf.as_mut_ptr().add(buf_offset);
+                ptr::copy_nonoverlapping(src, dst, len);
+            }
+            buf_offset += len;
+        })
+    }
+
+    /// Visits the memory region in page-aligned chunks.
+    ///
+    /// `vmo_offset` and `copy_len` don't need to be page-aligned.
+    fn read_write<F>(
+        &self,
+        mut vmo_offset: usize,
+        copy_len: usize,
+        mut f: F,
+    ) -> Result<(), ErrorCode>
+    where
+        F: FnMut(VAddr, usize),
+    {
+        let end = vmo_offset
+            .checked_add(copy_len)
             .ok_or(ErrorCode::OUT_OF_BOUNDS)?;
 
-        if offset_end > self.len {
+        if end > self.len {
             return Err(ErrorCode::OUT_OF_BOUNDS);
         }
 
         let mut mutable = self.mutable.lock();
-        while !buf.is_empty() {
-            let index = offset / MIN_PAGE_SIZE;
-            let offset_in_page = offset % MIN_PAGE_SIZE;
+        let mut remaining = copy_len;
+        while remaining > 0 {
+            let page_index = vmo_offset / MIN_PAGE_SIZE;
+            let page_offset = vmo_offset % MIN_PAGE_SIZE;
+            let len = min(remaining, MIN_PAGE_SIZE - page_offset);
 
-            let page = mutable.get_or_fill(index)?;
-            let vaddr = arch::paddr2vaddr(page.paddr);
+            let page = mutable.get_or_fill(page_index)?;
+            let vaddr = arch::paddr2vaddr(page.paddr)
+                .add(page_offset)
+                .ok_or(ErrorCode::OUT_OF_BOUNDS)?;
 
-            let copy_len = min(buf.len(), MIN_PAGE_SIZE - offset_in_page);
-            unsafe {
-                let src = vaddr.as_ptr::<u8>().add(offset_in_page);
-                ptr::copy_nonoverlapping(src, buf.as_mut_ptr(), copy_len);
-            }
+            f(vaddr, len);
 
-            buf = &mut buf[copy_len..];
-            offset += copy_len;
+            vmo_offset += len;
+            remaining -= len;
         }
 
         Ok(())
