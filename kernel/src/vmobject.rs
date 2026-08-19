@@ -238,19 +238,12 @@ pub fn sys_vmo_create(
     current: &SharedRef<Thread>,
     ctx: &SyscallRegs,
 ) -> Result<SyscallOutput, ErrorCode> {
-    let id = HandleId::new(ctx.a0);
-    let len = ctx.a1;
-
-    let isolate = current
-        .isolate()
-        .handles()
-        .lock()
-        .get::<Isolate>(id, HandleRight::WRITE)?;
+    let len = ctx.a0;
 
     let vmo = VmObject::new_anonymous(len)?;
     let rights = HandleRight::READ | HandleRight::WRITE | HandleRight::MAP;
     let handle = Handle::new(vmo, rights);
-    let id = isolate.handles().lock().insert(handle)?;
+    let id = current.isolate().handles().lock().insert(handle)?;
     Ok(SyscallOutput::Done(id.as_usize()))
 }
 
@@ -264,16 +257,12 @@ pub fn sys_vmo_write(
     let len = ctx.a3;
 
     let uslice = USlice::new(uaddr, len)?;
-    let isolate = current
+    let vmo = current
         .isolate()
         .handles()
         .lock()
-        .get::<Isolate>(id, HandleRight::WRITE)?;
-
-    let vmo = isolate
-        .handles()
-        .lock()
         .get::<VmObject>(id, HandleRight::WRITE)?;
+
     vmo.write_user(offset, uslice)?;
     Ok(SyscallOutput::Done(0))
 }

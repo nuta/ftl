@@ -16,18 +16,18 @@ pub fn thread_exit(reason: ExitReason) -> ! {
     crate::arch::unreachable();
 }
 
-pub fn vmo_create(isolate: HandleId, len: usize) -> Result<HandleId, ErrorCode> {
-    let ret = syscall2(Syscall::VmoCreate, isolate.as_usize(), len)?;
+pub fn vmo_create(len: usize) -> Result<HandleId, ErrorCode> {
+    let ret = syscall1(Syscall::VmoCreate, len)?;
     Ok(HandleId::new(ret))
 }
 
-pub fn vmo_write(vmo: HandleId, offset: usize, data: &[u8]) -> Result<(), ErrorCode> {
+pub fn vmo_write(vmo: HandleId, offset: usize, buf: &[u8]) -> Result<(), ErrorCode> {
     syscall4(
         Syscall::VmoWrite,
         vmo.as_usize(),
         offset,
-        data.as_ptr() as usize,
-        data.len(),
+        buf.as_ptr() as usize,
+        buf.len(),
     )?;
     Ok(())
 }
