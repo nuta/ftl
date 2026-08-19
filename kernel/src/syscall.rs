@@ -27,6 +27,9 @@ fn do_handle_syscall() {
             crate::vmspace::sys_vmspace_clone(&thread, &regs)
         }
         n if n == Syscall::VmSpaceMap as usize => crate::vmspace::sys_vmspace_map(&thread, &regs),
+        n if n == Syscall::ThreadCreate as usize => {
+            crate::thread::sys_thread_create(&thread, &regs)
+        }
         _ => todo!(),
     };
 

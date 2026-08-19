@@ -17,6 +17,22 @@ pub fn thread_exit(reason: ExitReason) -> ! {
     crate::arch::unreachable();
 }
 
+pub fn thread_create(
+    isolate: HandleId,
+    vmspace: HandleId,
+    pc: usize,
+    sp: usize,
+) -> Result<HandleId, ErrorCode> {
+    let ret = syscall4(
+        Syscall::ThreadCreate,
+        isolate.as_usize(),
+        vmspace.as_usize(),
+        pc,
+        sp,
+    )?;
+    Ok(HandleId::new(ret))
+}
+
 pub fn vmspace_clone(source: HandleId) -> Result<HandleId, ErrorCode> {
     let ret = syscall1(Syscall::VmSpaceClone, source.as_usize())?;
     Ok(HandleId::new(ret))

@@ -2,14 +2,19 @@ use core::cell::UnsafeCell;
 use core::mem::offset_of;
 
 use ftl_types::error::ErrorCode;
+use ftl_types::handle::HandleId;
+use ftl_types::handle::HandleRight;
+use ftl_types::thread::SyscallRegs;
 use ftl_utils::spinlock::SpinLock;
 use ftl_utils::static_assert;
 
 use crate::arch;
+use crate::handle::Handle;
 use crate::handle::Handleable;
 use crate::isolate::Isolate;
 use crate::scheduler::SCHEDULER;
 use crate::shared_ref::SharedRef;
+use crate::syscall::SyscallOutput;
 use crate::vmspace::VmSpace;
 
 #[derive(Debug, PartialEq, Eq)]
@@ -98,6 +103,27 @@ impl Thread {
 }
 
 impl Handleable for Thread {}
+
+pub fn sys_thread_create(
+    current: &SharedRef<Thread>,
+    ctx: &SyscallRegs,
+) -> Result<SyscallOutput, ErrorCode> {
+    let isolate_id = HandleId::new(ctx.a0);
+    let vmspace_id = HandleId::new(ctx.a1);
+    let pc = ctx.a2;
+    let sp = ctx.a3;
+
+    let handle_table = current.isolate().handles();
+    let handles = handle_table.lock();
+    let isolate = handles.get::<Isolate>(isolate_id, HandleRight::WRITE)?;
+    let vmspace = handles.get::<VmSpace>(vmspace_id, HandleRight::READ)?;
+    drop(handles);
+
+    let thread = Thread::new(isolate, vmspace, pc, sp)?;
+    let handle = Handle::new(thread, HandleRight::WRITE);
+    let id = handle_table.lock().insert(handle)?;
+    Ok(SyscallOutput::Done(id.as_usize()))
+}
 
 /// The current thread.
 ///

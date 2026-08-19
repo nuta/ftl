@@ -8,4 +8,5 @@ pub enum Syscall {
     VmoWrite = SYS_NUMBER_BASE + 4,
     VmSpaceClone = SYS_NUMBER_BASE + 5,
     VmSpaceMap = SYS_NUMBER_BASE + 6,
+    ThreadCreate = SYS_NUMBER_BASE + 7,
 }
