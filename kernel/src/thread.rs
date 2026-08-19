@@ -21,7 +21,7 @@ use crate::vmspace::VmSpace;
 enum State {
     Runnable,
     Blocked,
-    Terminated,
+    Exited,
 }
 
 struct Mutable {
@@ -100,6 +100,16 @@ impl Thread {
 
         Ok(())
     }
+
+    pub fn exit(&self) -> Result<(), ErrorCode> {
+        let mut mutable = self.mutable.lock();
+        if mutable.state != State::Runnable {
+            return Err(ErrorCode::INVALID_STATE);
+        }
+
+        mutable.state = State::Exited;
+        Ok(())
+    }
 }
 
 impl Handleable for Thread {}
@@ -137,6 +147,16 @@ pub fn sys_thread_start(
         .get::<Thread>(thread_id, HandleRight::WRITE)?;
     thread.unblock()?;
     Ok(SyscallOutput::Done(0))
+}
+
+pub fn sys_thread_exit(
+    current: &SharedRef<Thread>,
+    ctx: &SyscallRegs,
+) -> Result<SyscallOutput, ErrorCode> {
+    let _reason = ctx.a0; // ignored for now
+
+    current.exit()?;
+    Ok(SyscallOutput::Exited)
 }
 
 /// The current thread.

@@ -5,6 +5,7 @@ use crate::scheduler;
 
 pub enum SyscallOutput {
     Done(usize),
+    Exited,
 }
 
 fn do_handle_syscall() {
@@ -18,9 +19,7 @@ fn do_handle_syscall() {
             // TODO: syscall retval
             crate::print::sys_print(&regs)
         }
-        n if n == Syscall::ThreadExit as usize => {
-            todo!()
-        }
+        n if n == Syscall::ThreadExit as usize => crate::thread::sys_thread_exit(&thread, &regs),
         n if n == Syscall::VmoCreate as usize => crate::vmobject::sys_vmo_create(&thread, &regs),
         n if n == Syscall::VmoWrite as usize => crate::vmobject::sys_vmo_write(&thread, &regs),
         n if n == Syscall::VmSpaceClone as usize => {
@@ -40,6 +39,7 @@ fn do_handle_syscall() {
             unreachable!();
         }
         Ok(SyscallOutput::Done(retval)) => retval,
+        Ok(SyscallOutput::Exited) => return,
         Err(err) => err.as_usize(),
     };
 
