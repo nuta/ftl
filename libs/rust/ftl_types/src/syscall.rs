@@ -9,4 +9,5 @@ pub enum Syscall {
     VmSpaceClone = SYS_NUMBER_BASE + 5,
     VmSpaceMap = SYS_NUMBER_BASE + 6,
     ThreadCreate = SYS_NUMBER_BASE + 7,
+    ThreadStart = SYS_NUMBER_BASE + 8,
 }

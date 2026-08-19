@@ -33,6 +33,11 @@ pub fn thread_create(
     Ok(HandleId::new(ret))
 }
 
+pub fn thread_start(thread: HandleId) -> Result<(), ErrorCode> {
+    syscall1(Syscall::ThreadStart, thread.as_usize())?;
+    Ok(())
+}
+
 pub fn vmspace_clone(source: HandleId) -> Result<HandleId, ErrorCode> {
     let ret = syscall1(Syscall::VmSpaceClone, source.as_usize())?;
     Ok(HandleId::new(ret))

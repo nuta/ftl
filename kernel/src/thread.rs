@@ -125,6 +125,20 @@ pub fn sys_thread_create(
     Ok(SyscallOutput::Done(id.as_usize()))
 }
 
+pub fn sys_thread_start(
+    current: &SharedRef<Thread>,
+    ctx: &SyscallRegs,
+) -> Result<SyscallOutput, ErrorCode> {
+    let thread_id = HandleId::new(ctx.a0);
+    let thread = current
+        .isolate()
+        .handles()
+        .lock()
+        .get::<Thread>(thread_id, HandleRight::WRITE)?;
+    thread.unblock()?;
+    Ok(SyscallOutput::Done(0))
+}
+
 /// The current thread.
 ///
 /// This is a special struct replacing SharedRef<Thread> for the current
