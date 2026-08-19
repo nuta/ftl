@@ -70,7 +70,7 @@ pub fn sys_print(ctx: &SyscallRegs) -> Result<SyscallOutput, ErrorCode> {
     while len > 0 {
         let copy_len = min(len, buf.len());
         let slice = &mut buf[..copy_len];
-        USlice::new(addr, copy_len)?.read(slice)?;
+        USlice::new(addr, copy_len)?.read_bytes(slice)?;
         crate::arch::console_write(slice);
 
         // TODO: Handle this in USlice (USliceReader?)

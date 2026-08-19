@@ -136,8 +136,7 @@ impl fmt::Display for UAddr {
 #[derive(Clone, Copy)]
 pub struct USlice {
     addr: UAddr,
-    // TODO: should we keep the end address instead of the length? Does it make checks simpler?
-    len: usize,
+    end: UAddr,
 }
 
 impl USlice {
@@ -150,31 +149,47 @@ impl USlice {
             return Err(ErrorCode::NOT_ALLOWED);
         }
 
-        Ok(Self { addr, len })
+        Ok(Self { addr, end })
     }
 
     pub const fn len(self) -> usize {
-        self.len
+        self.end.as_usize() - self.addr.as_usize()
     }
 
-    pub fn read(self, dst: &mut [u8]) -> Result<(), ErrorCode> {
-        self.read_at(0, dst)
-    }
+    pub fn subslice(self, start: usize, len: usize) -> Result<Self, ErrorCode> {
+        let Some(new_start) = self.addr.add(start) else {
+            return Err(ErrorCode::OUT_OF_BOUNDS);
+        };
+        let Some(new_end) = new_start.add(len) else {
+            return Err(ErrorCode::OUT_OF_BOUNDS);
+        };
 
-    pub fn read_at(self, offset: usize, dst: &mut [u8]) -> Result<(), ErrorCode> {
-        let end = offset
-            .checked_add(dst.len())
-            .ok_or(ErrorCode::OUT_OF_BOUNDS)?;
-
-        if end > self.len {
+        if new_end.as_usize() > self.end.as_usize() {
             return Err(ErrorCode::OUT_OF_BOUNDS);
         }
 
-        let addr = self.addr.add(offset).ok_or(ErrorCode::OUT_OF_BOUNDS)?;
-        unsafe {
-            usercopy_read(addr, dst.as_mut_ptr(), dst.len())?;
+        Ok(Self {
+            addr: new_start,
+            end: new_end,
+        })
+    }
+
+    pub fn read_bytes(self, dst: &mut [u8]) -> Result<(), ErrorCode> {
+        // SAFETY: &mut [u8] is a non-null pointer and carries the length.
+        unsafe { self.read(dst.as_mut_ptr(), dst.len()) }
+    }
+
+    /// Reads the user address into a kernel buffer.
+    ///
+    /// # Safety
+    ///
+    /// - `ptr` must be a non-null pointer.
+    /// - The buffer must be at least `len` bytes long.
+    pub unsafe fn read(self, ptr: *mut u8, len: usize) -> Result<(), ErrorCode> {
+        if len != self.len() {
+            return Err(ErrorCode::INVALID_ARG);
         }
 
-        Ok(())
+        unsafe { usercopy_read(self.addr, ptr, len) }
     }
 }

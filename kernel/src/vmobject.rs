@@ -1,6 +1,5 @@
 use alloc::vec::Vec;
 use core::cmp::min;
-use core::ptr;
 
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
@@ -97,24 +96,20 @@ impl VmObject {
     }
 
     pub fn write(&self, offset: usize, buf: &[u8]) -> Result<(), ErrorCode> {
-        let mut buf_offset = 0;
-        self.read_write(offset, buf.len(), |vaddr, len| {
-            unsafe {
-                let dst = vaddr.as_mut_ptr::<u8>();
-                let src = buf.as_ptr().add(buf_offset);
-                ptr::copy_nonoverlapping(src, dst, len);
-            }
-            buf_offset += len;
+        let mut off = 0;
+        self.read_write(offset, buf.len(), |page_slice| {
+            page_slice.write(&buf[off..off + page_slice.len()])?;
+            off += page_slice.len();
             Ok(())
         })
     }
 
     pub fn write_user(&self, offset: usize, uslice: USlice) -> Result<(), ErrorCode> {
-        let mut buf_offset = 0;
-        self.read_write(offset, uslice.len(), |vaddr, len| {
-            let dst = unsafe { core::slice::from_raw_parts_mut(vaddr.as_mut_ptr(), len) };
-            uslice.read_at(buf_offset, dst)?;
-            buf_offset += len;
+        let mut off = 0;
+        self.read_write(offset, uslice.len(), |page_slice| {
+            let src = uslice.subslice(off, page_slice.len())?;
+            page_slice.read_user(src)?;
+            off += page_slice.len();
             Ok(())
         })
     }
@@ -123,14 +118,10 @@ impl VmObject {
     ///
     /// The lazily-allocated pages are filled on demand.
     pub fn read(&self, offset: usize, buf: &mut [u8]) -> Result<(), ErrorCode> {
-        let mut buf_offset = 0;
-        self.read_write(offset, buf.len(), |vaddr, len| {
-            unsafe {
-                let src = vaddr.as_ptr::<u8>();
-                let dst = buf.as_mut_ptr().add(buf_offset);
-                ptr::copy_nonoverlapping(src, dst, len);
-            }
-            buf_offset += len;
+        let mut off = 0;
+        self.read_write(offset, buf.len(), |page_slice| {
+            page_slice.read(&mut buf[off..off + page_slice.len()])?;
+            off += page_slice.len();
             Ok(())
         })
     }
@@ -145,7 +136,7 @@ impl VmObject {
         mut f: F,
     ) -> Result<(), ErrorCode>
     where
-        F: FnMut(VAddr, usize) -> Result<(), ErrorCode>,
+        F: FnMut(PageSlice<'_>) -> Result<(), ErrorCode>,
     {
         let end = vmo_offset
             .checked_add(copy_len)
@@ -163,11 +154,8 @@ impl VmObject {
             let len = min(remaining, MIN_PAGE_SIZE - page_offset);
 
             let page = mutable.get_or_fill(page_index)?;
-            let vaddr = arch::paddr2vaddr(page.paddr)
-                .add(page_offset)
-                .ok_or(ErrorCode::OUT_OF_BOUNDS)?;
-
-            f(vaddr, len)?;
+            let page_slice = PageSlice::new(page, page_offset, len)?;
+            f(page_slice)?;
 
             vmo_offset += len;
             remaining -= len;
@@ -178,6 +166,73 @@ impl VmObject {
 }
 
 impl Handleable for VmObject {}
+
+/// A slice of a page.
+///
+/// This provides access without creating a Rust reference to the page data,
+/// which might also be mapped into userspace.
+struct PageSlice<'a> {
+    /// Keeps the page borrowed while this slice exists.
+    _page: &'a Page,
+    vaddr: VAddr,
+    len: usize,
+}
+
+impl<'a> PageSlice<'a> {
+    fn new(page: &'a Page, offset: usize, len: usize) -> Result<Self, ErrorCode> {
+        let end = offset.checked_add(len).ok_or(ErrorCode::OUT_OF_BOUNDS)?;
+        if end > MIN_PAGE_SIZE {
+            return Err(ErrorCode::OUT_OF_BOUNDS);
+        }
+
+        let vaddr = arch::paddr2vaddr(page.paddr)
+            .add(offset)
+            .ok_or(ErrorCode::OUT_OF_BOUNDS)?;
+
+        Ok(Self {
+            _page: page,
+            vaddr,
+            len,
+        })
+    }
+
+    fn len(&self) -> usize {
+        self.len
+    }
+
+    fn read(&self, buf: &mut [u8]) -> Result<(), ErrorCode> {
+        if buf.len() != self.len {
+            return Err(ErrorCode::INVALID_ARG);
+        }
+
+        unsafe {
+            let src = self.vaddr.as_ptr();
+            let dst = buf.as_mut_ptr();
+            core::ptr::copy(src, dst, self.len);
+        }
+
+        Ok(())
+    }
+
+    fn write(&self, buf: &[u8]) -> Result<(), ErrorCode> {
+        if buf.len() != self.len {
+            return Err(ErrorCode::INVALID_ARG);
+        }
+
+        unsafe {
+            let src = buf.as_ptr();
+            let dst = self.vaddr.as_mut_ptr();
+            core::ptr::copy(src, dst, self.len);
+        }
+
+        Ok(())
+    }
+
+    fn read_user(&self, uslice: USlice) -> Result<(), ErrorCode> {
+        // SAFETY: We keep `self._page` borrowed while copying.
+        unsafe { uslice.read(self.vaddr.as_mut_ptr(), self.len) }
+    }
+}
 
 pub fn sys_vmo_create(
     current: &SharedRef<Thread>,
