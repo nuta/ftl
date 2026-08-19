@@ -149,6 +149,10 @@ pub fn sys_vmspace_map(
     let vmo_id = HandleId::new(ctx.a1);
     let uaddr = UAddr::new(ctx.a2);
     let attrs = PageAttrs::from_raw(ctx.a3);
+    let allowed_attrs = PageAttrs::READ | PageAttrs::WRITE | PageAttrs::EXEC;
+    if !allowed_attrs.contains(attrs) {
+        return Err(ErrorCode::INVALID_ARG);
+    }
 
     let handles = current.isolate().handles().lock();
     let vmspace = handles.get::<VmSpace>(vmspace_id, HandleRight::MAP)?;
