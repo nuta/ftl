@@ -7,4 +7,5 @@ pub enum Syscall {
     VmoCreate = SYS_NUMBER_BASE + 3,
     VmoWrite = SYS_NUMBER_BASE + 4,
     VmSpaceClone = SYS_NUMBER_BASE + 5,
+    VmSpaceMap = SYS_NUMBER_BASE + 6,
 }

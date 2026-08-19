@@ -140,3 +140,21 @@ pub fn sys_vmspace_clone(
     let id = current.isolate().handles().lock().insert(handle)?;
     Ok(SyscallOutput::Done(id.as_usize()))
 }
+
+pub fn sys_vmspace_map(
+    current: &SharedRef<Thread>,
+    ctx: &SyscallRegs,
+) -> Result<SyscallOutput, ErrorCode> {
+    let vmspace_id = HandleId::new(ctx.a0);
+    let vmo_id = HandleId::new(ctx.a1);
+    let uaddr = UAddr::new(ctx.a2);
+    let attrs = PageAttrs::from_raw(ctx.a3);
+
+    let handles = current.isolate().handles().lock();
+    let vmspace = handles.get::<VmSpace>(vmspace_id, HandleRight::MAP)?;
+    let vmo = handles.get::<VmObject>(vmo_id, HandleRight::MAP)?;
+    drop(handles);
+
+    vmspace.map(vmo, uaddr, attrs)?;
+    Ok(SyscallOutput::Done(0))
+}

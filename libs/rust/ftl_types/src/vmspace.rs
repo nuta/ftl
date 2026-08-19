@@ -29,8 +29,12 @@ impl PageAttrs {
         self.0 & other.0 == other.0
     }
 
-    pub const fn as_raw(self) -> u64 {
-        self.0 as u64
+    pub const fn as_raw(self) -> usize {
+        self.0
+    }
+
+    pub const fn from_raw(raw: usize) -> Self {
+        Self(raw)
     }
 }
 

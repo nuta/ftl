@@ -205,7 +205,7 @@ impl VmSpace {
             return Err(ErrorCode::ALREADY_EXISTS);
         }
 
-        *entry = Pte::new(paddr, PTE_V | PTE_U | attrs.as_raw());
+        *entry = Pte::new(paddr, PTE_V | PTE_U | attrs.as_raw() as u64);
         Ok(())
     }
 }

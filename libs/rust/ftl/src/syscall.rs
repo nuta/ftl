@@ -2,6 +2,7 @@ use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use ftl_types::syscall::Syscall;
 use ftl_types::thread::ExitReason;
+use ftl_types::vmspace::PageAttrs;
 
 use crate::arch::syscall1;
 use crate::arch::syscall2;
@@ -19,6 +20,22 @@ pub fn thread_exit(reason: ExitReason) -> ! {
 pub fn vmspace_clone(source: HandleId) -> Result<HandleId, ErrorCode> {
     let ret = syscall1(Syscall::VmSpaceClone, source.as_usize())?;
     Ok(HandleId::new(ret))
+}
+
+pub fn vmspace_map(
+    vmspace: HandleId,
+    vmo: HandleId,
+    uaddr: usize,
+    attrs: PageAttrs,
+) -> Result<(), ErrorCode> {
+    syscall4(
+        Syscall::VmSpaceMap,
+        vmspace.as_usize(),
+        vmo.as_usize(),
+        uaddr,
+        attrs.as_raw(),
+    )?;
+    Ok(())
 }
 
 pub fn vmo_create(len: usize) -> Result<HandleId, ErrorCode> {
