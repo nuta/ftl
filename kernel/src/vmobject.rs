@@ -16,7 +16,6 @@ use crate::arch;
 use crate::arch::MIN_PAGE_SIZE;
 use crate::handle::Handle;
 use crate::handle::Handleable;
-use crate::isolate::Isolate;
 use crate::memory::PAGE_ALLOCATOR;
 use crate::memory::PageType;
 use crate::shared_ref::SharedRef;

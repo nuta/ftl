@@ -16,6 +16,11 @@ pub fn thread_exit(reason: ExitReason) -> ! {
     crate::arch::unreachable();
 }
 
+pub fn vmspace_clone(source: HandleId) -> Result<HandleId, ErrorCode> {
+    let ret = syscall1(Syscall::VmSpaceClone, source.as_usize())?;
+    Ok(HandleId::new(ret))
+}
+
 pub fn vmo_create(len: usize) -> Result<HandleId, ErrorCode> {
     let ret = syscall1(Syscall::VmoCreate, len)?;
     Ok(HandleId::new(ret))

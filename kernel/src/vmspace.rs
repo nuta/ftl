@@ -1,14 +1,20 @@
 use alloc::vec::Vec;
 
 use ftl_types::error::ErrorCode;
+use ftl_types::handle::HandleId;
+use ftl_types::handle::HandleRight;
+use ftl_types::thread::SyscallRegs;
 use ftl_types::vmspace::PageAttrs;
 use ftl_utils::spinlock::SpinLock;
 
 use crate::address::UAddr;
 use crate::arch;
 use crate::arch::MIN_PAGE_SIZE;
+use crate::handle::Handle;
 use crate::handle::Handleable;
 use crate::shared_ref::SharedRef;
+use crate::syscall::SyscallOutput;
+use crate::thread::Thread;
 use crate::vmobject::VmObject;
 
 struct Mapping {
@@ -48,6 +54,15 @@ impl VmSpace {
 
     pub fn switch(&self) {
         self.arch.switch();
+    }
+
+    pub fn clone(&self) -> Result<Self, ErrorCode> {
+        let new_vmspace = Self::new()?;
+        let mutable = self.mutable.lock();
+        for mapping in &mutable.mappings {
+            new_vmspace.map(mapping.vmo.clone(), mapping.start, mapping.attrs)?;
+        }
+        Ok(new_vmspace)
     }
 
     pub fn map(
@@ -107,3 +122,21 @@ impl VmSpace {
 }
 
 impl Handleable for VmSpace {}
+
+pub fn sys_vmspace_clone(
+    current: &SharedRef<Thread>,
+    ctx: &SyscallRegs,
+) -> Result<SyscallOutput, ErrorCode> {
+    let source_id = HandleId::new(ctx.a0);
+    let source = current
+        .isolate()
+        .handles()
+        .lock()
+        .get::<VmSpace>(source_id, HandleRight::READ)?;
+    let vmspace = VmSpace::clone(&source)?;
+    let vmspace = SharedRef::new(vmspace)?;
+    let rights = HandleRight::READ | HandleRight::WRITE | HandleRight::MAP;
+    let handle = Handle::new(vmspace, rights);
+    let id = current.isolate().handles().lock().insert(handle)?;
+    Ok(SyscallOutput::Done(id.as_usize()))
+}

@@ -6,4 +6,5 @@ pub enum Syscall {
     ThreadExit = SYS_NUMBER_BASE + 2,
     VmoCreate = SYS_NUMBER_BASE + 3,
     VmoWrite = SYS_NUMBER_BASE + 4,
+    VmSpaceClone = SYS_NUMBER_BASE + 5,
 }
