@@ -150,7 +150,7 @@ impl VmSpace {
         let pml4 = unsafe { &mut *(pml4_vaddr.as_usize() as *mut Table) };
 
         // Map KERNEL_BASE to BOOT_PDPT.
-        pml4.0[256] = Pte::new(pdpt_paddr, PTE_V);
+        pml4.0[256] = Pte::new(pdpt_paddr, PTE_V | PTE_W);
 
         Ok(Self {
             cr3: pml4_paddr.as_u64(),

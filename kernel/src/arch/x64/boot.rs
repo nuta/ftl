@@ -129,7 +129,7 @@ unsafe extern "C" fn x64_boot() -> ! {
         // Fill the page table (PML4).
         "lea ebx, [{BOOT_PML4} - {KERNEL_BASE}]", // EBX = physical address of BOOT_PML4
         "lea eax, [{BOOT_PDPT} - {KERNEL_BASE}]", // EAX = physical address of BOOT_PDPT
-        "or  eax, 1",                           // PTE_V
+        "or  eax, 1 << 0 | 1 << 1",             // PTE_V | PTE_W
         "mov [ebx], eax",                       // Entry 0: maps 0 (identity mapping for x64_boot)
         "mov [ebx + 256 * 8], eax",             // Entry 256: maps KERNEL_BASE
 
@@ -144,7 +144,7 @@ unsafe extern "C" fn x64_boot() -> ! {
 
         // Enable paging.
         "mov eax, cr0",
-        "or eax, 1 << 31", // Paging
+        "or eax, 1 << 31 | 1 << 16", // Paging, write protection
         "mov cr0, eax",
 
         // Prepare for RETF.
