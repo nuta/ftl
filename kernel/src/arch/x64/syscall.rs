@@ -1,7 +1,12 @@
 use core::arch::naked_asm;
 use core::mem::offset_of;
 
+use ftl_utils::static_assert;
+
 use super::gdt::GDT_KERNEL_CS;
+use super::gdt::GDT_KERNEL_DS;
+use super::gdt::GDT_USER_CS;
+use super::gdt::GDT_USER_DS;
 use super::msr::rdmsr;
 use super::msr::wrmsr;
 use super::thread::Thread;
@@ -82,6 +87,13 @@ extern "C" fn syscall_handler() -> ! {
     );
 }
 
+const SYSCALL_SEG_BASE: u64 = GDT_KERNEL_CS as u64;
+const SYSRET_SEG_BASE: u64 = (GDT_USER_CS as u64) - 16;
+
+// SYSCALL/SYSRET computes SS from IA32_STAR.
+static_assert!(SYSCALL_SEG_BASE + 8 == GDT_KERNEL_DS as u64); // kernel SS
+static_assert!(SYSRET_SEG_BASE + 8 == GDT_USER_DS as u64); // user SS
+
 pub(super) fn init() {
     const MSR_IA32_STAR: u32 = 0xc000_0081;
     const MSR_IA32_LSTAR: u32 = 0xc000_0082;
@@ -92,12 +104,13 @@ pub(super) fn init() {
     // RFLAGS bits to clear on SYSCALL entry.
     const SYSCALL_FMASK: u64 = (1 << 8) | (1 << 9); // TF | IF
 
-    // Configure SYSCALL instructions. SYSRET (STAR[63:48]) is not set because
-    // we always use IRET.
     unsafe {
         let syscall_handler = syscall_handler as *const () as u64;
         wrmsr(MSR_IA32_EFER, rdmsr(MSR_IA32_EFER) | EFER_SCE);
-        wrmsr(MSR_IA32_STAR, (GDT_KERNEL_CS as u64) << 32);
+        wrmsr(
+            MSR_IA32_STAR,
+            (SYSRET_SEG_BASE << 48) | (SYSCALL_SEG_BASE << 32),
+        );
         wrmsr(MSR_IA32_LSTAR, syscall_handler);
         wrmsr(MSR_IA32_FMASK, SYSCALL_FMASK);
     }

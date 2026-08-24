@@ -8,6 +8,7 @@ use crate::address::VAddr;
 
 const NUM_GDT_ENTRIES: usize = 8;
 pub(super) const GDT_KERNEL_CS: u16 = 8;
+pub(super) const GDT_KERNEL_DS: u16 = 2 * 8;
 pub(super) const GDT_USER_DS: u16 = (4 * 8) | 3;
 pub(super) const GDT_USER_CS: u16 = (5 * 8) | 3;
 const GDT_TSS: u16 = 6 * 8;
