@@ -88,7 +88,9 @@ pub(super) fn init() {
     const MSR_IA32_FMASK: u32 = 0xc000_0084;
     const MSR_IA32_EFER: u32 = 0xc000_0080;
     const EFER_SCE: u64 = 1 << 0;
-    const SYSCALL_FMASK: u64 = 1 << 9; // Clear IF on SYSCALL entry.
+
+    // RFLAGS bits to clear on SYSCALL entry.
+    const SYSCALL_FMASK: u64 = (1 << 8) | (1 << 9); // TF | IF
 
     // Configure SYSCALL instructions. SYSRET (STAR[63:48]) is not set because
     // we always use IRET.
