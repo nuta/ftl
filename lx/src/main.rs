@@ -1,8 +1,10 @@
 #![no_std]
 #![no_main]
 
+use core::arch::naked_asm;
 use core::mem::size_of;
 
+use ftl::info;
 use ftl::syscall::thread_create;
 use ftl::syscall::thread_start;
 use ftl::syscall::vmo_create;
@@ -28,6 +30,75 @@ struct Aligned<const N: usize>([u8; N]);
 
 static HELLO_ELF: Aligned<{ include_bytes!("../../initfs/bin/hello").len() }> =
     Aligned(*include_bytes!("../../initfs/bin/hello"));
+
+const SYS_WRITE: usize = 1;
+const ENOSYS: isize = 38;
+
+extern "C" fn handle_syscall(
+    arg0: usize,
+    arg1: usize,
+    arg2: usize,
+    _arg3: usize,
+    _arg4: usize,
+    _arg5: usize,
+    n: usize,
+) -> isize {
+    info!("syscall: n={}, [{:#x}, {:#x}, {:#x}]", n, arg0, arg1, arg2);
+    if n == SYS_WRITE {
+        let bytes = unsafe { core::slice::from_raw_parts(arg1 as *const u8, arg2) };
+        ftl::syscall::print(bytes);
+        arg2 as isize
+    } else {
+        -ENOSYS
+    }
+}
+
+#[unsafe(naked)]
+extern "C" fn syscall_handler() -> ! {
+    naked_asm!(
+        // Save caller-saved registers except for syscall-related ones
+        // (rax, rcx, r11).
+        "push rdi",
+        "push rsi",
+        "push rdx",
+        "push r8",
+        "push r9",
+        "push r10",
+        "push rbx",
+
+        // Align the stack to 16 bytes.
+        "mov rbx, rsp",
+        "and rsp, -16",
+
+        "mov rcx, r10", // arg3
+        "sub rsp, 8", // Padding to keep it 16-bytes aligned
+        "push rax", // syscall number (the last argument)
+        "call {handle_syscall}",
+
+        // Restore the stack pointer, and others.
+        "mov rsp, rbx",
+        "pop rbx",
+        "pop r10",
+        "pop r9",
+        "pop r8",
+        "pop rdx",
+        "pop rsi",
+        "pop rdi",
+        "pop r11", // user RFLAGS (from syscall frame)
+        "pop rcx", // user RIP (from syscall frame)
+
+        // Restore user RFLAGS.
+        "push r11",
+        "popfq",
+
+        // Restore user RSP.
+        "lea rsp, [rsp + 128]", // red zone
+
+        // Go back to the application code.
+        "jmp rcx",
+        handle_syscall = sym handle_syscall,
+    )
+}
 
 fn attrs_from_phdr(phdr: &ftl_elf::Phdr) -> PageAttrs {
     let mut attrs = PageAttrs::EMPTY;
@@ -88,7 +159,8 @@ fn main() {
     // TODO: implement argc, argv, envp, auxv
     let sp = align_down(STACK_START + STACK_SIZE - 5 * size_of::<usize>(), 16);
 
-    let thread = thread_create(root_isolate, vmspace, entry, sp).unwrap();
+    let fault_pc = syscall_handler as *const () as usize;
+    let thread = thread_create(root_isolate, vmspace, entry, sp, fault_pc).unwrap();
     thread_start(thread).unwrap();
 
     ftl::info!("started hello at {:#x}", entry);

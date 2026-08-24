@@ -9,6 +9,7 @@ use ftl_utils::spinlock::SpinLock;
 use ftl_utils::static_assert;
 
 use crate::arch;
+use crate::arch::USER_ADDR_END;
 use crate::handle::Handle;
 use crate::handle::Handleable;
 use crate::isolate::Isolate;
@@ -54,12 +55,19 @@ impl Thread {
         vmspace: SharedRef<VmSpace>,
         pc: usize,
         sp: usize,
+        fault_pc: usize,
     ) -> Result<SharedRef<Self>, ErrorCode> {
+        // SYSRET-ing to the kernel pages should trigger a page fault, but it
+        // is obviously invalid. Reject it early.
+        if fault_pc >= USER_ADDR_END {
+            return Err(ErrorCode::INVALID_ARG);
+        }
+
         let mutable = Mutable {
             state: State::Blocked,
         };
 
-        let arch_thread = arch::Thread::new(pc, sp)?;
+        let arch_thread = arch::Thread::new(pc, sp, fault_pc)?;
         let thread = SharedRef::new(Thread {
             arch: UnsafeCell::new(arch_thread),
             isolate,
@@ -122,6 +130,7 @@ pub fn sys_thread_create(
     let vmspace_id = HandleId::new(ctx.a1);
     let pc = ctx.a2;
     let sp = ctx.a3;
+    let fault_pc = ctx.a4;
 
     let handle_table = current.isolate().handles();
     let handles = handle_table.lock();
@@ -129,7 +138,7 @@ pub fn sys_thread_create(
     let vmspace = handles.get::<VmSpace>(vmspace_id, HandleRight::READ)?;
     drop(handles);
 
-    let thread = Thread::new(isolate, vmspace, pc, sp)?;
+    let thread = Thread::new(isolate, vmspace, pc, sp, fault_pc)?;
     let handle = Handle::new(thread, HandleRight::WRITE);
     let id = handle_table.lock().insert(handle)?;
     Ok(SyscallOutput::Done(id.as_usize()))

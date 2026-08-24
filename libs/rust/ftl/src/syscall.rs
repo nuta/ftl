@@ -7,6 +7,7 @@ use ftl_types::vmspace::PageAttrs;
 use crate::arch::syscall1;
 use crate::arch::syscall2;
 use crate::arch::syscall4;
+use crate::arch::syscall5;
 
 pub fn print(bytes: &[u8]) {
     let _ = syscall2(Syscall::Print, bytes.as_ptr() as usize, bytes.len());
@@ -22,13 +23,15 @@ pub fn thread_create(
     vmspace: HandleId,
     pc: usize,
     sp: usize,
+    fault_pc: usize,
 ) -> Result<HandleId, ErrorCode> {
-    let ret = syscall4(
+    let ret = syscall5(
         Syscall::ThreadCreate,
         isolate.as_usize(),
         vmspace.as_usize(),
         pc,
         sp,
+        fault_pc,
     )?;
     Ok(HandleId::new(ret))
 }

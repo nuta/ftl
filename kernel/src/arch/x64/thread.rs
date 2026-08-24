@@ -41,10 +41,11 @@ pub struct Thread {
     pub(super) gsbase: u64,
     pub(super) fsbase: u64,
     pub(super) xsave_ptr: u64,
+    pub(super) fault_pc: u64,
 }
 
 impl Thread {
-    pub fn new(pc: usize, sp: usize) -> Result<Self, ErrorCode> {
+    pub fn new(pc: usize, sp: usize, fault_pc: usize) -> Result<Self, ErrorCode> {
         let paddr = PAGE_ALLOCATOR
             .alloc(MIN_PAGE_SIZE, PageType::Zeroed)
             .ok_or(ErrorCode::OUT_OF_MEMORY)?;
@@ -55,6 +56,7 @@ impl Thread {
             ss: GDT_USER_DS as u64,
             rip: pc as u64,
             rsp: sp as u64,
+            fault_pc: fault_pc as u64,
             xsave_ptr: arch::paddr2vaddr(paddr).as_usize() as u64,
             ..Default::default()
         })

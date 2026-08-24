@@ -54,7 +54,7 @@ impl VmSpace {
 pub struct Thread {}
 
 impl Thread {
-    pub fn new(_pc: usize, _sp: usize) -> Result<Self, ErrorCode> {
+    pub fn new(_pc: usize, _sp: usize, _fault_pc: usize) -> Result<Self, ErrorCode> {
         todo!()
     }
 

@@ -76,6 +76,9 @@ impl VmSpace {
         }
 
         let end = uaddr.add(vmo.len()).ok_or(ErrorCode::OUT_OF_BOUNDS)?;
+        if end.as_usize() > arch::USER_ADDR_END {
+            return Err(ErrorCode::NOT_ALLOWED);
+        }
 
         let mut mutable = self.mutable.lock();
         if mutable

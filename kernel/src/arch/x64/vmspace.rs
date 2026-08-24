@@ -189,11 +189,6 @@ impl VmSpace {
             return Err(ErrorCode::INVALID_ARG);
         }
 
-        // Keep kernel mappings immutable from this API.
-        if uaddr >= KERNEL_BASE {
-            return Err(ErrorCode::NOT_ALLOWED);
-        }
-
         let mutable = self.mutable.lock();
         let pml4 = unsafe { &mut *(mutable.pml4.as_usize() as *mut Table) };
         let pdpt = ensure_next_table(pml4, pml4_index(uaddr))?;

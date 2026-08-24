@@ -7,6 +7,7 @@ use ftl_utils::spinlock::SpinLock;
 
 use super::gdt::GDT_KERNEL_CS;
 use super::io_apic::IRQ_VECTOR_BASE;
+use super::syscall::syscall_copy_recover;
 use super::thread::Thread;
 use super::thread::XSTATE_MASK;
 use super::timer::TIMER_IRQ;
@@ -35,6 +36,8 @@ unsafe extern "C" {
     static idt_handlers: u8;
     static usercopy0: u8;
     static usercopy0_recover: u8;
+    static syscall_copy0: u8;
+    static syscall_copy1: u8;
 }
 
 const NUM_IDT_ENTRIES: usize = 256;
@@ -264,11 +267,27 @@ extern "C" fn interrupt_entry() -> ! {
     )
 }
 
-fn is_usercopy_fault(rip: u64) -> Option<u64> {
-    let addr0 = &raw const usercopy0 as u64;
-    let recover0 = &raw const usercopy0_recover as u64;
-    if rip == addr0 {
-        return Some(recover0);
+/// Checks if the kernel page fault is caused by touching a user address.
+///
+/// Returns the kernel RIP to recover from the fault.
+fn recover_from_kernel_page_fault(rip: u64) -> Option<u64> {
+    // User pointer access in FTL system calls.
+    {
+        let addr = &raw const usercopy0 as u64;
+        let recover = &raw const usercopy0_recover as u64;
+        if rip == addr {
+            return Some(recover);
+        }
+    }
+
+    // System call frame writes.
+    {
+        let addr0 = &raw const syscall_copy0 as u64;
+        let addr1 = &raw const syscall_copy1 as u64;
+        let recover = syscall_copy_recover as *const () as u64;
+        if rip == addr0 || rip == addr1 {
+            return Some(recover);
+        }
     }
 
     None
@@ -277,7 +296,7 @@ fn is_usercopy_fault(rip: u64) -> Option<u64> {
 extern "C" fn handle_kernel_interrupt(frame: &mut InterruptFrame) {
     match frame.vector as u8 {
         EXCEPTION_PAGE_FAULT => {
-            if let Some(recover_rip) = is_usercopy_fault(frame.rip) {
+            if let Some(recover_rip) = recover_from_kernel_page_fault(frame.rip) {
                 frame.rip = recover_rip;
                 frame.rax = 1;
                 return;
