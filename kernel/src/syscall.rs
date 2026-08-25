@@ -30,6 +30,9 @@ fn do_handle_syscall() {
             crate::thread::sys_thread_create(&thread, &regs)
         }
         n if n == Syscall::ThreadStart as usize => crate::thread::sys_thread_start(&thread, &regs),
+        n if n == Syscall::ThreadWriteRegs as usize => {
+            crate::thread::sys_thread_write_regs(&thread, arch_thread, &regs)
+        }
         _ => todo!(),
     };
 

@@ -4,6 +4,27 @@ pub enum ExitReason {
     Panic = 1,
 }
 
+#[repr(usize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RegsKind {
+    FsBase = 1,
+}
+
+impl RegsKind {
+    pub const fn from_usize(value: usize) -> Option<Self> {
+        match value {
+            value if value == Self::FsBase as usize => Some(Self::FsBase),
+            _ => None,
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub union Regs {
+    pub fs_base: usize,
+}
+
 pub struct SyscallRegs {
     pub n: usize,
     pub a0: usize,

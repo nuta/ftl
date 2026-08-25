@@ -1,13 +1,18 @@
 use core::arch::asm;
+use core::mem::MaybeUninit;
 use core::mem::offset_of;
 
 use ftl_types::error::ErrorCode;
+use ftl_types::thread::Regs;
+use ftl_types::thread::RegsKind;
 use ftl_types::thread::SyscallRegs;
 
 use super::gdt::GDT_USER_CS;
 use super::gdt::GDT_USER_DS;
+use crate::address::USlice;
 use crate::arch;
 use crate::arch::MIN_PAGE_SIZE;
+use crate::arch::USER_ADDR_END;
 use crate::memory::PAGE_ALLOCATOR;
 use crate::memory::PageType;
 
@@ -78,6 +83,24 @@ impl Thread {
 
     pub fn set_syscall_retval(&mut self, retval: usize) {
         self.rax = retval as u64;
+    }
+
+    pub fn write_regs(&mut self, kind: RegsKind, uslice: USlice) -> Result<(), ErrorCode> {
+        let mut regs = MaybeUninit::<Regs>::uninit();
+        let regs = unsafe { uslice.read_uninit(&mut regs)? };
+
+        match kind {
+            RegsKind::FsBase => {
+                let fs_base = unsafe { regs.fs_base };
+                if fs_base >= USER_ADDR_END {
+                    return Err(ErrorCode::INVALID_ARG);
+                }
+
+                self.fsbase = fs_base as u64;
+            }
+        }
+
+        Ok(())
     }
 
     pub fn enter(thread: *const Thread) -> ! {

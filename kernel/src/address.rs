@@ -1,4 +1,6 @@
 use core::fmt;
+use core::mem::MaybeUninit;
+use core::mem::size_of;
 
 use ftl_types::error::ErrorCode;
 use ftl_utils::alignment::is_aligned;
@@ -177,6 +179,23 @@ impl USlice {
     pub fn read_bytes(self, dst: &mut [u8]) -> Result<(), ErrorCode> {
         // SAFETY: &mut [u8] is a non-null pointer and carries the length.
         unsafe { self.read(dst.as_mut_ptr(), dst.len()) }
+    }
+
+    /// Reads the user address into a kernel's uninitialized buffer.
+    ///
+    /// # Safety
+    ///
+    /// The user slice must be a valid representation of `T`.
+    ///
+    /// TODO: Should we introduce a trait to explicitly mark the type as
+    ///       user-copyable?
+    pub unsafe fn read_uninit<'a, T>(
+        self,
+        dst: &'a mut MaybeUninit<T>,
+    ) -> Result<&'a mut T, ErrorCode> {
+        // SAFETY: The caller must ensure that it is safe to copy.
+        unsafe { self.read(dst.as_mut_ptr().cast(), size_of::<T>())? };
+        Ok(unsafe { dst.assume_init_mut() })
     }
 
     /// Reads the user address into a kernel buffer.

@@ -2,11 +2,13 @@ use std::ops::Range;
 
 use ftl_arrayvec::ArrayVec;
 use ftl_types::error::ErrorCode;
+use ftl_types::thread::RegsKind;
 use ftl_types::thread::SyscallRegs;
 use ftl_types::vmspace::PageAttrs;
 
 use crate::address::PAddr;
 use crate::address::UAddr;
+use crate::address::USlice;
 use crate::address::VAddr;
 use crate::boot::BootInfo;
 
@@ -68,6 +70,10 @@ impl Thread {
     }
 
     pub fn set_syscall_retval(&mut self, _retval: usize) {
+        todo!()
+    }
+
+    pub fn write_regs(&mut self, _kind: RegsKind, _regs: USlice) -> Result<(), ErrorCode> {
         todo!()
     }
 

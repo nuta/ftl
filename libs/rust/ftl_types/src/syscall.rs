@@ -10,4 +10,5 @@ pub enum Syscall {
     VmSpaceMap = SYSCALL_BASE + 6,
     ThreadCreate = SYSCALL_BASE + 7,
     ThreadStart = SYSCALL_BASE + 8,
+    ThreadWriteRegs = SYSCALL_BASE + 9,
 }

@@ -1,13 +1,18 @@
 use core::cell::UnsafeCell;
 use core::mem::offset_of;
+use core::mem::size_of;
 
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use ftl_types::handle::HandleRight;
+use ftl_types::thread::Regs;
+use ftl_types::thread::RegsKind;
 use ftl_types::thread::SyscallRegs;
 use ftl_utils::spinlock::SpinLock;
 use ftl_utils::static_assert;
 
+use crate::address::UAddr;
+use crate::address::USlice;
 use crate::arch;
 use crate::arch::USER_ADDR_END;
 use crate::handle::Handle;
@@ -119,6 +124,28 @@ impl Thread {
         mutable.state = State::Exited;
         Ok(())
     }
+
+    pub fn write_regs(&self, kind: RegsKind, regs: USlice) -> Result<(), ErrorCode> {
+        let mutable = self.mutable.lock();
+        if mutable.state != State::Blocked {
+            return Err(ErrorCode::INVALID_STATE);
+        }
+
+        // SAFETY: The thread is blocked and we hold the mutable lock to prevent
+        //         concurrent access.
+        unsafe { &mut *self.arch.get() }.write_regs(kind, regs)?;
+        Ok(())
+    }
+
+    pub fn write_current_regs(
+        &self,
+        current_arch: &mut arch::Thread,
+        kind: RegsKind,
+        regs: USlice,
+    ) -> Result<(), ErrorCode> {
+        debug_assert!(core::ptr::eq(self.arch.get(), current_arch));
+        current_arch.write_regs(kind, regs)
+    }
 }
 
 impl Handleable for Thread {}
@@ -157,6 +184,29 @@ pub fn sys_thread_start(
         .lock()
         .get::<Thread>(thread_id, HandleRight::WRITE)?;
     thread.unblock()?;
+    Ok(SyscallOutput::Done(0))
+}
+
+pub fn sys_thread_write_regs(
+    current: &SharedRef<Thread>,
+    current_arch: &mut arch::Thread,
+    ctx: &SyscallRegs,
+) -> Result<SyscallOutput, ErrorCode> {
+    let thread_id = HandleId::new(ctx.a0);
+    let kind = RegsKind::from_usize(ctx.a1).ok_or(ErrorCode::INVALID_ARG)?;
+    let regs = USlice::new(UAddr::new(ctx.a2), size_of::<Regs>())?;
+    let thread = current
+        .isolate()
+        .handles()
+        .lock()
+        .get::<Thread>(thread_id, HandleRight::WRITE)?;
+
+    if SharedRef::eq(&thread, current) {
+        thread.write_current_regs(current_arch, kind, regs)?;
+    } else {
+        thread.write_regs(kind, regs)?;
+    }
+
     Ok(SyscallOutput::Done(0))
 }
 

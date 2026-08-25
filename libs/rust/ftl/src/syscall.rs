@@ -2,10 +2,13 @@ use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use ftl_types::syscall::Syscall;
 use ftl_types::thread::ExitReason;
+use ftl_types::thread::Regs;
+use ftl_types::thread::RegsKind;
 use ftl_types::vmspace::PageAttrs;
 
 use crate::arch::syscall1;
 use crate::arch::syscall2;
+use crate::arch::syscall3;
 use crate::arch::syscall4;
 use crate::arch::syscall6;
 
@@ -40,6 +43,16 @@ pub fn thread_create(
 
 pub fn thread_start(thread: HandleId) -> Result<(), ErrorCode> {
     syscall1(Syscall::ThreadStart, thread.as_usize())?;
+    Ok(())
+}
+
+pub fn thread_write_regs(thread: HandleId, kind: RegsKind, regs: Regs) -> Result<(), ErrorCode> {
+    syscall3(
+        Syscall::ThreadWriteRegs,
+        thread.as_usize(),
+        kind as usize,
+        &raw const regs as usize,
+    )?;
     Ok(())
 }
 
