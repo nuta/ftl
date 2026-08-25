@@ -2,7 +2,6 @@
 set -eu
 
 APPS=(hello)
-SERVERS=(lx)
 RELEASE=${RELEASE:-}
 ARCH=${ARCH:-x64}
 
@@ -28,7 +27,7 @@ mkdir -p initfs
 mkdir -p initfs/bin
 zig cc -O2 -target x86_64-linux-musl -static -no-pie apps/hello/hello.c -o initfs/bin/hello
 
-# Build servers.
+# Build userspace OS.
 FTL_LOG_PREFIX="[$(printf '%-10s' "lx")] " \
     cargo build "${CARGOFLAGS[@]}" --target libs/rust/ftl/src/arch/$ARCH/user.json \
        --manifest-path lx/Cargo.toml
