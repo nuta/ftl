@@ -1,6 +1,7 @@
 #![no_std]
 #![no_main]
 
+use core::arch::asm;
 use core::arch::naked_asm;
 use core::mem::size_of;
 
@@ -17,6 +18,7 @@ use ftl_elf::PF_W;
 use ftl_elf::PF_X;
 use ftl_elf::PhdrType;
 use ftl_types::handle::HandleId;
+use ftl_types::thread::ExitReason;
 use ftl_types::vmspace::PageAttrs;
 use ftl_utils::alignment::align_down;
 use ftl_utils::alignment::align_up;
@@ -42,6 +44,7 @@ extern "C" fn handle_syscall(
     _arg4: usize,
     _arg5: usize,
     n: usize,
+    cookie: usize,
 ) -> isize {
     info!("syscall: n={}, [{:#x}, {:#x}, {:#x}]", n, arg0, arg1, arg2);
     if n == SYS_WRITE {
@@ -56,6 +59,8 @@ extern "C" fn handle_syscall(
 #[unsafe(naked)]
 extern "C" fn syscall_handler() -> ! {
     naked_asm!(
+        "pop r11", // cookie from syscall frame
+
         // Save caller-saved registers except for syscall-related ones
         // (rax, rcx, r11).
         "push rdi",
@@ -71,7 +76,7 @@ extern "C" fn syscall_handler() -> ! {
         "and rsp, -16",
 
         "mov rcx, r10", // arg3
-        "sub rsp, 8", // Padding to keep it 16-bytes aligned
+        "push r11", // cookie (the second stack argument)
         "push rax", // syscall number (the last argument)
         "call {handle_syscall}",
 
@@ -160,7 +165,7 @@ fn main() {
     let sp = align_down(STACK_START + STACK_SIZE - 5 * size_of::<usize>(), 16);
 
     let fault_pc = syscall_handler as *const () as usize;
-    let thread = thread_create(root_isolate, vmspace, entry, sp, fault_pc).unwrap();
+    let thread = thread_create(root_isolate, vmspace, entry, sp, fault_pc, 1).unwrap();
     thread_start(thread).unwrap();
 
     ftl::info!("started hello at {:#x}", entry);

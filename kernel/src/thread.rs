@@ -56,6 +56,7 @@ impl Thread {
         pc: usize,
         sp: usize,
         fault_pc: usize,
+        cookie: usize,
     ) -> Result<SharedRef<Self>, ErrorCode> {
         // SYSRET-ing to the kernel pages should trigger a page fault, but it
         // is obviously invalid. Reject it early.
@@ -67,7 +68,7 @@ impl Thread {
             state: State::Blocked,
         };
 
-        let arch_thread = arch::Thread::new(pc, sp, fault_pc)?;
+        let arch_thread = arch::Thread::new(pc, sp, fault_pc, cookie)?;
         let thread = SharedRef::new(Thread {
             arch: UnsafeCell::new(arch_thread),
             isolate,
@@ -131,6 +132,7 @@ pub fn sys_thread_create(
     let pc = ctx.a2;
     let sp = ctx.a3;
     let fault_pc = ctx.a4;
+    let cookie = ctx.a5;
 
     let handle_table = current.isolate().handles();
     let handles = handle_table.lock();
@@ -138,7 +140,7 @@ pub fn sys_thread_create(
     let vmspace = handles.get::<VmSpace>(vmspace_id, HandleRight::READ)?;
     drop(handles);
 
-    let thread = Thread::new(isolate, vmspace, pc, sp, fault_pc)?;
+    let thread = Thread::new(isolate, vmspace, pc, sp, fault_pc, cookie)?;
     let handle = Handle::new(thread, HandleRight::WRITE);
     let id = handle_table.lock().insert(handle)?;
     Ok(SyscallOutput::Done(id.as_usize()))

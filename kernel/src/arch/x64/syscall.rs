@@ -1,7 +1,9 @@
 use core::arch::naked_asm;
 use core::mem::offset_of;
+use core::mem::size_of;
 
 use ftl_types::syscall::Syscall;
+use ftl_types::thread::SyscallFrame;
 use ftl_utils::static_assert;
 
 use super::gdt::GDT_KERNEL_CS;
@@ -18,7 +20,6 @@ use crate::scheduler;
 
 const USER_RFLAGS: u64 = 0x202;
 const RED_ZONE_SIZE: usize = 128;
-const SYSCALL_FRAME_SIZE: usize = 16; // user RIP, and RFLAGS
 
 fn try_exit_current() {
     let cpuvar = super::get_cpuvar();
@@ -120,18 +121,24 @@ extern "C" fn syscall_handler() -> ! {
         "jae {syscall_copy_recover}",
 
         // Allocate the trap frame (below the red zone) from user RSP.
-        "sub r11, {trap_stack_size}",
+        "sub r11, {syscall_frame_size}",
         "jc {syscall_copy_recover}", // user RSP is too low
 
         // Write user RFLAGS
         "mov rcx, [rsp]",
         ".global syscall_copy0; syscall_copy0:",
-        "mov [r11], rcx",
+        "mov [r11 + {frame_rflags_offset}], rcx",
 
         // Write user RIP
         "mov rcx, [rsp + 8]",
         ".global syscall_copy1; syscall_copy1:",
-        "mov [r11 + 8], rcx",
+        "mov [r11 + {frame_rip_offset}], rcx",
+
+        // Write cookie
+        "mov rcx, gs:[{current_thread_offset}]",
+        "mov rcx, [rcx + {cookie_offset}]",
+        ".global syscall_copy2; syscall_copy2:",
+        "mov [r11 + {frame_cookie_offset}], rcx",
 
         // Load fault_pc from the current thread.
         "mov rcx, gs:[{current_thread_offset}]",
@@ -145,13 +152,17 @@ extern "C" fn syscall_handler() -> ! {
         ftl_syscall_min = const Syscall::Print as usize,
         ftl_syscall_max = const Syscall::ThreadStart as usize,
         user_addr_end = const USER_ADDR_END,
-        trap_stack_size = const RED_ZONE_SIZE + SYSCALL_FRAME_SIZE,
+        syscall_frame_size = const RED_ZONE_SIZE + size_of::<SyscallFrame>(),
         user_rflags = const USER_RFLAGS,
         current_thread_offset = const offset_of!(CpuVar, current_thread),
         xstate_mask_lo = const XSTATE_MASK & 0xffff_ffff,
         xstate_mask_hi = const XSTATE_MASK >> 32,
         xsave_ptr_offset = const offset_of!(Thread, xsave_ptr),
         fault_pc_offset = const offset_of!(Thread, fault_pc),
+        cookie_offset = const offset_of!(Thread, cookie),
+        frame_rflags_offset = const offset_of!(SyscallFrame, rflags),
+        frame_rip_offset = const offset_of!(SyscallFrame, rip),
+        frame_cookie_offset = const offset_of!(SyscallFrame, cookie),
         scratch_offset = const offset_of!(CpuVar, arch.scratch),
         kernel_rsp_offset = const offset_of!(CpuVar, arch.kernel_rsp),
         rip_offset = const offset_of!(Thread, rip),

@@ -70,13 +70,14 @@ pub fn syscall4(
     convert_retval(rax)
 }
 
-pub fn syscall5(
+pub fn syscall6(
     n: Syscall,
     a0: usize,
     a1: usize,
     a2: usize,
     a3: usize,
     a4: usize,
+    a5: usize,
 ) -> Result<usize, ErrorCode> {
     let mut rax = n as usize;
     unsafe {
@@ -88,6 +89,7 @@ pub fn syscall5(
             in("rdx") a2,
             in("r10") a3,
             in("r8") a4,
+            in("r9") a5,
             out("rcx") _,
             out("r11") _,
         );

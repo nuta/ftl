@@ -11,4 +11,12 @@ pub struct SyscallRegs {
     pub a2: usize,
     pub a3: usize,
     pub a4: usize,
+    pub a5: usize,
+}
+
+#[repr(C)]
+pub struct SyscallFrame {
+    pub cookie: usize,
+    pub rflags: usize,
+    pub rip: usize,
 }

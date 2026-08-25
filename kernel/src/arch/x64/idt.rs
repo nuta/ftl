@@ -38,6 +38,7 @@ unsafe extern "C" {
     static usercopy0_recover: u8;
     static syscall_copy0: u8;
     static syscall_copy1: u8;
+    static syscall_copy2: u8;
 }
 
 const NUM_IDT_ENTRIES: usize = 256;
@@ -284,8 +285,9 @@ fn recover_from_kernel_page_fault(rip: u64) -> Option<u64> {
     {
         let addr0 = &raw const syscall_copy0 as u64;
         let addr1 = &raw const syscall_copy1 as u64;
+        let addr2 = &raw const syscall_copy2 as u64;
         let recover = syscall_copy_recover as *const () as u64;
-        if rip == addr0 || rip == addr1 {
+        if rip == addr0 || rip == addr1 || rip == addr2 {
             return Some(recover);
         }
     }

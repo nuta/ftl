@@ -42,10 +42,11 @@ pub struct Thread {
     pub(super) fsbase: u64,
     pub(super) xsave_ptr: u64,
     pub(super) fault_pc: u64,
+    pub(super) cookie: u64,
 }
 
 impl Thread {
-    pub fn new(pc: usize, sp: usize, fault_pc: usize) -> Result<Self, ErrorCode> {
+    pub fn new(pc: usize, sp: usize, fault_pc: usize, cookie: usize) -> Result<Self, ErrorCode> {
         let paddr = PAGE_ALLOCATOR
             .alloc(MIN_PAGE_SIZE, PageType::Zeroed)
             .ok_or(ErrorCode::OUT_OF_MEMORY)?;
@@ -58,6 +59,7 @@ impl Thread {
             rsp: sp as u64,
             fault_pc: fault_pc as u64,
             xsave_ptr: arch::paddr2vaddr(paddr).as_usize() as u64,
+            cookie: cookie as u64,
             ..Default::default()
         })
     }
@@ -70,6 +72,7 @@ impl Thread {
             a2: self.rdx as usize,
             a3: self.r10 as usize,
             a4: self.r8 as usize,
+            a5: self.r9 as usize,
         }
     }
 
