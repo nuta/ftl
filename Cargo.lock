@@ -6,7 +6,7 @@ version = 4
 name = "ftl"
 version = "0.0.0"
 dependencies = [
- "ftl_malloc",
+ "ftl_bump_allocator",
  "ftl_types",
  "ftl_utils",
 ]

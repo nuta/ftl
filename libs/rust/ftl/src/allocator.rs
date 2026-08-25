@@ -1,26 +1,30 @@
 use core::alloc::GlobalAlloc;
 use core::alloc::Layout;
+use core::cell::UnsafeCell;
+use core::ptr;
 
-use ftl_malloc::LinkedListAllocator;
+use ftl_bump_allocator::BumpAllocator;
 use ftl_utils::spinlock::SpinLock;
 
-const MALLOC_CHUNK_SIZE: usize = 128 * 1024; // 128 KB
+const HEAP_SIZE: usize = 8 * 1024 * 1024;
+
+#[repr(align(4096))]
+struct Heap(UnsafeCell<[u8; HEAP_SIZE]>);
+
+unsafe impl Sync for Heap {}
 
 #[global_allocator]
 static GLOBAL_ALLOCATOR: GlobalAllocator = GlobalAllocator::new();
-
-fn sys_malloc(_size: usize) -> Result<*mut u8, ()> {
-    todo!()
-}
+static HEAP: Heap = Heap(UnsafeCell::new([0; HEAP_SIZE]));
 
 struct GlobalAllocator {
-    inner: SpinLock<LinkedListAllocator>,
+    inner: SpinLock<Option<BumpAllocator>>,
 }
 
 impl GlobalAllocator {
     pub const fn new() -> Self {
         Self {
-            inner: SpinLock::new(LinkedListAllocator::new()),
+            inner: SpinLock::new(None),
         }
     }
 }
@@ -28,39 +32,15 @@ impl GlobalAllocator {
 unsafe impl GlobalAlloc for GlobalAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         let mut inner = self.inner.lock();
-        if let Some(ptr) = inner.malloc(layout.size(), layout.align()) {
-            return ptr;
-        }
+        let allocator = inner.get_or_insert_with(|| {
+            let start = HEAP.0.get().cast::<u8>() as usize;
+            BumpAllocator::new(start, start + HEAP_SIZE)
+        });
 
-        // Allocate more memory from the kernel.
-        let ptr = match sys_malloc(MALLOC_CHUNK_SIZE) {
-            Ok(ptr) => ptr,
-            Err(error) => {
-                panic!("failed to malloc from kernel: {:?}", error);
-            }
-        };
-
-        // SAFETY: malloc is guaranteed to return a valid pointer
-        //         when it returns Ok(ptr).
-        unsafe {
-            inner.add_chunk(ptr, MALLOC_CHUNK_SIZE);
-        }
-
-        // Try to allocate from the new chunk.
-        if let Some(ptr) = inner.malloc(layout.size(), layout.align()) {
-            return ptr;
-        }
-
-        panic!(
-            "failed to malloc from new chunk: size={}, align={}",
-            layout.size(),
-            layout.align()
-        );
+        allocator
+            .alloc(layout.size(), layout.align())
+            .map_or(ptr::null_mut(), |addr| addr as *mut u8)
     }
 
-    unsafe fn dealloc(&self, ptr: *mut u8, _layout: Layout) {
-        unsafe {
-            self.inner.lock().free(ptr);
-        }
-    }
+    unsafe fn dealloc(&self, _ptr: *mut u8, _layout: Layout) {}
 }
