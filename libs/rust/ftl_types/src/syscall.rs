@@ -1,13 +1,13 @@
-const SYS_NUMBER_BASE: i32 = i32::MAX - 0xfff;
+pub const SYSCALL_BASE: usize = usize::MAX - 0x1000;
 
-#[repr(i32)]
+#[repr(usize)]
 pub enum Syscall {
-    Print = SYS_NUMBER_BASE + 1,
-    ThreadExit = SYS_NUMBER_BASE + 2,
-    VmoCreate = SYS_NUMBER_BASE + 3,
-    VmoWrite = SYS_NUMBER_BASE + 4,
-    VmSpaceClone = SYS_NUMBER_BASE + 5,
-    VmSpaceMap = SYS_NUMBER_BASE + 6,
-    ThreadCreate = SYS_NUMBER_BASE + 7,
-    ThreadStart = SYS_NUMBER_BASE + 8,
+    Print = SYSCALL_BASE + 1,
+    ThreadExit = SYSCALL_BASE + 2,
+    VmoCreate = SYSCALL_BASE + 3,
+    VmoWrite = SYSCALL_BASE + 4,
+    VmSpaceClone = SYSCALL_BASE + 5,
+    VmSpaceMap = SYSCALL_BASE + 6,
+    ThreadCreate = SYSCALL_BASE + 7,
+    ThreadStart = SYSCALL_BASE + 8,
 }
