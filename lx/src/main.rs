@@ -7,6 +7,7 @@ mod arch;
 mod process;
 mod syscall;
 mod thread;
+mod types;
 
 use ftl_types::handle::HandleId;
 

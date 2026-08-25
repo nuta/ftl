@@ -2,6 +2,7 @@
 pub enum ExitReason {
     Success = 0,
     Panic = 1,
+    Errored = 2,
 }
 
 #[repr(usize)]

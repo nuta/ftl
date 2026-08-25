@@ -19,6 +19,7 @@ use ftl_utils::alignment::align_up;
 use ftl_utils::spinlock::SpinLock;
 
 use crate::thread::Thread;
+use crate::types::c_int;
 
 const PAGE_SIZE: usize = 4096; // TODO: system call?
 const STACK_START: usize = 0x0200_0000;
@@ -34,11 +35,17 @@ pub enum CreateError {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct PId(i32);
+pub struct PId(c_int);
 
 impl fmt::Display for PId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)
+    }
+}
+
+impl PId {
+    pub fn as_int(self) -> c_int {
+        self.0
     }
 }
 

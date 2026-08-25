@@ -4,8 +4,11 @@ use alloc::sync::Weak;
 
 use ftl::syscall::thread_create;
 use ftl::syscall::thread_start;
+use ftl::syscall::thread_write_regs;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
+use ftl_types::thread::Regs;
+use ftl_types::thread::RegsKind;
 
 use crate::process::PId;
 use crate::process::Process;
@@ -21,16 +24,17 @@ pub struct Thread {
     handle: HandleId,
 }
 
-pub struct ThreadCtx {
-    pub thread: Arc<Thread>,
+struct Cookie {
+    thread: Arc<Thread>,
 }
 
-impl ThreadCtx {
+impl Cookie {
     /// # Safety
     ///
-    /// `cookie` must be the thread's cookie which we created in [`Thread::new`].
-    pub unsafe fn from_cookie(cookie: usize) -> Arc<Thread> {
-        let ptr = cookie as *const ThreadCtx;
+    /// `cookie` must be the thread's cookie which we created in
+    /// [`Thread::new`].
+    unsafe fn from_raw(cookie: usize) -> Arc<Thread> {
+        let ptr = cookie as *const Cookie;
         unsafe { (*ptr).thread.clone() }
     }
 }
@@ -44,7 +48,7 @@ impl Thread {
         process: Weak<Process>,
         tid: PId,
     ) -> Result<Arc<Self>, SpawnError> {
-        let this = Box::<ThreadCtx>::new_uninit();
+        let this = Box::<Cookie>::new_uninit();
         let fault_pc = crate::arch::syscall_handler as *const () as usize;
         let cookie = this.as_ptr() as usize;
 
@@ -62,7 +66,7 @@ impl Thread {
         // Initialize and leak the thread context. We'll free manually later.
         Box::leak(Box::write(
             this,
-            ThreadCtx {
+            Cookie {
                 thread: thread.clone(),
             },
         ));
@@ -76,5 +80,17 @@ impl Thread {
 
     pub fn tid(&self) -> PId {
         self.tid
+    }
+
+    pub fn set_fsbase(&self, fsbase: usize) -> Result<(), ErrorCode> {
+        thread_write_regs(self.handle, RegsKind::FsBase, Regs { fs_base: fsbase })
+    }
+
+    /// # Safety
+    ///
+    /// `cookie` must be the thread's cookie which we created in
+    /// [`Thread::new`].
+    pub unsafe fn from_cookie(cookie: usize) -> Arc<Thread> {
+        unsafe { Cookie::from_raw(cookie) }
     }
 }
