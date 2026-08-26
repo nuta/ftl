@@ -2,6 +2,7 @@ use alloc::boxed::Box;
 use alloc::sync::Arc;
 use alloc::sync::Weak;
 
+use ftl::syscall::thread_copy_regs;
 use ftl::syscall::thread_create;
 use ftl::syscall::thread_start;
 use ftl::syscall::thread_write_regs;
@@ -12,11 +13,6 @@ use ftl_types::thread::RegsKind;
 
 use crate::process::PId;
 use crate::process::Process;
-
-#[derive(Debug)]
-pub enum SpawnError {
-    ThreadCreate(ErrorCode),
-}
 
 pub struct Thread {
     process: Weak<Process>,
@@ -47,15 +43,14 @@ impl Thread {
         sp: usize,
         process: Weak<Process>,
         tid: PId,
-    ) -> Result<Arc<Self>, SpawnError> {
+    ) -> Result<Arc<Self>, ErrorCode> {
         let this = Box::<Cookie>::new_uninit();
         let fault_pc = crate::arch::syscall_handler as *const () as usize;
         let cookie = this.as_ptr() as usize;
 
         // TODO: LX assumes that the cookie won't be derefernced until the
         //       thread is started. Should we document and guarantee this?
-        let handle = thread_create(isolate, vmspace, entry, sp, fault_pc, cookie)
-            .map_err(SpawnError::ThreadCreate)?;
+        let handle = thread_create(isolate, vmspace, entry, sp, fault_pc, cookie)?;
 
         let thread = Arc::new(Thread {
             process,
@@ -82,8 +77,16 @@ impl Thread {
         self.tid
     }
 
+    pub fn process(&self) -> Arc<Process> {
+        self.process.upgrade().unwrap()
+    }
+
     pub fn set_fsbase(&self, fsbase: usize) -> Result<(), ErrorCode> {
         thread_write_regs(self.handle, RegsKind::FsBase, Regs { fs_base: fsbase })
+    }
+
+    pub fn copy_regs_to(&self, dest: &Thread, kind: RegsKind) -> Result<(), ErrorCode> {
+        thread_copy_regs(self.handle, dest.handle, kind)
     }
 
     /// # Safety
