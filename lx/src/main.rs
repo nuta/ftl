@@ -20,7 +20,7 @@ use crate::vfs::EmbeddedFile;
 #[repr(C, align(8))]
 struct Aligned<const N: usize>([u8; N]);
 
-static HELLO_ELF: Aligned<{ include_bytes!("../../initfs/bin/hello").len() }> =
+pub static HELLO_ELF: Aligned<{ include_bytes!("../../initfs/bin/hello").len() }> =
     Aligned(*include_bytes!("../../initfs/bin/hello"));
 
 #[unsafe(no_mangle)]
