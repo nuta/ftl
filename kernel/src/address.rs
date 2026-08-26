@@ -189,10 +189,7 @@ impl USlice {
     ///
     /// TODO: Should we introduce a trait to explicitly mark the type as
     ///       user-copyable?
-    pub unsafe fn read_uninit<'a, T>(
-        self,
-        dst: &'a mut MaybeUninit<T>,
-    ) -> Result<&'a mut T, ErrorCode> {
+    pub unsafe fn read_uninit<T>(self, dst: &mut MaybeUninit<T>) -> Result<&mut T, ErrorCode> {
         // SAFETY: The caller must ensure that it is safe to copy.
         unsafe { self.read(dst.as_mut_ptr().cast(), size_of::<T>())? };
         Ok(unsafe { dst.assume_init_mut() })

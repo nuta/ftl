@@ -4,8 +4,6 @@ use alloc::vec::Vec;
 use core::fmt;
 use core::mem::MaybeUninit;
 use core::slice;
-use core::sync::atomic::AtomicI32;
-use core::sync::atomic::Ordering;
 
 use ftl::syscall::vmo_create;
 use ftl::syscall::vmo_write;
