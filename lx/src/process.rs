@@ -24,6 +24,7 @@ use ftl_utils::alignment::align_up;
 use ftl_utils::spinlock::SpinLock;
 
 use crate::arch::fork_child_entry;
+use crate::container::Container;
 use crate::thread::Thread;
 use crate::types::c_int;
 use crate::types::errno::Errno;
@@ -33,10 +34,15 @@ use crate::vfs::FileLike;
 const PAGE_SIZE: usize = 4096; // TODO: system call?
 const STACK_BOTTOM: usize = 0x0200_0000;
 const STACK_SIZE: usize = 256 * 1024;
-static NEXT_PID: AtomicI32 = AtomicI32::new(2);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct PId(c_int);
+
+impl PId {
+    pub const fn new(id: c_int) -> Self {
+        Self(id)
+    }
+}
 
 impl fmt::Display for PId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -132,19 +138,18 @@ struct Mutable {
 
 pub struct Process {
     tgid: PId,
-    isolate: HandleId,
-    root_vmspace: HandleId,
+    container: Arc<Container>,
     mutable: SpinLock<Mutable>,
     fd_table: SpinLock<FdTable>,
 }
 
 impl Process {
     pub fn new_init(
-        root_isolate: HandleId,
-        root_vmspace: HandleId,
+        container: Arc<Container>,
         elf_file: Arc<dyn FileLike>,
     ) -> Result<Arc<Process>, Errno> {
-        let (vmspace, mappings, entry, sp) = create_address_space(root_vmspace, elf_file, &[])?;
+        let (vmspace, mappings, entry, sp) =
+            create_address_space(container.root_vmspace, elf_file, &[])?;
 
         let mut fd_table = FdTable::new(1024); // TODO: make this configurable
         let console: Arc<dyn FileLike> = Arc::new(Console::new());
@@ -153,8 +158,7 @@ impl Process {
         fd_table.insert_at(2, console)?;
 
         let process = Self::new(
-            root_isolate,
-            root_vmspace,
+            container,
             vmspace,
             fd_table,
             PId(1),
@@ -174,9 +178,9 @@ impl Process {
         argv: &[&[u8]],
     ) -> Result<(), Errno> {
         let (vmspace, mappings, entry, sp) =
-            create_address_space(self.root_vmspace, elf_file, argv)?;
+            create_address_space(self.container.root_vmspace, elf_file, argv)?;
         let thread = Thread::new(
-            self.isolate,
+            self.container.isolate,
             vmspace,
             entry,
             sp,
@@ -195,8 +199,7 @@ impl Process {
     }
 
     fn new<F>(
-        isolate: HandleId,
-        root_vmspace: HandleId,
+        container: Arc<Container>,
         vmspace: HandleId,
         fd_table: FdTable,
         tgid: PId,
@@ -210,8 +213,7 @@ impl Process {
     {
         let process = Arc::new(Self {
             tgid,
-            isolate,
-            root_vmspace,
+            container: container.clone(),
             mutable: SpinLock::new(Mutable {
                 threads: Vec::with_capacity(1),
                 mappings,
@@ -221,7 +223,14 @@ impl Process {
 
         // TODO: LX assumes that the cookie won't be dereferenced until the
         // thread is started. Should we document and guarantee this?
-        let thread = Thread::new(isolate, vmspace, entry, sp, Arc::downgrade(&process), tgid)?;
+        let thread = Thread::new(
+            container.isolate,
+            vmspace,
+            entry,
+            sp,
+            Arc::downgrade(&process),
+            tgid,
+        )?;
         thread_prestart(&thread)?;
 
         // Start the thread.
@@ -232,7 +241,7 @@ impl Process {
     }
 
     pub fn fork(self: &Arc<Self>, current: &Thread, syscall_sp: usize) -> Result<PId, Errno> {
-        let vmspace = vmspace_clone(self.root_vmspace)?;
+        let vmspace = vmspace_clone(self.container.root_vmspace)?;
         let fd_table = self.fd_table.lock().clone();
 
         // Copy memory into the child's VM space.
@@ -246,14 +255,14 @@ impl Process {
             vmspace_map(vmspace, vmo, mapping.start, mapping.attrs)?;
         }
 
-        // FIXME: PID table to check conflicts
-        let tgid = PId(NEXT_PID.fetch_add(1, Ordering::Relaxed));
+        // Allocate a new PID for the child process.
+        let mut pid_table = self.container.processes.lock();
+        let tgid = pid_table.allocate()?;
 
         // Create a new process and the first thread.
         let entry = fork_child_entry as *const () as usize;
         let child = Self::new(
-            self.isolate,
-            self.root_vmspace,
+            self.container.clone(),
             vmspace,
             fd_table,
             tgid,
@@ -267,9 +276,7 @@ impl Process {
             },
         )?;
 
-        // FIXME: PID table to keep the ref count
-        core::mem::forget(child);
-
+        pid_table.insert(tgid, child);
         Ok(tgid)
     }
 

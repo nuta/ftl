@@ -4,6 +4,7 @@
 extern crate alloc;
 
 mod arch;
+mod container;
 mod process;
 mod syscall;
 mod thread;
@@ -14,7 +15,7 @@ use alloc::sync::Arc;
 
 use ftl_types::handle::HandleId;
 
-use crate::process::Process;
+use crate::container::Container;
 use crate::vfs::EmbeddedFile;
 
 #[repr(C, align(8))]
@@ -28,8 +29,9 @@ fn main() {
     let root_isolate = HandleId::new(1);
     let root_vmspace = HandleId::new(2);
     let hello_elf = Arc::new(EmbeddedFile::new(&HELLO_ELF.0));
-    let init_process = Process::new_init(root_isolate, root_vmspace, hello_elf).unwrap();
+    let container =
+        Container::new(root_isolate, root_vmspace, hello_elf).expect("failed to start LX");
 
-    // TODO: wait for root process to exit
-    core::mem::forget(init_process);
+    // TODO: wait for init process to exit
+    core::mem::forget(container);
 }
