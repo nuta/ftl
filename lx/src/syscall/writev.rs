@@ -18,6 +18,10 @@ pub fn sys_writev(
         fd_table.get(fd)?.clone()
     };
 
+    if iovcnt == 0 {
+        return Ok(0);
+    }
+
     if iovcnt < 0 {
         return Err(Errno::EINVAL);
     }
@@ -25,6 +29,10 @@ pub fn sys_writev(
     let iovecs = unsafe { slice::from_raw_parts(iov, iovcnt as usize) };
     let mut total = 0;
     for iovec in iovecs {
+        if iovec.iov_len == 0 {
+            continue;
+        }
+
         let ptr = iovec.iov_base.cast::<u8>();
         let bytes = unsafe { slice::from_raw_parts(ptr, iovec.iov_len) };
 
