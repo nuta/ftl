@@ -11,4 +11,5 @@ pub enum Syscall {
     ThreadCreate = SYSCALL_BASE + 7,
     ThreadStart = SYSCALL_BASE + 8,
     ThreadWriteRegs = SYSCALL_BASE + 9,
+    ThreadCopyRegs = SYSCALL_BASE + 10,
 }

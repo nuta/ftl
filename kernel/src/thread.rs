@@ -146,6 +146,25 @@ impl Thread {
         debug_assert!(core::ptr::eq(self.arch.get(), current_arch));
         current_arch.write_regs(kind, regs)
     }
+
+    /// Copies the current thread's registers to another thread.
+    ///
+    /// The system call entry already saved the current thread's state. No need
+    /// to copy any more registers.
+    pub fn copy_regs_from_current(
+        &self,
+        current_arch: &arch::Thread,
+        kind: RegsKind,
+    ) -> Result<(), ErrorCode> {
+        let mutable = self.mutable.lock();
+        if mutable.state != State::Blocked {
+            return Err(ErrorCode::INVALID_STATE);
+        }
+
+        // SAFETY: The thread is blocked and we hold the mutable lock to prevent
+        // concurrent access.
+        unsafe { &mut *self.arch.get() }.copy_regs(current_arch, kind)
+    }
 }
 
 impl Handleable for Thread {}
@@ -168,7 +187,8 @@ pub fn sys_thread_create(
     drop(handles);
 
     let thread = Thread::new(isolate, vmspace, pc, sp, fault_pc, cookie)?;
-    let handle = Handle::new(thread, HandleRight::WRITE);
+    let rights = HandleRight::READ | HandleRight::WRITE;
+    let handle = Handle::new(thread, rights);
     let id = handle_table.lock().insert(handle)?;
     Ok(SyscallOutput::Done(id.as_usize()))
 }
@@ -207,6 +227,32 @@ pub fn sys_thread_write_regs(
         thread.write_regs(kind, regs)?;
     }
 
+    Ok(SyscallOutput::Done(0))
+}
+
+pub fn sys_thread_copy_regs(
+    current: &SharedRef<Thread>,
+    current_arch: &arch::Thread,
+    ctx: &SyscallRegs,
+) -> Result<SyscallOutput, ErrorCode> {
+    let src_id = HandleId::new(ctx.a0);
+    let dest_id = HandleId::new(ctx.a1);
+    let kind = RegsKind::from_usize(ctx.a2).ok_or(ErrorCode::INVALID_ARG)?;
+    let handles = current.isolate().handles().lock();
+    let src = handles.get::<Thread>(src_id, HandleRight::READ)?;
+    let dest = handles.get::<Thread>(dest_id, HandleRight::WRITE)?;
+    drop(handles);
+
+    if SharedRef::eq(&src, &dest) {
+        return Err(ErrorCode::INVALID_ARG);
+    }
+
+    if !SharedRef::eq(&src, current) {
+        // TODO: How should the lock ordering be for src/dest threads?
+        return Err(ErrorCode::UNSUPPORTED);
+    }
+
+    dest.copy_regs_from_current(current_arch, kind)?;
     Ok(SyscallOutput::Done(0))
 }
 

@@ -77,6 +77,10 @@ impl Thread {
         todo!()
     }
 
+    pub fn copy_regs(&mut self, _source: &Self, _kind: RegsKind) -> Result<(), ErrorCode> {
+        todo!()
+    }
+
     pub fn enter(_thread: *const Thread) -> ! {
         todo!()
     }

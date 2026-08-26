@@ -9,12 +9,14 @@ pub enum ExitReason {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RegsKind {
     FsBase = 1,
+    FpAndVector = 2,
 }
 
 impl RegsKind {
     pub const fn from_usize(value: usize) -> Option<Self> {
         match value {
             value if value == Self::FsBase as usize => Some(Self::FsBase),
+            value if value == Self::FpAndVector as usize => Some(Self::FpAndVector),
             _ => None,
         }
     }

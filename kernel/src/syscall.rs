@@ -33,6 +33,9 @@ fn do_handle_syscall() {
         n if n == Syscall::ThreadWriteRegs as usize => {
             crate::thread::sys_thread_write_regs(&thread, arch_thread, &regs)
         }
+        n if n == Syscall::ThreadCopyRegs as usize => {
+            crate::thread::sys_thread_copy_regs(&thread, arch_thread, &regs)
+        }
         _ => todo!(),
     };
 

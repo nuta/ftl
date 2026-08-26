@@ -98,6 +98,22 @@ impl Thread {
 
                 self.fsbase = fs_base as u64;
             }
+            RegsKind::FpAndVector => return Err(ErrorCode::UNSUPPORTED),
+        }
+
+        Ok(())
+    }
+
+    pub fn copy_regs(&mut self, src: &Self, kind: RegsKind) -> Result<(), ErrorCode> {
+        match kind {
+            RegsKind::FsBase => self.fsbase = src.fsbase,
+            RegsKind::FpAndVector => unsafe {
+                core::ptr::copy_nonoverlapping(
+                    src.xsave_ptr as *const u8,
+                    self.xsave_ptr as *mut u8,
+                    MIN_PAGE_SIZE, // FIXME: use the correct size
+                );
+            },
         }
 
         Ok(())

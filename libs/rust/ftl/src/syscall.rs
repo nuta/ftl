@@ -56,6 +56,16 @@ pub fn thread_write_regs(thread: HandleId, kind: RegsKind, regs: Regs) -> Result
     Ok(())
 }
 
+pub fn thread_copy_regs(src: HandleId, dest: HandleId, kind: RegsKind) -> Result<(), ErrorCode> {
+    syscall3(
+        Syscall::ThreadCopyRegs,
+        src.as_usize(),
+        dest.as_usize(),
+        kind as usize,
+    )?;
+    Ok(())
+}
+
 pub fn vmspace_clone(source: HandleId) -> Result<HandleId, ErrorCode> {
     let ret = syscall1(Syscall::VmSpaceClone, source.as_usize())?;
     Ok(HandleId::new(ret))
