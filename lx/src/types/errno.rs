@@ -10,6 +10,7 @@ pub struct Errno(c_int);
 impl Errno {
     pub const EPERM: Self = Self(1);
     pub const EBADF: Self = Self(9);
+    pub const ECHILD: Self = Self(10);
     pub const EAGAIN: Self = Self(11);
     pub const EFAULT: Self = Self(14);
     pub const EBUSY: Self = Self(16);

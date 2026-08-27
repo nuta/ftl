@@ -43,4 +43,8 @@ impl PIdTable {
 
         Err(Errno::EAGAIN) // Too many processes
     }
+
+    pub fn remove(&mut self, pid: PId) {
+        self.pids.remove(&pid.as_int());
+    }
 }

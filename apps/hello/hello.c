@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <string.h>
+#include <sys/wait.h>
 #include <unistd.h>
 #include <errno.h>
 
@@ -11,7 +12,7 @@ int main(int argc, char **argv)
         {
             printf("argv[%d] = %s\n", i, argv[i]);
         }
-        return 0;
+        return 123;
     }
 
     pid_t pid = fork();
@@ -29,7 +30,19 @@ int main(int argc, char **argv)
         printf("failed to exec: %s\n", strerror(errno));
     }
     else
+    {
         printf("Hello from parent child=%d\n", pid);
+
+        int status;
+        pid_t waited = waitpid(pid, &status, 0);
+        if (waited < 0)
+        {
+            printf("failed to wait: %s\n", strerror(errno));
+            return 1;
+        }
+
+        printf("child=%d exited with status=%d\n", waited, WEXITSTATUS(status));
+    }
 
     return 0;
 }

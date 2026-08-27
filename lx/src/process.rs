@@ -1,10 +1,14 @@
 use alloc::sync::Arc;
+use alloc::sync::Weak;
 use alloc::vec;
 use alloc::vec::Vec;
 use core::fmt;
 use core::mem::MaybeUninit;
 use core::slice;
 
+use ftl::syscall::poll_create;
+use ftl::syscall::poll_notify;
+use ftl::syscall::poll_wait;
 use ftl::syscall::vmo_create;
 use ftl::syscall::vmo_write;
 use ftl::syscall::vmspace_clone;
@@ -130,12 +134,16 @@ impl FdTable {
 }
 
 struct Mutable {
+    parent: Option<Weak<Process>>,
     threads: Vec<Arc<Thread>>,
     mappings: Vec<Mapping>,
+    children: Vec<Arc<Process>>,
+    exit_status: Option<c_int>,
 }
 
 pub struct Process {
     tgid: PId,
+    poll: HandleId,
     container: Arc<Container>,
     mutable: SpinLock<Mutable>,
     fd_table: SpinLock<FdTable>,
@@ -160,6 +168,7 @@ impl Process {
             vmspace,
             fd_table,
             PId(1),
+            None,
             mappings,
             entry,
             sp,
@@ -201,6 +210,7 @@ impl Process {
         vmspace: HandleId,
         fd_table: FdTable,
         tgid: PId,
+        parent: Option<Weak<Process>>,
         mappings: Vec<Mapping>,
         entry: usize,
         sp: usize,
@@ -209,12 +219,17 @@ impl Process {
     where
         F: FnOnce(&Arc<Thread>) -> Result<(), Errno>,
     {
+        let poll = poll_create()?;
         let process = Arc::new(Self {
             tgid,
+            poll,
             container: container.clone(),
             mutable: SpinLock::new(Mutable {
+                parent,
                 threads: Vec::with_capacity(1),
                 mappings,
+                children: Vec::new(),
+                exit_status: None,
             }),
             fd_table: SpinLock::new(fd_table),
         });
@@ -264,6 +279,7 @@ impl Process {
             vmspace,
             fd_table,
             tgid,
+            Some(Arc::downgrade(self)),
             mappings,
             entry,
             syscall_sp,
@@ -274,8 +290,79 @@ impl Process {
             },
         )?;
 
-        pid_table.insert(tgid, child);
+        pid_table.insert(tgid, child.clone());
+        self.mutable.lock().children.push(child);
         Ok(tgid)
+    }
+
+    // TODO: Should we make this method infallible?
+    pub fn exit(&self, status: c_int) -> Result<(), Errno> {
+        if self.tgid == PId::new(1) {
+            panic!("init process exited with status {}", status);
+        }
+
+        let mut mutable = self.mutable.lock();
+
+        // Wake up the parent process while holding the lock. When poll_notify
+        // fails, exit fails and keeps this process alive.
+        let parent = mutable.parent.as_ref().and_then(Weak::upgrade);
+        if let Some(parent) = &parent {
+            poll_notify(parent.poll)?;
+        }
+
+        // Mark the process as exited.
+        mutable.exit_status = Some(status);
+
+        // Reap this process if its parent is gone.
+        if parent.is_none() {
+            self.container.processes.lock().remove(self.tgid);
+        }
+
+        // Orphan its children that have already exited.
+        while let Some(child) = mutable.children.pop() {
+            let mut child_mutable = child.mutable.lock();
+
+            // Drop the reference to this process. It has ceased to be. It is an ex-process.
+            child_mutable.parent = None;
+
+            if child_mutable.exit_status.is_some() {
+                self.container.processes.lock().remove(child.tgid);
+            }
+        }
+        Ok(())
+    }
+
+    pub fn wait(&self, pid: c_int) -> Result<(PId, c_int), Errno> {
+        if pid != -1 && pid <= 0 {
+            return Err(Errno::EINVAL);
+        }
+
+        loop {
+            let mut mutable = self.mutable.lock();
+            let mut matched_any = false;
+            for (index, child) in mutable.children.iter().enumerate() {
+                if pid != -1 && child.tgid != PId::new(pid) {
+                    // This child is not the one we are waiting for.
+                    continue;
+                }
+
+                let exit_status = child.mutable.lock().exit_status;
+                if let Some(status) = exit_status {
+                    let tgid = child.tgid;
+                    mutable.children.remove(index);
+                    self.container.processes.lock().remove(tgid);
+                    return Ok((tgid, status));
+                }
+
+                matched_any = true;
+            }
+
+            if !matched_any {
+                return Err(Errno::ECHILD);
+            }
+
+            poll_wait(self.poll)?;
+        }
     }
 
     pub fn fd_table(&self) -> &SpinLock<FdTable> {
