@@ -9,6 +9,7 @@ pub struct Errno(c_int);
 
 impl Errno {
     pub const EPERM: Self = Self(1);
+    pub const EBADF: Self = Self(9);
     pub const EFAULT: Self = Self(14);
     pub const EBUSY: Self = Self(16);
     pub const EEXIST: Self = Self(17);
@@ -17,6 +18,7 @@ impl Errno {
     pub const EINVAL: Self = Self(22);
     pub const ENOSYS: Self = Self(38);
     pub const EOPNOTSUPP: Self = Self(95);
+    pub const ENOTSUP: Self = Self::EOPNOTSUPP;
 
     pub const fn as_int(self) -> c_int {
         self.0

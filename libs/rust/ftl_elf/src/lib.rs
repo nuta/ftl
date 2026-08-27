@@ -15,7 +15,7 @@ const EM_NATIVE: u16 = 62;
 #[cfg(target_arch = "aarch64")]
 const EM_NATIVE: u16 = 183;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 #[repr(C)]
 pub struct Ehdr {
     pub e_ident: [u8; 16],
