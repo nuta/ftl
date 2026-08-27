@@ -81,6 +81,9 @@ pub fn return_to_user() -> ! {
             arch::idle();
         };
 
+        // Try resuming the thread if it is blocked.
+        thread.try_wake();
+
         // The thread can be blocked while in the runqueue. Make sure it
         // is still runnable.
         if thread.is_runnable() {

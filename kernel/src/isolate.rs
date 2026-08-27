@@ -2,9 +2,11 @@ use alloc::collections::BTreeMap;
 use alloc::collections::btree_map::Entry;
 
 use ftl_types::error::ErrorCode;
+use ftl_types::handle::HANDLE_ID_MAX;
 use ftl_types::handle::HandleId;
 use ftl_types::handle::HandleRight;
 use ftl_utils::spinlock::SpinLock;
+use ftl_utils::static_assert;
 
 use crate::handle::AnyHandle;
 use crate::handle::Handleable;
@@ -29,6 +31,8 @@ impl Isolate {
 impl Handleable for Isolate {}
 
 const NUM_HANDLES_MAX: usize = 1024;
+
+static_assert!(NUM_HANDLES_MAX <= HANDLE_ID_MAX);
 
 pub struct HandleTable {
     handles: BTreeMap<usize, AnyHandle>,

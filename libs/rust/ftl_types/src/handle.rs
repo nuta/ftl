@@ -1,5 +1,8 @@
 use core::ops::BitOr;
 
+/// The upper 8 bits are used for encoding EventKind.
+pub const HANDLE_ID_MAX: usize = 0x00ff_ffff;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct HandleId(usize);
 

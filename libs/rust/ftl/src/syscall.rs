@@ -1,5 +1,6 @@
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
+use ftl_types::poll::Event;
 use ftl_types::syscall::Syscall;
 use ftl_types::thread::ExitReason;
 use ftl_types::thread::Regs;
@@ -63,6 +64,21 @@ pub fn thread_copy_regs(src: HandleId, dest: HandleId, kind: RegsKind) -> Result
         dest.as_usize(),
         kind as usize,
     )?;
+    Ok(())
+}
+
+pub fn poll_create() -> Result<HandleId, ErrorCode> {
+    let ret = syscall1(Syscall::PollCreate, 0)?;
+    Ok(HandleId::new(ret))
+}
+
+pub fn poll_wait(poll: HandleId) -> Result<Event, ErrorCode> {
+    let ret = syscall1(Syscall::PollWait, poll.as_usize())?;
+    Ok(Event::from_raw(ret as u32))
+}
+
+pub fn poll_notify(poll: HandleId) -> Result<(), ErrorCode> {
+    syscall1(Syscall::PollNotify, poll.as_usize())?;
     Ok(())
 }
 

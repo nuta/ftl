@@ -5,6 +5,7 @@ use crate::scheduler;
 
 pub enum SyscallOutput {
     Done(usize),
+    Blocked,
     Exited,
 }
 
@@ -36,6 +37,11 @@ fn do_handle_syscall() {
         n if n == Syscall::ThreadCopyRegs as usize => {
             crate::thread::sys_thread_copy_regs(&thread, arch_thread, &regs)
         }
+        n if n == Syscall::PollCreate as usize => crate::poll::sys_poll_create(&thread, &regs),
+        n if n == Syscall::PollWait as usize => {
+            crate::poll::sys_poll_wait(&thread, &cpuvar.current_thread, &regs)
+        }
+        n if n == Syscall::PollNotify as usize => crate::poll::sys_poll_notify(&thread, &regs),
         _ => todo!(),
     };
 
@@ -44,6 +50,7 @@ fn do_handle_syscall() {
             // TODO: Prevent this.
             unreachable!();
         }
+        Ok(SyscallOutput::Blocked) => return,
         Ok(SyscallOutput::Done(retval)) => retval,
         Ok(SyscallOutput::Exited) => return,
         Err(err) => err.as_usize(),

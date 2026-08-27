@@ -18,15 +18,16 @@ use crate::arch::USER_ADDR_END;
 use crate::handle::Handle;
 use crate::handle::Handleable;
 use crate::isolate::Isolate;
+use crate::poll::Poll;
 use crate::scheduler::SCHEDULER;
 use crate::shared_ref::SharedRef;
 use crate::syscall::SyscallOutput;
 use crate::vmspace::VmSpace;
 
-#[derive(Debug, PartialEq, Eq)]
 enum State {
+    NotStarted,
     Runnable,
-    Blocked,
+    Blocked(SharedRef<Poll>),
     Exited,
 }
 
@@ -70,7 +71,7 @@ impl Thread {
         }
 
         let mutable = Mutable {
-            state: State::Blocked,
+            state: State::NotStarted,
         };
 
         let arch_thread = arch::Thread::new(pc, sp, fault_pc, cookie)?;
@@ -102,22 +103,67 @@ impl Thread {
         &self.isolate
     }
 
-    /// Resumes the thread.
-    pub fn unblock(self: &SharedRef<Self>) -> Result<(), ErrorCode> {
+    pub fn start_polling(
+        self: &SharedRef<Self>,
+        current_thread: &CurrentThread,
+        poll: SharedRef<Poll>,
+    ) -> Result<SyscallOutput, ErrorCode> {
         let mut mutable = self.mutable.lock();
-        if mutable.state != State::Blocked {
+        if !matches!(mutable.state, State::Runnable) {
             return Err(ErrorCode::INVALID_STATE);
         }
 
+        match poll.try_wait(self)? {
+            Some(output) => Ok(SyscallOutput::Done(output.as_raw())),
+            None => {
+                mutable.state = State::Blocked(poll);
+
+                // Avoid enqueuing this thread twice: in Poll::enqueue (by
+                // another CPU), and in return_to_user (by us).
+                current_thread.clear();
+
+                Ok(SyscallOutput::Blocked)
+            }
+        }
+    }
+
+    /// Checks if the blocked thread can be woken up, and resume if so.
+    pub fn try_wake(self: &SharedRef<Self>) {
+        let mut mutable = self.mutable.lock();
+        let State::Blocked(ref poll) = mutable.state else {
+            return;
+        };
+
+        let retval = match poll.try_wait(self) {
+            Ok(Some(event)) => event.as_raw(),
+            Ok(None) => return,
+            Err(err) => err.as_usize(),
+        };
+
+        let arch_thread = unsafe { &mut *self.arch.get() };
+        arch_thread.set_syscall_retval(retval);
+        mutable.state = State::Runnable;
+    }
+
+    fn resume_locked(self: &SharedRef<Self>, mutable: &mut Mutable) -> Result<(), ErrorCode> {
         SCHEDULER.push_back(self.clone())?;
         mutable.state = State::Runnable;
-
         Ok(())
+    }
+
+    /// Starts the thread.
+    pub fn start(self: &SharedRef<Self>) -> Result<(), ErrorCode> {
+        let mut mutable = self.mutable.lock();
+        if !matches!(mutable.state, State::NotStarted) {
+            return Err(ErrorCode::INVALID_STATE);
+        }
+
+        self.resume_locked(&mut mutable)
     }
 
     pub fn exit(&self) -> Result<(), ErrorCode> {
         let mut mutable = self.mutable.lock();
-        if mutable.state != State::Runnable {
+        if !matches!(mutable.state, State::Runnable) {
             return Err(ErrorCode::INVALID_STATE);
         }
 
@@ -127,7 +173,7 @@ impl Thread {
 
     pub fn write_regs(&self, kind: RegsKind, regs: USlice) -> Result<(), ErrorCode> {
         let mutable = self.mutable.lock();
-        if mutable.state != State::Blocked {
+        if !matches!(mutable.state, State::NotStarted) {
             return Err(ErrorCode::INVALID_STATE);
         }
 
@@ -157,7 +203,7 @@ impl Thread {
         kind: RegsKind,
     ) -> Result<(), ErrorCode> {
         let mutable = self.mutable.lock();
-        if mutable.state != State::Blocked {
+        if !matches!(mutable.state, State::NotStarted) {
             return Err(ErrorCode::INVALID_STATE);
         }
 
@@ -203,7 +249,7 @@ pub fn sys_thread_start(
         .handles()
         .lock()
         .get::<Thread>(thread_id, HandleRight::WRITE)?;
-    thread.unblock()?;
+    thread.start()?;
     Ok(SyscallOutput::Done(0))
 }
 

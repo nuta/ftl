@@ -12,4 +12,7 @@ pub enum Syscall {
     ThreadStart = SYSCALL_BASE + 8,
     ThreadWriteRegs = SYSCALL_BASE + 9,
     ThreadCopyRegs = SYSCALL_BASE + 10,
+    PollCreate = SYSCALL_BASE + 11,
+    PollWait = SYSCALL_BASE + 12,
+    PollNotify = SYSCALL_BASE + 13,
 }

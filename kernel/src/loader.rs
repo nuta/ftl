@@ -99,5 +99,5 @@ pub fn load(bootinfo: &BootInfo) {
         handles.insert_at(HandleId::new(2), vmspace_handle).unwrap();
     }
     let thread = Thread::new(isolate, vmspace, entry, sp, 0, 0).unwrap();
-    thread.unblock().unwrap();
+    thread.start().unwrap();
 }

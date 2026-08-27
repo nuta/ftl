@@ -21,6 +21,7 @@ mod isolate;
 mod loader;
 mod memory;
 mod panic;
+mod poll;
 mod scheduler;
 mod shared_ref;
 mod syscall;
