@@ -15,6 +15,9 @@ ftl_arrayvec = { path = "libs/rust/ftl_arrayvec" }
 ftl_malloc = { path = "libs/rust/ftl_malloc" }
 ftl_elf = { path = "libs/rust/ftl_elf" }
 ftl_types = { path = "libs/rust/ftl_types" }
+ftl_virtio = { path = "libs/rust/ftl_virtio" }
+ftl_driver = { path = "libs/rust/ftl_driver" }
+virtio_net = { path = "libs/rust/virtio_net" }
 
 [profile.dev]
 panic = "abort"

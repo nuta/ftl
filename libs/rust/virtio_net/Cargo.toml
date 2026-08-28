@@ -1,0 +1,10 @@
+[package]
+name = "virtio_net"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+
+[dependencies]
+ftl_driver = { workspace = true }
+ftl_virtio = { workspace = true }
+ftl_utils = { workspace = true }

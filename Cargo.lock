@@ -23,6 +23,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "ftl_driver"
+version = "0.0.0"
+
+[[package]]
 name = "ftl_elf"
 version = "0.0.0"
 
@@ -40,6 +44,14 @@ version = "0.0.0"
 [[package]]
 name = "ftl_utils"
 version = "0.0.0"
+
+[[package]]
+name = "ftl_virtio"
+version = "0.0.0"
+dependencies = [
+ "ftl_driver",
+ "ftl_utils",
+]
 
 [[package]]
 name = "kernel"
@@ -61,4 +73,13 @@ dependencies = [
  "ftl_elf",
  "ftl_types",
  "ftl_utils",
+]
+
+[[package]]
+name = "virtio_net"
+version = "0.0.0"
+dependencies = [
+ "ftl_driver",
+ "ftl_utils",
+ "ftl_virtio",
 ]

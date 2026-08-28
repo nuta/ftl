@@ -1,0 +1,23 @@
+//! Virtio device driver (legacy).
+//!
+//! # References
+//!
+//! Latest but very long:
+//! <https://docs.oasis-open.org/virtio/virtio/v1.3/csd01/virtio-v1.3-csd01.html>
+//!
+//! Old but covers legacy + PCI concisely:
+//! <https://ozlabs.org/~rusty/virtio-spec/virtio-0.9.5.pdf>
+
+#![no_std]
+
+extern crate alloc;
+
+pub mod virtqueue;
+
+#[cfg(target_arch = "x86_64")]
+pub mod virtio_pci;
+
+#[cfg(target_arch = "x86_64")]
+pub use virtio_pci::VirtioPci;
+pub use virtqueue::ChainEntry;
+pub use virtqueue::VirtQueue;
