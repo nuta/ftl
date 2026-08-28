@@ -19,7 +19,7 @@ ARCH=x64 ./build.sh
 
 mkdir -p isofiles/boot/grub
 cp kernel/src/arch/x64/grub.cfg isofiles/boot/grub/
-cp ftl.elf initfs.tar isofiles/
+cp ftl.elf initfs.cpio isofiles/
 
 $GRUB_MKRESCUE -o ftl.iso isofiles
 
