@@ -21,7 +21,7 @@ use ftl::syscall::net_subscribe;
 use ftl::syscall::poll_create;
 use ftl::syscall::poll_wait;
 use ftl_types::handle::HandleId;
-use ftl_types::net::NetMatch;
+use ftl_types::net::Rule;
 
 use crate::container::Container;
 use crate::vfs::EmbeddedFile;
@@ -42,7 +42,7 @@ fn main() {
     let poll = poll_create().expect("failed to create poll");
     let net_handle = net_create().expect("failed to create network");
     let listener_cookie = 1;
-    let listener_rule = NetMatch::tcp_ipv4_listener(None, NonZeroU16::new(80).unwrap());
+    let listener_rule = Rule::tcp_ipv4_listener(None, NonZeroU16::new(80).unwrap());
     net_bind(net_handle, &listener_rule, listener_cookie)
         .expect("failed to bind TCP listener rule");
     let network = net::TcpIp::new(net_handle, listener_cookie);

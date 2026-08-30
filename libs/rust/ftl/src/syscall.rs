@@ -1,6 +1,6 @@
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
-use ftl_types::net::NetMatch;
+use ftl_types::net::Rule;
 use ftl_types::poll::Event;
 use ftl_types::syscall::Syscall;
 use ftl_types::thread::ExitReason;
@@ -93,21 +93,21 @@ pub fn net_subscribe(net: HandleId, poll: HandleId) -> Result<(), ErrorCode> {
     Ok(())
 }
 
-pub fn net_bind(net: HandleId, rule: &NetMatch, cookie: u64) -> Result<(), ErrorCode> {
+pub fn net_bind(net: HandleId, rule: &Rule, cookie: u64) -> Result<(), ErrorCode> {
     syscall3(
         Syscall::NetBind,
         net.as_usize(),
-        rule as *const NetMatch as usize,
+        rule as *const Rule as usize,
         cookie as usize,
     )?;
     Ok(())
 }
 
-pub fn net_unbind(net: HandleId, rule: &NetMatch) -> Result<(), ErrorCode> {
+pub fn net_unbind(net: HandleId, rule: &Rule) -> Result<(), ErrorCode> {
     syscall2(
         Syscall::NetUnbind,
         net.as_usize(),
-        rule as *const NetMatch as usize,
+        rule as *const Rule as usize,
     )?;
     Ok(())
 }

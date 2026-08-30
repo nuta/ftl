@@ -14,7 +14,7 @@ use ftl::syscall::net_unbind;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use ftl_types::net::NET_MAX_HEADER_LEN;
-use ftl_types::net::NetMatch;
+use ftl_types::net::Rule;
 use ftl_utils::spinlock::SpinLock;
 
 use super::tcp::Endpoint;
@@ -27,7 +27,7 @@ use super::tcp::parse_received;
 
 struct ConnectionEntry {
     connection: Arc<TcpConnection>,
-    selector: NetMatch,
+    selector: Rule,
 }
 
 struct Connections {
@@ -72,7 +72,7 @@ impl TcpIp {
         let local_port = NonZeroU16::new(info.local_port).ok_or(ErrorCode::INVALID_ARG)?;
         let remote_ip = NonZeroU32::new(info.remote_ip).ok_or(ErrorCode::INVALID_ARG)?;
         let remote_port = NonZeroU16::new(info.remote_port).ok_or(ErrorCode::INVALID_ARG)?;
-        let selector = NetMatch::tcp_ipv4_flow(local_ip, local_port, remote_ip, remote_port);
+        let selector = Rule::tcp_ipv4_flow(local_ip, local_port, remote_ip, remote_port);
         let mut connections = self.connections.lock();
         while connections.next_cookie == self.listener_cookie
             || connections.entries.contains_key(&connections.next_cookie)

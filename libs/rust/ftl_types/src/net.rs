@@ -7,7 +7,7 @@ pub const NET_MAX_HEADER_LEN: usize = 120;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(C)]
-pub struct NetMatch {
+pub struct Rule {
     ip_version: u8,
     ip_protocol: u8,
     local_port: Option<NonZeroU16>,
@@ -17,7 +17,7 @@ pub struct NetMatch {
     _padding: u16,
 }
 
-impl NetMatch {
+impl Rule {
     pub const fn tcp_ipv4_listener(local_ip: Option<NonZeroU32>, local_port: NonZeroU16) -> Self {
         Self {
             ip_version: IP_VERSION_4,

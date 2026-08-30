@@ -1,14 +1,13 @@
-use core::mem::MaybeUninit;
-use core::mem::size_of;
-
 use alloc::collections::VecDeque;
 use alloc::vec::Vec;
+use core::mem::MaybeUninit;
+use core::mem::size_of;
 
 use ftl_driver::dma::DmaBuf;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use ftl_types::handle::HandleRight;
-use ftl_types::net::NetMatch;
+use ftl_types::net::Rule;
 use ftl_types::poll::EventKind;
 use ftl_types::thread::SyscallRegs;
 use ftl_utils::spinlock::SpinLock;
@@ -33,7 +32,7 @@ const GATEWAY_IP: Ipv4Addr = Ipv4Addr::new(0x0a00_0202);
 
 #[derive(Clone, Copy)]
 struct Binding {
-    rule: NetMatch,
+    rule: Rule,
     cookie: u64,
 }
 
@@ -103,8 +102,8 @@ pub fn sys_net_bind(
     ctx: &SyscallRegs,
 ) -> Result<SyscallOutput, ErrorCode> {
     let network_id = HandleId::new(ctx.a0);
-    let rule_uslice = USlice::new(UAddr::new(ctx.a1), size_of::<NetMatch>())?;
-    let mut rule_buf = MaybeUninit::<NetMatch>::uninit();
+    let rule_uslice = USlice::new(UAddr::new(ctx.a1), size_of::<Rule>())?;
+    let mut rule_buf = MaybeUninit::<Rule>::uninit();
     let rule = unsafe { rule_uslice.read_uninit(&mut rule_buf)? };
 
     let network = current
@@ -122,8 +121,8 @@ pub fn sys_net_unbind(
     ctx: &SyscallRegs,
 ) -> Result<SyscallOutput, ErrorCode> {
     let network_id = HandleId::new(ctx.a0);
-    let rule_uslice = USlice::new(UAddr::new(ctx.a1), size_of::<NetMatch>())?;
-    let mut _buf = MaybeUninit::<NetMatch>::uninit();
+    let rule_uslice = USlice::new(UAddr::new(ctx.a1), size_of::<Rule>())?;
+    let mut _buf = MaybeUninit::<Rule>::uninit();
     let rule = unsafe { rule_uslice.read_uninit(&mut _buf)? };
 
     let network = current
@@ -229,7 +228,7 @@ impl Network {
         Ok(())
     }
 
-    pub fn bind(&self, rule: NetMatch, cookie: u64) -> Result<(), ErrorCode> {
+    pub fn bind(&self, rule: Rule, cookie: u64) -> Result<(), ErrorCode> {
         if !rule.is_supported() {
             return Err(ErrorCode::INVALID_ARG);
         }
@@ -246,7 +245,7 @@ impl Network {
         Ok(())
     }
 
-    pub fn unbind(&self, rule: &NetMatch) -> Result<(), ErrorCode> {
+    pub fn unbind(&self, rule: &Rule) -> Result<(), ErrorCode> {
         let mut bindings = self.bindings.lock();
         for (index, binding) in bindings.iter().enumerate() {
             if binding.rule == *rule {
