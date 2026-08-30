@@ -17,6 +17,7 @@ use ftl_utils::spinlock::SpinLock;
 
 use crate::address::UAddr;
 use crate::address::USlice;
+use crate::arch;
 use crate::arch::paddr2vaddr;
 use crate::handle::Handle;
 use crate::memory::PAGE_ALLOCATOR;
@@ -115,16 +116,17 @@ pub fn sys_net_bind(
     ctx: &SyscallRegs,
 ) -> Result<SyscallOutput, ErrorCode> {
     let network_id = HandleId::new(ctx.a0);
-    let selector = USlice::new(UAddr::new(ctx.a1), size_of::<NetMatch>())?;
-    let mut selector_value = MaybeUninit::<NetMatch>::uninit();
-    let selector_value = unsafe { selector.read_uninit(&mut selector_value)? };
+    let rule_uslice = USlice::new(UAddr::new(ctx.a1), size_of::<NetMatch>())?;
+    let mut rule_buf = MaybeUninit::<NetMatch>::uninit();
+    let rule = unsafe { rule_uslice.read_uninit(&mut rule_buf)? };
 
     let network = current
         .isolate()
         .handles()
         .lock()
         .get::<Network>(network_id, HandleRight::WRITE)?;
-    network.bind(*selector_value, ctx.a2 as u64)?;
+
+    network.bind(*rule, ctx.a2 as u64)?;
     Ok(SyscallOutput::Done(0))
 }
 
@@ -133,15 +135,17 @@ pub fn sys_net_unbind(
     ctx: &SyscallRegs,
 ) -> Result<SyscallOutput, ErrorCode> {
     let network_id = HandleId::new(ctx.a0);
-    let selector = USlice::new(UAddr::new(ctx.a1), size_of::<NetMatch>())?;
-    let mut selector_value = MaybeUninit::<NetMatch>::uninit();
-    let selector_value = unsafe { selector.read_uninit(&mut selector_value)? };
+    let rule_uslice = USlice::new(UAddr::new(ctx.a1), size_of::<NetMatch>())?;
+    let mut _buf = MaybeUninit::<NetMatch>::uninit();
+    let rule = unsafe { rule_uslice.read_uninit(&mut _buf)? };
+
     let network = current
         .isolate()
         .handles()
         .lock()
         .get::<Network>(network_id, HandleRight::WRITE)?;
-    network.unbind(selector_value)?;
+
+    network.unbind(rule)?;
     Ok(SyscallOutput::Done(0))
 }
 
@@ -151,6 +155,7 @@ pub fn sys_net_recv(
 ) -> Result<SyscallOutput, ErrorCode> {
     let network_id = HandleId::new(ctx.a0);
     let payload = USlice::new(UAddr::new(ctx.a1), ctx.a2)?;
+
     let network = current
         .isolate()
         .handles()
@@ -222,6 +227,7 @@ pub fn handle_interrupt() {
     router.handle_interrupt();
 }
 
+// FIXME: Move this into virtio_net?
 fn virtio_net_init() -> (SharedRef<Device>, u8) {
     use ftl_driver::pci::find_virtio_device;
     use ftl_driver::pci::get_interrupt_line;
@@ -253,7 +259,7 @@ fn virtio_net_init() -> (SharedRef<Device>, u8) {
 pub fn init() {
     let (device, irq) = virtio_net_init();
     *GLOBAL_ROUTER.lock() = Some(Router::new(device));
-    crate::arch::interrupt_acquire(irq).expect("failed to enable virtio-net IRQ");
+    arch::interrupt_acquire(irq).expect("failed to enable virtio-net IRQ");
     NET_IRQ.store(irq, Ordering::Relaxed);
     info!("net: listening for virtio-net IRQ {}", irq);
 }

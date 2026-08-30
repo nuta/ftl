@@ -16,6 +16,7 @@ impl ErrorCode {
     pub const TOO_MANY_HANDLES: Self = Self::from_name(b"TMHD");
     pub const NO_ROUTE: Self = Self::from_name(b"NORO");
     pub const EMPTY: Self = Self::from_name(b"EMPT");
+    pub const NOT_FOUND: Self = Self::from_name(b"NOTF");
 
     const fn from_name(name: &'static [u8]) -> Self {
         if name.len() != 4 {

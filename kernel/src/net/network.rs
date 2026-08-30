@@ -25,9 +25,10 @@ const ETHTYPE_IPV4: u16 = 0x0800;
 const ETHTYPE_ARP: u16 = 0x0806;
 const OUR_IP: Ipv4Addr = Ipv4Addr::new(0x0a00_020f);
 const GATEWAY_IP: Ipv4Addr = Ipv4Addr::new(0x0a00_0202);
+
 #[derive(Clone, Copy)]
-struct NetBinding {
-    selector: NetMatch,
+struct Binding {
+    rule: NetMatch,
     cookie: u64,
 }
 
@@ -200,7 +201,7 @@ struct Mutable {
 
 pub struct Network {
     device: SharedRef<Device>,
-    bindings: SpinLock<Vec<NetBinding>>,
+    bindings: SpinLock<Vec<Binding>>,
     mutable: SpinLock<Mutable>,
 }
 
@@ -232,30 +233,33 @@ impl Network {
         Ok(())
     }
 
-    pub fn bind(&self, selector: NetMatch, cookie: u64) -> Result<(), ErrorCode> {
-        if !selector.is_supported() {
+    pub fn bind(&self, rule: NetMatch, cookie: u64) -> Result<(), ErrorCode> {
+        if !rule.is_supported() {
             return Err(ErrorCode::INVALID_ARG);
         }
 
         let mut bindings = self.bindings.lock();
-        if bindings.iter().any(|binding| binding.selector == selector) {
+        if bindings.iter().any(|binding| binding.rule == rule) {
             return Err(ErrorCode::ALREADY_EXISTS);
         }
+
         bindings
             .try_reserve(1)
             .map_err(|_| ErrorCode::OUT_OF_MEMORY)?;
-        bindings.push(NetBinding { selector, cookie });
+        bindings.push(Binding { rule, cookie });
         Ok(())
     }
 
-    pub fn unbind(&self, selector: &NetMatch) -> Result<(), ErrorCode> {
+    pub fn unbind(&self, rule: &NetMatch) -> Result<(), ErrorCode> {
         let mut bindings = self.bindings.lock();
-        let index = bindings
-            .iter()
-            .position(|binding| binding.selector == *selector)
-            .ok_or(ErrorCode::INVALID_ARG)?;
-        bindings.remove(index);
-        Ok(())
+        for (index, binding) in bindings.iter().enumerate() {
+            if binding.rule == *rule {
+                bindings.remove(index);
+                return Ok(());
+            }
+        }
+
+        Err(ErrorCode::NOT_FOUND)
     }
 
     fn match_packet(
@@ -265,19 +269,26 @@ impl Network {
         remote_ip: Ipv4Addr,
         remote_port: u16,
     ) -> Option<(u32, u64)> {
-        self.bindings
-            .lock()
-            .iter()
-            .filter(|binding| {
-                binding.selector.matches(
-                    local_ip.as_u32(),
-                    local_port,
-                    remote_ip.as_u32(),
-                    remote_port,
-                )
-            })
-            .max_by_key(|binding| binding.selector.specificity())
-            .map(|binding| (binding.selector.specificity(), binding.cookie))
+        let mut best = None;
+        for binding in self.bindings.lock().iter() {
+            if !binding.rule.matches(
+                local_ip.as_u32(),
+                local_port,
+                remote_ip.as_u32(),
+                remote_port,
+            ) {
+                continue;
+            }
+
+            let specificity = binding.rule.specificity();
+            if best
+                .as_ref()
+                .is_none_or(|(best_specificity, _)| specificity >= *best_specificity)
+            {
+                best = Some((specificity, binding.cookie));
+            }
+        }
+        best
     }
 
     fn recycle_rx_buffer(&self, rx: Rx) {
