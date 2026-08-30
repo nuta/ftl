@@ -183,7 +183,10 @@ pub fn handle_interrupt() {
     router.handle_interrupt();
 }
 
-pub fn init() {
+fn virtio_net_init() -> (SharedRef<Device>, u8) {
+    use ftl_driver::pci::find_virtio_device;
+    use ftl_driver::pci::get_interrupt_line;
+
     const RX_BUFFER_SIZE: usize = 2048;
     const RX_BUFFER_COUNT: usize = 64;
 
@@ -203,10 +206,13 @@ pub fn init() {
 
     let device = Device::new(driver);
     let device = SharedRef::new(device).expect("failed to allocate network device");
-    let pci_device =
-        ftl_driver::pci::find_virtio_device(&GLOBAL_ENV, 1).expect("virtio-net disappeared");
-    let irq = ftl_driver::pci::get_interrupt_line(&GLOBAL_ENV, &pci_device);
+    let pci_device = find_virtio_device(&GLOBAL_ENV, 1).expect("virtio-net disappeared");
+    let irq = get_interrupt_line(&GLOBAL_ENV, &pci_device);
 
+    (device, irq)
+}
+pub fn init() {
+    let (device, irq) = virtio_net_init();
     *GLOBAL_ROUTER.lock() = Some(Router::new(device));
     crate::arch::interrupt_acquire(irq).expect("failed to enable virtio-net IRQ");
     NET_IRQ.store(irq, Ordering::Relaxed);
