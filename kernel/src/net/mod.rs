@@ -9,8 +9,8 @@ use crate::memory::PageType;
 
 mod arp;
 mod device;
-mod network;
 mod packet;
+mod route;
 mod router;
 
 struct EnvImpl {}
@@ -44,10 +44,10 @@ impl ftl_driver::env::Env for EnvImpl {
     }
 }
 
-pub use network::handle_interrupt;
-pub use network::init;
-pub use network::is_irq;
-pub use network::sys_net_acquire;
-pub use network::sys_net_peek;
-pub use network::sys_net_recv;
-pub use network::sys_net_send;
+pub use router::handle_interrupt;
+pub use router::init;
+pub use router::is_irq;
+pub use router::sys_net_acquire;
+pub use router::sys_net_peek;
+pub use router::sys_net_recv;
+pub use router::sys_net_send;
