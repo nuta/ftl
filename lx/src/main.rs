@@ -16,6 +16,7 @@ use alloc::sync::Arc;
 
 use ftl::syscall::net_bind;
 use ftl::syscall::net_create;
+use ftl::syscall::net_subscribe;
 use ftl::syscall::poll_create;
 use ftl::syscall::poll_wait;
 use ftl_types::handle::HandleId;
@@ -40,15 +41,17 @@ fn main() {
     let container =
         Container::new(root_isolate, root_vmspace, hello_elf).expect("failed to start LX");
     let poll = poll_create().expect("failed to create poll");
-    let net_handle = net_create(poll).expect("failed to create network");
+    let net_handle = net_create().expect("failed to create network");
     net_bind(net_handle, NET_IPV4 | NET_TCP | NET_LISTEN, 0, 80)
         .expect("failed to bind TCP listener rule");
     let network = net::TcpIp::new(net_handle);
     container.set_network(network.clone());
+    net_subscribe(net_handle, poll).expect("failed to subscribe to network events");
     loop {
         let event = poll_wait(poll).expect("poll wait failed");
         if event.handle_id() == net_handle {
             network.handle_event();
+            net_subscribe(net_handle, poll).expect("failed to subscribe to network events");
         }
     }
 }

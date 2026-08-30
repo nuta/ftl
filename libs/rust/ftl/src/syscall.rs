@@ -83,9 +83,14 @@ pub fn poll_notify(poll: HandleId) -> Result<(), ErrorCode> {
     Ok(())
 }
 
-pub fn net_create(poll: HandleId) -> Result<HandleId, ErrorCode> {
-    let ret = syscall1(Syscall::NetCreate, poll.as_usize())?;
+pub fn net_create() -> Result<HandleId, ErrorCode> {
+    let ret = syscall1(Syscall::NetCreate, 0)?;
     Ok(HandleId::new(ret))
+}
+
+pub fn net_subscribe(net: HandleId, poll: HandleId) -> Result<(), ErrorCode> {
+    syscall2(Syscall::NetSubscribe, net.as_usize(), poll.as_usize())?;
+    Ok(())
 }
 
 pub fn net_bind(net: HandleId, kind: usize, our_ip: u32, our_port: u16) -> Result<(), ErrorCode> {

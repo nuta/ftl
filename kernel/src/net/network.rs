@@ -28,7 +28,7 @@ const ETHTYPE_IPV4: u16 = 0x0800;
 const ETHTYPE_ARP: u16 = 0x0806;
 const OUR_IP: Ipv4Addr = Ipv4Addr::new(0x0a00_020f);
 const GATEWAY_IP: Ipv4Addr = Ipv4Addr::new(0x0a00_0202);
-pub(super) const NETWORK_KIND: usize = NET_IPV4 | NET_TCP | NET_LISTEN;
+pub const NETWORK_KIND: usize = NET_IPV4 | NET_TCP | NET_LISTEN;
 
 #[derive(Clone, Copy)]
 struct NetworkRule {
@@ -195,7 +195,7 @@ struct Mutable {
     rx_queue: VecDeque<Rx>,
     reserved: Option<ReservedRx>,
     next_token: usize,
-    emitter: Option<EventEmitter>,
+    emitters: VecDeque<EventEmitter>,
 }
 
 pub struct Network {
@@ -205,7 +205,7 @@ pub struct Network {
 }
 
 impl Network {
-    pub(super) fn new(device: SharedRef<Device>) -> Self {
+    pub fn new(device: SharedRef<Device>) -> Self {
         Self {
             device,
             rules: SpinLock::new(Vec::new()),
@@ -213,21 +213,27 @@ impl Network {
                 rx_queue: VecDeque::new(),
                 reserved: None,
                 next_token: 1,
-                emitter: None,
+                emitters: VecDeque::new(),
             }),
         }
     }
 
-    pub(super) fn set_emitter(&self, emitter: EventEmitter) {
-        self.mutable.lock().emitter = Some(emitter);
+    pub fn subscribe(&self, emitter: EventEmitter) -> Result<(), ErrorCode> {
+        let mut mutable = self.mutable.lock();
+        if mutable.reserved.is_some() || !mutable.rx_queue.is_empty() {
+            drop(mutable);
+            return emitter.emit(EventKind::PollNotified);
+        }
+
+        mutable
+            .emitters
+            .try_reserve(1)
+            .map_err(|_| ErrorCode::OUT_OF_MEMORY)?;
+        mutable.emitters.push_back(emitter);
+        Ok(())
     }
 
-    pub(super) fn add_rule(
-        &self,
-        kind: usize,
-        local_ip: u32,
-        local_port: u16,
-    ) -> Result<(), ErrorCode> {
+    pub fn add_rule(&self, kind: usize, local_ip: u32, local_port: u16) -> Result<(), ErrorCode> {
         if kind != NETWORK_KIND {
             return Err(ErrorCode::INVALID_ARG);
         }
@@ -262,7 +268,7 @@ impl Network {
         }
     }
 
-    pub(super) fn send(&self, header: USlice, payload: USlice) -> Result<(), ErrorCode> {
+    pub fn send(&self, header: USlice, payload: USlice) -> Result<(), ErrorCode> {
         let mut tx = Tx::alloc(&GLOBAL_ENV, header.len(), payload.len())?;
         header.read_bytes(tx.ip_header_bytes())?;
         Ipv4Inspector::new_tcp_header(tx.ip_header_bytes()).map_err(|_| ErrorCode::INVALID_ARG)?;
@@ -284,12 +290,14 @@ impl Network {
         }
 
         mutable.rx_queue.push_back(rx);
-        if let Some(emitter) = &mutable.emitter {
+        let emitter = mutable.emitters.pop_front();
+        drop(mutable);
+        if let Some(emitter) = emitter {
             let _ = emitter.emit(EventKind::PollNotified);
         }
     }
 
-    pub(super) fn peek(&self) -> Result<(usize, NetRxInfo), ErrorCode> {
+    pub fn peek(&self) -> Result<(usize, NetRxInfo), ErrorCode> {
         let mut mutable = self.mutable.lock();
         if let Some(reserved) = &mutable.reserved {
             return Ok((reserved.token, reserved.rx.info));
@@ -309,7 +317,7 @@ impl Network {
         Ok((token, info))
     }
 
-    pub(super) fn recv(&self, token: usize, payload: USlice) -> Result<(), ErrorCode> {
+    pub fn recv(&self, token: usize, payload: USlice) -> Result<(), ErrorCode> {
         let mut mutable = self.mutable.lock();
         let Some(reserved) = mutable.reserved.as_ref() else {
             return Err(ErrorCode::EMPTY);

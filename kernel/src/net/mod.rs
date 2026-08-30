@@ -71,13 +71,9 @@ impl ftl_driver::env::Env for EnvImpl {
 
 pub fn sys_net_create(
     current: &SharedRef<Thread>,
-    ctx: &SyscallRegs,
+    _ctx: &SyscallRegs,
 ) -> Result<SyscallOutput, ErrorCode> {
-    let poll_id = HandleId::new(ctx.a0);
     let handle_table = current.isolate().handles();
-    let poll = handle_table
-        .lock()
-        .get::<Poll>(poll_id, HandleRight::WRITE)?;
 
     let device = GLOBAL_ROUTER
         .lock()
@@ -93,8 +89,25 @@ pub fn sys_net_create(
         .as_mut()
         .ok_or(ErrorCode::INVALID_STATE)?
         .add_network(network.clone())?;
-    network.set_emitter(EventEmitter::new(poll, handle_id));
     Ok(SyscallOutput::Done(handle_id.as_usize()))
+}
+
+pub fn sys_net_subscribe(
+    current: &SharedRef<Thread>,
+    ctx: &SyscallRegs,
+) -> Result<SyscallOutput, ErrorCode> {
+    let network_id = HandleId::new(ctx.a0);
+    let poll_id = HandleId::new(ctx.a1);
+    let handle_table = current.isolate().handles();
+    let network = handle_table
+        .lock()
+        .get::<Network>(network_id, HandleRight::READ)?;
+    let poll = handle_table
+        .lock()
+        .get::<Poll>(poll_id, HandleRight::WRITE)?;
+
+    network.subscribe(EventEmitter::new(poll, network_id))?;
+    Ok(SyscallOutput::Done(0))
 }
 
 pub fn sys_net_bind(

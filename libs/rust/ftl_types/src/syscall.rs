@@ -20,4 +20,5 @@ pub enum Syscall {
     NetRecv = SYSCALL_BASE + 16,
     NetSend = SYSCALL_BASE + 17,
     NetCreate = SYSCALL_BASE + 18,
+    NetSubscribe = SYSCALL_BASE + 19,
 }
