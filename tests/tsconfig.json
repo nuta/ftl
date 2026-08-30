@@ -1,0 +1,10 @@
+{
+    "compilerOptions": {
+        "target": "ESNext",
+        "strict": true,
+        "skipLibCheck": true,
+        "types": [
+            "bun"
+        ]
+    }
+}

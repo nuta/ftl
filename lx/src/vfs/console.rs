@@ -14,6 +14,10 @@ impl Console {
 }
 
 impl FileLike for Console {
+    fn as_any(&self) -> &dyn core::any::Any {
+        self
+    }
+
     fn read(&self, _buf: &mut [u8], _offset: usize) -> Result<usize, Errno> {
         todo!()
     }
