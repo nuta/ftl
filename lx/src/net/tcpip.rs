@@ -32,20 +32,20 @@ struct ConnectionEntry {
 }
 
 struct Connections {
-    next_cookie: u64,
-    entries: BTreeMap<u64, ConnectionEntry>,
+    next_cookie: usize,
+    entries: BTreeMap<usize, ConnectionEntry>,
 }
 
 pub struct TcpIp {
     net: HandleId,
-    listener_cookie: u64,
+    listener_cookie: usize,
     listener: SpinLock<Option<Arc<TcpListener>>>,
     connections: SpinLock<Connections>,
     rx_header: SpinLock<Vec<u8>>,
 }
 
 impl TcpIp {
-    pub fn new(net: HandleId, listener_cookie: u64) -> Arc<Self> {
+    pub fn new(net: HandleId, listener_cookie: usize) -> Arc<Self> {
         Arc::new(Self {
             net,
             listener_cookie,
@@ -130,7 +130,7 @@ impl TcpIp {
         None
     }
 
-    fn connection(&self, cookie: u64) -> Option<Arc<TcpConnection>> {
+    fn connection(&self, cookie: usize) -> Option<Arc<TcpConnection>> {
         self.connections
             .lock()
             .entries
@@ -166,7 +166,7 @@ impl TcpIp {
         }
     }
 
-    fn handle_packet(&self, cookie: u64, info: &TcpSegmentMeta) {
+    fn handle_packet(&self, cookie: usize, info: &TcpSegmentMeta) {
         let connection = if cookie == self.listener_cookie {
             self.find_connection(info)
         } else {

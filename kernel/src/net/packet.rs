@@ -41,7 +41,7 @@ pub struct Ipv4Inspector<'a> {
 }
 
 impl<'a> Ipv4Inspector<'a> {
-    pub fn new_tcp_header(buf: &'a [u8]) -> Result<Self, Error> {
+    pub fn new_tcp_tx(buf: &'a [u8]) -> Result<Self, Error> {
         if buf.len() < 20 {
             return Err(Error::Ipv4HeaderTooShort);
         }
@@ -86,14 +86,16 @@ impl<'a> Ipv4Inspector<'a> {
     }
 
     pub fn new_tcp_packet(buf: &'a [u8]) -> Result<Self, Error> {
-        let inspector = Self::new_tcp_header(buf)?;
+        let inspector = Self::new_tcp_tx(buf)?;
         if inspector.total_len > buf.len() {
             return Err(Error::InvalidPacketLength);
         }
+
         let fragment = u16::from_be_bytes([buf[6], buf[7]]);
         if fragment & 0x3fff != 0 {
             return Err(Error::FragmentedPacket);
         }
+
         if !checksum_valid(&buf[..inspector.ip_header_len], 0) {
             return Err(Error::InvalidIpv4Checksum);
         }
@@ -103,9 +105,11 @@ impl<'a> Ipv4Inspector<'a> {
         sum = checksum_add(sum, &buf[12..20]);
         sum += 6;
         sum += tcp_len as u32;
+
         if !checksum_valid(&buf[inspector.ip_header_len..inspector.total_len], sum) {
             return Err(Error::InvalidTcpChecksum);
         }
+
         Ok(inspector)
     }
 

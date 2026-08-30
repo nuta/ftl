@@ -93,33 +93,33 @@ pub fn net_subscribe(net: HandleId, poll: HandleId) -> Result<(), ErrorCode> {
     Ok(())
 }
 
-pub fn net_bind(net: HandleId, rule: &Rule, cookie: u64) -> Result<(), ErrorCode> {
+pub fn net_bind(net: HandleId, rule: &Rule, cookie: usize) -> Result<(), ErrorCode> {
     syscall3(
         Syscall::NetBind,
         net.as_usize(),
         rule as *const Rule as usize,
-        cookie as usize,
+        cookie,
     )?;
     Ok(())
 }
 
-pub fn net_unbind(net: HandleId, rule: &Rule) -> Result<(), ErrorCode> {
-    syscall2(
+pub fn net_unbind(net: HandleId, rule: &Rule) -> Result<usize, ErrorCode> {
+    let cookie = syscall2(
         Syscall::NetUnbind,
         net.as_usize(),
         rule as *const Rule as usize,
     )?;
-    Ok(())
+    Ok(cookie)
 }
 
-pub fn net_peek(net: HandleId, header: &mut [u8]) -> Result<u64, ErrorCode> {
+pub fn net_peek(net: HandleId, header: &mut [u8]) -> Result<usize, ErrorCode> {
     let cookie = syscall3(
         Syscall::NetPeek,
         net.as_usize(),
         header.as_mut_ptr() as usize,
         header.len(),
     )?;
-    Ok(cookie as u64)
+    Ok(cookie)
 }
 
 pub fn net_recv(net: HandleId, payload: &mut [u8]) -> Result<(), ErrorCode> {

@@ -41,12 +41,21 @@ struct Binding {
     cookie: usize,
 }
 
-pub struct Rx {
-    pub buf: DmaBuf,
-    pub packet_offset: usize,
-    pub packet_len: usize,
-    pub header_len: usize,
-    pub cookie: usize,
+/// A received packet.
+struct Rx {
+    buf: DmaBuf,
+    /// The offset of the IP header in the packet. This is also the length of
+    /// the device's header, Ethernet header, and some headroom in `buf`.
+    packet_offset: usize,
+    /// The length of the packet.
+    packet_len: usize,
+    /// The length of the IP header.
+    header_len: usize,
+    /// The cookie of the matching rule.
+    ///
+    /// FIXME: Remove this field. What if we `net_unbind` concurrently, while
+    ///        this cookie is still in the RX queue?
+    cookie: usize,
 }
 
 struct Mutable {
@@ -140,8 +149,8 @@ pub fn sys_net_unbind(
         .lock()
         .get::<Network>(network_id, HandleRight::WRITE)?;
 
-    network.unbind(rule)?;
-    Ok(SyscallOutput::Done(0))
+    let cookie = network.unbind(rule)?;
+    Ok(SyscallOutput::Done(cookie))
 }
 
 pub fn sys_net_recv(
@@ -254,12 +263,13 @@ impl Network {
         Ok(())
     }
 
-    pub fn unbind(&self, rule: &Rule) -> Result<(), ErrorCode> {
+    pub fn unbind(&self, rule: &Rule) -> Result<usize, ErrorCode> {
         let mut bindings = self.bindings.lock();
         for (index, binding) in bindings.iter().enumerate() {
             if binding.rule == *rule {
+                let cookie = binding.cookie;
                 bindings.remove(index);
-                return Ok(());
+                return Ok(cookie);
             }
         }
 
@@ -283,37 +293,71 @@ impl Network {
         best_cookie
     }
 
-    fn recycle_rx_buffer(&self, rx: Rx) {
+    fn recycle_rx_buffer(&self, buf: DmaBuf) {
         let driver = self.device.driver();
-        if driver.provide(&GLOBAL_ENV, rx.buf).is_err() {
+        if driver.provide(&GLOBAL_ENV, buf).is_err() {
             warn!("net: failed to recycle an RX buffer");
         }
     }
 
+    /// Sends a packet to the network.
     pub fn send(&self, header: USlice, payload: USlice) -> Result<(), ErrorCode> {
         let mut tx = Tx::alloc(&GLOBAL_ENV, header.len(), payload.len())?;
+
+        // Copy the header from the user.
         header.read_bytes(tx.ip_header_bytes())?;
-        Ipv4Inspector::new_tcp_header(tx.ip_header_bytes()).map_err(|_| ErrorCode::INVALID_ARG)?;
+
+        // FIXME: Check if the network owns the binding (our IP/port).
+
+        // Validate the IP and TCP headers.
+        // TODO: reject IPv6 / UDP
+        if let Err(err) = Ipv4Inspector::new_tcp_tx(tx.ip_header_bytes()) {
+            // TODO: Return more specific ErrorCode rather than INVALID_ARG
+            warn!("invalid network header: {:?}", err);
+            return Err(ErrorCode::INVALID_ARG);
+        }
+
+        // Copy the payload from the user.
         if let Some(payload_bytes) = tx.payload_bytes() {
             payload.read_bytes(payload_bytes)?;
         }
+
+        // Send the packet.
         self.device.send_ipv4(&GLOBAL_ENV, GATEWAY_IP, tx)
     }
 
-    pub(super) fn enqueue_rx(&self, rx: Rx) {
+    /// Receives a packet from the driver.
+    pub fn receive(
+        &self,
+        buf: DmaBuf,
+        packet_offset: usize,
+        packet_len: usize,
+        header_len: usize,
+        cookie: usize,
+    ) {
         let mut mutable = self.mutable.lock();
         if mutable.rx_queue.len() >= MAX_RX_QUEUE_DEPTH {
+            // Our RX queue is full. Drop the packet.
             drop(mutable);
-            self.recycle_rx_buffer(rx);
-            return;
-        }
-        if mutable.rx_queue.try_reserve(1).is_err() {
-            drop(mutable);
-            self.recycle_rx_buffer(rx);
+            self.recycle_rx_buffer(buf);
             return;
         }
 
-        mutable.rx_queue.push_back(rx);
+        if mutable.rx_queue.try_reserve(1).is_err() {
+            drop(mutable);
+            self.recycle_rx_buffer(buf);
+            return;
+        }
+
+        mutable.rx_queue.push_back(Rx {
+            buf,
+            packet_offset,
+            packet_len,
+            header_len,
+            cookie,
+        });
+
+        // Notify a poll.
         let emitter = mutable.emitters.pop_front();
         drop(mutable);
         if let Some(emitter) = emitter {
@@ -324,38 +368,52 @@ impl Network {
     pub fn peek(&self, header: USlice) -> Result<usize, ErrorCode> {
         let mut mutable = self.mutable.lock();
         if mutable.peeked.is_none() {
+            // No peeked packet. Pop the first one from the queue.
             mutable.peeked = mutable.rx_queue.pop_front();
         }
+
         let rx = mutable.peeked.as_ref().ok_or(ErrorCode::EMPTY)?;
 
         if header.len() < rx.header_len {
+            // The user-provided buffer is not large enough.
             return Err(ErrorCode::OUT_OF_BOUNDS);
         }
 
+        // Copy the header.
         let start = rx.packet_offset;
         let end = start + rx.header_len;
         header
             .subslice(0, rx.header_len)?
             .write_bytes(&rx.buf.as_slice()[start..end])?;
+
         Ok(rx.cookie)
     }
 
+    // TODO: How should we handle `peek` and `recv` from multiple threads?
     pub fn recv(&self, payload: USlice) -> Result<usize, ErrorCode> {
         let mut mutable = self.mutable.lock();
         let Some(rx) = mutable.peeked.as_ref() else {
+            // You must peek first.
             return Err(ErrorCode::EMPTY);
         };
+
         let payload_len = rx.packet_len - rx.header_len;
         if payload.len() != payload_len {
+            // The user-provided buffer is not large enough.
             return Err(ErrorCode::OUT_OF_BOUNDS);
         }
+
+        // Copy the payload.
         let start = rx.packet_offset + rx.header_len;
         let end = start + payload_len;
         payload.write_bytes(&rx.buf.as_slice()[start..end])?;
 
+        // Pop the RX packet from the queue.
+        // TODO: Can we simplify this since we've already checked `self.peeked` above?
         let rx = mutable.peeked.take().unwrap();
         drop(mutable);
-        self.recycle_rx_buffer(rx);
+
+        self.recycle_rx_buffer(rx.buf);
         Ok(payload_len)
     }
 
@@ -364,8 +422,9 @@ impl Network {
         let Some(rx) = mutable.peeked.take() else {
             return Err(ErrorCode::EMPTY);
         };
+
         drop(mutable);
-        self.recycle_rx_buffer(rx);
+        self.recycle_rx_buffer(rx.buf);
         Ok(())
     }
 }

@@ -10,7 +10,6 @@ use ftl_types::net::FiveTuple;
 
 use super::device::Device;
 use super::network::Network;
-use super::network::Rx;
 use super::packet::Ipv4Addr;
 use super::packet::Ipv4Inspector;
 use crate::net::GLOBAL_ENV;
@@ -21,12 +20,12 @@ const ARP_PACKET_LEN: usize = 28;
 const OUR_IP: Ipv4Addr = Ipv4Addr::new(0x0a00_020f);
 
 /// Pushes the RX buffer back to the driver when dropped, if not taken.
-struct RxBufGuard<'a> {
+struct RxDmaBuf<'a> {
     device: &'a SharedRef<Device>,
     buf: Option<DmaBuf>,
 }
 
-impl<'a> RxBufGuard<'a> {
+impl<'a> RxDmaBuf<'a> {
     pub fn new(device: &'a SharedRef<Device>, buf: DmaBuf) -> Self {
         Self {
             device,
@@ -39,7 +38,7 @@ impl<'a> RxBufGuard<'a> {
     }
 }
 
-impl<'a> Deref for RxBufGuard<'a> {
+impl<'a> Deref for RxDmaBuf<'a> {
     type Target = DmaBuf;
 
     fn deref(&self) -> &Self::Target {
@@ -54,7 +53,7 @@ fn recycle_rx_buffer(device: &SharedRef<Device>, buf: DmaBuf) {
     }
 }
 
-impl<'a> Drop for RxBufGuard<'a> {
+impl<'a> Drop for RxDmaBuf<'a> {
     fn drop(&mut self) {
         if let Some(buf) = self.buf.take() {
             recycle_rx_buffer(self.device, buf);
@@ -100,7 +99,7 @@ impl Router {
     }
 
     fn handle_eth_frame(&self, buf: DmaBuf, headroom: usize, frame_len: usize) {
-        let buf = RxBufGuard::new(&self.device, buf);
+        let buf = RxDmaBuf::new(&self.device, buf);
         if frame_len < ETHERNET_HEADER_LEN {
             return;
         }
@@ -139,13 +138,7 @@ impl Router {
             .send_arp_reply(&GLOBAL_ENV, src_mac, sender_ip, OUR_IP);
     }
 
-    fn handle_ipv4(
-        &self,
-        src_mac: [u8; 6],
-        buf: RxBufGuard<'_>,
-        headroom: usize,
-        frame_len: usize,
-    ) {
+    fn handle_ipv4(&self, src_mac: [u8; 6], buf: RxDmaBuf<'_>, headroom: usize, frame_len: usize) {
         let packet_offset = headroom + ETHERNET_HEADER_LEN;
         let packet_len = frame_len - ETHERNET_HEADER_LEN;
         let packet = &buf.as_slice()[packet_offset..packet_offset + packet_len];
@@ -179,14 +172,7 @@ impl Router {
 
         let packet_len = inspector.packet_len();
         let header_len = inspector.header_len();
-        let rx = Rx {
-            buf: buf.take(),
-            packet_offset,
-            packet_len,
-            header_len,
-            cookie,
-        };
-        network.enqueue_rx(rx);
+        network.receive(buf.take(), packet_offset, packet_len, header_len, cookie);
     }
 
     pub fn handle_interrupt(&self) {
