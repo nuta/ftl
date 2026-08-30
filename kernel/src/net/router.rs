@@ -84,7 +84,7 @@ impl Router {
         Ok(())
     }
 
-    fn find_network(&self, five_tuple: FiveTuple) -> Option<(SharedRef<Network>, u64)> {
+    fn find_network(&self, five_tuple: FiveTuple) -> Option<(SharedRef<Network>, usize)> {
         // TODO: 5-tuple hash map to avoid scanning all networks.
         for network in &self.networks {
             if let Some(cookie) = network.matches(five_tuple) {
@@ -190,24 +190,30 @@ impl Router {
     }
 
     pub fn handle_interrupt(&self) {
+        // Do driver's interrupt work.
         let driver = self.device.driver();
         driver.handle_interrupt(&GLOBAL_ENV);
 
+        // Process pending RX packets.
         loop {
-            let rx = match driver.try_receive() {
-                Ok(rx) => rx,
-                Err((Error::RxEmpty, _)) => break,
+            match driver.try_receive() {
+                Ok((buf, headroom, frame_len)) => {
+                    self.handle_eth_frame(buf, headroom, frame_len);
+                }
+                Err((Error::RxEmpty, _)) => {
+                    // We've processed all pending RX packets.
+                    break;
+                }
                 Err((error, buf)) => {
+                    // Something went wrong. Abort.
                     warn!("net: failed to receive packet: {:?}", error);
                     if let Some(buf) = buf {
                         recycle_rx_buffer(&self.device, buf);
                     }
+
                     break;
                 }
             };
-
-            let (buf, headroom, frame_len) = rx;
-            self.handle_eth_frame(buf, headroom, frame_len);
         }
     }
 }

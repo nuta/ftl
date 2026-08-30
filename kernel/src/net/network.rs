@@ -38,7 +38,7 @@ const GATEWAY_IP: Ipv4Addr = Ipv4Addr::new(0x0a00_0202);
 /// cookie.
 struct Binding {
     rule: Rule,
-    cookie: u64,
+    cookie: usize,
 }
 
 pub struct Rx {
@@ -46,7 +46,7 @@ pub struct Rx {
     pub packet_offset: usize,
     pub packet_len: usize,
     pub header_len: usize,
-    pub cookie: u64,
+    pub cookie: usize,
 }
 
 struct Mutable {
@@ -110,6 +110,8 @@ pub fn sys_net_bind(
 ) -> Result<SyscallOutput, ErrorCode> {
     let network_id = HandleId::new(ctx.a0);
     let rule_uslice = USlice::new(UAddr::new(ctx.a1), size_of::<Rule>())?;
+    let cookie = ctx.a2;
+
     let mut rule_buf = MaybeUninit::<Rule>::uninit();
     let rule = unsafe { rule_uslice.read_uninit(&mut rule_buf)? };
 
@@ -119,7 +121,7 @@ pub fn sys_net_bind(
         .lock()
         .get::<Network>(network_id, HandleRight::WRITE)?;
 
-    network.bind(*rule, ctx.a2 as u64)?;
+    network.bind(*rule, cookie)?;
     Ok(SyscallOutput::Done(0))
 }
 
@@ -237,7 +239,7 @@ impl Network {
         Ok(())
     }
 
-    pub fn bind(&self, rule: Rule, cookie: u64) -> Result<(), ErrorCode> {
+    pub fn bind(&self, rule: Rule, cookie: usize) -> Result<(), ErrorCode> {
         // TODO: Do we need a validation for the rule?
 
         let mut bindings = self.bindings.lock();
@@ -265,24 +267,20 @@ impl Network {
     }
 
     /// Returns a cookie of the matching rule if found.
-    pub fn matches(&self, five_tuple: FiveTuple) -> Option<u64> {
+    pub fn matches(&self, five_tuple: FiveTuple) -> Option<usize> {
         let mut best_specificity = 0;
-        let mut best_cookie = 0;
+        let mut best_cookie = None;
         // TODO: Sort the bindings by specificity to avoid iterating through all of them.
         for binding in self.bindings.lock().iter() {
             if let Some(specificity) = binding.rule.matches(five_tuple) {
                 if specificity > best_specificity {
                     best_specificity = specificity;
-                    best_cookie = binding.cookie;
+                    best_cookie = Some(binding.cookie);
                 }
             }
         }
 
-        if best_specificity == 0 {
-            None
-        } else {
-            Some(best_cookie)
-        }
+        best_cookie
     }
 
     fn recycle_rx_buffer(&self, rx: Rx) {
@@ -323,7 +321,7 @@ impl Network {
         }
     }
 
-    pub fn peek(&self, header: USlice) -> Result<u64, ErrorCode> {
+    pub fn peek(&self, header: USlice) -> Result<usize, ErrorCode> {
         let mut mutable = self.mutable.lock();
         if mutable.peeked.is_none() {
             mutable.peeked = mutable.rx_queue.pop_front();

@@ -73,8 +73,9 @@ pub fn is_irq(irq: u8) -> bool {
 
 pub fn handle_interrupt() {
     let router = GLOBAL_ROUTER.lock();
-    let router = router.as_ref().expect("network router is not initialized");
-    router.handle_interrupt();
+    if let Some(router) = router.as_ref() {
+        router.handle_interrupt();
+    }
 }
 
 // FIXME: Move this into virtio_net?
