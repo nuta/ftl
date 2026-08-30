@@ -21,6 +21,7 @@ use crate::address::USlice;
 use crate::handle::Handle;
 use crate::handle::Handleable;
 use crate::net::GLOBAL_ENV;
+use crate::net::GLOBAL_ROUTER;
 use crate::poll::EventEmitter;
 use crate::poll::Poll;
 use crate::shared_ref::SharedRef;
@@ -62,16 +63,18 @@ pub fn sys_net_create(
 ) -> Result<SyscallOutput, ErrorCode> {
     let handle_table = current.isolate().handles();
 
-    let device = super::GLOBAL_ROUTER
+    let device = GLOBAL_ROUTER
         .lock()
         .as_ref()
         .ok_or(ErrorCode::INVALID_STATE)?
-        .device();
+        .device()
+        .clone();
+
     let network = SharedRef::new(Network::new(device))?;
     let handle = Handle::new(network.clone(), HandleRight::READ | HandleRight::WRITE);
     let handle_id = handle_table.lock().insert(handle)?;
 
-    super::GLOBAL_ROUTER
+    GLOBAL_ROUTER
         .lock()
         .as_mut()
         .ok_or(ErrorCode::INVALID_STATE)?

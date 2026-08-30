@@ -1,4 +1,5 @@
 use alloc::vec::Vec;
+use core::ops::Deref;
 
 use ftl_driver::dma::DmaBuf;
 use ftl_driver::net::Error;
@@ -18,7 +19,50 @@ const ETHERNET_HEADER_LEN: usize = 14;
 const ARP_PACKET_LEN: usize = 28;
 const OUR_IP: Ipv4Addr = Ipv4Addr::new(0x0a00_020f);
 
+/// Pushes the RX buffer back to the driver when dropped, if not taken.
+struct RxBufGuard<'a> {
+    device: &'a SharedRef<Device>,
+    buf: Option<DmaBuf>,
+}
+
+impl<'a> RxBufGuard<'a> {
+    pub fn new(device: &'a SharedRef<Device>, buf: DmaBuf) -> Self {
+        Self {
+            device,
+            buf: Some(buf),
+        }
+    }
+
+    pub fn take(mut self) -> DmaBuf {
+        self.buf.take().unwrap()
+    }
+}
+
+impl<'a> Deref for RxBufGuard<'a> {
+    type Target = DmaBuf;
+
+    fn deref(&self) -> &Self::Target {
+        self.buf.as_ref().unwrap()
+    }
+}
+
+/// Pushes the RX buffer back to the driver.
+fn recycle_rx_buffer(device: &SharedRef<Device>, buf: DmaBuf) {
+    if device.driver().provide(&GLOBAL_ENV, buf).is_err() {
+        warn!("net: failed to recycle an RX buffer");
+    }
+}
+
+impl<'a> Drop for RxBufGuard<'a> {
+    fn drop(&mut self) {
+        if let Some(buf) = self.buf.take() {
+            recycle_rx_buffer(self.device, buf);
+        }
+    }
+}
+
 pub struct Router {
+    // TODO: Support multiple devices.
     device: SharedRef<Device>,
     networks: Vec<SharedRef<Network>>,
 }
@@ -65,14 +109,26 @@ impl Router {
         None
     }
 
-    pub fn device(&self) -> SharedRef<Device> {
-        self.device.clone()
+    pub fn device(&self) -> &SharedRef<Device> {
+        &self.device
     }
 
-    fn recycle_rx_buffer(&self, buf: DmaBuf) {
-        let driver = self.device.driver();
-        if driver.provide(&GLOBAL_ENV, buf).is_err() {
-            warn!("net: failed to recycle an RX buffer");
+    fn handle_eth_frame(&self, buf: DmaBuf, headroom: usize, frame_len: usize) {
+        let buf = RxBufGuard::new(&self.device, buf);
+        if frame_len < ETHERNET_HEADER_LEN {
+            return;
+        }
+
+        let frame = &buf.as_slice()[headroom..headroom + frame_len];
+        let src_mac = frame[6..12].try_into().unwrap();
+        let eth_type = u16::from_be_bytes(frame[12..14].try_into().unwrap());
+
+        match eth_type {
+            ETHTYPE_ARP => self.handle_arp(frame, src_mac),
+            ETHTYPE_IPV4 => self.handle_ipv4(src_mac, buf, headroom, frame_len),
+            _ => {
+                trace!("unsupported ethernet type: {:x}", eth_type);
+            }
         }
     }
 
@@ -97,42 +153,21 @@ impl Router {
             .send_arp_reply(&GLOBAL_ENV, src_mac, sender_ip, OUR_IP);
     }
 
-    fn handle_frame(&self, buf: DmaBuf, headroom: usize, frame_len: usize) -> Option<DmaBuf> {
-        if frame_len < ETHERNET_HEADER_LEN {
-            return Some(buf);
-        }
-
-        let frame = &buf.as_slice()[headroom..headroom + frame_len];
-        let src_mac = frame[6..12].try_into().unwrap();
-        let eth_type = u16::from_be_bytes(frame[12..14].try_into().unwrap());
-
-        match eth_type {
-            ETHTYPE_ARP => {
-                self.handle_arp(frame, src_mac);
-                return Some(buf);
-            }
-            ETHTYPE_IPV4 => self.handle_ipv4(src_mac, buf, headroom, frame_len),
-            _ => {
-                trace!("unsupported ethernet type: {:x}", eth_type);
-                return Some(buf);
-            }
-        }
-    }
-
     fn handle_ipv4(
         &self,
         src_mac: [u8; 6],
-        buf: DmaBuf,
+        buf: RxBufGuard<'_>,
         headroom: usize,
         frame_len: usize,
-    ) -> Option<DmaBuf> {
+    ) {
         let packet_offset = headroom + ETHERNET_HEADER_LEN;
         let packet_len = frame_len - ETHERNET_HEADER_LEN;
         let packet = &buf.as_slice()[packet_offset..packet_offset + packet_len];
         let inspector = match Ipv4Inspector::new_tcp_packet(packet) {
             Ok(inspector) => inspector,
-            Err(_) => {
-                return Some(buf);
+            Err(e) => {
+                trace!("failed to inspect IPv4 packet: {:?}", e);
+                return;
             }
         };
 
@@ -149,7 +184,7 @@ impl Router {
             remote_ip,
             remote_port,
         ) else {
-            return Some(buf);
+            return;
         };
 
         self.device.learn_arp(&GLOBAL_ENV, remote_ip, src_mac);
@@ -157,15 +192,13 @@ impl Router {
         let packet_len = inspector.packet_len();
         let header_len = inspector.header_len();
         let rx = Rx {
-            buf,
+            buf: buf.take(),
             packet_offset,
             packet_len,
             header_len,
             cookie,
         };
         network.enqueue_rx(rx);
-
-        None
     }
 
     pub fn handle_interrupt(&self) {
@@ -179,15 +212,14 @@ impl Router {
                 Err((error, buf)) => {
                     warn!("net: failed to receive packet: {:?}", error);
                     if let Some(buf) = buf {
-                        self.recycle_rx_buffer(buf);
+                        recycle_rx_buffer(&self.device, buf);
                     }
                     break;
                 }
             };
+
             let (buf, headroom, frame_len) = rx;
-            if let Some(buf) = self.handle_frame(buf, headroom, frame_len) {
-                self.recycle_rx_buffer(buf);
-            }
+            self.handle_eth_frame(buf, headroom, frame_len);
         }
     }
 }
