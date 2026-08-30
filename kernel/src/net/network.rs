@@ -32,7 +32,10 @@ use crate::thread::Thread;
 const MAX_RX_QUEUE_DEPTH: usize = 128;
 const GATEWAY_IP: Ipv4Addr = Ipv4Addr::new(0x0a00_0202);
 
-#[derive(Clone, Copy)]
+/// A registered rule.
+///
+/// This struct must not be `Clone`-able to preserve the uniqueness of the
+/// cookie.
 struct Binding {
     rule: Rule,
     cookie: u64,
