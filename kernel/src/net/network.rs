@@ -42,7 +42,7 @@ struct Binding {
 }
 
 /// A received packet.
-struct Rx {
+struct Packet {
     buf: DmaBuf,
     /// The offset of the IP header in the packet. This is also the length of
     /// the device's header, Ethernet header, and some headroom in `buf`.
@@ -59,8 +59,8 @@ struct Rx {
 }
 
 struct Mutable {
-    rx_queue: VecDeque<Rx>,
-    peeked: Option<Rx>,
+    rx_queue: VecDeque<Packet>,
+    peeked: Option<Packet>,
     emitters: VecDeque<EventEmitter>,
 }
 
@@ -69,6 +69,219 @@ pub struct Network {
     bindings: SpinLock<Vec<Binding>>,
     mutable: SpinLock<Mutable>,
 }
+
+impl Network {
+    pub fn new(device: SharedRef<Device>) -> Self {
+        Self {
+            device,
+            bindings: SpinLock::new(Vec::new()),
+            mutable: SpinLock::new(Mutable {
+                rx_queue: VecDeque::new(),
+                peeked: None,
+                emitters: VecDeque::new(),
+            }),
+        }
+    }
+
+    pub fn subscribe(&self, emitter: EventEmitter) -> Result<(), ErrorCode> {
+        let mut mutable = self.mutable.lock();
+        if !mutable.rx_queue.is_empty() {
+            // There are pending RX packets. Notify the poll immediately.
+            drop(mutable);
+            emitter.emit(EventKind::PollNotified)?;
+            return Ok(());
+        }
+
+        mutable
+            .emitters
+            .try_reserve(1)
+            .map_err(|_| ErrorCode::OUT_OF_MEMORY)?;
+        mutable.emitters.push_back(emitter);
+        Ok(())
+    }
+
+    pub fn bind(&self, rule: Rule, cookie: usize) -> Result<(), ErrorCode> {
+        // TODO: Do we need a validation for the rule?
+
+        let mut bindings = self.bindings.lock();
+        if bindings.iter().any(|binding| binding.rule == rule) {
+            return Err(ErrorCode::ALREADY_EXISTS);
+        }
+
+        bindings
+            .try_reserve(1)
+            .map_err(|_| ErrorCode::OUT_OF_MEMORY)?;
+        bindings.push(Binding { rule, cookie });
+        Ok(())
+    }
+
+    pub fn unbind(&self, rule: &Rule) -> Result<usize, ErrorCode> {
+        let mut bindings = self.bindings.lock();
+        for (index, binding) in bindings.iter().enumerate() {
+            if binding.rule == *rule {
+                let cookie = binding.cookie;
+                bindings.remove(index);
+                return Ok(cookie);
+            }
+        }
+
+        Err(ErrorCode::NOT_FOUND)
+    }
+
+    /// Returns a cookie of the matching rule if found.
+    pub fn matches(&self, five_tuple: FiveTuple) -> Option<usize> {
+        let mut best_specificity = 0;
+        let mut best_cookie = None;
+        // TODO: Sort the bindings by specificity to avoid iterating through all of them.
+        for binding in self.bindings.lock().iter() {
+            if let Some(specificity) = binding.rule.matches(five_tuple) {
+                if specificity > best_specificity {
+                    best_specificity = specificity;
+                    best_cookie = Some(binding.cookie);
+                }
+            }
+        }
+
+        best_cookie
+    }
+
+    fn recycle_rx_buffer(&self, buf: DmaBuf) {
+        let driver = self.device.driver();
+        if driver.provide(&GLOBAL_ENV, buf).is_err() {
+            warn!("net: failed to recycle an RX buffer");
+        }
+    }
+
+    /// Sends a packet to the network.
+    pub fn send(&self, header: USlice, payload: USlice) -> Result<(), ErrorCode> {
+        let mut tx = Tx::alloc(&GLOBAL_ENV, header.len(), payload.len())?;
+
+        // Copy the header from the user.
+        header.read_bytes(tx.ip_header_bytes())?;
+
+        // FIXME: Check if the network owns the binding (our IP/port).
+
+        // Validate the IP and TCP headers.
+        // TODO: reject IPv6 / UDP
+        if let Err(err) = Ipv4Inspector::new_tcp_tx(tx.ip_header_bytes()) {
+            // TODO: Return more specific ErrorCode rather than INVALID_ARG
+            warn!("invalid network header: {:?}", err);
+            return Err(ErrorCode::INVALID_ARG);
+        }
+
+        // Copy the payload from the user.
+        if let Some(payload_bytes) = tx.payload_bytes() {
+            payload.read_bytes(payload_bytes)?;
+        }
+
+        // Send the packet.
+        self.device.send_ipv4(&GLOBAL_ENV, GATEWAY_IP, tx)
+    }
+
+    /// Receives a packet from the driver.
+    pub fn receive(
+        &self,
+        buf: DmaBuf,
+        packet_offset: usize,
+        packet_len: usize,
+        header_len: usize,
+        cookie: usize,
+    ) {
+        let mut mutable = self.mutable.lock();
+        if mutable.rx_queue.len() >= MAX_RX_QUEUE_DEPTH {
+            // Our RX queue is full. Drop the packet.
+            drop(mutable);
+            self.recycle_rx_buffer(buf);
+            return;
+        }
+
+        if mutable.rx_queue.try_reserve(1).is_err() {
+            drop(mutable);
+            self.recycle_rx_buffer(buf);
+            return;
+        }
+
+        mutable.rx_queue.push_back(Packet {
+            buf,
+            packet_offset,
+            packet_len,
+            header_len,
+            cookie,
+        });
+
+        // Notify a poll.
+        let emitter = mutable.emitters.pop_front();
+        drop(mutable);
+        if let Some(emitter) = emitter {
+            let _ = emitter.emit(EventKind::PollNotified);
+        }
+    }
+
+    pub fn peek(&self, header: USlice) -> Result<usize, ErrorCode> {
+        let mut mutable = self.mutable.lock();
+        if mutable.peeked.is_none() {
+            // No peeked packet. Pop the first one from the queue.
+            mutable.peeked = mutable.rx_queue.pop_front();
+        }
+
+        let rx = mutable.peeked.as_ref().ok_or(ErrorCode::EMPTY)?;
+
+        if header.len() < rx.header_len {
+            // The user-provided buffer is not large enough.
+            return Err(ErrorCode::OUT_OF_BOUNDS);
+        }
+
+        // Copy the header.
+        let start = rx.packet_offset;
+        let end = start + rx.header_len;
+        header
+            .subslice(0, rx.header_len)?
+            .write_bytes(&rx.buf.as_slice()[start..end])?;
+
+        Ok(rx.cookie)
+    }
+
+    // TODO: How should we handle `peek` and `recv` from multiple threads?
+    pub fn recv(&self, payload: USlice) -> Result<usize, ErrorCode> {
+        let mut mutable = self.mutable.lock();
+        let Some(rx) = mutable.peeked.as_ref() else {
+            // You must peek first.
+            return Err(ErrorCode::EMPTY);
+        };
+
+        let payload_len = rx.packet_len - rx.header_len;
+        if payload.len() != payload_len {
+            // The user-provided buffer is not large enough.
+            return Err(ErrorCode::OUT_OF_BOUNDS);
+        }
+
+        // Copy the payload.
+        let start = rx.packet_offset + rx.header_len;
+        let end = start + payload_len;
+        payload.write_bytes(&rx.buf.as_slice()[start..end])?;
+
+        // Pop the RX packet from the queue.
+        // TODO: Can we simplify this since we've already checked `self.peeked` above?
+        let rx = mutable.peeked.take().unwrap();
+        drop(mutable);
+
+        self.recycle_rx_buffer(rx.buf);
+        Ok(payload_len)
+    }
+
+    pub fn drop_peeked(&self) -> Result<(), ErrorCode> {
+        let mut mutable = self.mutable.lock();
+        let Some(rx) = mutable.peeked.take() else {
+            return Err(ErrorCode::EMPTY);
+        };
+
+        drop(mutable);
+        self.recycle_rx_buffer(rx.buf);
+        Ok(())
+    }
+}
+
+impl Handleable for Network {}
 
 pub fn sys_net_create(
     current: &SharedRef<Thread>,
@@ -217,216 +430,3 @@ pub fn sys_net_send(
     network.send(header, payload)?;
     Ok(SyscallOutput::Done(0))
 }
-
-impl Network {
-    pub fn new(device: SharedRef<Device>) -> Self {
-        Self {
-            device,
-            bindings: SpinLock::new(Vec::new()),
-            mutable: SpinLock::new(Mutable {
-                rx_queue: VecDeque::new(),
-                peeked: None,
-                emitters: VecDeque::new(),
-            }),
-        }
-    }
-
-    pub fn subscribe(&self, emitter: EventEmitter) -> Result<(), ErrorCode> {
-        let mut mutable = self.mutable.lock();
-        if !mutable.rx_queue.is_empty() {
-            // There are pending RX packets. Notify the poll immediately.
-            drop(mutable);
-            emitter.emit(EventKind::PollNotified)?;
-            return Ok(());
-        }
-
-        mutable
-            .emitters
-            .try_reserve(1)
-            .map_err(|_| ErrorCode::OUT_OF_MEMORY)?;
-        mutable.emitters.push_back(emitter);
-        Ok(())
-    }
-
-    pub fn bind(&self, rule: Rule, cookie: usize) -> Result<(), ErrorCode> {
-        // TODO: Do we need a validation for the rule?
-
-        let mut bindings = self.bindings.lock();
-        if bindings.iter().any(|binding| binding.rule == rule) {
-            return Err(ErrorCode::ALREADY_EXISTS);
-        }
-
-        bindings
-            .try_reserve(1)
-            .map_err(|_| ErrorCode::OUT_OF_MEMORY)?;
-        bindings.push(Binding { rule, cookie });
-        Ok(())
-    }
-
-    pub fn unbind(&self, rule: &Rule) -> Result<usize, ErrorCode> {
-        let mut bindings = self.bindings.lock();
-        for (index, binding) in bindings.iter().enumerate() {
-            if binding.rule == *rule {
-                let cookie = binding.cookie;
-                bindings.remove(index);
-                return Ok(cookie);
-            }
-        }
-
-        Err(ErrorCode::NOT_FOUND)
-    }
-
-    /// Returns a cookie of the matching rule if found.
-    pub fn matches(&self, five_tuple: FiveTuple) -> Option<usize> {
-        let mut best_specificity = 0;
-        let mut best_cookie = None;
-        // TODO: Sort the bindings by specificity to avoid iterating through all of them.
-        for binding in self.bindings.lock().iter() {
-            if let Some(specificity) = binding.rule.matches(five_tuple) {
-                if specificity > best_specificity {
-                    best_specificity = specificity;
-                    best_cookie = Some(binding.cookie);
-                }
-            }
-        }
-
-        best_cookie
-    }
-
-    fn recycle_rx_buffer(&self, buf: DmaBuf) {
-        let driver = self.device.driver();
-        if driver.provide(&GLOBAL_ENV, buf).is_err() {
-            warn!("net: failed to recycle an RX buffer");
-        }
-    }
-
-    /// Sends a packet to the network.
-    pub fn send(&self, header: USlice, payload: USlice) -> Result<(), ErrorCode> {
-        let mut tx = Tx::alloc(&GLOBAL_ENV, header.len(), payload.len())?;
-
-        // Copy the header from the user.
-        header.read_bytes(tx.ip_header_bytes())?;
-
-        // FIXME: Check if the network owns the binding (our IP/port).
-
-        // Validate the IP and TCP headers.
-        // TODO: reject IPv6 / UDP
-        if let Err(err) = Ipv4Inspector::new_tcp_tx(tx.ip_header_bytes()) {
-            // TODO: Return more specific ErrorCode rather than INVALID_ARG
-            warn!("invalid network header: {:?}", err);
-            return Err(ErrorCode::INVALID_ARG);
-        }
-
-        // Copy the payload from the user.
-        if let Some(payload_bytes) = tx.payload_bytes() {
-            payload.read_bytes(payload_bytes)?;
-        }
-
-        // Send the packet.
-        self.device.send_ipv4(&GLOBAL_ENV, GATEWAY_IP, tx)
-    }
-
-    /// Receives a packet from the driver.
-    pub fn receive(
-        &self,
-        buf: DmaBuf,
-        packet_offset: usize,
-        packet_len: usize,
-        header_len: usize,
-        cookie: usize,
-    ) {
-        let mut mutable = self.mutable.lock();
-        if mutable.rx_queue.len() >= MAX_RX_QUEUE_DEPTH {
-            // Our RX queue is full. Drop the packet.
-            drop(mutable);
-            self.recycle_rx_buffer(buf);
-            return;
-        }
-
-        if mutable.rx_queue.try_reserve(1).is_err() {
-            drop(mutable);
-            self.recycle_rx_buffer(buf);
-            return;
-        }
-
-        mutable.rx_queue.push_back(Rx {
-            buf,
-            packet_offset,
-            packet_len,
-            header_len,
-            cookie,
-        });
-
-        // Notify a poll.
-        let emitter = mutable.emitters.pop_front();
-        drop(mutable);
-        if let Some(emitter) = emitter {
-            let _ = emitter.emit(EventKind::PollNotified);
-        }
-    }
-
-    pub fn peek(&self, header: USlice) -> Result<usize, ErrorCode> {
-        let mut mutable = self.mutable.lock();
-        if mutable.peeked.is_none() {
-            // No peeked packet. Pop the first one from the queue.
-            mutable.peeked = mutable.rx_queue.pop_front();
-        }
-
-        let rx = mutable.peeked.as_ref().ok_or(ErrorCode::EMPTY)?;
-
-        if header.len() < rx.header_len {
-            // The user-provided buffer is not large enough.
-            return Err(ErrorCode::OUT_OF_BOUNDS);
-        }
-
-        // Copy the header.
-        let start = rx.packet_offset;
-        let end = start + rx.header_len;
-        header
-            .subslice(0, rx.header_len)?
-            .write_bytes(&rx.buf.as_slice()[start..end])?;
-
-        Ok(rx.cookie)
-    }
-
-    // TODO: How should we handle `peek` and `recv` from multiple threads?
-    pub fn recv(&self, payload: USlice) -> Result<usize, ErrorCode> {
-        let mut mutable = self.mutable.lock();
-        let Some(rx) = mutable.peeked.as_ref() else {
-            // You must peek first.
-            return Err(ErrorCode::EMPTY);
-        };
-
-        let payload_len = rx.packet_len - rx.header_len;
-        if payload.len() != payload_len {
-            // The user-provided buffer is not large enough.
-            return Err(ErrorCode::OUT_OF_BOUNDS);
-        }
-
-        // Copy the payload.
-        let start = rx.packet_offset + rx.header_len;
-        let end = start + payload_len;
-        payload.write_bytes(&rx.buf.as_slice()[start..end])?;
-
-        // Pop the RX packet from the queue.
-        // TODO: Can we simplify this since we've already checked `self.peeked` above?
-        let rx = mutable.peeked.take().unwrap();
-        drop(mutable);
-
-        self.recycle_rx_buffer(rx.buf);
-        Ok(payload_len)
-    }
-
-    pub fn drop_peeked(&self) -> Result<(), ErrorCode> {
-        let mut mutable = self.mutable.lock();
-        let Some(rx) = mutable.peeked.take() else {
-            return Err(ErrorCode::EMPTY);
-        };
-
-        drop(mutable);
-        self.recycle_rx_buffer(rx.buf);
-        Ok(())
-    }
-}
-
-impl Handleable for Network {}
