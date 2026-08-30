@@ -14,6 +14,8 @@ impl ErrorCode {
     pub const PAGE_FAULT: Self = Self::from_name(b"PFLT");
     pub const UNSUPPORTED: Self = Self::from_name(b"UNSP");
     pub const TOO_MANY_HANDLES: Self = Self::from_name(b"TMHD");
+    pub const NO_ROUTE: Self = Self::from_name(b"NORO");
+    pub const EMPTY: Self = Self::from_name(b"EMPT");
 
     const fn from_name(name: &'static [u8]) -> Self {
         if name.len() != 4 {
