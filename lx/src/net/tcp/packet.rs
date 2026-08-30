@@ -1,6 +1,10 @@
 use core::ops::BitOr;
 use core::ops::BitOrAssign;
 
+use ftl_types::net::IP_PROTOCOL_TCP;
+use ftl_types::net::IP_VERSION_4;
+use ftl_types::net::NetRxMeta;
+
 const OUR_IP: u32 = 0x0a00_020f;
 const IPV4_HEADER_LEN: usize = 20;
 const TCP_HEADER_LEN: usize = 20;
@@ -54,6 +58,48 @@ pub struct Segment<'a> {
     pub window_size: u16,
     pub flags: TcpFlags,
     pub payload: &'a [u8],
+}
+
+#[derive(Clone, Copy)]
+pub struct TcpSegmentMeta {
+    pub remote_ip: u32,
+    pub local_ip: u32,
+    pub remote_port: u16,
+    pub local_port: u16,
+    pub seq: u32,
+    pub ack: u32,
+    pub payload_len: u16,
+    pub window_size: u16,
+    pub flags: u8,
+}
+
+pub fn parse_received(header: &[u8], rx: &NetRxMeta) -> Option<TcpSegmentMeta> {
+    if rx.ip_version != IP_VERSION_4 || rx.ip_protocol != IP_PROTOCOL_TCP {
+        return None;
+    }
+
+    let transport_offset = rx.transport_offset as usize;
+    let payload_offset = rx.payload_offset as usize;
+    let packet_len = rx.packet_len as usize;
+    let header = header.get(..payload_offset)?;
+    let ip_header = header.get(..transport_offset)?;
+    let tcp_header = header.get(transport_offset..payload_offset)?;
+    let payload_len = packet_len.checked_sub(payload_offset)?;
+    if ip_header.len() < 20 || tcp_header.len() < 20 || payload_len > u16::MAX as usize {
+        return None;
+    }
+
+    Some(TcpSegmentMeta {
+        remote_ip: u32::from_be_bytes(ip_header[12..16].try_into().ok()?),
+        local_ip: u32::from_be_bytes(ip_header[16..20].try_into().ok()?),
+        remote_port: u16::from_be_bytes(tcp_header[0..2].try_into().ok()?),
+        local_port: u16::from_be_bytes(tcp_header[2..4].try_into().ok()?),
+        seq: u32::from_be_bytes(tcp_header[4..8].try_into().ok()?),
+        ack: u32::from_be_bytes(tcp_header[8..12].try_into().ok()?),
+        payload_len: payload_len as u16,
+        window_size: u16::from_be_bytes(tcp_header[14..16].try_into().ok()?),
+        flags: tcp_header[13],
+    })
 }
 
 pub fn build_header(

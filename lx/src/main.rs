@@ -13,6 +13,7 @@ mod types;
 mod vfs;
 
 use alloc::sync::Arc;
+use core::num::NonZeroU16;
 
 use ftl::syscall::net_bind;
 use ftl::syscall::net_create;
@@ -20,9 +21,7 @@ use ftl::syscall::net_subscribe;
 use ftl::syscall::poll_create;
 use ftl::syscall::poll_wait;
 use ftl_types::handle::HandleId;
-use ftl_types::net::NET_IPV4;
-use ftl_types::net::NET_LISTEN;
-use ftl_types::net::NET_TCP;
+use ftl_types::net::NetMatch;
 
 use crate::container::Container;
 use crate::vfs::EmbeddedFile;
@@ -42,9 +41,11 @@ fn main() {
         Container::new(root_isolate, root_vmspace, hello_elf).expect("failed to start LX");
     let poll = poll_create().expect("failed to create poll");
     let net_handle = net_create().expect("failed to create network");
-    net_bind(net_handle, NET_IPV4 | NET_TCP | NET_LISTEN, 0, 80)
+    let listener_cookie = 1;
+    let listener_rule = NetMatch::tcp_ipv4_listener(None, NonZeroU16::new(80).unwrap());
+    net_bind(net_handle, &listener_rule, listener_cookie)
         .expect("failed to bind TCP listener rule");
-    let network = net::TcpIp::new(net_handle);
+    let network = net::TcpIp::new(net_handle, listener_cookie);
     container.set_network(network.clone());
     net_subscribe(net_handle, poll).expect("failed to subscribe to network events");
     loop {

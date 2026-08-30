@@ -5,13 +5,13 @@ use core::cmp::min;
 use ftl::syscall::poll_notify;
 use ftl::syscall::poll_wait;
 use ftl_types::handle::HandleId;
-use ftl_types::net::NetRxInfo;
 use ftl_utils::spinlock::SpinLock;
 
 use super::buffer::TcpBuffer;
 use super::packet::Endpoint;
 use super::packet::Segment;
 use super::packet::TcpFlags;
+use super::packet::TcpSegmentMeta;
 use crate::net::TcpIp;
 use crate::types::errno::Errno;
 use crate::vfs::FileLike;
@@ -81,7 +81,7 @@ impl TcpConnection {
         })
     }
 
-    pub fn matches(&self, info: &NetRxInfo) -> bool {
+    pub fn matches(&self, info: &TcpSegmentMeta) -> bool {
         if self.remote.ip != info.remote_ip || self.remote.port != info.remote_port {
             return false;
         }
@@ -136,17 +136,20 @@ impl TcpConnection {
         Some(acked_len)
     }
 
-    fn receive_payload(&self, mutable: &mut Mutable, payload: &[u8]) -> bool {
-        if payload.is_empty() {
-            return false;
+    fn receive_payload(&self, mutable: &mut Mutable, payload_len: usize) -> Option<(bool, bool)> {
+        let network = self.network.upgrade()?;
+        let consumed = mutable
+            .rx_buffer
+            .receive(payload_len, |payload| network.recv_payload(payload))
+            .ok()?;
+        if !consumed {
+            return Some((false, false));
         }
-
-        let written_len = mutable.rx_buffer.write(payload);
-        mutable.rcv_nxt = mutable.rcv_nxt.wrapping_add(written_len as u32);
-        true
+        mutable.rcv_nxt = mutable.rcv_nxt.wrapping_add(payload_len as u32);
+        Some((true, payload_len != 0))
     }
 
-    fn receive_fin(&self, mutable: &mut Mutable, info: &NetRxInfo) -> bool {
+    fn receive_fin(&self, mutable: &mut Mutable, info: &TcpSegmentMeta) -> bool {
         let flags = TcpFlags::from_u8(info.flags);
         if !flags.contains(TcpFlags::FIN) {
             return false;
@@ -226,7 +229,7 @@ impl TcpConnection {
         };
     }
 
-    pub fn handle_packet(&self, info: &NetRxInfo, payload: &[u8]) {
+    pub fn handle_packet(&self, info: &TcpSegmentMeta) -> bool {
         let flags = TcpFlags::from_u8(info.flags);
         let mut mutable = self.mutable.lock();
         mutable.snd_wnd = info.window_size;
@@ -236,12 +239,12 @@ impl TcpConnection {
             mutable.eof = true;
             drop(mutable);
             let _ = poll_notify(self.poll);
-            return;
+            return false;
         }
 
         let acked_len = if flags.contains(TcpFlags::ACK) {
             let Some(acked_len) = self.handle_ack(&mut mutable, info.ack) else {
-                return;
+                return false;
             };
             acked_len
         } else {
@@ -254,10 +257,22 @@ impl TcpConnection {
             if acked_len > 0 {
                 let _ = poll_notify(self.poll);
             }
-            return;
+            return false;
         }
 
-        let received_payload = self.receive_payload(&mut mutable, payload);
+        let Some((consumed, received_payload)) =
+            self.receive_payload(&mut mutable, info.payload_len as usize)
+        else {
+            return false;
+        };
+        if !consumed {
+            self.acknowledge(&mutable);
+            drop(mutable);
+            if acked_len > 0 {
+                let _ = poll_notify(self.poll);
+            }
+            return false;
+        }
         let received_fin = self.receive_fin(&mut mutable, info);
         if received_payload || received_fin {
             self.acknowledge(&mutable);
@@ -268,6 +283,7 @@ impl TcpConnection {
         if acked_len > 0 || received_payload || received_fin {
             let _ = poll_notify(self.poll);
         }
+        true
     }
 
     pub fn close(&self) {

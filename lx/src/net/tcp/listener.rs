@@ -7,7 +7,6 @@ use ftl::info;
 use ftl::syscall::poll_notify;
 use ftl::syscall::poll_wait;
 use ftl_types::handle::HandleId;
-use ftl_types::net::NetRxInfo;
 use ftl_utils::spinlock::SpinLock;
 
 use super::buffer::TCP_BUFFER_CAPACITY;
@@ -16,6 +15,7 @@ use super::conn::TcpConnection;
 use super::packet::Endpoint;
 use super::packet::Segment;
 use super::packet::TcpFlags;
+use super::packet::TcpSegmentMeta;
 use crate::net::TcpIp;
 use crate::types::errno::Errno;
 use crate::vfs::FileLike;
@@ -118,7 +118,7 @@ impl TcpListener {
         None
     }
 
-    fn start_handshake(&self, info: &NetRxInfo) {
+    fn start_handshake(&self, info: &TcpSegmentMeta) {
         let remote = Endpoint {
             ip: info.remote_ip,
             port: info.remote_port,
@@ -149,7 +149,7 @@ impl TcpListener {
         self.send_syn_ack(&handshake, local_port);
     }
 
-    fn finish_handshake(&self, info: &NetRxInfo, payload: &[u8]) {
+    fn finish_handshake(&self, info: &TcpSegmentMeta) -> bool {
         let remote = Endpoint {
             ip: info.remote_ip,
             port: info.remote_port,
@@ -158,23 +158,23 @@ impl TcpListener {
         let (handshake, local_port) = {
             let mut mutable = self.mutable.lock();
             let Some(index) = Self::find_handshake(&mutable, remote) else {
-                return;
+                return false;
             };
             let expected_ack = mutable.inflight[index].local_iss.wrapping_add(1);
             if info.ack != expected_ack {
-                return;
+                return false;
             }
             if info.seq != mutable.inflight[index].remote_rcv_nxt {
-                return;
+                return false;
             }
             let Some(local_port) = mutable.local_port else {
-                return;
+                return false;
             };
             (mutable.inflight.remove(index), local_port)
         };
 
         let Some(network) = self.network() else {
-            return;
+            return false;
         };
         let connection = TcpConnection::new(
             Arc::downgrade(&network),
@@ -186,28 +186,32 @@ impl TcpListener {
             handshake.remote_rcv_wnd,
             TcpBuffer::new(),
         );
-        network.add_connection(connection.clone());
-        connection.handle_packet(info, payload);
+        if network.add_connection(connection.clone(), info).is_err() {
+            return false;
+        }
+        let consumed = connection.handle_packet(info);
         if connection.is_closed() {
-            return;
+            return consumed;
         }
 
         self.mutable.lock().established.push_back(connection);
         let _ = poll_notify(self.poll);
+        consumed
     }
 
-    pub fn handle_packet(&self, info: &NetRxInfo, payload: &[u8]) {
+    pub fn handle_packet(&self, info: &TcpSegmentMeta) -> bool {
         let flags = TcpFlags::from_u8(info.flags);
         if flags.contains(TcpFlags::RST) {
-            return;
+            return false;
         }
         if flags.contains(TcpFlags::SYN) {
             self.start_handshake(info);
-            return;
+            return false;
         }
         if flags.contains(TcpFlags::ACK) {
-            self.finish_handshake(info, payload);
+            return self.finish_handshake(info);
         }
+        false
     }
 
     pub fn accept(&self) -> Result<Arc<TcpConnection>, Errno> {

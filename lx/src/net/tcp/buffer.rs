@@ -1,6 +1,8 @@
 use alloc::vec::Vec;
 use core::cmp::min;
 
+use ftl_types::error::ErrorCode;
+
 pub(super) const TCP_BUFFER_CAPACITY: usize = 4096;
 
 pub(super) struct TcpBuffer {
@@ -28,6 +30,25 @@ impl TcpBuffer {
         let len = min(bytes.len(), self.writable_len());
         self.bytes.extend_from_slice(&bytes[..len]);
         len
+    }
+
+    pub fn receive<F>(&mut self, len: usize, receive: F) -> Result<bool, ErrorCode>
+    where
+        F: FnOnce(&mut [u8]) -> Result<(), ErrorCode>,
+    {
+        if len > self.writable_len() {
+            return Ok(false);
+        }
+        let old_len = self.bytes.len();
+        self.bytes
+            .try_reserve(len)
+            .map_err(|_| ErrorCode::OUT_OF_MEMORY)?;
+        self.bytes.resize(old_len + len, 0);
+        if let Err(error) = receive(&mut self.bytes[old_len..]) {
+            self.bytes.truncate(old_len);
+            return Err(error);
+        }
+        Ok(true)
     }
 
     pub fn read(&mut self, output: &mut [u8]) -> usize {

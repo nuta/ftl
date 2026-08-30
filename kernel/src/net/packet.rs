@@ -28,6 +28,9 @@ pub enum Error {
     NotTcp,
     TcpHeaderTooShort,
     InvalidPacketLength,
+    FragmentedPacket,
+    InvalidIpv4Checksum,
+    InvalidTcpChecksum,
 }
 
 pub struct Ipv4Inspector<'a> {
@@ -87,7 +90,31 @@ impl<'a> Ipv4Inspector<'a> {
         if inspector.total_len > buf.len() {
             return Err(Error::InvalidPacketLength);
         }
+        let fragment = u16::from_be_bytes([buf[6], buf[7]]);
+        if fragment & 0x3fff != 0 {
+            return Err(Error::FragmentedPacket);
+        }
+        if !checksum_valid(&buf[..inspector.ip_header_len], 0) {
+            return Err(Error::InvalidIpv4Checksum);
+        }
+
+        let tcp_len = inspector.total_len - inspector.ip_header_len;
+        let mut sum = 0;
+        sum = checksum_add(sum, &buf[12..20]);
+        sum += 6;
+        sum += tcp_len as u32;
+        if !checksum_valid(&buf[inspector.ip_header_len..inspector.total_len], sum) {
+            return Err(Error::InvalidTcpChecksum);
+        }
         Ok(inspector)
+    }
+
+    pub fn packet_len(&self) -> usize {
+        self.total_len
+    }
+
+    pub fn transport_offset(&self) -> usize {
+        self.ip_header_len
     }
 
     pub fn dst_ip(&self) -> Ipv4Addr {
@@ -136,4 +163,23 @@ impl<'a> Ipv4Inspector<'a> {
     pub fn payload_len(&self) -> usize {
         self.total_len - self.header_len
     }
+}
+
+fn checksum_valid(bytes: &[u8], initial: u32) -> bool {
+    let mut sum = checksum_add(initial, bytes);
+    while sum >> 16 != 0 {
+        sum = (sum & 0xffff) + (sum >> 16);
+    }
+    sum as u16 == 0xffff
+}
+
+fn checksum_add(mut sum: u32, bytes: &[u8]) -> u32 {
+    let mut chunks = bytes.chunks_exact(2);
+    for chunk in &mut chunks {
+        sum += u16::from_be_bytes([chunk[0], chunk[1]]) as u32;
+    }
+    if let Some(byte) = chunks.remainder().first() {
+        sum += (*byte as u32) << 8;
+    }
+    sum
 }

@@ -1,13 +1,15 @@
 use alloc::collections::VecDeque;
 use alloc::vec::Vec;
+use core::mem::size_of;
+use core::slice;
 
 use ftl_driver::dma::DmaBuf;
 use ftl_driver::net::Error;
 use ftl_types::error::ErrorCode;
-use ftl_types::net::NET_IPV4;
-use ftl_types::net::NET_LISTEN;
-use ftl_types::net::NET_TCP;
-use ftl_types::net::NetRxInfo;
+use ftl_types::net::IP_PROTOCOL_TCP;
+use ftl_types::net::IP_VERSION_4;
+use ftl_types::net::NetMatch;
+use ftl_types::net::NetRxMeta;
 use ftl_types::poll::EventKind;
 use ftl_utils::spinlock::SpinLock;
 
@@ -28,13 +30,10 @@ const ETHTYPE_IPV4: u16 = 0x0800;
 const ETHTYPE_ARP: u16 = 0x0806;
 const OUR_IP: Ipv4Addr = Ipv4Addr::new(0x0a00_020f);
 const GATEWAY_IP: Ipv4Addr = Ipv4Addr::new(0x0a00_0202);
-pub const NETWORK_KIND: usize = NET_IPV4 | NET_TCP | NET_LISTEN;
-
 #[derive(Clone, Copy)]
-struct Rule {
-    kind: usize,
-    local_ip: Option<Ipv4Addr>,
-    local_port: u16,
+struct NetBinding {
+    selector: NetMatch,
+    cookie: u64,
 }
 
 pub struct Router {
@@ -58,13 +57,28 @@ impl Router {
         Ok(())
     }
 
-    fn find_network(&self, local_ip: Ipv4Addr, local_port: u16) -> Option<SharedRef<Network>> {
+    fn find_network(
+        &self,
+        local_ip: Ipv4Addr,
+        local_port: u16,
+        remote_ip: Ipv4Addr,
+        remote_port: u16,
+    ) -> Option<(SharedRef<Network>, u64)> {
+        let mut best = None;
         for network in &self.networks {
-            if network.matches(NETWORK_KIND, local_ip, local_port) {
-                return Some(network.clone());
+            let Some((specificity, cookie)) =
+                network.match_packet(local_ip, local_port, remote_ip, remote_port)
+            else {
+                continue;
+            };
+            if best
+                .as_ref()
+                .is_none_or(|(best_specificity, _, _)| specificity > *best_specificity)
+            {
+                best = Some((specificity, network.clone(), cookie));
             }
         }
-        None
+        best.map(|(_, network, cookie)| (network, cookie))
     }
 
     pub fn device(&self) -> SharedRef<Device> {
@@ -99,27 +113,6 @@ impl Router {
             .send_arp_reply(&GLOBAL_ENV, src_mac, sender_ip, OUR_IP);
     }
 
-    fn inspect_ipv4(&self, packet: &[u8]) -> Option<(NetRxInfo, usize)> {
-        let inspector = match Ipv4Inspector::new_tcp_packet(packet) {
-            Ok(inspector) => inspector,
-            Err(_) => return None,
-        };
-
-        let info = NetRxInfo {
-            remote_ip: inspector.src_ip().as_u32(),
-            local_ip: inspector.dst_ip().as_u32(),
-            remote_port: inspector.src_port(),
-            local_port: inspector.dst_port(),
-            seq: inspector.seq(),
-            ack: inspector.ack(),
-            payload_len: inspector.payload_len() as u16,
-            window_size: inspector.window_size(),
-            flags: inspector.flags(),
-            reserved: [0; 3],
-        };
-        Some((info, inspector.payload_offset()))
-    }
-
     fn handle_frame(&self, buf: DmaBuf, headroom: usize, frame_len: usize) {
         if frame_len < ETHERNET_HEADER_LEN {
             self.recycle(buf);
@@ -142,24 +135,39 @@ impl Router {
         let packet_offset = headroom + ETHERNET_HEADER_LEN;
         let packet_len = frame_len - ETHERNET_HEADER_LEN;
         let packet = &buf.as_slice()[packet_offset..packet_offset + packet_len];
-        let Some((info, payload_offset)) = self.inspect_ipv4(packet) else {
+        let inspector = match Ipv4Inspector::new_tcp_packet(packet) {
+            Ok(inspector) => inspector,
+            Err(_) => {
+                self.recycle(buf);
+                return;
+            }
+        };
+        let local_ip = inspector.dst_ip();
+        let local_port = inspector.dst_port();
+        let remote_ip = inspector.src_ip();
+        let remote_port = inspector.src_port();
+        let Some((network, cookie)) =
+            self.find_network(local_ip, local_port, remote_ip, remote_port)
+        else {
             self.recycle(buf);
             return;
         };
 
-        let local_ip = Ipv4Addr::new(info.local_ip);
-        let Some(network) = self.find_network(local_ip, info.local_port) else {
-            self.recycle(buf);
-            return;
-        };
-
-        let remote_ip = Ipv4Addr::new(info.remote_ip);
         self.device.learn_arp(&GLOBAL_ENV, remote_ip, src_mac);
 
+        let meta = NetRxMeta {
+            cookie,
+            packet_len: inspector.packet_len() as u32,
+            ip_version: IP_VERSION_4,
+            ip_protocol: IP_PROTOCOL_TCP,
+            transport_offset: inspector.transport_offset() as u16,
+            payload_offset: inspector.payload_offset() as u16,
+            reserved: [0; 6],
+        };
         let rx = Rx {
             buf,
-            payload_offset: packet_offset + payload_offset,
-            info,
+            packet_offset,
+            meta,
         };
         network.enqueue_rx(rx);
     }
@@ -188,25 +196,19 @@ impl Router {
 
 struct Rx {
     buf: DmaBuf,
-    payload_offset: usize,
-    info: NetRxInfo,
-}
-
-struct ReservedRx {
-    token: usize,
-    rx: Rx,
+    packet_offset: usize,
+    meta: NetRxMeta,
 }
 
 struct Mutable {
     rx_queue: VecDeque<Rx>,
-    reserved: Option<ReservedRx>,
-    next_token: usize,
+    peeked: Option<Rx>,
     emitters: VecDeque<EventEmitter>,
 }
 
 pub struct Network {
     device: SharedRef<Device>,
-    rules: SpinLock<Vec<Rule>>,
+    bindings: SpinLock<Vec<NetBinding>>,
     mutable: SpinLock<Mutable>,
 }
 
@@ -214,11 +216,10 @@ impl Network {
     pub fn new(device: SharedRef<Device>) -> Self {
         Self {
             device,
-            rules: SpinLock::new(Vec::new()),
+            bindings: SpinLock::new(Vec::new()),
             mutable: SpinLock::new(Mutable {
                 rx_queue: VecDeque::new(),
-                reserved: None,
-                next_token: 1,
+                peeked: None,
                 emitters: VecDeque::new(),
             }),
         }
@@ -226,7 +227,7 @@ impl Network {
 
     pub fn subscribe(&self, emitter: EventEmitter) -> Result<(), ErrorCode> {
         let mut mutable = self.mutable.lock();
-        if mutable.reserved.is_some() || !mutable.rx_queue.is_empty() {
+        if mutable.peeked.is_some() || !mutable.rx_queue.is_empty() {
             drop(mutable);
             return emitter.emit(EventKind::PollNotified);
         }
@@ -239,32 +240,52 @@ impl Network {
         Ok(())
     }
 
-    pub fn add_rule(&self, kind: usize, local_ip: u32, local_port: u16) -> Result<(), ErrorCode> {
-        if kind != NETWORK_KIND {
+    pub fn bind(&self, selector: NetMatch, cookie: u64) -> Result<(), ErrorCode> {
+        if !selector.is_supported() {
             return Err(ErrorCode::INVALID_ARG);
         }
 
-        let local_ip = if local_ip == 0 {
-            None
-        } else {
-            Some(Ipv4Addr::new(local_ip))
-        };
-        let mut rules = self.rules.lock();
-        rules.try_reserve(1).map_err(|_| ErrorCode::OUT_OF_MEMORY)?;
-        rules.push(Rule {
-            kind,
-            local_ip,
-            local_port,
-        });
+        let mut bindings = self.bindings.lock();
+        if bindings.iter().any(|binding| binding.selector == selector) {
+            return Err(ErrorCode::ALREADY_EXISTS);
+        }
+        bindings
+            .try_reserve(1)
+            .map_err(|_| ErrorCode::OUT_OF_MEMORY)?;
+        bindings.push(NetBinding { selector, cookie });
         Ok(())
     }
 
-    fn matches(&self, kind: usize, local_ip: Ipv4Addr, local_port: u16) -> bool {
-        self.rules.lock().iter().any(|rule| {
-            rule.kind == kind
-                && rule.local_port == local_port
-                && rule.local_ip.map_or(true, |rule_ip| rule_ip == local_ip)
-        })
+    pub fn unbind(&self, selector: &NetMatch) -> Result<(), ErrorCode> {
+        let mut bindings = self.bindings.lock();
+        let index = bindings
+            .iter()
+            .position(|binding| binding.selector == *selector)
+            .ok_or(ErrorCode::INVALID_ARG)?;
+        bindings.remove(index);
+        Ok(())
+    }
+
+    fn match_packet(
+        &self,
+        local_ip: Ipv4Addr,
+        local_port: u16,
+        remote_ip: Ipv4Addr,
+        remote_port: u16,
+    ) -> Option<(u32, u64)> {
+        self.bindings
+            .lock()
+            .iter()
+            .filter(|binding| {
+                binding.selector.matches(
+                    local_ip.as_u32(),
+                    local_port,
+                    remote_ip.as_u32(),
+                    remote_port,
+                )
+            })
+            .max_by_key(|binding| binding.selector.specificity())
+            .map(|binding| (binding.selector.specificity(), binding.cookie))
     }
 
     fn recycle(&self, rx: Rx) {
@@ -305,47 +326,59 @@ impl Network {
         }
     }
 
-    pub fn peek(&self) -> Result<(usize, NetRxInfo), ErrorCode> {
+    pub fn peek(&self, header: USlice, meta: USlice) -> Result<(), ErrorCode> {
         let mut mutable = self.mutable.lock();
-        if let Some(reserved) = &mutable.reserved {
-            return Ok((reserved.token, reserved.rx.info));
+        if mutable.peeked.is_none() {
+            mutable.peeked = mutable.rx_queue.pop_front();
         }
 
-        let Some(rx) = mutable.rx_queue.pop_front() else {
+        let Some(rx) = mutable.peeked.as_ref() else {
             return Err(ErrorCode::EMPTY);
         };
-        let token = mutable.next_token;
-        mutable.next_token = mutable.next_token.wrapping_add(1);
-        if mutable.next_token == 0 {
-            mutable.next_token = 1;
+
+        let header_len = rx.meta.payload_offset as usize;
+        if header.len() < header_len {
+            return Err(ErrorCode::OUT_OF_BOUNDS);
         }
 
-        let info = rx.info;
-        mutable.reserved = Some(ReservedRx { token, rx });
-        Ok((token, info))
+        let meta_ptr = &raw const rx.meta;
+        let meta_bytes =
+            unsafe { slice::from_raw_parts(meta_ptr.cast::<u8>(), size_of::<NetRxMeta>()) };
+        meta.write_bytes(meta_bytes)?;
+        let start = rx.packet_offset;
+        let end = start + header_len;
+        header
+            .subslice(0, header_len)?
+            .write_bytes(&rx.buf.as_slice()[start..end])?;
+        Ok(())
     }
 
-    pub fn recv(&self, token: usize, payload: USlice) -> Result<(), ErrorCode> {
+    pub fn recv(&self, payload: USlice) -> Result<usize, ErrorCode> {
         let mut mutable = self.mutable.lock();
-        let Some(reserved) = mutable.reserved.as_ref() else {
+        let Some(rx) = mutable.peeked.as_ref() else {
             return Err(ErrorCode::EMPTY);
         };
-
-        if reserved.token != token {
-            return Err(ErrorCode::INVALID_ARG);
-        }
-
-        let payload_len = reserved.rx.info.payload_len as usize;
+        let payload_len = rx.meta.packet_len as usize - rx.meta.payload_offset as usize;
         if payload.len() != payload_len {
             return Err(ErrorCode::OUT_OF_BOUNDS);
         }
-        let start = reserved.rx.payload_offset;
+        let start = rx.packet_offset + rx.meta.payload_offset as usize;
         let end = start + payload_len;
-        payload.write_bytes(&reserved.rx.buf.as_slice()[start..end])?;
+        payload.write_bytes(&rx.buf.as_slice()[start..end])?;
 
-        let reserved = mutable.reserved.take().unwrap();
+        let rx = mutable.peeked.take().unwrap();
         drop(mutable);
-        self.recycle(reserved.rx);
+        self.recycle(rx);
+        Ok(payload_len)
+    }
+
+    pub fn drop_rx(&self) -> Result<(), ErrorCode> {
+        let mut mutable = self.mutable.lock();
+        let Some(rx) = mutable.peeked.take() else {
+            return Err(ErrorCode::EMPTY);
+        };
+        drop(mutable);
+        self.recycle(rx);
         Ok(())
     }
 }

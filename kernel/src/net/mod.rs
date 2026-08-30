@@ -1,6 +1,6 @@
 use core::fmt;
+use core::mem::MaybeUninit;
 use core::mem::size_of;
-use core::slice;
 use core::sync::atomic::AtomicU8;
 use core::sync::atomic::Ordering;
 
@@ -10,7 +10,8 @@ use ftl_driver::net::Driver;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use ftl_types::handle::HandleRight;
-use ftl_types::net::NetRxInfo;
+use ftl_types::net::NetMatch;
+use ftl_types::net::NetRxMeta;
 use ftl_types::thread::SyscallRegs;
 use ftl_utils::alignment::align_up;
 use ftl_utils::spinlock::SpinLock;
@@ -115,38 +116,34 @@ pub fn sys_net_bind(
     ctx: &SyscallRegs,
 ) -> Result<SyscallOutput, ErrorCode> {
     let network_id = HandleId::new(ctx.a0);
-    let local_port = ctx.a3;
-    if local_port > u16::MAX as usize {
-        return Err(ErrorCode::INVALID_ARG);
-    }
+    let selector = USlice::new(UAddr::new(ctx.a1), size_of::<NetMatch>())?;
+    let mut selector_value = MaybeUninit::<NetMatch>::uninit();
+    let selector_value = unsafe { selector.read_uninit(&mut selector_value)? };
 
     let network = current
         .isolate()
         .handles()
         .lock()
         .get::<Network>(network_id, HandleRight::WRITE)?;
-    network.add_rule(ctx.a1, ctx.a2 as u32, local_port as u16)?;
+    network.bind(*selector_value, ctx.a2 as u64)?;
     Ok(SyscallOutput::Done(0))
 }
 
-pub fn sys_net_peek(
+pub fn sys_net_unbind(
     current: &SharedRef<Thread>,
     ctx: &SyscallRegs,
 ) -> Result<SyscallOutput, ErrorCode> {
     let network_id = HandleId::new(ctx.a0);
-    let info_addr = UAddr::new(ctx.a1);
+    let selector = USlice::new(UAddr::new(ctx.a1), size_of::<NetMatch>())?;
+    let mut selector_value = MaybeUninit::<NetMatch>::uninit();
+    let selector_value = unsafe { selector.read_uninit(&mut selector_value)? };
     let network = current
         .isolate()
         .handles()
         .lock()
-        .get::<Network>(network_id, HandleRight::READ)?;
-
-    let (token, info) = network.peek()?;
-    let info_ptr = &raw const info;
-    let info_len = size_of::<NetRxInfo>();
-    let info_bytes = unsafe { slice::from_raw_parts(info_ptr.cast::<u8>(), info_len) };
-    USlice::new(info_addr, info_len)?.write_bytes(info_bytes)?;
-    Ok(SyscallOutput::Done(token))
+        .get::<Network>(network_id, HandleRight::WRITE)?;
+    network.unbind(selector_value)?;
+    Ok(SyscallOutput::Done(0))
 }
 
 pub fn sys_net_recv(
@@ -154,15 +151,46 @@ pub fn sys_net_recv(
     ctx: &SyscallRegs,
 ) -> Result<SyscallOutput, ErrorCode> {
     let network_id = HandleId::new(ctx.a0);
-    let token = ctx.a1;
-    let payload = USlice::new(UAddr::new(ctx.a2), ctx.a3)?;
+    let payload = USlice::new(UAddr::new(ctx.a1), ctx.a2)?;
     let network = current
         .isolate()
         .handles()
         .lock()
         .get::<Network>(network_id, HandleRight::READ)?;
 
-    network.recv(token, payload)?;
+    let payload_len = network.recv(payload)?;
+    Ok(SyscallOutput::Done(payload_len))
+}
+
+pub fn sys_net_peek(
+    current: &SharedRef<Thread>,
+    ctx: &SyscallRegs,
+) -> Result<SyscallOutput, ErrorCode> {
+    let network_id = HandleId::new(ctx.a0);
+    let header = USlice::new(UAddr::new(ctx.a1), ctx.a2)?;
+    let meta = USlice::new(UAddr::new(ctx.a3), size_of::<NetRxMeta>())?;
+    let network = current
+        .isolate()
+        .handles()
+        .lock()
+        .get::<Network>(network_id, HandleRight::READ)?;
+
+    network.peek(header, meta)?;
+    Ok(SyscallOutput::Done(0))
+}
+
+pub fn sys_net_drop(
+    current: &SharedRef<Thread>,
+    ctx: &SyscallRegs,
+) -> Result<SyscallOutput, ErrorCode> {
+    let network_id = HandleId::new(ctx.a0);
+    let network = current
+        .isolate()
+        .handles()
+        .lock()
+        .get::<Network>(network_id, HandleRight::READ)?;
+
+    network.drop_rx()?;
     Ok(SyscallOutput::Done(0))
 }
 

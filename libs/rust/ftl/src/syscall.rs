@@ -1,6 +1,7 @@
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
-use ftl_types::net::NetRxInfo;
+use ftl_types::net::NetMatch;
+use ftl_types::net::NetRxMeta;
 use ftl_types::poll::Event;
 use ftl_types::syscall::Syscall;
 use ftl_types::thread::ExitReason;
@@ -93,33 +94,48 @@ pub fn net_subscribe(net: HandleId, poll: HandleId) -> Result<(), ErrorCode> {
     Ok(())
 }
 
-pub fn net_bind(net: HandleId, kind: usize, our_ip: u32, our_port: u16) -> Result<(), ErrorCode> {
-    syscall4(
+pub fn net_bind(net: HandleId, rule: &NetMatch, cookie: u64) -> Result<(), ErrorCode> {
+    syscall3(
         Syscall::NetBind,
         net.as_usize(),
-        kind,
-        our_ip as usize,
-        our_port as usize,
+        rule as *const NetMatch as usize,
+        cookie as usize,
     )?;
     Ok(())
 }
 
-pub fn net_peek(net: HandleId, info: &mut NetRxInfo) -> Result<usize, ErrorCode> {
+pub fn net_unbind(net: HandleId, rule: &NetMatch) -> Result<(), ErrorCode> {
     syscall2(
-        Syscall::NetPeek,
+        Syscall::NetUnbind,
         net.as_usize(),
-        info as *mut NetRxInfo as usize,
-    )
+        rule as *const NetMatch as usize,
+    )?;
+    Ok(())
 }
 
-pub fn net_recv(net: HandleId, token: usize, payload: &mut [u8]) -> Result<(), ErrorCode> {
+pub fn net_peek(net: HandleId, header: &mut [u8], meta: &mut NetRxMeta) -> Result<(), ErrorCode> {
     syscall4(
+        Syscall::NetPeek,
+        net.as_usize(),
+        header.as_mut_ptr() as usize,
+        header.len(),
+        meta as *mut NetRxMeta as usize,
+    )?;
+    Ok(())
+}
+
+pub fn net_recv(net: HandleId, payload: &mut [u8]) -> Result<(), ErrorCode> {
+    syscall3(
         Syscall::NetRecv,
         net.as_usize(),
-        token,
         payload.as_mut_ptr() as usize,
         payload.len(),
     )?;
+    Ok(())
+}
+
+pub fn net_drop(net: HandleId) -> Result<(), ErrorCode> {
+    syscall1(Syscall::NetDrop, net.as_usize())?;
     Ok(())
 }
 

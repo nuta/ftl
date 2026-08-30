@@ -16,9 +16,11 @@ pub enum Syscall {
     PollWait = SYSCALL_BASE + 12,
     PollNotify = SYSCALL_BASE + 13,
     NetBind = SYSCALL_BASE + 14,
-    NetPeek = SYSCALL_BASE + 15,
+    NetUnbind = SYSCALL_BASE + 15,
     NetRecv = SYSCALL_BASE + 16,
     NetSend = SYSCALL_BASE + 17,
     NetCreate = SYSCALL_BASE + 18,
     NetSubscribe = SYSCALL_BASE + 19,
+    NetPeek = SYSCALL_BASE + 20,
+    NetDrop = SYSCALL_BASE + 21,
 }
