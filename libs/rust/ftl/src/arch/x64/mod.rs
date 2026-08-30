@@ -18,6 +18,14 @@ fn convert_retval(rax: usize) -> Result<usize, ErrorCode> {
     }
 }
 
+pub fn syscall0(n: Syscall) -> Result<usize, ErrorCode> {
+    let mut rax = n as usize;
+    unsafe {
+        asm!("syscall", inlateout("rax") rax, out("rcx") _, out("r11") _,);
+    }
+    convert_retval(rax)
+}
+
 pub fn syscall1(n: Syscall, a0: usize) -> Result<usize, ErrorCode> {
     let mut rax = n as usize;
     unsafe {

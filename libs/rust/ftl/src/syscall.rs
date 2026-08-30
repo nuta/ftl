@@ -1,5 +1,6 @@
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
+use ftl_types::net::Rule;
 use ftl_types::poll::Event;
 use ftl_types::syscall::Syscall;
 use ftl_types::thread::ExitReason;
@@ -7,6 +8,7 @@ use ftl_types::thread::Regs;
 use ftl_types::thread::RegsKind;
 use ftl_types::vmspace::PageAttrs;
 
+use crate::arch::syscall0;
 use crate::arch::syscall1;
 use crate::arch::syscall2;
 use crate::arch::syscall3;
@@ -79,6 +81,73 @@ pub fn poll_wait(poll: HandleId) -> Result<Event, ErrorCode> {
 
 pub fn poll_notify(poll: HandleId) -> Result<(), ErrorCode> {
     syscall1(Syscall::PollNotify, poll.as_usize())?;
+    Ok(())
+}
+
+pub fn net_create() -> Result<HandleId, ErrorCode> {
+    let ret = syscall0(Syscall::NetCreate)?;
+    Ok(HandleId::new(ret))
+}
+
+pub fn net_subscribe(net: HandleId, poll: HandleId) -> Result<(), ErrorCode> {
+    syscall2(Syscall::NetSubscribe, net.as_usize(), poll.as_usize())?;
+    Ok(())
+}
+
+pub fn net_bind(net: HandleId, rule: &Rule, cookie: usize) -> Result<(), ErrorCode> {
+    syscall3(
+        Syscall::NetBind,
+        net.as_usize(),
+        rule as *const Rule as usize,
+        cookie,
+    )?;
+    Ok(())
+}
+
+pub fn net_unbind(net: HandleId, rule: &Rule) -> Result<usize, ErrorCode> {
+    let cookie = syscall2(
+        Syscall::NetUnbind,
+        net.as_usize(),
+        rule as *const Rule as usize,
+    )?;
+    Ok(cookie)
+}
+
+pub fn net_peek(net: HandleId, header: &mut [u8]) -> Result<usize, ErrorCode> {
+    let cookie = syscall3(
+        Syscall::NetPeek,
+        net.as_usize(),
+        header.as_mut_ptr() as usize,
+        header.len(),
+    )?;
+    Ok(cookie)
+}
+
+pub fn net_recv(net: HandleId, payload: &mut [u8]) -> Result<(), ErrorCode> {
+    syscall3(
+        Syscall::NetRecv,
+        net.as_usize(),
+        payload.as_mut_ptr() as usize,
+        payload.len(),
+    )?;
+    Ok(())
+}
+
+pub fn net_drop(net: HandleId) -> Result<(), ErrorCode> {
+    syscall1(Syscall::NetDrop, net.as_usize())?;
+    Ok(())
+}
+
+pub fn net_send(net: HandleId, header: &[u8], payload: &[u8]) -> Result<(), ErrorCode> {
+    syscall6(
+        Syscall::NetSend,
+        net.as_usize(),
+        0,
+        header.as_ptr() as usize,
+        header.len(),
+        payload.as_ptr() as usize,
+        payload.len(),
+    )?;
     Ok(())
 }
 

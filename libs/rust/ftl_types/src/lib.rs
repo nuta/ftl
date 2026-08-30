@@ -2,6 +2,7 @@
 
 pub mod error;
 pub mod handle;
+pub mod net;
 pub mod poll;
 pub mod syscall;
 pub mod thread;

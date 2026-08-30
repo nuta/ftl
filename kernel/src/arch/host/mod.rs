@@ -20,6 +20,10 @@ pub fn idle() -> ! {
     todo!()
 }
 
+pub fn interrupt_acquire(_irq: u8) -> Result<(), ErrorCode> {
+    Ok(())
+}
+
 pub fn console_write(_bytes: &[u8]) {}
 
 pub unsafe fn usercopy_read(src: UAddr, dst: *mut u8, len: usize) -> Result<(), ErrorCode> {
