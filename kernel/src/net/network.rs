@@ -42,7 +42,7 @@ struct Binding {
 }
 
 /// A received packet.
-struct Packet {
+struct RxPacket {
     buf: DmaBuf,
     /// The offset of the IP header in the packet. This is also the length of
     /// the device's header, Ethernet header, and some headroom in `buf`.
@@ -59,8 +59,8 @@ struct Packet {
 }
 
 struct Mutable {
-    rx_queue: VecDeque<Packet>,
-    peeked: Option<Packet>,
+    rx_queue: VecDeque<RxPacket>,
+    peeked: Option<RxPacket>,
     emitters: VecDeque<EventEmitter>,
 }
 
@@ -201,7 +201,7 @@ impl Network {
             return;
         }
 
-        mutable.rx_queue.push_back(Packet {
+        mutable.rx_queue.push_back(RxPacket {
             buf,
             packet_offset,
             packet_len,
