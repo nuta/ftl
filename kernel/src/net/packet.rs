@@ -113,6 +113,10 @@ impl<'a> Ipv4Inspector<'a> {
         self.total_len
     }
 
+    pub fn ip_proto(&self) -> u16 {
+        self.buf[9] as u16
+    }
+
     pub fn dst_ip(&self) -> Ipv4Addr {
         let value = u32::from_be_bytes(self.buf[16..20].try_into().unwrap());
         Ipv4Addr(value)

@@ -13,10 +13,9 @@ use ftl::syscall::net_send;
 use ftl::syscall::net_unbind;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
-use ftl_types::net::IP_PROTOCOL_TCP;
-use ftl_types::net::NET_MAX_HEADER_LEN;
+use ftl_types::net::ETHTYPE_IPV4;
+use ftl_types::net::IPPROTO_TCP;
 use ftl_types::net::Rule;
-use ftl_types::net::TCP_CONNECT;
 use ftl_utils::spinlock::SpinLock;
 
 use super::tcp::Endpoint;
@@ -55,7 +54,7 @@ impl TcpIp {
                 next_cookie: listener_cookie.wrapping_add(1).max(1),
                 entries: BTreeMap::new(),
             }),
-            rx_header: SpinLock::new(vec![0; NET_MAX_HEADER_LEN]),
+            rx_header: SpinLock::new(vec![0; 128]),
         })
     }
 
@@ -75,8 +74,8 @@ impl TcpIp {
         let remote_ip = NonZeroU32::new(info.remote_ip).ok_or(ErrorCode::INVALID_ARG)?;
         let remote_port = NonZeroU16::new(info.remote_port).ok_or(ErrorCode::INVALID_ARG)?;
         let selector = Rule::new(
-            IP_PROTOCOL_TCP,
-            TCP_CONNECT,
+            ETHTYPE_IPV4,
+            IPPROTO_TCP,
             Some(local_ip),
             Some(local_port),
             Some(remote_ip),

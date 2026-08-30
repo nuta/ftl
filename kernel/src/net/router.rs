@@ -3,6 +3,8 @@ use alloc::vec::Vec;
 use ftl_driver::dma::DmaBuf;
 use ftl_driver::net::Error;
 use ftl_types::error::ErrorCode;
+use ftl_types::net::ETHTYPE_ARP;
+use ftl_types::net::ETHTYPE_IPV4;
 
 use super::device::Device;
 use super::network::Network;
@@ -14,8 +16,6 @@ use crate::shared_ref::SharedRef;
 
 const ETHERNET_HEADER_LEN: usize = 14;
 const ARP_PACKET_LEN: usize = 28;
-const ETHTYPE_IPV4: u16 = 0x0800;
-const ETHTYPE_ARP: u16 = 0x0806;
 const OUR_IP: Ipv4Addr = Ipv4Addr::new(0x0a00_020f);
 
 pub struct Router {
@@ -41,33 +41,35 @@ impl Router {
 
     fn find_network(
         &self,
+        eth_type: u16,
+        ip_proto: u16,
         local_ip: Ipv4Addr,
         local_port: u16,
         remote_ip: Ipv4Addr,
         remote_port: u16,
     ) -> Option<(SharedRef<Network>, u64)> {
-        let mut best = None;
+        // TODO: 5-tuple hash map to avoid scanning all networks.
         for network in &self.networks {
-            let Some((specificity, cookie)) =
-                network.match_packet(local_ip, local_port, remote_ip, remote_port)
-            else {
-                continue;
-            };
-            if best
-                .as_ref()
-                .is_none_or(|(best_specificity, _, _)| specificity > *best_specificity)
-            {
-                best = Some((specificity, network.clone(), cookie));
+            if let Some(cookie) = network.matches(
+                eth_type,
+                ip_proto,
+                local_ip,
+                local_port,
+                remote_ip,
+                remote_port,
+            ) {
+                return Some((network.clone(), cookie));
             }
         }
-        best.map(|(_, network, cookie)| (network, cookie))
+
+        None
     }
 
     pub fn device(&self) -> SharedRef<Device> {
         self.device.clone()
     }
 
-    fn recycle(&self, buf: DmaBuf) {
+    fn recycle_rx_buffer(&self, buf: DmaBuf) {
         let driver = self.device.driver();
         if driver.provide(&GLOBAL_ENV, buf).is_err() {
             warn!("net: failed to recycle an RX buffer");
@@ -95,44 +97,59 @@ impl Router {
             .send_arp_reply(&GLOBAL_ENV, src_mac, sender_ip, OUR_IP);
     }
 
-    fn handle_frame(&self, buf: DmaBuf, headroom: usize, frame_len: usize) {
+    fn handle_frame(&self, buf: DmaBuf, headroom: usize, frame_len: usize) -> Option<DmaBuf> {
         if frame_len < ETHERNET_HEADER_LEN {
-            self.recycle(buf);
-            return;
+            return Some(buf);
         }
 
         let frame = &buf.as_slice()[headroom..headroom + frame_len];
         let src_mac = frame[6..12].try_into().unwrap();
         let eth_type = u16::from_be_bytes(frame[12..14].try_into().unwrap());
-        if eth_type == ETHTYPE_ARP {
-            self.handle_arp(frame, src_mac);
-            self.recycle(buf);
-            return;
-        }
-        if eth_type != ETHTYPE_IPV4 {
-            self.recycle(buf);
-            return;
-        }
 
+        match eth_type {
+            ETHTYPE_ARP => {
+                self.handle_arp(frame, src_mac);
+                return Some(buf);
+            }
+            ETHTYPE_IPV4 => self.handle_ipv4(src_mac, buf, headroom, frame_len),
+            _ => {
+                trace!("unsupported ethernet type: {:x}", eth_type);
+                return Some(buf);
+            }
+        }
+    }
+
+    fn handle_ipv4(
+        &self,
+        src_mac: [u8; 6],
+        buf: DmaBuf,
+        headroom: usize,
+        frame_len: usize,
+    ) -> Option<DmaBuf> {
         let packet_offset = headroom + ETHERNET_HEADER_LEN;
         let packet_len = frame_len - ETHERNET_HEADER_LEN;
         let packet = &buf.as_slice()[packet_offset..packet_offset + packet_len];
         let inspector = match Ipv4Inspector::new_tcp_packet(packet) {
             Ok(inspector) => inspector,
             Err(_) => {
-                self.recycle(buf);
-                return;
+                return Some(buf);
             }
         };
+
         let local_ip = inspector.dst_ip();
         let local_port = inspector.dst_port();
         let remote_ip = inspector.src_ip();
         let remote_port = inspector.src_port();
-        let Some((network, cookie)) =
-            self.find_network(local_ip, local_port, remote_ip, remote_port)
-        else {
-            self.recycle(buf);
-            return;
+        let proto = inspector.ip_proto();
+        let Some((network, cookie)) = self.find_network(
+            ETHTYPE_IPV4,
+            proto,
+            local_ip,
+            local_port,
+            remote_ip,
+            remote_port,
+        ) else {
+            return Some(buf);
         };
 
         self.device.learn_arp(&GLOBAL_ENV, remote_ip, src_mac);
@@ -147,6 +164,8 @@ impl Router {
             cookie,
         };
         network.enqueue_rx(rx);
+
+        None
     }
 
     pub fn handle_interrupt(&self) {
@@ -160,13 +179,15 @@ impl Router {
                 Err((error, buf)) => {
                     warn!("net: failed to receive packet: {:?}", error);
                     if let Some(buf) = buf {
-                        self.recycle(buf);
+                        self.recycle_rx_buffer(buf);
                     }
                     break;
                 }
             };
             let (buf, headroom, frame_len) = rx;
-            self.handle_frame(buf, headroom, frame_len);
+            if let Some(buf) = self.handle_frame(buf, headroom, frame_len) {
+                self.recycle_rx_buffer(buf);
+            }
         }
     }
 }

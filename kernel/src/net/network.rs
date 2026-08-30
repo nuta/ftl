@@ -229,9 +229,7 @@ impl Network {
     }
 
     pub fn bind(&self, rule: Rule, cookie: u64) -> Result<(), ErrorCode> {
-        if !rule.is_supported() {
-            return Err(ErrorCode::INVALID_ARG);
-        }
+        // TODO: Do we need a validation for the rule?
 
         let mut bindings = self.bindings.lock();
         if bindings.iter().any(|binding| binding.rule == rule) {
@@ -257,32 +255,42 @@ impl Network {
         Err(ErrorCode::NOT_FOUND)
     }
 
-    pub(super) fn match_packet(
+    /// Returns a cookie of the matching rule if found.
+    pub fn matches(
         &self,
+        eth_type: u16,
+        ip_proto: u16,
         local_ip: Ipv4Addr,
         local_port: u16,
         remote_ip: Ipv4Addr,
         remote_port: u16,
-    ) -> Option<(u8, u64)> {
-        let mut best = None;
+    ) -> Option<u64> {
+        let mut best_specificity = 0;
+        let mut best_cookie = 0;
+        // TODO: Sort the bindings by specificity to avoid iterating through all of them.
         for binding in self.bindings.lock().iter() {
-            let Some(specificity) = binding.rule.matches(
+            let result = binding.rule.matches(
+                eth_type,
+                ip_proto,
                 local_ip.as_u32(),
                 local_port,
                 remote_ip.as_u32(),
                 remote_port,
-            ) else {
-                continue;
-            };
+            );
 
-            if best
-                .as_ref()
-                .is_none_or(|(best_specificity, _)| specificity >= *best_specificity)
-            {
-                best = Some((specificity, binding.cookie));
+            if let Some(specificity) = result {
+                if specificity > best_specificity {
+                    best_specificity = specificity;
+                    best_cookie = binding.cookie;
+                }
             }
         }
-        best
+
+        if best_specificity == 0 {
+            None
+        } else {
+            Some(best_cookie)
+        }
     }
 
     fn recycle_rx_buffer(&self, rx: Rx) {

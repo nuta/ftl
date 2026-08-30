@@ -3,14 +3,13 @@ use ftl_driver::env::Env;
 use ftl_driver::net::Driver;
 use ftl_driver::net::Notifier;
 use ftl_types::error::ErrorCode;
+use ftl_types::net::ETHTYPE_ARP;
+use ftl_types::net::ETHTYPE_IPV4;
 use ftl_utils::spinlock::SpinLock;
 
 use super::arp::ArpTable;
 use super::packet::Ipv4Addr;
 use crate::shared_ref::SharedRef;
-
-const ETHTYPE_IPV4: u16 = 0x0800;
-const ETHTYPE_ARP: u16 = 0x0806;
 
 const DRIVER_HEADROOM: usize = 20;
 const ETHERNET_HEADROOM: usize = 14;

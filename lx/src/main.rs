@@ -21,9 +21,9 @@ use ftl::syscall::net_subscribe;
 use ftl::syscall::poll_create;
 use ftl::syscall::poll_wait;
 use ftl_types::handle::HandleId;
-use ftl_types::net::IP_PROTOCOL_TCP;
+use ftl_types::net::ETHTYPE_IPV4;
+use ftl_types::net::IPPROTO_TCP;
 use ftl_types::net::Rule;
-use ftl_types::net::TCP_LISTEN;
 
 use crate::container::Container;
 use crate::vfs::EmbeddedFile;
@@ -45,8 +45,8 @@ fn main() {
     let net_handle = net_create().expect("failed to create network");
     let listener_cookie = 1;
     let listener_rule = Rule::new(
-        IP_PROTOCOL_TCP,
-        TCP_LISTEN,
+        ETHTYPE_IPV4,
+        IPPROTO_TCP,
         None,
         NonZeroU16::new(80),
         None,
