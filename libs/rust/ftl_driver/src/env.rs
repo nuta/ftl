@@ -1,3 +1,5 @@
+use core::fmt;
+
 use crate::dma::DmaBuf;
 
 #[derive(Debug)]
@@ -6,7 +8,7 @@ pub struct OutOfMemoryError;
 pub trait Env {
     fn alloc_dma(&self, size: usize) -> Result<DmaBuf, OutOfMemoryError>;
     fn free_dma(&self, buf: DmaBuf);
-    fn print(&self, text: &str);
+    fn print(&self, args: fmt::Arguments<'_>);
 
     #[cfg(target_arch = "x86_64")]
     unsafe fn out8(&self, port: u16, value: u8) {
