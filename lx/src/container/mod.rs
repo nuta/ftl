@@ -4,7 +4,7 @@ use ftl_types::handle::HandleId;
 use ftl_utils::spinlock::SpinLock;
 use pid_table::PIdTable;
 
-use crate::net::NetworkService;
+use crate::net::TcpIp;
 use crate::process::PId;
 use crate::process::Process;
 use crate::types::errno::Errno;
@@ -16,7 +16,7 @@ pub struct Container {
     pub isolate: HandleId,
     pub root_vmspace: HandleId,
     pub processes: SpinLock<PIdTable>,
-    network: SpinLock<Option<Arc<NetworkService>>>,
+    network: SpinLock<Option<Arc<TcpIp>>>,
 }
 
 impl Container {
@@ -37,11 +37,11 @@ impl Container {
         Ok(this)
     }
 
-    pub fn set_network(&self, network: Arc<NetworkService>) {
+    pub fn set_network(&self, network: Arc<TcpIp>) {
         *self.network.lock() = Some(network);
     }
 
-    pub fn network(&self) -> Arc<NetworkService> {
+    pub fn network(&self) -> Arc<TcpIp> {
         self.network
             .lock()
             .as_ref()

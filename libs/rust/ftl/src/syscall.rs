@@ -83,20 +83,20 @@ pub fn poll_notify(poll: HandleId) -> Result<(), ErrorCode> {
     Ok(())
 }
 
-pub fn net_acquire(
-    poll: HandleId,
-    kind: usize,
-    our_ip: u32,
-    our_port: u16,
-) -> Result<HandleId, ErrorCode> {
-    let ret = syscall4(
-        Syscall::NetAcquire,
-        poll.as_usize(),
+pub fn net_create(poll: HandleId) -> Result<HandleId, ErrorCode> {
+    let ret = syscall1(Syscall::NetCreate, poll.as_usize())?;
+    Ok(HandleId::new(ret))
+}
+
+pub fn net_bind(net: HandleId, kind: usize, our_ip: u32, our_port: u16) -> Result<(), ErrorCode> {
+    syscall4(
+        Syscall::NetBind,
+        net.as_usize(),
         kind,
         our_ip as usize,
         our_port as usize,
     )?;
-    Ok(HandleId::new(ret))
+    Ok(())
 }
 
 pub fn net_peek(net: HandleId, info: &mut NetRxInfo) -> Result<usize, ErrorCode> {

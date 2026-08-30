@@ -8,11 +8,11 @@ use ftl_types::handle::HandleId;
 use ftl_types::net::NetRxInfo;
 use ftl_utils::spinlock::SpinLock;
 
-use super::tcp_buffer::TcpBuffer;
-use super::tcp_packet::Endpoint;
-use super::tcp_packet::Segment;
-use super::tcp_packet::TcpFlags;
-use super::tcp_service::NetworkService;
+use super::buffer::TcpBuffer;
+use super::packet::Endpoint;
+use super::packet::Segment;
+use super::packet::TcpFlags;
+use crate::net::TcpIp;
 use crate::types::errno::Errno;
 use crate::vfs::FileLike;
 
@@ -42,7 +42,7 @@ struct Mutable {
 }
 
 pub struct TcpConnection {
-    network: Weak<NetworkService>,
+    network: Weak<TcpIp>,
     poll: HandleId,
     remote: Endpoint,
     local_port: u16,
@@ -51,7 +51,7 @@ pub struct TcpConnection {
 
 impl TcpConnection {
     pub(super) fn new(
-        network: Weak<NetworkService>,
+        network: Weak<TcpIp>,
         poll: HandleId,
         remote: Endpoint,
         local_port: u16,
@@ -81,14 +81,14 @@ impl TcpConnection {
         })
     }
 
-    pub(super) fn matches(&self, info: &NetRxInfo) -> bool {
+    pub fn matches(&self, info: &NetRxInfo) -> bool {
         if self.remote.ip != info.remote_ip || self.remote.port != info.remote_port {
             return false;
         }
         self.local_port == info.local_port
     }
 
-    pub(super) fn is_closed(&self) -> bool {
+    pub fn is_closed(&self) -> bool {
         self.mutable.lock().state == ConnectionState::Closed
     }
 
@@ -226,7 +226,7 @@ impl TcpConnection {
         };
     }
 
-    pub(super) fn handle_packet(&self, info: &NetRxInfo, payload: &[u8]) {
+    pub fn handle_packet(&self, info: &NetRxInfo, payload: &[u8]) {
         let flags = TcpFlags::from_u8(info.flags);
         let mut mutable = self.mutable.lock();
         mutable.snd_wnd = info.window_size;

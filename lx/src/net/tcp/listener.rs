@@ -10,13 +10,13 @@ use ftl_types::handle::HandleId;
 use ftl_types::net::NetRxInfo;
 use ftl_utils::spinlock::SpinLock;
 
-use super::tcp_buffer::TCP_BUFFER_CAPACITY;
-use super::tcp_buffer::TcpBuffer;
-use super::tcp_conn::TcpConnection;
-use super::tcp_packet::Endpoint;
-use super::tcp_packet::Segment;
-use super::tcp_packet::TcpFlags;
-use super::tcp_service::NetworkService;
+use super::buffer::TCP_BUFFER_CAPACITY;
+use super::buffer::TcpBuffer;
+use super::conn::TcpConnection;
+use super::packet::Endpoint;
+use super::packet::Segment;
+use super::packet::TcpFlags;
+use crate::net::TcpIp;
 use crate::types::errno::Errno;
 use crate::vfs::FileLike;
 
@@ -38,13 +38,13 @@ struct Mutable {
 }
 
 pub struct TcpListener {
-    network: Weak<NetworkService>,
+    network: Weak<TcpIp>,
     poll: HandleId,
     mutable: SpinLock<Mutable>,
 }
 
 impl TcpListener {
-    pub(super) fn new(network: Weak<NetworkService>, poll: HandleId) -> Arc<Self> {
+    pub fn new(network: Weak<TcpIp>, poll: HandleId) -> Arc<Self> {
         let mutable = Mutable {
             local_port: None,
             backlog: 0,
@@ -86,12 +86,12 @@ impl TcpListener {
         Ok(())
     }
 
-    pub(super) fn accepts(&self, port: u16) -> bool {
+    pub fn accepts(&self, port: u16) -> bool {
         let mutable = self.mutable.lock();
         mutable.backlog > 0 && mutable.local_port == Some(port)
     }
 
-    fn network(&self) -> Option<Arc<NetworkService>> {
+    fn network(&self) -> Option<Arc<TcpIp>> {
         self.network.upgrade()
     }
 
@@ -196,7 +196,7 @@ impl TcpListener {
         let _ = poll_notify(self.poll);
     }
 
-    pub(super) fn handle_packet(&self, info: &NetRxInfo, payload: &[u8]) {
+    pub fn handle_packet(&self, info: &NetRxInfo, payload: &[u8]) {
         let flags = TcpFlags::from_u8(info.flags);
         if flags.contains(TcpFlags::RST) {
             return;

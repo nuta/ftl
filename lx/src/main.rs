@@ -14,8 +14,10 @@ mod vfs;
 
 use alloc::sync::Arc;
 
-use ftl::syscall::net_acquire;
+use ftl::syscall::net_bind;
+use ftl::syscall::net_create;
 use ftl::syscall::poll_create;
+use ftl::syscall::poll_wait;
 use ftl_types::handle::HandleId;
 use ftl_types::net::NET_IPV4;
 use ftl_types::net::NET_LISTEN;
@@ -37,10 +39,16 @@ fn main() {
     let hello_elf = Arc::new(EmbeddedFile::new(&HELLO_ELF.0));
     let container =
         Container::new(root_isolate, root_vmspace, hello_elf).expect("failed to start LX");
-    let net_poll = poll_create().expect("failed to create network poll");
-    let net_handle = net_acquire(net_poll, NET_IPV4 | NET_TCP | NET_LISTEN, 0, 80)
-        .expect("failed to acquire TCP listener network");
-    let network = net::NetworkService::new(net_poll, net_handle);
+    let poll = poll_create().expect("failed to create poll");
+    let net_handle = net_create(poll).expect("failed to create network");
+    net_bind(net_handle, NET_IPV4 | NET_TCP | NET_LISTEN, 0, 80)
+        .expect("failed to bind TCP listener rule");
+    let network = net::TcpIp::new(net_handle);
     container.set_network(network.clone());
-    network.run();
+    loop {
+        let event = poll_wait(poll).expect("poll wait failed");
+        if event.handle_id() == net_handle {
+            network.handle_event();
+        }
+    }
 }

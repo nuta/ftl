@@ -6,13 +6,13 @@ const IPV4_HEADER_LEN: usize = 20;
 const TCP_HEADER_LEN: usize = 20;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub(super) struct Endpoint {
+pub struct Endpoint {
     pub ip: u32,
     pub port: u16,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub(super) struct TcpFlags(u8);
+pub struct TcpFlags(u8);
 
 impl TcpFlags {
     pub const FIN: Self = Self(1 << 0);
@@ -48,7 +48,7 @@ impl BitOrAssign for TcpFlags {
     }
 }
 
-pub(super) struct Segment<'a> {
+pub struct Segment<'a> {
     pub seq: u32,
     pub ack: u32,
     pub window_size: u16,
@@ -56,7 +56,7 @@ pub(super) struct Segment<'a> {
     pub payload: &'a [u8],
 }
 
-pub(super) fn build_header(
+pub fn build_header(
     remote: Endpoint,
     local_port: u16,
     segment: &Segment,

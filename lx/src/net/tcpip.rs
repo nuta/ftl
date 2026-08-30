@@ -2,33 +2,29 @@ use alloc::sync::Arc;
 use alloc::vec;
 use alloc::vec::Vec;
 
-use ftl::info;
 use ftl::syscall::net_peek;
 use ftl::syscall::net_recv;
 use ftl::syscall::net_send;
-use ftl::syscall::poll_wait;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use ftl_types::net::NetRxInfo;
 use ftl_utils::spinlock::SpinLock;
 
-use super::tcp_conn::TcpConnection;
-use super::tcp_listener::TcpListener;
-use super::tcp_packet::Endpoint;
-use super::tcp_packet::Segment;
-use super::tcp_packet::build_header;
+use super::tcp::Endpoint;
+use super::tcp::Segment;
+use super::tcp::TcpConnection;
+use super::tcp::TcpListener;
+use super::tcp::build_header;
 
-pub struct NetworkService {
-    poll: HandleId,
+pub struct TcpIp {
     net: HandleId,
     listener: SpinLock<Option<Arc<TcpListener>>>,
     connections: SpinLock<Vec<Arc<TcpConnection>>>,
 }
 
-impl NetworkService {
-    pub fn new(poll: HandleId, net: HandleId) -> Arc<Self> {
+impl TcpIp {
+    pub fn new(net: HandleId) -> Arc<Self> {
         Arc::new(Self {
-            poll,
             net,
             listener: SpinLock::new(None),
             connections: SpinLock::new(Vec::new()),
@@ -41,7 +37,7 @@ impl NetworkService {
         listener
     }
 
-    pub(super) fn add_connection(&self, connection: Arc<TcpConnection>) {
+    pub fn add_connection(&self, connection: Arc<TcpConnection>) {
         self.connections.lock().push(connection);
     }
 
@@ -68,12 +64,8 @@ impl NetworkService {
         }
     }
 
-    pub fn run(&self) -> ! {
-        info!("tcpip: network event loop is ready");
-        loop {
-            poll_wait(self.poll).expect("network poll failed");
-            self.drain();
-        }
+    pub fn handle_event(&self) {
+        self.drain();
     }
 
     fn find_connection(&self, info: &NetRxInfo) -> Option<Arc<TcpConnection>> {
@@ -122,7 +114,7 @@ impl NetworkService {
         listener.handle_packet(info, payload);
     }
 
-    pub(super) fn send_segment(
+    pub fn send_segment(
         &self,
         remote: Endpoint,
         local_port: u16,

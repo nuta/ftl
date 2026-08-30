@@ -1,7 +1,5 @@
 use alloc::collections::VecDeque;
 use alloc::vec::Vec;
-use core::mem::size_of;
-use core::slice;
 
 use ftl_driver::dma::DmaBuf;
 use ftl_driver::env::Env;
@@ -9,13 +7,11 @@ use ftl_driver::net::Driver;
 use ftl_driver::net::Error;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
-use ftl_types::handle::HandleRight;
 use ftl_types::net::NET_IPV4;
 use ftl_types::net::NET_LISTEN;
 use ftl_types::net::NET_TCP;
 use ftl_types::net::NetRxInfo;
 use ftl_types::poll::EventKind;
-use ftl_types::thread::SyscallRegs;
 use ftl_utils::spinlock::SpinLock;
 
 use super::device::Device;
@@ -25,14 +21,10 @@ use super::packet::Ipv4Addr;
 use super::packet::Ipv4Inspector;
 use crate::address::UAddr;
 use crate::address::USlice;
-use crate::handle::Handle;
 use crate::handle::Handleable;
 use crate::net::GLOBAL_ENV;
 use crate::poll::EventEmitter;
-use crate::poll::Poll;
 use crate::shared_ref::SharedRef;
-use crate::syscall::SyscallOutput;
-use crate::thread::Thread;
 
 const MAX_RX_QUEUE_DEPTH: usize = 128;
 const RX_BUFFER_SIZE: usize = 2048;
@@ -43,16 +35,23 @@ const ETHTYPE_IPV4: u16 = 0x0800;
 const ETHTYPE_ARP: u16 = 0x0806;
 const OUR_IP: Ipv4Addr = Ipv4Addr::new(0x0a00_020f);
 const GATEWAY_IP: Ipv4Addr = Ipv4Addr::new(0x0a00_0202);
-const NETWORK_KIND: usize = NET_IPV4 | NET_TCP | NET_LISTEN;
+pub(super) const NETWORK_KIND: usize = NET_IPV4 | NET_TCP | NET_LISTEN;
 
-struct Stack {
+#[derive(Clone, Copy)]
+struct NetworkRule {
+    kind: usize,
+    local_ip: Option<Ipv4Addr>,
+    local_port: u16,
+}
+
+pub(super) struct Router {
     device: SharedRef<Device>,
     networks: Vec<SharedRef<Network>>,
     irq: u8,
 }
 
-impl Stack {
-    fn new(device: SharedRef<Device>, irq: u8) -> Self {
+impl Router {
+    pub(super) fn new(device: SharedRef<Device>, irq: u8) -> Self {
         Self {
             device,
             networks: Vec::new(),
@@ -60,7 +59,7 @@ impl Stack {
         }
     }
 
-    fn add_network(&mut self, network: SharedRef<Network>) -> Result<(), ErrorCode> {
+    pub(super) fn add_network(&mut self, network: SharedRef<Network>) -> Result<(), ErrorCode> {
         self.networks
             .try_reserve(1)
             .map_err(|_| ErrorCode::OUT_OF_MEMORY)?;
@@ -70,11 +69,15 @@ impl Stack {
 
     fn find_network(&self, local_ip: Ipv4Addr, local_port: u16) -> Option<SharedRef<Network>> {
         for network in &self.networks {
-            if network.matches(local_ip, local_port) {
+            if network.matches(NETWORK_KIND, local_ip, local_port) {
                 return Some(network.clone());
             }
         }
         None
+    }
+
+    pub(super) fn device(&self) -> SharedRef<Device> {
+        self.device.clone()
     }
 
     fn recycle(&self, buf: DmaBuf) {
@@ -192,7 +195,7 @@ impl Stack {
     }
 }
 
-static STACK: SpinLock<Option<Stack>> = SpinLock::new(None);
+pub(super) static ROUTER: SpinLock<Option<Router>> = SpinLock::new(None);
 
 struct ReservedRx {
     token: usize,
@@ -208,23 +211,15 @@ struct Mutable {
 
 pub struct Network {
     device: SharedRef<Device>,
-    local_ip: Option<Ipv4Addr>,
-    local_port: u16,
+    rules: SpinLock<Vec<NetworkRule>>,
     mutable: SpinLock<Mutable>,
 }
 
 impl Network {
-    fn new(device: SharedRef<Device>, local_ip: u32, local_port: u16) -> Self {
-        let local_ip = if local_ip == 0 {
-            None
-        } else {
-            Some(Ipv4Addr::new(local_ip))
-        };
-
+    pub(super) fn new(device: SharedRef<Device>) -> Self {
         Self {
             device,
-            local_ip,
-            local_port,
+            rules: SpinLock::new(Vec::new()),
             mutable: SpinLock::new(Mutable {
                 rx_queue: VecDeque::new(),
                 reserved: None,
@@ -234,19 +229,41 @@ impl Network {
         }
     }
 
-    fn set_emitter(&self, emitter: EventEmitter) {
+    pub(super) fn set_emitter(&self, emitter: EventEmitter) {
         self.mutable.lock().emitter = Some(emitter);
     }
 
-    fn matches(&self, local_ip: Ipv4Addr, local_port: u16) -> bool {
-        if self.local_port != local_port {
-            return false;
+    pub(super) fn add_rule(
+        &self,
+        kind: usize,
+        local_ip: u32,
+        local_port: u16,
+    ) -> Result<(), ErrorCode> {
+        if kind != NETWORK_KIND {
+            return Err(ErrorCode::INVALID_ARG);
         }
 
-        match self.local_ip {
-            Some(our_ip) => our_ip == local_ip,
-            None => true,
-        }
+        let local_ip = if local_ip == 0 {
+            None
+        } else {
+            Some(Ipv4Addr::new(local_ip))
+        };
+        let mut rules = self.rules.lock();
+        rules.try_reserve(1).map_err(|_| ErrorCode::OUT_OF_MEMORY)?;
+        rules.push(NetworkRule {
+            kind,
+            local_ip,
+            local_port,
+        });
+        Ok(())
+    }
+
+    fn matches(&self, kind: usize, local_ip: Ipv4Addr, local_port: u16) -> bool {
+        self.rules.lock().iter().any(|rule| {
+            rule.kind == kind
+                && rule.local_port == local_port
+                && rule.local_ip.map_or(true, |rule_ip| rule_ip == local_ip)
+        })
     }
 
     fn recycle(&self, rx: Rx) {
@@ -256,7 +273,7 @@ impl Network {
         }
     }
 
-    fn send(&self, header: USlice, payload: USlice) -> Result<(), ErrorCode> {
+    pub(super) fn send(&self, header: USlice, payload: USlice) -> Result<(), ErrorCode> {
         let mut tx = Tx::alloc(&GLOBAL_ENV, header.len(), payload.len())?;
         header.read_bytes(tx.ip_header_bytes())?;
         Ipv4Inspector::new_tcp_header(tx.ip_header_bytes()).map_err(|_| ErrorCode::INVALID_ARG)?;
@@ -283,7 +300,7 @@ impl Network {
         }
     }
 
-    fn peek(&self) -> Result<(usize, NetRxInfo), ErrorCode> {
+    pub(super) fn peek(&self) -> Result<(usize, NetRxInfo), ErrorCode> {
         let mut mutable = self.mutable.lock();
         if let Some(reserved) = &mutable.reserved {
             return Ok((reserved.token, reserved.rx.info));
@@ -303,7 +320,7 @@ impl Network {
         Ok((token, info))
     }
 
-    fn recv(&self, token: usize, payload: USlice) -> Result<(), ErrorCode> {
+    pub(super) fn recv(&self, token: usize, payload: USlice) -> Result<(), ErrorCode> {
         let mut mutable = self.mutable.lock();
         let Some(reserved) = mutable.reserved.as_ref() else {
             return Err(ErrorCode::EMPTY);
@@ -356,109 +373,21 @@ pub fn init() {
         ftl_driver::pci::find_virtio_device(&GLOBAL_ENV, 1).expect("virtio-net disappeared");
     let irq = ftl_driver::pci::get_interrupt_line(&GLOBAL_ENV, &pci_device);
 
-    *STACK.lock() = Some(Stack::new(device, irq));
+    *ROUTER.lock() = Some(Router::new(device, irq));
     crate::arch::interrupt_acquire(irq).expect("failed to enable virtio-net IRQ");
     info!("net: listening for virtio-net IRQ {}", irq);
 }
 
 pub fn is_irq(irq: u8) -> bool {
-    let stack = STACK.lock();
-    match stack.as_ref() {
-        Some(stack) => stack.irq == irq,
+    let router = ROUTER.lock();
+    match router.as_ref() {
+        Some(router) => router.irq == irq,
         None => false,
     }
 }
 
 pub fn handle_interrupt() {
-    let stack = STACK.lock();
-    let stack = stack.as_ref().expect("network stack is not initialized");
-    stack.handle_interrupt();
-}
-
-pub fn sys_net_acquire(
-    current: &SharedRef<Thread>,
-    ctx: &SyscallRegs,
-) -> Result<SyscallOutput, ErrorCode> {
-    let poll_id = HandleId::new(ctx.a0);
-    let kind = ctx.a1;
-    let local_ip = ctx.a2 as u32;
-    let local_port = ctx.a3;
-    if kind != NETWORK_KIND || local_port > u16::MAX as usize {
-        return Err(ErrorCode::INVALID_ARG);
-    }
-
-    let handle_table = current.isolate().handles();
-    let handles = handle_table.lock();
-    let poll = handles.get::<Poll>(poll_id, HandleRight::WRITE)?;
-    drop(handles);
-
-    let mut stack_guard = STACK.lock();
-    let Some(stack) = stack_guard.as_mut() else {
-        return Err(ErrorCode::INVALID_STATE);
-    };
-    let network = Network::new(stack.device.clone(), local_ip, local_port as u16);
-    let network = SharedRef::new(network)?;
-    stack.add_network(network.clone())?;
-    drop(stack_guard);
-
-    let rights = HandleRight::READ | HandleRight::WRITE;
-    let handle = Handle::new(network.clone(), rights);
-    let handle_id = handle_table.lock().insert(handle)?;
-    let emitter = EventEmitter::new(poll, handle_id);
-    network.set_emitter(emitter);
-    Ok(SyscallOutput::Done(handle_id.as_usize()))
-}
-
-pub fn sys_net_peek(
-    current: &SharedRef<Thread>,
-    ctx: &SyscallRegs,
-) -> Result<SyscallOutput, ErrorCode> {
-    let network_id = HandleId::new(ctx.a0);
-    let info_addr = UAddr::new(ctx.a1);
-    let network = current
-        .isolate()
-        .handles()
-        .lock()
-        .get::<Network>(network_id, HandleRight::READ)?;
-
-    let (token, info) = network.peek()?;
-    let info_ptr = &raw const info;
-    let info_len = size_of::<NetRxInfo>();
-    let info_bytes = unsafe { slice::from_raw_parts(info_ptr.cast::<u8>(), info_len) };
-    USlice::new(info_addr, info_len)?.write_bytes(info_bytes)?;
-    Ok(SyscallOutput::Done(token))
-}
-
-pub fn sys_net_recv(
-    current: &SharedRef<Thread>,
-    ctx: &SyscallRegs,
-) -> Result<SyscallOutput, ErrorCode> {
-    let network_id = HandleId::new(ctx.a0);
-    let token = ctx.a1;
-    let payload = USlice::new(UAddr::new(ctx.a2), ctx.a3)?;
-    let network = current
-        .isolate()
-        .handles()
-        .lock()
-        .get::<Network>(network_id, HandleRight::READ)?;
-
-    network.recv(token, payload)?;
-    Ok(SyscallOutput::Done(0))
-}
-
-pub fn sys_net_send(
-    current: &SharedRef<Thread>,
-    ctx: &SyscallRegs,
-) -> Result<SyscallOutput, ErrorCode> {
-    let network_id = HandleId::new(ctx.a0);
-    let header = USlice::new(UAddr::new(ctx.a2), ctx.a3)?;
-    let payload = USlice::new(UAddr::new(ctx.a4), ctx.a5)?;
-    let network = current
-        .isolate()
-        .handles()
-        .lock()
-        .get::<Network>(network_id, HandleRight::WRITE)?;
-
-    network.send(header, payload)?;
-    Ok(SyscallOutput::Done(0))
+    let router = ROUTER.lock();
+    let router = router.as_ref().expect("network router is not initialized");
+    router.handle_interrupt();
 }
