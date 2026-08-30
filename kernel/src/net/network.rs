@@ -280,7 +280,7 @@ impl Network {
             .map(|binding| (binding.selector.specificity(), binding.cookie))
     }
 
-    fn recycle(&self, rx: Rx) {
+    fn recycle_rx_buffer(&self, rx: Rx) {
         let driver = self.device.driver();
         if driver.provide(&GLOBAL_ENV, rx.buf).is_err() {
             warn!("net: failed to recycle an RX buffer");
@@ -301,12 +301,12 @@ impl Network {
         let mut mutable = self.mutable.lock();
         if mutable.rx_queue.len() >= MAX_RX_QUEUE_DEPTH {
             drop(mutable);
-            self.recycle(rx);
+            self.recycle_rx_buffer(rx);
             return;
         }
         if mutable.rx_queue.try_reserve(1).is_err() {
             drop(mutable);
-            self.recycle(rx);
+            self.recycle_rx_buffer(rx);
             return;
         }
 
@@ -352,17 +352,17 @@ impl Network {
 
         let rx = mutable.peeked.take().unwrap();
         drop(mutable);
-        self.recycle(rx);
+        self.recycle_rx_buffer(rx);
         Ok(payload_len)
     }
 
-    pub fn drop_rx(&self) -> Result<(), ErrorCode> {
+    pub fn drop_peeked(&self) -> Result<(), ErrorCode> {
         let mut mutable = self.mutable.lock();
         let Some(rx) = mutable.peeked.take() else {
             return Err(ErrorCode::EMPTY);
         };
         drop(mutable);
-        self.recycle(rx);
+        self.recycle_rx_buffer(rx);
         Ok(())
     }
 }

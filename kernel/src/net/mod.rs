@@ -188,7 +188,7 @@ pub fn sys_net_drop(
         .lock()
         .get::<Network>(network_id, HandleRight::READ)?;
 
-    network.drop_rx()?;
+    network.drop_peeked()?;
     Ok(SyscallOutput::Done(0))
 }
 
