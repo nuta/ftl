@@ -26,6 +26,7 @@ pub use cpuvar::CpuVar;
 pub use cpuvar::get_cpuvar;
 pub use cpuvar::set_cpuvar;
 pub use idle::idle;
+pub use io_apic::interrupt_acquire;
 // pub use semihosting::semihosting_exit;
 pub use thread::Thread;
 pub use usercopy::usercopy_read;

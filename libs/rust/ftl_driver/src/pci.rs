@@ -144,7 +144,13 @@ pub fn set_bus_master(env: &dyn Env, dev: &PciDevice, enable: bool) {
     } else {
         value &= !(1 << 2);
     }
-    write_config16(env, dev.bus, dev.slot, offset_of!(PciConfig, command), value);
+    write_config16(
+        env,
+        dev.bus,
+        dev.slot,
+        offset_of!(PciConfig, command),
+        value,
+    );
 }
 
 pub fn get_bar(env: &dyn Env, dev: &PciDevice, bar: u8) -> u32 {
@@ -154,5 +160,10 @@ pub fn get_bar(env: &dyn Env, dev: &PciDevice, bar: u8) -> u32 {
 }
 
 pub fn get_interrupt_line(env: &dyn Env, dev: &PciDevice) -> u8 {
-    read_config8(env, dev.bus, dev.slot, offset_of!(PciConfig, interrupt_line))
+    read_config8(
+        env,
+        dev.bus,
+        dev.slot,
+        offset_of!(PciConfig, interrupt_line),
+    )
 }

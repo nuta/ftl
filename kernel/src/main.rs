@@ -20,6 +20,7 @@ mod initfs;
 mod isolate;
 mod loader;
 mod memory;
+mod net;
 mod panic;
 mod poll;
 mod scheduler;

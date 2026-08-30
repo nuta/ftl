@@ -42,6 +42,14 @@ fn do_handle_syscall() {
             crate::poll::sys_poll_wait(&thread, &cpuvar.current_thread, &regs)
         }
         n if n == Syscall::PollNotify as usize => crate::poll::sys_poll_notify(&thread, &regs),
+        n if n == Syscall::NetCreate as usize => crate::net::sys_net_create(&thread, &regs),
+        n if n == Syscall::NetSubscribe as usize => crate::net::sys_net_subscribe(&thread, &regs),
+        n if n == Syscall::NetBind as usize => crate::net::sys_net_bind(&thread, &regs),
+        n if n == Syscall::NetUnbind as usize => crate::net::sys_net_unbind(&thread, &regs),
+        n if n == Syscall::NetPeek as usize => crate::net::sys_net_peek(&thread, &regs),
+        n if n == Syscall::NetRecv as usize => crate::net::sys_net_recv(&thread, &regs),
+        n if n == Syscall::NetDrop as usize => crate::net::sys_net_drop(&thread, &regs),
+        n if n == Syscall::NetSend as usize => crate::net::sys_net_send(&thread, &regs),
         _ => todo!(),
     };
 

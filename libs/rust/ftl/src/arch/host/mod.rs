@@ -5,6 +5,10 @@ pub fn unreachable() -> ! {
     panic!("unreachable");
 }
 
+pub fn syscall0(n: Syscall) -> Result<usize, ErrorCode> {
+    panic!("syscall0(0x{:x}) is not implemented", n as usize);
+}
+
 pub fn syscall1(n: Syscall, a0: usize) -> Result<usize, ErrorCode> {
     panic!("syscall1(0x{:x}, {a0:x}) is not implemented", n as usize);
 }
