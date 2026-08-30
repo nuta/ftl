@@ -132,8 +132,8 @@ impl<N: Notifier> VirtioNet<N> {
 impl<N: Notifier> Driver for VirtioNet<N> {
     type Notifier = N;
 
-    fn mac_address(&self) -> Result<[u8; 6], Error> {
-        Ok(self.mac)
+    fn mac_address(&self) -> &[u8; 6] {
+        &self.mac
     }
 
     fn try_send(
@@ -159,19 +159,20 @@ impl<N: Notifier> Driver for VirtioNet<N> {
         header_buf.as_mut_slice()[header_offset..headroom].fill(0);
 
         // Prepare a descriptor chain for virtio-net.
-        let chain = [
-            ChainEntry::Read {
-                paddr: (header_buf.paddr() + header_offset) as u64,
-                len: (header_buf.len() - header_offset) as u32,
-            },
-            ChainEntry::Read {
-                paddr: payload_buf.paddr() as u64,
-                len: payload_buf.len() as u32,
-            },
-        ];
+        let header_entry = ChainEntry::Read {
+            paddr: (header_buf.paddr() + header_offset) as u64,
+            len: (header_buf.len() - header_offset) as u32,
+        };
+        let payload_entry = ChainEntry::Read {
+            paddr: payload_buf.paddr() as u64,
+            len: payload_buf.len() as u32,
+        };
+        let chain = [header_entry, payload_entry];
+        let chain_len = if payload_buf.len() == 0 { 1 } else { 2 };
+        let chain = &chain[..chain_len];
 
         if let Err((_, data)) = mutable.txq.push(
-            &chain,
+            chain,
             TxData {
                 header_buf,
                 payload_buf,

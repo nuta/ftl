@@ -1,7 +1,7 @@
 use crate::dma::DmaBuf;
 use crate::env::Env;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Error {
     TxFull,
     HeadroomTooSmall,
@@ -27,7 +27,7 @@ pub trait Driver: Send + Sync {
     type Notifier: Notifier;
 
     /// Reads the MAC address.
-    fn mac_address(&self) -> Result<[u8; 6], Error>;
+    fn mac_address(&self) -> &[u8; 6];
 
     /// Tries to send a packet.
     ///

@@ -1,5 +1,6 @@
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
+use ftl_types::net::NetRxInfo;
 use ftl_types::poll::Event;
 use ftl_types::syscall::Syscall;
 use ftl_types::thread::ExitReason;
@@ -79,6 +80,54 @@ pub fn poll_wait(poll: HandleId) -> Result<Event, ErrorCode> {
 
 pub fn poll_notify(poll: HandleId) -> Result<(), ErrorCode> {
     syscall1(Syscall::PollNotify, poll.as_usize())?;
+    Ok(())
+}
+
+pub fn net_acquire(
+    poll: HandleId,
+    kind: usize,
+    our_ip: u32,
+    our_port: u16,
+) -> Result<HandleId, ErrorCode> {
+    let ret = syscall4(
+        Syscall::NetAcquire,
+        poll.as_usize(),
+        kind,
+        our_ip as usize,
+        our_port as usize,
+    )?;
+    Ok(HandleId::new(ret))
+}
+
+pub fn net_peek(net: HandleId, info: &mut NetRxInfo) -> Result<usize, ErrorCode> {
+    syscall2(
+        Syscall::NetPeek,
+        net.as_usize(),
+        info as *mut NetRxInfo as usize,
+    )
+}
+
+pub fn net_recv(net: HandleId, token: usize, payload: &mut [u8]) -> Result<(), ErrorCode> {
+    syscall4(
+        Syscall::NetRecv,
+        net.as_usize(),
+        token,
+        payload.as_mut_ptr() as usize,
+        payload.len(),
+    )?;
+    Ok(())
+}
+
+pub fn net_send(net: HandleId, header: &[u8], payload: &[u8]) -> Result<(), ErrorCode> {
+    syscall6(
+        Syscall::NetSend,
+        net.as_usize(),
+        0,
+        header.as_ptr() as usize,
+        header.len(),
+        payload.as_ptr() as usize,
+        payload.len(),
+    )?;
     Ok(())
 }
 

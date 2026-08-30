@@ -81,14 +81,15 @@ impl FdTable {
         }
     }
 
-    pub fn insert(&mut self, file: Arc<dyn FileLike>) -> Result<Option<Arc<dyn FileLike>>, Errno> {
+    pub fn insert(&mut self, file: Arc<dyn FileLike>) -> Result<c_int, Errno> {
         if self.active_fds >= self.capacity {
             return Err(Errno::EMFILE);
         }
 
         for fd in 0..self.capacity {
             if fd >= self.open_files.len() || self.open_files[fd].is_none() {
-                return self.insert_at(fd as c_int, file);
+                self.insert_at(fd as c_int, file)?;
+                return Ok(fd as c_int);
             }
         }
 
@@ -130,6 +131,20 @@ impl FdTable {
             Some(Some(file)) => Ok(file),
             _ => Err(Errno::EBADF),
         }
+    }
+
+    pub fn remove(&mut self, fd: c_int) -> Result<Arc<dyn FileLike>, Errno> {
+        if fd < 0 {
+            return Err(Errno::EBADF);
+        }
+
+        let slot = self.open_files.get_mut(fd as usize);
+        let file = match slot {
+            Some(slot) => slot.take().ok_or(Errno::EBADF)?,
+            None => return Err(Errno::EBADF),
+        };
+        self.active_fds -= 1;
+        Ok(file)
     }
 }
 
@@ -367,6 +382,14 @@ impl Process {
 
     pub fn fd_table(&self) -> &SpinLock<FdTable> {
         &self.fd_table
+    }
+
+    pub fn poll(&self) -> HandleId {
+        self.poll
+    }
+
+    pub fn container(&self) -> &Arc<Container> {
+        &self.container
     }
 }
 

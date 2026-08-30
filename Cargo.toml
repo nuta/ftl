@@ -18,6 +18,7 @@ ftl_types = { path = "libs/rust/ftl_types" }
 ftl_virtio = { path = "libs/rust/ftl_virtio" }
 ftl_driver = { path = "libs/rust/ftl_driver" }
 virtio_net = { path = "libs/rust/virtio_net" }
+hashbrown = "0.17.1"
 
 [profile.dev]
 panic = "abort"

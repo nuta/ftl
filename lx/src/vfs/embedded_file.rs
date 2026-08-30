@@ -15,6 +15,10 @@ impl EmbeddedFile {
 }
 
 impl FileLike for EmbeddedFile {
+    fn as_any(&self) -> &dyn core::any::Any {
+        self
+    }
+
     fn read(&self, buf: &mut [u8], offset: usize) -> Result<usize, Errno> {
         let len = self.data.len();
         if offset >= len {

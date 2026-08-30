@@ -324,6 +324,18 @@ extern "C" fn handle_kernel_interrupt(frame: &mut InterruptFrame) {
                 frame.rip, frame.error_code
             );
         }
+        vector if vector >= IRQ_VECTOR_BASE => {
+            let irq = vector - IRQ_VECTOR_BASE;
+            if irq == TIMER_IRQ {
+                super::timer::handle_interrupt();
+            } else if crate::net::is_irq(irq) {
+                crate::net::handle_interrupt();
+                super::io_apic::interrupt_acknowledge(irq);
+                crate::scheduler::return_to_user();
+            } else {
+                panic!("unhandled kernel interrupt ({vector})");
+            }
+        }
         vector => {
             panic!(
                 "unhandled kernel exception ({vector}), error_code={:#x}",
@@ -348,6 +360,9 @@ extern "C" fn handle_user_interrupt(vector: u8, error_code: u64) -> ! {
             if irq == TIMER_IRQ {
                 // trace!("timer interrupt");
                 super::timer::handle_interrupt();
+            } else if crate::net::is_irq(irq) {
+                crate::net::handle_interrupt();
+                super::io_apic::interrupt_acknowledge(irq);
             } else {
                 trace!("unhandled interrupt ({vector}), error_code={error_code:#x}");
             }
