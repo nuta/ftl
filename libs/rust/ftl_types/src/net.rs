@@ -16,6 +16,16 @@ pub struct Rule {
     remote_port: Option<NonZeroU16>,
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct FiveTuple {
+    pub eth_type: u16,
+    pub ip_proto: u16,
+    pub local_ip: u32,
+    pub local_port: u16,
+    pub remote_ip: u32,
+    pub remote_port: u16,
+}
+
 impl Rule {
     pub const fn new(
         eth_type: u16,
@@ -40,26 +50,18 @@ impl Rule {
     /// Because a network has multiple rules, like CSS selectors, multiple rules
     /// may match the same packet. The specificity is a number to compare the
     /// priority of the rules. Higher is more specific, and is non-zero.
-    pub const fn matches(
-        &self,
-        eth_type: u16,
-        ip_proto: u16,
-        local_ip: u32,
-        local_port: u16,
-        remote_ip: u32,
-        remote_port: u16,
-    ) -> Option<u8> {
-        if self.eth_type != eth_type {
+    pub const fn matches(&self, tuple: FiveTuple) -> Option<u8> {
+        if self.eth_type != tuple.eth_type {
             return None;
         }
 
-        if self.ip_proto != ip_proto {
+        if self.ip_proto != tuple.ip_proto {
             return None;
         }
 
         let mut specificity = 1;
         if let Some(expected) = self.local_ip {
-            if expected.get() != local_ip {
+            if expected.get() != tuple.local_ip {
                 return None;
             }
 
@@ -67,7 +69,7 @@ impl Rule {
         }
 
         if let Some(expected) = self.remote_ip {
-            if expected.get() != remote_ip {
+            if expected.get() != tuple.remote_ip {
                 return None;
             }
 
@@ -75,7 +77,7 @@ impl Rule {
         }
 
         if let Some(expected) = self.local_port {
-            if expected.get() != local_port {
+            if expected.get() != tuple.local_port {
                 return None;
             }
 
@@ -83,7 +85,7 @@ impl Rule {
         }
 
         if let Some(expected) = self.remote_port {
-            if expected.get() != remote_port {
+            if expected.get() != tuple.remote_port {
                 return None;
             }
 

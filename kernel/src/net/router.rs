@@ -6,6 +6,7 @@ use ftl_driver::net::Error;
 use ftl_types::error::ErrorCode;
 use ftl_types::net::ETHTYPE_ARP;
 use ftl_types::net::ETHTYPE_IPV4;
+use ftl_types::net::FiveTuple;
 
 use super::device::Device;
 use super::network::Network;
@@ -83,25 +84,10 @@ impl Router {
         Ok(())
     }
 
-    fn find_network(
-        &self,
-        eth_type: u16,
-        ip_proto: u16,
-        local_ip: Ipv4Addr,
-        local_port: u16,
-        remote_ip: Ipv4Addr,
-        remote_port: u16,
-    ) -> Option<(SharedRef<Network>, u64)> {
+    fn find_network(&self, five_tuple: FiveTuple) -> Option<(SharedRef<Network>, u64)> {
         // TODO: 5-tuple hash map to avoid scanning all networks.
         for network in &self.networks {
-            if let Some(cookie) = network.matches(
-                eth_type,
-                ip_proto,
-                local_ip,
-                local_port,
-                remote_ip,
-                remote_port,
-            ) {
+            if let Some(cookie) = network.matches(five_tuple) {
                 return Some((network.clone(), cookie));
             }
         }
@@ -176,14 +162,16 @@ impl Router {
         let remote_ip = inspector.src_ip();
         let remote_port = inspector.src_port();
         let proto = inspector.ip_proto();
-        let Some((network, cookie)) = self.find_network(
-            ETHTYPE_IPV4,
-            proto,
-            local_ip,
+        let five_tuple = FiveTuple {
+            eth_type: ETHTYPE_IPV4,
+            ip_proto: proto,
+            local_ip: local_ip.as_u32(),
             local_port,
-            remote_ip,
+            remote_ip: remote_ip.as_u32(),
             remote_port,
-        ) else {
+        };
+
+        let Some((network, cookie)) = self.find_network(five_tuple) else {
             return;
         };
 

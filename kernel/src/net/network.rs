@@ -7,6 +7,7 @@ use ftl_driver::dma::DmaBuf;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use ftl_types::handle::HandleRight;
+use ftl_types::net::FiveTuple;
 use ftl_types::net::Rule;
 use ftl_types::poll::EventKind;
 use ftl_types::thread::SyscallRegs;
@@ -218,9 +219,11 @@ impl Network {
 
     pub fn subscribe(&self, emitter: EventEmitter) -> Result<(), ErrorCode> {
         let mut mutable = self.mutable.lock();
-        if mutable.peeked.is_some() || !mutable.rx_queue.is_empty() {
+        if !mutable.rx_queue.is_empty() {
+            // There are pending RX packets. Notify the poll immediately.
             drop(mutable);
-            return emitter.emit(EventKind::PollNotified);
+            emitter.emit(EventKind::PollNotified)?;
+            return Ok(());
         }
 
         mutable
@@ -259,29 +262,12 @@ impl Network {
     }
 
     /// Returns a cookie of the matching rule if found.
-    pub fn matches(
-        &self,
-        eth_type: u16,
-        ip_proto: u16,
-        local_ip: Ipv4Addr,
-        local_port: u16,
-        remote_ip: Ipv4Addr,
-        remote_port: u16,
-    ) -> Option<u64> {
+    pub fn matches(&self, five_tuple: FiveTuple) -> Option<u64> {
         let mut best_specificity = 0;
         let mut best_cookie = 0;
         // TODO: Sort the bindings by specificity to avoid iterating through all of them.
         for binding in self.bindings.lock().iter() {
-            let result = binding.rule.matches(
-                eth_type,
-                ip_proto,
-                local_ip.as_u32(),
-                local_port,
-                remote_ip.as_u32(),
-                remote_port,
-            );
-
-            if let Some(specificity) = result {
+            if let Some(specificity) = binding.rule.matches(five_tuple) {
                 if specificity > best_specificity {
                     best_specificity = specificity;
                     best_cookie = binding.cookie;
