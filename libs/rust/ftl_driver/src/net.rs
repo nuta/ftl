@@ -37,8 +37,8 @@ pub trait Driver: Send + Sync {
         env: &dyn Env,
         header_buf: DmaBuf,
         headroom: usize,
-        payload_buf: DmaBuf,
-    ) -> Result<(), (DmaBuf, DmaBuf, Error)>;
+        payload_buf: Option<DmaBuf>,
+    ) -> Result<(), (DmaBuf, Option<DmaBuf>, Error)>;
 
     /// Provides an RX buffer to receive a packet.
     fn provide(&self, env: &dyn Env, buf: DmaBuf) -> Result<(), (Error, DmaBuf)>;

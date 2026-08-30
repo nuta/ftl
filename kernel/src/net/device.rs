@@ -18,7 +18,7 @@ const HEADROOM_TOTAL: usize = DRIVER_HEADROOM + ETHERNET_HEADROOM;
 
 pub struct Tx {
     header_buf: DmaBuf,
-    payload_buf: DmaBuf,
+    payload_buf: Option<DmaBuf>,
 }
 
 impl Tx {
@@ -27,9 +27,14 @@ impl Tx {
         let header_buf = env
             .alloc_dma(ip_header_len + HEADROOM_TOTAL)
             .map_err(|_| ErrorCode::INVALID_ARG)?;
-        let payload_buf = env
-            .alloc_dma(payload_len)
-            .map_err(|_| ErrorCode::INVALID_ARG)?;
+        let payload_buf = if payload_len == 0 {
+            None
+        } else {
+            Some(
+                env.alloc_dma(payload_len)
+                    .map_err(|_| ErrorCode::INVALID_ARG)?,
+            )
+        };
 
         Ok(Self {
             header_buf,
@@ -45,8 +50,10 @@ impl Tx {
         &mut self.header_buf.as_mut_slice()[DRIVER_HEADROOM..DRIVER_HEADROOM + ETHERNET_HEADROOM]
     }
 
-    pub fn payload_bytes(&mut self) -> &mut [u8] {
-        self.payload_buf.as_mut_slice()
+    pub fn payload_bytes(&mut self) -> Option<&mut [u8]> {
+        self.payload_buf
+            .as_mut()
+            .map(|payload_buf| payload_buf.as_mut_slice())
     }
 
     fn write_ethernet_header(&mut self, dst_mac: &[u8; 6], src_mac: &[u8; 6], eth_type: u16) {

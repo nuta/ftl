@@ -278,7 +278,9 @@ impl Network {
         let mut tx = Tx::alloc(&GLOBAL_ENV, header.len(), payload.len())?;
         header.read_bytes(tx.ip_header_bytes())?;
         Ipv4Inspector::new_tcp_header(tx.ip_header_bytes()).map_err(|_| ErrorCode::INVALID_ARG)?;
-        payload.read_bytes(tx.payload_bytes())?;
+        if let Some(payload_bytes) = tx.payload_bytes() {
+            payload.read_bytes(payload_bytes)?;
+        }
         self.device.send_ipv4(&GLOBAL_ENV, GATEWAY_IP, tx)
     }
 

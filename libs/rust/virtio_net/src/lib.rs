@@ -39,7 +39,7 @@ struct VirtioNetHdr {
 
 struct TxData {
     header_buf: DmaBuf,
-    payload_buf: DmaBuf,
+    payload_buf: Option<DmaBuf>,
 }
 
 struct RxData {
@@ -141,8 +141,8 @@ impl<N: Notifier> Driver for VirtioNet<N> {
         env: &dyn Env,
         mut header_buf: DmaBuf,
         headroom: usize,
-        payload_buf: DmaBuf,
-    ) -> Result<(), (DmaBuf, DmaBuf, Error)> {
+        payload_buf: Option<DmaBuf>,
+    ) -> Result<(), (DmaBuf, Option<DmaBuf>, Error)> {
         // We need some space to prepend the Virtio-net header.
         if headroom < size_of::<VirtioNetHdr>() {
             return Err((header_buf, payload_buf, Error::HeadroomTooSmall));
@@ -163,13 +163,18 @@ impl<N: Notifier> Driver for VirtioNet<N> {
             paddr: (header_buf.paddr() + header_offset) as u64,
             len: (header_buf.len() - header_offset) as u32,
         };
-        let payload_entry = ChainEntry::Read {
-            paddr: payload_buf.paddr() as u64,
-            len: payload_buf.len() as u32,
+        let chain = match payload_buf.as_ref() {
+            Some(payload_buf) => {
+                &[
+                    header_entry,
+                    ChainEntry::Read {
+                        paddr: payload_buf.paddr() as u64,
+                        len: payload_buf.len() as u32,
+                    },
+                ][..]
+            }
+            None => &[header_entry],
         };
-        let chain = [header_entry, payload_entry];
-        let chain_len = if payload_buf.len() == 0 { 1 } else { 2 };
-        let chain = &chain[..chain_len];
 
         if let Err((_, data)) = mutable.txq.push(
             chain,
@@ -255,7 +260,9 @@ impl<N: Notifier> Driver for VirtioNet<N> {
                 match mutable.txq.pop() {
                     Ok(Some((data, _total_len))) => {
                         env.free_dma(data.header_buf);
-                        env.free_dma(data.payload_buf);
+                        if let Some(payload_buf) = data.payload_buf {
+                            env.free_dma(payload_buf);
+                        }
                     }
                     Ok(None) => break,
                     // Ignore bad descriptors.
