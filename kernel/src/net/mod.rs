@@ -11,7 +11,6 @@ use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use ftl_types::handle::HandleRight;
 use ftl_types::net::NetMatch;
-use ftl_types::net::NetRxMeta;
 use ftl_types::thread::SyscallRegs;
 use ftl_utils::alignment::align_up;
 use ftl_utils::spinlock::SpinLock;
@@ -168,15 +167,14 @@ pub fn sys_net_peek(
 ) -> Result<SyscallOutput, ErrorCode> {
     let network_id = HandleId::new(ctx.a0);
     let header = USlice::new(UAddr::new(ctx.a1), ctx.a2)?;
-    let meta = USlice::new(UAddr::new(ctx.a3), size_of::<NetRxMeta>())?;
     let network = current
         .isolate()
         .handles()
         .lock()
         .get::<Network>(network_id, HandleRight::READ)?;
 
-    network.peek(header, meta)?;
-    Ok(SyscallOutput::Done(0))
+    let cookie = network.peek(header)?;
+    Ok(SyscallOutput::Done(cookie as usize))
 }
 
 pub fn sys_net_drop(

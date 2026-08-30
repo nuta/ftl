@@ -1,15 +1,10 @@
 use alloc::collections::VecDeque;
 use alloc::vec::Vec;
-use core::mem::size_of;
-use core::slice;
 
 use ftl_driver::dma::DmaBuf;
 use ftl_driver::net::Error;
 use ftl_types::error::ErrorCode;
-use ftl_types::net::IP_PROTOCOL_TCP;
-use ftl_types::net::IP_VERSION_4;
 use ftl_types::net::NetMatch;
-use ftl_types::net::NetRxMeta;
 use ftl_types::poll::EventKind;
 use ftl_utils::spinlock::SpinLock;
 
@@ -155,19 +150,14 @@ impl Router {
 
         self.device.learn_arp(&GLOBAL_ENV, remote_ip, src_mac);
 
-        let meta = NetRxMeta {
-            cookie,
-            packet_len: inspector.packet_len() as u32,
-            ip_version: IP_VERSION_4,
-            ip_protocol: IP_PROTOCOL_TCP,
-            transport_offset: inspector.transport_offset() as u16,
-            payload_offset: inspector.payload_offset() as u16,
-            reserved: [0; 6],
-        };
+        let packet_len = inspector.packet_len();
+        let header_len = inspector.header_len();
         let rx = Rx {
             buf,
             packet_offset,
-            meta,
+            packet_len,
+            header_len,
+            cookie,
         };
         network.enqueue_rx(rx);
     }
@@ -197,7 +187,9 @@ impl Router {
 struct Rx {
     buf: DmaBuf,
     packet_offset: usize,
-    meta: NetRxMeta,
+    packet_len: usize,
+    header_len: usize,
+    cookie: u64,
 }
 
 struct Mutable {
@@ -326,31 +318,23 @@ impl Network {
         }
     }
 
-    pub fn peek(&self, header: USlice, meta: USlice) -> Result<(), ErrorCode> {
+    pub fn peek(&self, header: USlice) -> Result<u64, ErrorCode> {
         let mut mutable = self.mutable.lock();
         if mutable.peeked.is_none() {
             mutable.peeked = mutable.rx_queue.pop_front();
         }
+        let rx = mutable.peeked.as_ref().ok_or(ErrorCode::EMPTY)?;
 
-        let Some(rx) = mutable.peeked.as_ref() else {
-            return Err(ErrorCode::EMPTY);
-        };
-
-        let header_len = rx.meta.payload_offset as usize;
-        if header.len() < header_len {
+        if header.len() < rx.header_len {
             return Err(ErrorCode::OUT_OF_BOUNDS);
         }
 
-        let meta_ptr = &raw const rx.meta;
-        let meta_bytes =
-            unsafe { slice::from_raw_parts(meta_ptr.cast::<u8>(), size_of::<NetRxMeta>()) };
-        meta.write_bytes(meta_bytes)?;
         let start = rx.packet_offset;
-        let end = start + header_len;
+        let end = start + rx.header_len;
         header
-            .subslice(0, header_len)?
+            .subslice(0, rx.header_len)?
             .write_bytes(&rx.buf.as_slice()[start..end])?;
-        Ok(())
+        Ok(rx.cookie)
     }
 
     pub fn recv(&self, payload: USlice) -> Result<usize, ErrorCode> {
@@ -358,11 +342,11 @@ impl Network {
         let Some(rx) = mutable.peeked.as_ref() else {
             return Err(ErrorCode::EMPTY);
         };
-        let payload_len = rx.meta.packet_len as usize - rx.meta.payload_offset as usize;
+        let payload_len = rx.packet_len - rx.header_len;
         if payload.len() != payload_len {
             return Err(ErrorCode::OUT_OF_BOUNDS);
         }
-        let start = rx.packet_offset + rx.meta.payload_offset as usize;
+        let start = rx.packet_offset + rx.header_len;
         let end = start + payload_len;
         payload.write_bytes(&rx.buf.as_slice()[start..end])?;
 

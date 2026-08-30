@@ -15,7 +15,6 @@ use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use ftl_types::net::NET_MAX_HEADER_LEN;
 use ftl_types::net::NetMatch;
-use ftl_types::net::NetRxMeta;
 use ftl_utils::spinlock::SpinLock;
 
 use super::tcp::Endpoint;
@@ -96,17 +95,16 @@ impl TcpIp {
     fn drain(&self) {
         let mut header = self.rx_header.lock();
         loop {
-            let mut rx = NetRxMeta::empty();
-            match net_peek(self.net, &mut header, &mut rx) {
-                Ok(()) => {}
+            let cookie = match net_peek(self.net, &mut header) {
+                Ok(cookie) => cookie,
                 Err(error) if error == ErrorCode::EMPTY => return,
                 Err(_) => panic!("failed to peek at a network packet"),
-            }
-            let Some(info) = parse_received(&header, &rx) else {
+            };
+            let Some(info) = parse_received(&header) else {
                 net_drop(self.net).expect("failed to drop a network packet");
                 continue;
             };
-            self.handle_packet(rx.cookie, &info);
+            self.handle_packet(cookie, &info);
         }
     }
 

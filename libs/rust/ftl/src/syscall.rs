@@ -1,7 +1,6 @@
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use ftl_types::net::NetMatch;
-use ftl_types::net::NetRxMeta;
 use ftl_types::poll::Event;
 use ftl_types::syscall::Syscall;
 use ftl_types::thread::ExitReason;
@@ -113,15 +112,14 @@ pub fn net_unbind(net: HandleId, rule: &NetMatch) -> Result<(), ErrorCode> {
     Ok(())
 }
 
-pub fn net_peek(net: HandleId, header: &mut [u8], meta: &mut NetRxMeta) -> Result<(), ErrorCode> {
-    syscall4(
+pub fn net_peek(net: HandleId, header: &mut [u8]) -> Result<u64, ErrorCode> {
+    let cookie = syscall3(
         Syscall::NetPeek,
         net.as_usize(),
         header.as_mut_ptr() as usize,
         header.len(),
-        meta as *mut NetRxMeta as usize,
     )?;
-    Ok(())
+    Ok(cookie as u64)
 }
 
 pub fn net_recv(net: HandleId, payload: &mut [u8]) -> Result<(), ErrorCode> {

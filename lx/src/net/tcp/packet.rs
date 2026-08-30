@@ -1,10 +1,6 @@
 use core::ops::BitOr;
 use core::ops::BitOrAssign;
 
-use ftl_types::net::IP_PROTOCOL_TCP;
-use ftl_types::net::IP_VERSION_4;
-use ftl_types::net::NetRxMeta;
-
 const OUR_IP: u32 = 0x0a00_020f;
 const IPV4_HEADER_LEN: usize = 20;
 const TCP_HEADER_LEN: usize = 20;
@@ -73,32 +69,36 @@ pub struct TcpSegmentMeta {
     pub flags: u8,
 }
 
-pub fn parse_received(header: &[u8], rx: &NetRxMeta) -> Option<TcpSegmentMeta> {
-    if rx.ip_version != IP_VERSION_4 || rx.ip_protocol != IP_PROTOCOL_TCP {
+pub fn parse_received(header: &[u8]) -> Option<TcpSegmentMeta> {
+    let fixed_ip_header = header.get(..IPV4_HEADER_LEN)?;
+    if fixed_ip_header[0] >> 4 != 4 || fixed_ip_header[9] != 6 {
         return None;
     }
 
-    let transport_offset = rx.transport_offset as usize;
-    let payload_offset = rx.payload_offset as usize;
-    let packet_len = rx.packet_len as usize;
-    let header = header.get(..payload_offset)?;
-    let ip_header = header.get(..transport_offset)?;
-    let tcp_header = header.get(transport_offset..payload_offset)?;
-    let payload_len = packet_len.checked_sub(payload_offset)?;
-    if ip_header.len() < 20 || tcp_header.len() < 20 || payload_len > u16::MAX as usize {
+    let ip_header_len = (fixed_ip_header[0] & 0x0f) as usize * 4;
+    if ip_header_len < IPV4_HEADER_LEN {
         return None;
     }
+    let packet_len = u16::from_be_bytes(fixed_ip_header[2..4].try_into().ok()?) as usize;
+    let fixed_tcp_header = header.get(ip_header_len..ip_header_len + TCP_HEADER_LEN)?;
+    let tcp_header_len = (fixed_tcp_header[12] >> 4) as usize * 4;
+    if tcp_header_len < TCP_HEADER_LEN {
+        return None;
+    }
+    let header_len = ip_header_len.checked_add(tcp_header_len)?;
+    header.get(..header_len)?;
+    let payload_len = packet_len.checked_sub(header_len)?;
 
     Some(TcpSegmentMeta {
-        remote_ip: u32::from_be_bytes(ip_header[12..16].try_into().ok()?),
-        local_ip: u32::from_be_bytes(ip_header[16..20].try_into().ok()?),
-        remote_port: u16::from_be_bytes(tcp_header[0..2].try_into().ok()?),
-        local_port: u16::from_be_bytes(tcp_header[2..4].try_into().ok()?),
-        seq: u32::from_be_bytes(tcp_header[4..8].try_into().ok()?),
-        ack: u32::from_be_bytes(tcp_header[8..12].try_into().ok()?),
+        remote_ip: u32::from_be_bytes(fixed_ip_header[12..16].try_into().ok()?),
+        local_ip: u32::from_be_bytes(fixed_ip_header[16..20].try_into().ok()?),
+        remote_port: u16::from_be_bytes(fixed_tcp_header[0..2].try_into().ok()?),
+        local_port: u16::from_be_bytes(fixed_tcp_header[2..4].try_into().ok()?),
+        seq: u32::from_be_bytes(fixed_tcp_header[4..8].try_into().ok()?),
+        ack: u32::from_be_bytes(fixed_tcp_header[8..12].try_into().ok()?),
         payload_len: payload_len as u16,
-        window_size: u16::from_be_bytes(tcp_header[14..16].try_into().ok()?),
-        flags: tcp_header[13],
+        window_size: u16::from_be_bytes(fixed_tcp_header[14..16].try_into().ok()?),
+        flags: fixed_tcp_header[13],
     })
 }
 

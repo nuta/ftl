@@ -113,10 +113,6 @@ impl<'a> Ipv4Inspector<'a> {
         self.total_len
     }
 
-    pub fn transport_offset(&self) -> usize {
-        self.ip_header_len
-    }
-
     pub fn dst_ip(&self) -> Ipv4Addr {
         let value = u32::from_be_bytes(self.buf[16..20].try_into().unwrap());
         Ipv4Addr(value)
@@ -156,7 +152,7 @@ impl<'a> Ipv4Inspector<'a> {
         u16::from_be_bytes(self.buf[start..start + 2].try_into().unwrap())
     }
 
-    pub fn payload_offset(&self) -> usize {
+    pub fn header_len(&self) -> usize {
         self.header_len
     }
 

@@ -88,29 +88,3 @@ const fn matches_optional_u32(expected: Option<NonZeroU32>, actual: u32) -> bool
         None => true,
     }
 }
-
-#[derive(Clone, Copy)]
-#[repr(C)]
-pub struct NetRxMeta {
-    pub cookie: u64,
-    pub packet_len: u32,
-    pub ip_version: u8,
-    pub ip_protocol: u8,
-    pub transport_offset: u16,
-    pub payload_offset: u16,
-    pub reserved: [u8; 6],
-}
-
-impl NetRxMeta {
-    pub const fn empty() -> Self {
-        Self {
-            cookie: 0,
-            packet_len: 0,
-            ip_version: 0,
-            ip_protocol: 0,
-            transport_offset: 0,
-            payload_offset: 0,
-            reserved: [0; 6],
-        }
-    }
-}
