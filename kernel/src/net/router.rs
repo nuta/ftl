@@ -7,16 +7,20 @@ use ftl_types::error::ErrorCode;
 use ftl_types::net::ETHTYPE_ARP;
 use ftl_types::net::ETHTYPE_IPV4;
 use ftl_types::net::FiveTuple;
+use ftl_types::net::IPPROTO_TCP;
 
 use super::device::Device;
 use super::network::Network;
+use super::packet::ARP_OP_REQUEST;
+use super::packet::ArpInspector;
+use super::packet::Error as PacketError;
+use super::packet::EthernetInspector;
 use super::packet::Ipv4Addr;
 use super::packet::Ipv4Inspector;
+use super::packet::TcpInspector;
 use crate::net::GLOBAL_ENV;
 use crate::shared_ref::SharedRef;
 
-const ETHERNET_HEADER_LEN: usize = 14;
-const ARP_PACKET_LEN: usize = 28;
 const OUR_IP: Ipv4Addr = Ipv4Addr::new(0x0a00_020f);
 
 /// Pushes the RX buffer back to the driver when dropped, if not taken.
@@ -100,16 +104,22 @@ impl Router {
 
     fn handle_eth_frame(&self, buf: DmaBuf, headroom: usize, frame_len: usize) {
         let buf = RxDmaBuf::new(&self.device, buf);
-        if frame_len < ETHERNET_HEADER_LEN {
-            return;
-        }
 
+        // Parse the Ethernet frame.
         let frame = &buf.as_slice()[headroom..headroom + frame_len];
-        let src_mac = frame[6..12].try_into().unwrap();
-        let eth_type = u16::from_be_bytes(frame[12..14].try_into().unwrap());
+        let frame = match EthernetInspector::new(frame) {
+            Ok(frame) => frame,
+            Err(e) => {
+                trace!("failed to inspect Ethernet frame: {:?}", e);
+                return;
+            }
+        };
 
+        // Forward to the upper layer.
+        let src_mac = frame.src_mac();
+        let eth_type = frame.eth_type();
         match eth_type {
-            ETHTYPE_ARP => self.handle_arp(frame, src_mac),
+            ETHTYPE_ARP => self.handle_arp(frame.payload()),
             ETHTYPE_IPV4 => self.handle_ipv4(src_mac, buf, headroom, frame_len),
             _ => {
                 trace!("unsupported ethernet type: {:x}", eth_type);
@@ -117,61 +127,96 @@ impl Router {
         }
     }
 
-    fn handle_arp(&self, frame: &[u8], src_mac: [u8; 6]) {
-        let expected_len = ETHERNET_HEADER_LEN + ARP_PACKET_LEN;
-        if frame.len() < expected_len {
-            return;
+    fn handle_arp(&self, packet: &[u8]) {
+        let arp = match ArpInspector::new(packet) {
+            Ok(arp) => arp,
+            Err(e) => {
+                trace!("failed to inspect ARP packet: {:?}", e);
+                return;
+            }
+        };
+
+        let src_mac = arp.src_mac();
+        let src_ip = arp.src_ip();
+
+        // Learn the sender's MAC address.
+        self.device.learn_arp(&GLOBAL_ENV, src_ip, src_mac);
+
+        // Reply to the ARP request if it's for our IP.
+        if arp.operation() == ARP_OP_REQUEST && arp.dst_ip() == OUR_IP {
+            self.device
+                .send_arp_reply(&GLOBAL_ENV, src_mac, src_ip, OUR_IP);
         }
-
-        let operation = u16::from_be_bytes(frame[20..22].try_into().unwrap());
-        let sender_ip = u32::from_be_bytes(frame[28..32].try_into().unwrap());
-        let target_ip = u32::from_be_bytes(frame[38..42].try_into().unwrap());
-        let sender_ip = Ipv4Addr::new(sender_ip);
-        let target_ip = Ipv4Addr::new(target_ip);
-
-        self.device.learn_arp(&GLOBAL_ENV, sender_ip, src_mac);
-        if operation != 1 || target_ip != OUR_IP {
-            return;
-        }
-
-        self.device
-            .send_arp_reply(&GLOBAL_ENV, src_mac, sender_ip, OUR_IP);
     }
 
-    fn handle_ipv4(&self, src_mac: [u8; 6], buf: RxDmaBuf<'_>, headroom: usize, frame_len: usize) {
-        let packet_offset = headroom + ETHERNET_HEADER_LEN;
-        let packet_len = frame_len - ETHERNET_HEADER_LEN;
-        let packet = &buf.as_slice()[packet_offset..packet_offset + packet_len];
-        let inspector = match Ipv4Inspector::new_tcp_rx(packet) {
-            Ok(inspector) => inspector,
+    fn handle_ipv4(&self, buf: RxDmaBuf<'_>, headroom: usize, frame_len: usize) {
+        let off = headroom + EthernetInspector::HEADER_LEN;
+        let len = frame_len - EthernetInspector::HEADER_LEN;
+        let packet = &buf.as_slice()[off..off + len];
+
+        // Parse the IPv4 packet.
+        let ipv4 = match Ipv4Inspector::new(packet) {
+            Ok(ipv4) => ipv4,
             Err(e) => {
                 trace!("failed to inspect IPv4 packet: {:?}", e);
                 return;
             }
         };
 
-        let local_ip = inspector.dst_ip();
-        let local_port = inspector.dst_port();
-        let remote_ip = inspector.src_ip();
-        let remote_port = inspector.src_port();
-        let proto = inspector.ip_proto();
+        // Check if the IPv4 packet is valid.
+        if let Err(e) = ipv4.validate() {
+            trace!("failed to validate IPv4 packet: {:?}", e);
+            return;
+        }
+
+        // Forward to the upper layer.
+        match ipv4.ip_proto() {
+            IPPROTO_TCP => self.handle_tcp(buf, &ipv4, , ),
+            _ => {
+                trace!("unsupported IP protocol: {:x}", ipv4.ip_proto());
+            }
+        }
+    }
+
+    fn handle_tcp(&self, buf: RxDmaBuf<'_>, ipv4: &Ipv4Inspector<'_>, off: usize, len: usize) {
+        // Parse the TCP header.
+        let packet = &buf.as_slice()[off..off + len];
+        let tcp = match TcpInspector::new(packet) {
+            Ok(tcp) => tcp,
+            Err(e) => {
+                trace!("failed to inspect TCP segment: {:?}", e);
+                return;
+            }
+        };
+
+        // Check if the TCP header is valid.
+        if let Err(e) = tcp.validate(&ipv4) {
+            trace!("failed to validate TCP segment: {:?}", e);
+            return;
+        }
+
+        // Build the 5-tuple to look up the network.
+        let local_ip = ipv4.dst_ip();
+        let local_port = tcp.dst_port();
+        let remote_ip = ipv4.src_ip();
+        let remote_port = tcp.src_port();
         let five_tuple = FiveTuple {
             eth_type: ETHTYPE_IPV4,
-            ip_proto: proto,
+            ip_proto: IPPROTO_TCP,
             local_ip: local_ip.as_u32(),
             local_port,
             remote_ip: remote_ip.as_u32(),
             remote_port,
         };
 
+        // Find the network to forward the packet to.
         let Some((network, cookie)) = self.find_network(five_tuple) else {
             return;
         };
 
-        self.device.learn_arp(&GLOBAL_ENV, remote_ip, src_mac);
-
-        let packet_len = inspector.packet_len();
-        let header_len = inspector.header_len();
+        // Forward the packet to the network.
+        let packet_len = ipv4.packet_len();
+        let header_len = ipv4.header_len();
         network.receive(buf.take(), packet_offset, packet_len, header_len, cookie);
     }
 

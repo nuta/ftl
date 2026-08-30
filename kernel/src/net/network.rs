@@ -16,7 +16,6 @@ use ftl_utils::spinlock::SpinLock;
 use super::device::Device;
 use super::device::Tx;
 use super::packet::Ipv4Addr;
-use super::packet::Ipv4Inspector;
 use crate::address::UAddr;
 use crate::address::USlice;
 use crate::handle::Handle;
@@ -49,7 +48,7 @@ struct RxPacket {
     packet_offset: usize,
     /// The length of the packet.
     packet_len: usize,
-    /// The length of the IP header.
+    /// The total length of the IP and TCP/UDP headers.
     header_len: usize,
     /// The cookie of the matching rule.
     ///
@@ -157,17 +156,10 @@ impl Network {
         let mut tx = Tx::alloc(&GLOBAL_ENV, header.len(), payload.len())?;
 
         // Copy the header from the user.
-        header.read_bytes(tx.ip_header_bytes())?;
+        header.read_bytes(tx.header_bytes())?;
 
-        // FIXME: Check if the network owns the binding (our IP/port).
-
-        // Validate the IP and TCP headers.
-        // TODO: reject IPv6 / UDP
-        if let Err(err) = Ipv4Inspector::new_tcp_tx(tx.ip_header_bytes()) {
-            // TODO: Return more specific ErrorCode rather than INVALID_ARG
-            warn!("invalid network header: {:?}", err);
-            return Err(ErrorCode::INVALID_ARG);
-        }
+        // FIXME: Check if the network owns the binding (our IP/port), and figure out
+        //        the expected protocols, then validate the IP and TCP headers.
 
         // Copy the payload from the user.
         if let Some(payload_bytes) = tx.payload_bytes() {

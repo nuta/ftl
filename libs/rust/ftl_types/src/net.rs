@@ -3,13 +3,13 @@ use core::num::NonZeroU32;
 
 pub const ETHTYPE_IPV4: u16 = 0x0800;
 pub const ETHTYPE_ARP: u16 = 0x0806;
-pub const IPPROTO_TCP: u16 = 0x06;
+pub const IPPROTO_TCP: u8 = 0x06;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(C)]
 pub struct Rule {
     eth_type: u16, // eth type
-    ip_proto: u16, // protocol in IPv4 header
+    ip_proto: u8,  // protocol in IPv4 header
     local_ip: Option<NonZeroU32>,
     remote_ip: Option<NonZeroU32>,
     local_port: Option<NonZeroU16>,
@@ -19,7 +19,7 @@ pub struct Rule {
 #[derive(Clone, Copy, Debug)]
 pub struct FiveTuple {
     pub eth_type: u16,
-    pub ip_proto: u16,
+    pub ip_proto: u8,
     pub local_ip: u32,
     pub local_port: u16,
     pub remote_ip: u32,
@@ -29,7 +29,7 @@ pub struct FiveTuple {
 impl Rule {
     pub const fn new(
         eth_type: u16,
-        ip_proto: u16,
+        ip_proto: u8,
         local_ip: Option<NonZeroU32>,
         local_port: Option<NonZeroU16>,
         remote_ip: Option<NonZeroU32>,

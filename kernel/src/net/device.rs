@@ -8,11 +8,17 @@ use ftl_types::net::ETHTYPE_IPV4;
 use ftl_utils::spinlock::SpinLock;
 
 use super::arp::ArpTable;
+use super::packet::ARP_HW_ETHERNET;
+use super::packet::ARP_HWADDR_LEN;
+use super::packet::ARP_IPADDR_LEN;
+use super::packet::ARP_OP_REPLY;
+use super::packet::ArpRewriter;
+use super::packet::EthernetRewriter;
 use super::packet::Ipv4Addr;
 use crate::shared_ref::SharedRef;
 
 const DRIVER_HEADROOM: usize = 20;
-const ETHERNET_HEADROOM: usize = 14;
+const ETHERNET_HEADROOM: usize = EthernetRewriter::HEADER_LEN;
 const HEADROOM_TOTAL: usize = DRIVER_HEADROOM + ETHERNET_HEADROOM;
 
 pub struct Tx {
@@ -41,7 +47,7 @@ impl Tx {
         })
     }
 
-    pub fn ip_header_bytes(&mut self) -> &mut [u8] {
+    pub fn header_bytes(&mut self) -> &mut [u8] {
         &mut self.header_buf.as_mut_slice()[HEADROOM_TOTAL..]
     }
 
@@ -55,30 +61,30 @@ impl Tx {
             .map(|payload_buf| payload_buf.as_mut_slice())
     }
 
-    fn write_ethernet_header(&mut self, dst_mac: &[u8; 6], src_mac: &[u8; 6], eth_type: u16) {
-        let header = self.ethernet_header_bytes();
-        header[..6].copy_from_slice(dst_mac);
-        header[6..12].copy_from_slice(src_mac);
-        header[12..14].copy_from_slice(&eth_type.to_be_bytes());
+    fn rewrite_ethernet_header(&mut self, dst_mac: &[u8; 6], src_mac: &[u8; 6], eth_type: u16) {
+        let mut ethernet = EthernetRewriter::new(self.ethernet_header_bytes()).unwrap();
+        ethernet.set_dst_mac(*dst_mac);
+        ethernet.set_src_mac(*src_mac);
+        ethernet.set_eth_type(eth_type);
     }
 
-    fn write_arp_reply(
+    fn rewrite_arp_reply(
         &mut self,
         src_mac: &[u8; 6],
         src_ip: Ipv4Addr,
         dst_mac: &[u8; 6],
         dst_ip: Ipv4Addr,
     ) {
-        let arp = self.ip_header_bytes();
-        arp[0..2].copy_from_slice(&1u16.to_be_bytes());
-        arp[2..4].copy_from_slice(&ETHTYPE_IPV4.to_be_bytes());
-        arp[4] = 6;
-        arp[5] = 4;
-        arp[6..8].copy_from_slice(&2u16.to_be_bytes());
-        arp[8..14].copy_from_slice(src_mac);
-        arp[14..18].copy_from_slice(&src_ip.as_u32().to_be_bytes());
-        arp[18..24].copy_from_slice(dst_mac);
-        arp[24..28].copy_from_slice(&dst_ip.as_u32().to_be_bytes());
+        let mut arp = ArpRewriter::new(self.header_bytes()).unwrap();
+        arp.set_hardware_type(ARP_HW_ETHERNET);
+        arp.set_protocol_type(ETHTYPE_IPV4);
+        arp.set_hardware_addr_len(ARP_HWADDR_LEN);
+        arp.set_protocol_addr_len(ARP_IPADDR_LEN);
+        arp.set_operation(ARP_OP_REPLY);
+        arp.set_src_mac(*src_mac);
+        arp.set_src_ip(src_ip);
+        arp.set_dst_mac(*dst_mac);
+        arp.set_dst_ip(dst_ip);
     }
 }
 
@@ -111,7 +117,7 @@ impl Device {
         };
 
         // Fill the ethernet header and send it to the driver.
-        tx.write_ethernet_header(dst_mac, self.driver.mac_address(), ETHTYPE_IPV4);
+        tx.rewrite_ethernet_header(dst_mac, self.driver.mac_address(), ETHTYPE_IPV4);
         drop(arp_table);
         self.send(env, tx);
         Ok(())
@@ -136,7 +142,7 @@ impl Device {
         let txs = self.arp_table.lock().resolve(ip, mac);
         // Flush pending TX packets.
         for mut tx in txs {
-            tx.write_ethernet_header(&mac, self.driver.mac_address(), ETHTYPE_IPV4);
+            tx.rewrite_ethernet_header(&mac, self.driver.mac_address(), ETHTYPE_IPV4);
             self.send(env, tx);
         }
     }
@@ -149,13 +155,13 @@ impl Device {
         dst_ip: Ipv4Addr,
         our_ip: Ipv4Addr,
     ) {
-        let Ok(mut tx) = Tx::alloc(env, 28, 0) else {
+        let Ok(mut tx) = Tx::alloc(env, ArpRewriter::PACKET_LEN, 0) else {
             return;
         };
 
         let our_mac = self.driver.mac_address();
-        tx.write_ethernet_header(&dst_mac, our_mac, ETHTYPE_ARP);
-        tx.write_arp_reply(our_mac, our_ip, &dst_mac, dst_ip);
+        tx.rewrite_ethernet_header(&dst_mac, our_mac, ETHTYPE_ARP);
+        tx.rewrite_arp_reply(our_mac, our_ip, &dst_mac, dst_ip);
         self.send(env, tx);
     }
 }
