@@ -110,12 +110,14 @@ impl Device {
             }
         };
 
+        // Fill the ethernet header and send it to the driver.
         tx.write_ethernet_header(dst_mac, self.driver.mac_address(), ETHTYPE_IPV4);
         drop(arp_table);
         self.send(env, tx);
         Ok(())
     }
 
+    /// Sends a packet to the driver.
     fn send(&self, env: &dyn Env, tx: Tx) {
         let result = self
             .driver
@@ -129,14 +131,17 @@ impl Device {
         &self.driver
     }
 
+    /// Fills an ARP table entry.
     pub fn learn_arp(&self, env: &dyn Env, ip: Ipv4Addr, mac: [u8; 6]) {
         let txs = self.arp_table.lock().resolve(ip, mac);
+        // Flush pending TX packets.
         for mut tx in txs {
             tx.write_ethernet_header(&mac, self.driver.mac_address(), ETHTYPE_IPV4);
             self.send(env, tx);
         }
     }
 
+    /// Sends an ARP reply.
     pub fn send_arp_reply(
         &self,
         env: &dyn Env,
@@ -147,6 +152,7 @@ impl Device {
         let Ok(mut tx) = Tx::alloc(env, 28, 0) else {
             return;
         };
+
         let our_mac = self.driver.mac_address();
         tx.write_ethernet_header(&dst_mac, our_mac, ETHTYPE_ARP);
         tx.write_arp_reply(our_mac, our_ip, &dst_mac, dst_ip);

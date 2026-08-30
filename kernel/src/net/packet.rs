@@ -182,6 +182,7 @@ fn checksum_add(mut sum: u32, bytes: &[u8]) -> u32 {
     for chunk in &mut chunks {
         sum += u16::from_be_bytes([chunk[0], chunk[1]]) as u32;
     }
+
     if let Some(byte) = chunks.remainder().first() {
         sum += (*byte as u32) << 8;
     }
