@@ -85,7 +85,7 @@ impl<'a> Ipv4Inspector<'a> {
         })
     }
 
-    pub fn new_tcp_packet(buf: &'a [u8]) -> Result<Self, Error> {
+    pub fn new_tcp_rx(buf: &'a [u8]) -> Result<Self, Error> {
         let inspector = Self::new_tcp_tx(buf)?;
         if inspector.total_len > buf.len() {
             return Err(Error::InvalidPacketLength);

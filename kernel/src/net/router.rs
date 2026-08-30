@@ -142,7 +142,7 @@ impl Router {
         let packet_offset = headroom + ETHERNET_HEADER_LEN;
         let packet_len = frame_len - ETHERNET_HEADER_LEN;
         let packet = &buf.as_slice()[packet_offset..packet_offset + packet_len];
-        let inspector = match Ipv4Inspector::new_tcp_packet(packet) {
+        let inspector = match Ipv4Inspector::new_tcp_rx(packet) {
             Ok(inspector) => inspector,
             Err(e) => {
                 trace!("failed to inspect IPv4 packet: {:?}", e);
