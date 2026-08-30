@@ -36,6 +36,8 @@ unsafe extern "C" {
     static idt_handlers: u8;
     static usercopy0: u8;
     static usercopy0_recover: u8;
+    static usercopy1: u8;
+    static usercopy1_recover: u8;
     static syscall_copy0: u8;
     static syscall_copy1: u8;
     static syscall_copy2: u8;
@@ -276,6 +278,14 @@ fn recover_from_kernel_page_fault(rip: u64) -> Option<u64> {
     {
         let addr = &raw const usercopy0 as u64;
         let recover = &raw const usercopy0_recover as u64;
+        if rip == addr {
+            return Some(recover);
+        }
+    }
+
+    {
+        let addr = &raw const usercopy1 as u64;
+        let recover = &raw const usercopy1_recover as u64;
         if rip == addr {
             return Some(recover);
         }

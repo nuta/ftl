@@ -29,6 +29,7 @@ pub use idle::idle;
 // pub use semihosting::semihosting_exit;
 pub use thread::Thread;
 pub use usercopy::usercopy_read;
+pub use usercopy::usercopy_write;
 pub use vmspace::DIRECT_MAP_END;
 pub use vmspace::MIN_PAGE_SIZE;
 pub use vmspace::USER_ADDR_END;

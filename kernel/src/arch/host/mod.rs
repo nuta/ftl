@@ -27,6 +27,11 @@ pub unsafe fn usercopy_read(src: UAddr, dst: *mut u8, len: usize) -> Result<(), 
     Ok(())
 }
 
+pub unsafe fn usercopy_write(src: *const u8, dst: UAddr, len: usize) -> Result<(), ErrorCode> {
+    unsafe { core::ptr::copy_nonoverlapping(src, dst.as_usize() as *mut u8, len) }
+    Ok(())
+}
+
 pub fn paddr2vaddr(_paddr: PAddr) -> VAddr {
     todo!()
 }

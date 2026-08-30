@@ -7,6 +7,7 @@ use ftl_utils::alignment::is_aligned;
 
 use crate::arch::USER_ADDR_END;
 use crate::arch::usercopy_read;
+use crate::arch::usercopy_write;
 
 /// A physical memory address.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -179,6 +180,14 @@ impl USlice {
     pub fn read_bytes(self, dst: &mut [u8]) -> Result<(), ErrorCode> {
         // SAFETY: &mut [u8] is a non-null pointer and carries the length.
         unsafe { self.read(dst.as_mut_ptr(), dst.len()) }
+    }
+
+    pub fn write_bytes(self, src: &[u8]) -> Result<(), ErrorCode> {
+        if src.len() != self.len() {
+            return Err(ErrorCode::INVALID_ARG);
+        }
+
+        unsafe { usercopy_write(src.as_ptr(), self.addr, src.len()) }
     }
 
     /// Reads the user address into a kernel's uninitialized buffer.
