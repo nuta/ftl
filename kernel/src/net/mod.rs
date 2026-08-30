@@ -1,43 +1,37 @@
 use core::fmt;
-use core::mem::MaybeUninit;
-use core::mem::size_of;
 use core::sync::atomic::AtomicU8;
 use core::sync::atomic::Ordering;
 
 use ftl_driver::dma::DmaBuf;
 use ftl_driver::env::Env;
 use ftl_driver::net::Driver;
-use ftl_types::error::ErrorCode;
-use ftl_types::handle::HandleId;
-use ftl_types::handle::HandleRight;
-use ftl_types::net::NetMatch;
-use ftl_types::thread::SyscallRegs;
 use ftl_utils::alignment::align_up;
 use ftl_utils::spinlock::SpinLock;
 
-use crate::address::UAddr;
-use crate::address::USlice;
 use crate::arch;
 use crate::arch::paddr2vaddr;
-use crate::handle::Handle;
 use crate::memory::PAGE_ALLOCATOR;
 use crate::memory::PageType;
 use crate::net::device::Device;
 use crate::net::device::PollNotifier;
-use crate::net::network::Router;
-use crate::poll::EventEmitter;
-use crate::poll::Poll;
+use crate::net::router::Router;
 use crate::shared_ref::SharedRef;
-use crate::syscall::SyscallOutput;
-use crate::thread::Thread;
 
 mod arp;
 mod device;
 mod network;
 mod packet;
-mod route;
+mod route_table;
+mod router;
 
-use network::Network;
+pub use network::sys_net_bind;
+pub use network::sys_net_create;
+pub use network::sys_net_drop;
+pub use network::sys_net_peek;
+pub use network::sys_net_recv;
+pub use network::sys_net_send;
+pub use network::sys_net_subscribe;
+pub use network::sys_net_unbind;
 
 struct EnvImpl {}
 
@@ -68,150 +62,6 @@ impl ftl_driver::env::Env for EnvImpl {
         // TODO: better logging
         info!("{}", args)
     }
-}
-
-pub fn sys_net_create(
-    current: &SharedRef<Thread>,
-    _ctx: &SyscallRegs,
-) -> Result<SyscallOutput, ErrorCode> {
-    let handle_table = current.isolate().handles();
-
-    let device = GLOBAL_ROUTER
-        .lock()
-        .as_ref()
-        .ok_or(ErrorCode::INVALID_STATE)?
-        .device();
-    let network = SharedRef::new(network::Network::new(device))?;
-    let handle = Handle::new(network.clone(), HandleRight::READ | HandleRight::WRITE);
-    let handle_id = handle_table.lock().insert(handle)?;
-
-    GLOBAL_ROUTER
-        .lock()
-        .as_mut()
-        .ok_or(ErrorCode::INVALID_STATE)?
-        .add_network(network.clone())?;
-    Ok(SyscallOutput::Done(handle_id.as_usize()))
-}
-
-pub fn sys_net_subscribe(
-    current: &SharedRef<Thread>,
-    ctx: &SyscallRegs,
-) -> Result<SyscallOutput, ErrorCode> {
-    let network_id = HandleId::new(ctx.a0);
-    let poll_id = HandleId::new(ctx.a1);
-    let handle_table = current.isolate().handles();
-    let network = handle_table
-        .lock()
-        .get::<Network>(network_id, HandleRight::READ)?;
-    let poll = handle_table
-        .lock()
-        .get::<Poll>(poll_id, HandleRight::WRITE)?;
-
-    network.subscribe(EventEmitter::new(poll, network_id))?;
-    Ok(SyscallOutput::Done(0))
-}
-
-pub fn sys_net_bind(
-    current: &SharedRef<Thread>,
-    ctx: &SyscallRegs,
-) -> Result<SyscallOutput, ErrorCode> {
-    let network_id = HandleId::new(ctx.a0);
-    let rule_uslice = USlice::new(UAddr::new(ctx.a1), size_of::<NetMatch>())?;
-    let mut rule_buf = MaybeUninit::<NetMatch>::uninit();
-    let rule = unsafe { rule_uslice.read_uninit(&mut rule_buf)? };
-
-    let network = current
-        .isolate()
-        .handles()
-        .lock()
-        .get::<Network>(network_id, HandleRight::WRITE)?;
-
-    network.bind(*rule, ctx.a2 as u64)?;
-    Ok(SyscallOutput::Done(0))
-}
-
-pub fn sys_net_unbind(
-    current: &SharedRef<Thread>,
-    ctx: &SyscallRegs,
-) -> Result<SyscallOutput, ErrorCode> {
-    let network_id = HandleId::new(ctx.a0);
-    let rule_uslice = USlice::new(UAddr::new(ctx.a1), size_of::<NetMatch>())?;
-    let mut _buf = MaybeUninit::<NetMatch>::uninit();
-    let rule = unsafe { rule_uslice.read_uninit(&mut _buf)? };
-
-    let network = current
-        .isolate()
-        .handles()
-        .lock()
-        .get::<Network>(network_id, HandleRight::WRITE)?;
-
-    network.unbind(rule)?;
-    Ok(SyscallOutput::Done(0))
-}
-
-pub fn sys_net_recv(
-    current: &SharedRef<Thread>,
-    ctx: &SyscallRegs,
-) -> Result<SyscallOutput, ErrorCode> {
-    let network_id = HandleId::new(ctx.a0);
-    let payload = USlice::new(UAddr::new(ctx.a1), ctx.a2)?;
-
-    let network = current
-        .isolate()
-        .handles()
-        .lock()
-        .get::<Network>(network_id, HandleRight::READ)?;
-
-    let payload_len = network.recv(payload)?;
-    Ok(SyscallOutput::Done(payload_len))
-}
-
-pub fn sys_net_peek(
-    current: &SharedRef<Thread>,
-    ctx: &SyscallRegs,
-) -> Result<SyscallOutput, ErrorCode> {
-    let network_id = HandleId::new(ctx.a0);
-    let header = USlice::new(UAddr::new(ctx.a1), ctx.a2)?;
-    let network = current
-        .isolate()
-        .handles()
-        .lock()
-        .get::<Network>(network_id, HandleRight::READ)?;
-
-    let cookie = network.peek(header)?;
-    Ok(SyscallOutput::Done(cookie as usize))
-}
-
-pub fn sys_net_drop(
-    current: &SharedRef<Thread>,
-    ctx: &SyscallRegs,
-) -> Result<SyscallOutput, ErrorCode> {
-    let network_id = HandleId::new(ctx.a0);
-    let network = current
-        .isolate()
-        .handles()
-        .lock()
-        .get::<Network>(network_id, HandleRight::READ)?;
-
-    network.drop_peeked()?;
-    Ok(SyscallOutput::Done(0))
-}
-
-pub fn sys_net_send(
-    current: &SharedRef<Thread>,
-    ctx: &SyscallRegs,
-) -> Result<SyscallOutput, ErrorCode> {
-    let network_id = HandleId::new(ctx.a0);
-    let header = USlice::new(UAddr::new(ctx.a2), ctx.a3)?;
-    let payload = USlice::new(UAddr::new(ctx.a4), ctx.a5)?;
-    let network = current
-        .isolate()
-        .handles()
-        .lock()
-        .get::<Network>(network_id, HandleRight::WRITE)?;
-
-    network.send(header, payload)?;
-    Ok(SyscallOutput::Done(0))
 }
 
 pub(super) static GLOBAL_ROUTER: SpinLock<Option<Router>> = SpinLock::new(None);

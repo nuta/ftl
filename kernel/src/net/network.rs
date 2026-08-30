@@ -1,29 +1,34 @@
+use core::mem::MaybeUninit;
+use core::mem::size_of;
+
 use alloc::collections::VecDeque;
 use alloc::vec::Vec;
 
 use ftl_driver::dma::DmaBuf;
-use ftl_driver::net::Error;
 use ftl_types::error::ErrorCode;
+use ftl_types::handle::HandleId;
+use ftl_types::handle::HandleRight;
 use ftl_types::net::NetMatch;
 use ftl_types::poll::EventKind;
+use ftl_types::thread::SyscallRegs;
 use ftl_utils::spinlock::SpinLock;
 
 use super::device::Device;
 use super::device::Tx;
 use super::packet::Ipv4Addr;
 use super::packet::Ipv4Inspector;
+use crate::address::UAddr;
 use crate::address::USlice;
+use crate::handle::Handle;
 use crate::handle::Handleable;
 use crate::net::GLOBAL_ENV;
 use crate::poll::EventEmitter;
+use crate::poll::Poll;
 use crate::shared_ref::SharedRef;
+use crate::syscall::SyscallOutput;
+use crate::thread::Thread;
 
 const MAX_RX_QUEUE_DEPTH: usize = 128;
-const ETHERNET_HEADER_LEN: usize = 14;
-const ARP_PACKET_LEN: usize = 28;
-const ETHTYPE_IPV4: u16 = 0x0800;
-const ETHTYPE_ARP: u16 = 0x0806;
-const OUR_IP: Ipv4Addr = Ipv4Addr::new(0x0a00_020f);
 const GATEWAY_IP: Ipv4Addr = Ipv4Addr::new(0x0a00_0202);
 
 #[derive(Clone, Copy)]
@@ -32,165 +37,12 @@ struct Binding {
     cookie: u64,
 }
 
-pub struct Router {
-    device: SharedRef<Device>,
-    networks: Vec<SharedRef<Network>>,
-}
-
-impl Router {
-    pub fn new(device: SharedRef<Device>) -> Self {
-        Self {
-            device,
-            networks: Vec::new(),
-        }
-    }
-
-    pub fn add_network(&mut self, network: SharedRef<Network>) -> Result<(), ErrorCode> {
-        self.networks
-            .try_reserve(1)
-            .map_err(|_| ErrorCode::OUT_OF_MEMORY)?;
-        self.networks.push(network);
-        Ok(())
-    }
-
-    fn find_network(
-        &self,
-        local_ip: Ipv4Addr,
-        local_port: u16,
-        remote_ip: Ipv4Addr,
-        remote_port: u16,
-    ) -> Option<(SharedRef<Network>, u64)> {
-        let mut best = None;
-        for network in &self.networks {
-            let Some((specificity, cookie)) =
-                network.match_packet(local_ip, local_port, remote_ip, remote_port)
-            else {
-                continue;
-            };
-            if best
-                .as_ref()
-                .is_none_or(|(best_specificity, _, _)| specificity > *best_specificity)
-            {
-                best = Some((specificity, network.clone(), cookie));
-            }
-        }
-        best.map(|(_, network, cookie)| (network, cookie))
-    }
-
-    pub fn device(&self) -> SharedRef<Device> {
-        self.device.clone()
-    }
-
-    fn recycle(&self, buf: DmaBuf) {
-        let driver = self.device.driver();
-        if driver.provide(&GLOBAL_ENV, buf).is_err() {
-            warn!("net: failed to recycle an RX buffer");
-        }
-    }
-
-    fn handle_arp(&self, frame: &[u8], src_mac: [u8; 6]) {
-        let expected_len = ETHERNET_HEADER_LEN + ARP_PACKET_LEN;
-        if frame.len() < expected_len {
-            return;
-        }
-
-        let operation = u16::from_be_bytes(frame[20..22].try_into().unwrap());
-        let sender_ip = u32::from_be_bytes(frame[28..32].try_into().unwrap());
-        let target_ip = u32::from_be_bytes(frame[38..42].try_into().unwrap());
-        let sender_ip = Ipv4Addr::new(sender_ip);
-        let target_ip = Ipv4Addr::new(target_ip);
-
-        self.device.learn_arp(&GLOBAL_ENV, sender_ip, src_mac);
-        if operation != 1 || target_ip != OUR_IP {
-            return;
-        }
-
-        self.device
-            .send_arp_reply(&GLOBAL_ENV, src_mac, sender_ip, OUR_IP);
-    }
-
-    fn handle_frame(&self, buf: DmaBuf, headroom: usize, frame_len: usize) {
-        if frame_len < ETHERNET_HEADER_LEN {
-            self.recycle(buf);
-            return;
-        }
-
-        let frame = &buf.as_slice()[headroom..headroom + frame_len];
-        let src_mac = frame[6..12].try_into().unwrap();
-        let eth_type = u16::from_be_bytes(frame[12..14].try_into().unwrap());
-        if eth_type == ETHTYPE_ARP {
-            self.handle_arp(frame, src_mac);
-            self.recycle(buf);
-            return;
-        }
-        if eth_type != ETHTYPE_IPV4 {
-            self.recycle(buf);
-            return;
-        }
-
-        let packet_offset = headroom + ETHERNET_HEADER_LEN;
-        let packet_len = frame_len - ETHERNET_HEADER_LEN;
-        let packet = &buf.as_slice()[packet_offset..packet_offset + packet_len];
-        let inspector = match Ipv4Inspector::new_tcp_packet(packet) {
-            Ok(inspector) => inspector,
-            Err(_) => {
-                self.recycle(buf);
-                return;
-            }
-        };
-        let local_ip = inspector.dst_ip();
-        let local_port = inspector.dst_port();
-        let remote_ip = inspector.src_ip();
-        let remote_port = inspector.src_port();
-        let Some((network, cookie)) =
-            self.find_network(local_ip, local_port, remote_ip, remote_port)
-        else {
-            self.recycle(buf);
-            return;
-        };
-
-        self.device.learn_arp(&GLOBAL_ENV, remote_ip, src_mac);
-
-        let packet_len = inspector.packet_len();
-        let header_len = inspector.header_len();
-        let rx = Rx {
-            buf,
-            packet_offset,
-            packet_len,
-            header_len,
-            cookie,
-        };
-        network.enqueue_rx(rx);
-    }
-
-    pub fn handle_interrupt(&self) {
-        let driver = self.device.driver();
-        driver.handle_interrupt(&GLOBAL_ENV);
-
-        loop {
-            let rx = match driver.try_receive() {
-                Ok(rx) => rx,
-                Err((Error::RxEmpty, _)) => break,
-                Err((error, buf)) => {
-                    warn!("net: failed to receive packet: {:?}", error);
-                    if let Some(buf) = buf {
-                        self.recycle(buf);
-                    }
-                    break;
-                }
-            };
-            let (buf, headroom, frame_len) = rx;
-            self.handle_frame(buf, headroom, frame_len);
-        }
-    }
-}
-
-struct Rx {
-    buf: DmaBuf,
-    packet_offset: usize,
-    packet_len: usize,
-    header_len: usize,
-    cookie: u64,
+pub struct Rx {
+    pub buf: DmaBuf,
+    pub packet_offset: usize,
+    pub packet_len: usize,
+    pub header_len: usize,
+    pub cookie: u64,
 }
 
 struct Mutable {
@@ -203,6 +55,150 @@ pub struct Network {
     device: SharedRef<Device>,
     bindings: SpinLock<Vec<Binding>>,
     mutable: SpinLock<Mutable>,
+}
+
+pub fn sys_net_create(
+    current: &SharedRef<Thread>,
+    _ctx: &SyscallRegs,
+) -> Result<SyscallOutput, ErrorCode> {
+    let handle_table = current.isolate().handles();
+
+    let device = super::GLOBAL_ROUTER
+        .lock()
+        .as_ref()
+        .ok_or(ErrorCode::INVALID_STATE)?
+        .device();
+    let network = SharedRef::new(Network::new(device))?;
+    let handle = Handle::new(network.clone(), HandleRight::READ | HandleRight::WRITE);
+    let handle_id = handle_table.lock().insert(handle)?;
+
+    super::GLOBAL_ROUTER
+        .lock()
+        .as_mut()
+        .ok_or(ErrorCode::INVALID_STATE)?
+        .add_network(network.clone())?;
+    Ok(SyscallOutput::Done(handle_id.as_usize()))
+}
+
+pub fn sys_net_subscribe(
+    current: &SharedRef<Thread>,
+    ctx: &SyscallRegs,
+) -> Result<SyscallOutput, ErrorCode> {
+    let network_id = HandleId::new(ctx.a0);
+    let poll_id = HandleId::new(ctx.a1);
+    let handle_table = current.isolate().handles();
+    let network = handle_table
+        .lock()
+        .get::<Network>(network_id, HandleRight::READ)?;
+    let poll = handle_table
+        .lock()
+        .get::<Poll>(poll_id, HandleRight::WRITE)?;
+
+    network.subscribe(EventEmitter::new(poll, network_id))?;
+    Ok(SyscallOutput::Done(0))
+}
+
+pub fn sys_net_bind(
+    current: &SharedRef<Thread>,
+    ctx: &SyscallRegs,
+) -> Result<SyscallOutput, ErrorCode> {
+    let network_id = HandleId::new(ctx.a0);
+    let rule_uslice = USlice::new(UAddr::new(ctx.a1), size_of::<NetMatch>())?;
+    let mut rule_buf = MaybeUninit::<NetMatch>::uninit();
+    let rule = unsafe { rule_uslice.read_uninit(&mut rule_buf)? };
+
+    let network = current
+        .isolate()
+        .handles()
+        .lock()
+        .get::<Network>(network_id, HandleRight::WRITE)?;
+
+    network.bind(*rule, ctx.a2 as u64)?;
+    Ok(SyscallOutput::Done(0))
+}
+
+pub fn sys_net_unbind(
+    current: &SharedRef<Thread>,
+    ctx: &SyscallRegs,
+) -> Result<SyscallOutput, ErrorCode> {
+    let network_id = HandleId::new(ctx.a0);
+    let rule_uslice = USlice::new(UAddr::new(ctx.a1), size_of::<NetMatch>())?;
+    let mut _buf = MaybeUninit::<NetMatch>::uninit();
+    let rule = unsafe { rule_uslice.read_uninit(&mut _buf)? };
+
+    let network = current
+        .isolate()
+        .handles()
+        .lock()
+        .get::<Network>(network_id, HandleRight::WRITE)?;
+
+    network.unbind(rule)?;
+    Ok(SyscallOutput::Done(0))
+}
+
+pub fn sys_net_recv(
+    current: &SharedRef<Thread>,
+    ctx: &SyscallRegs,
+) -> Result<SyscallOutput, ErrorCode> {
+    let network_id = HandleId::new(ctx.a0);
+    let payload = USlice::new(UAddr::new(ctx.a1), ctx.a2)?;
+
+    let network = current
+        .isolate()
+        .handles()
+        .lock()
+        .get::<Network>(network_id, HandleRight::READ)?;
+
+    let payload_len = network.recv(payload)?;
+    Ok(SyscallOutput::Done(payload_len))
+}
+
+pub fn sys_net_peek(
+    current: &SharedRef<Thread>,
+    ctx: &SyscallRegs,
+) -> Result<SyscallOutput, ErrorCode> {
+    let network_id = HandleId::new(ctx.a0);
+    let header = USlice::new(UAddr::new(ctx.a1), ctx.a2)?;
+    let network = current
+        .isolate()
+        .handles()
+        .lock()
+        .get::<Network>(network_id, HandleRight::READ)?;
+
+    let cookie = network.peek(header)?;
+    Ok(SyscallOutput::Done(cookie as usize))
+}
+
+pub fn sys_net_drop(
+    current: &SharedRef<Thread>,
+    ctx: &SyscallRegs,
+) -> Result<SyscallOutput, ErrorCode> {
+    let network_id = HandleId::new(ctx.a0);
+    let network = current
+        .isolate()
+        .handles()
+        .lock()
+        .get::<Network>(network_id, HandleRight::READ)?;
+
+    network.drop_peeked()?;
+    Ok(SyscallOutput::Done(0))
+}
+
+pub fn sys_net_send(
+    current: &SharedRef<Thread>,
+    ctx: &SyscallRegs,
+) -> Result<SyscallOutput, ErrorCode> {
+    let network_id = HandleId::new(ctx.a0);
+    let header = USlice::new(UAddr::new(ctx.a2), ctx.a3)?;
+    let payload = USlice::new(UAddr::new(ctx.a4), ctx.a5)?;
+    let network = current
+        .isolate()
+        .handles()
+        .lock()
+        .get::<Network>(network_id, HandleRight::WRITE)?;
+
+    network.send(header, payload)?;
+    Ok(SyscallOutput::Done(0))
 }
 
 impl Network {
@@ -262,7 +258,7 @@ impl Network {
         Err(ErrorCode::NOT_FOUND)
     }
 
-    fn match_packet(
+    pub(super) fn match_packet(
         &self,
         local_ip: Ipv4Addr,
         local_port: u16,
@@ -308,7 +304,7 @@ impl Network {
         self.device.send_ipv4(&GLOBAL_ENV, GATEWAY_IP, tx)
     }
 
-    fn enqueue_rx(&self, rx: Rx) {
+    pub(super) fn enqueue_rx(&self, rx: Rx) {
         let mut mutable = self.mutable.lock();
         if mutable.rx_queue.len() >= MAX_RX_QUEUE_DEPTH {
             drop(mutable);
