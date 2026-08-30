@@ -5,8 +5,10 @@ use ftl_driver::net::Error;
 use ftl_types::error::ErrorCode;
 
 use super::device::Device;
-use super::network::{Network, Rx};
-use super::packet::{Ipv4Addr, Ipv4Inspector};
+use super::network::Network;
+use super::network::Rx;
+use super::packet::Ipv4Addr;
+use super::packet::Ipv4Inspector;
 use crate::net::GLOBAL_ENV;
 use crate::shared_ref::SharedRef;
 
