@@ -263,19 +263,18 @@ impl Network {
         local_port: u16,
         remote_ip: Ipv4Addr,
         remote_port: u16,
-    ) -> Option<(u32, u64)> {
+    ) -> Option<(u8, u64)> {
         let mut best = None;
         for binding in self.bindings.lock().iter() {
-            if !binding.rule.matches(
+            let Some(specificity) = binding.rule.matches(
                 local_ip.as_u32(),
                 local_port,
                 remote_ip.as_u32(),
                 remote_port,
-            ) {
+            ) else {
                 continue;
-            }
+            };
 
-            let specificity = binding.rule.specificity();
             if best
                 .as_ref()
                 .is_none_or(|(best_specificity, _)| specificity >= *best_specificity)
