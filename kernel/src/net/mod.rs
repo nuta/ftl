@@ -1,14 +1,19 @@
 use core::fmt;
 use core::mem::size_of;
 use core::slice;
+use core::sync::atomic::AtomicU8;
+use core::sync::atomic::Ordering;
 
 use ftl_driver::dma::DmaBuf;
+use ftl_driver::env::Env;
+use ftl_driver::net::Driver;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use ftl_types::handle::HandleRight;
 use ftl_types::net::NetRxInfo;
 use ftl_types::thread::SyscallRegs;
 use ftl_utils::alignment::align_up;
+use ftl_utils::spinlock::SpinLock;
 
 use crate::address::UAddr;
 use crate::address::USlice;
@@ -16,6 +21,9 @@ use crate::arch::paddr2vaddr;
 use crate::handle::Handle;
 use crate::memory::PAGE_ALLOCATOR;
 use crate::memory::PageType;
+use crate::net::device::Device;
+use crate::net::device::PollNotifier;
+use crate::net::network::Router;
 use crate::poll::EventEmitter;
 use crate::poll::Poll;
 use crate::shared_ref::SharedRef;
@@ -27,6 +35,8 @@ mod device;
 mod network;
 mod packet;
 mod route;
+
+use network::Network;
 
 struct EnvImpl {}
 
@@ -59,10 +69,6 @@ impl ftl_driver::env::Env for EnvImpl {
     }
 }
 
-pub use network::handle_interrupt;
-pub use network::init;
-pub use network::is_irq;
-
 pub fn sys_net_create(
     current: &SharedRef<Thread>,
     ctx: &SyscallRegs,
@@ -73,7 +79,7 @@ pub fn sys_net_create(
         .lock()
         .get::<Poll>(poll_id, HandleRight::WRITE)?;
 
-    let device = network::ROUTER
+    let device = GLOBAL_ROUTER
         .lock()
         .as_ref()
         .ok_or(ErrorCode::INVALID_STATE)?
@@ -82,7 +88,7 @@ pub fn sys_net_create(
     let handle = Handle::new(network.clone(), HandleRight::READ | HandleRight::WRITE);
     let handle_id = handle_table.lock().insert(handle)?;
 
-    network::ROUTER
+    GLOBAL_ROUTER
         .lock()
         .as_mut()
         .ok_or(ErrorCode::INVALID_STATE)?
@@ -105,7 +111,7 @@ pub fn sys_net_bind(
         .isolate()
         .handles()
         .lock()
-        .get::<network::Network>(network_id, HandleRight::WRITE)?;
+        .get::<Network>(network_id, HandleRight::WRITE)?;
     network.add_rule(ctx.a1, ctx.a2 as u32, local_port as u16)?;
     Ok(SyscallOutput::Done(0))
 }
@@ -120,7 +126,7 @@ pub fn sys_net_peek(
         .isolate()
         .handles()
         .lock()
-        .get::<network::Network>(network_id, HandleRight::READ)?;
+        .get::<Network>(network_id, HandleRight::READ)?;
 
     let (token, info) = network.peek()?;
     let info_ptr = &raw const info;
@@ -141,7 +147,7 @@ pub fn sys_net_recv(
         .isolate()
         .handles()
         .lock()
-        .get::<network::Network>(network_id, HandleRight::READ)?;
+        .get::<Network>(network_id, HandleRight::READ)?;
 
     network.recv(token, payload)?;
     Ok(SyscallOutput::Done(0))
@@ -158,8 +164,51 @@ pub fn sys_net_send(
         .isolate()
         .handles()
         .lock()
-        .get::<network::Network>(network_id, HandleRight::WRITE)?;
+        .get::<Network>(network_id, HandleRight::WRITE)?;
 
     network.send(header, payload)?;
     Ok(SyscallOutput::Done(0))
+}
+
+pub(super) static GLOBAL_ROUTER: SpinLock<Option<Router>> = SpinLock::new(None);
+pub(super) static NET_IRQ: AtomicU8 = AtomicU8::new(0);
+
+pub fn is_irq(irq: u8) -> bool {
+    irq == NET_IRQ.load(Ordering::Relaxed)
+}
+
+pub fn handle_interrupt() {
+    let router = GLOBAL_ROUTER.lock();
+    let router = router.as_ref().expect("network router is not initialized");
+    router.handle_interrupt();
+}
+
+pub fn init() {
+    const RX_BUFFER_SIZE: usize = 2048;
+    const RX_BUFFER_COUNT: usize = 64;
+
+    let driver = virtio_net::VirtioNet::<PollNotifier>::init(&GLOBAL_ENV)
+        .expect("failed to initialize virtio-net");
+    let driver = SharedRef::new(driver).expect("failed to allocate virtio-net driver");
+    let driver: SharedRef<dyn Driver<Notifier = PollNotifier>> = driver;
+
+    for _ in 0..RX_BUFFER_COUNT {
+        let buf = GLOBAL_ENV
+            .alloc_dma(RX_BUFFER_SIZE)
+            .expect("failed to allocate virtio-net RX buffer");
+        if driver.provide(&GLOBAL_ENV, buf).is_err() {
+            panic!("failed to supply virtio-net RX buffer");
+        }
+    }
+
+    let device = Device::new(driver);
+    let device = SharedRef::new(device).expect("failed to allocate network device");
+    let pci_device =
+        ftl_driver::pci::find_virtio_device(&GLOBAL_ENV, 1).expect("virtio-net disappeared");
+    let irq = ftl_driver::pci::get_interrupt_line(&GLOBAL_ENV, &pci_device);
+
+    *GLOBAL_ROUTER.lock() = Some(Router::new(device));
+    crate::arch::interrupt_acquire(irq).expect("failed to enable virtio-net IRQ");
+    NET_IRQ.store(irq, Ordering::Relaxed);
+    info!("net: listening for virtio-net IRQ {}", irq);
 }

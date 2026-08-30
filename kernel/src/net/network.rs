@@ -2,11 +2,8 @@ use alloc::collections::VecDeque;
 use alloc::vec::Vec;
 
 use ftl_driver::dma::DmaBuf;
-use ftl_driver::env::Env;
-use ftl_driver::net::Driver;
 use ftl_driver::net::Error;
 use ftl_types::error::ErrorCode;
-use ftl_types::handle::HandleId;
 use ftl_types::net::NET_IPV4;
 use ftl_types::net::NET_LISTEN;
 use ftl_types::net::NET_TCP;
@@ -15,11 +12,9 @@ use ftl_types::poll::EventKind;
 use ftl_utils::spinlock::SpinLock;
 
 use super::device::Device;
-use super::device::PollNotifier;
 use super::device::Tx;
 use super::packet::Ipv4Addr;
 use super::packet::Ipv4Inspector;
-use crate::address::UAddr;
 use crate::address::USlice;
 use crate::handle::Handleable;
 use crate::net::GLOBAL_ENV;
@@ -27,8 +22,6 @@ use crate::poll::EventEmitter;
 use crate::shared_ref::SharedRef;
 
 const MAX_RX_QUEUE_DEPTH: usize = 128;
-const RX_BUFFER_SIZE: usize = 2048;
-const RX_BUFFER_COUNT: usize = 64;
 const ETHERNET_HEADER_LEN: usize = 14;
 const ARP_PACKET_LEN: usize = 28;
 const ETHTYPE_IPV4: u16 = 0x0800;
@@ -44,22 +37,20 @@ struct NetworkRule {
     local_port: u16,
 }
 
-pub(super) struct Router {
+pub struct Router {
     device: SharedRef<Device>,
     networks: Vec<SharedRef<Network>>,
-    irq: u8,
 }
 
 impl Router {
-    pub(super) fn new(device: SharedRef<Device>, irq: u8) -> Self {
+    pub fn new(device: SharedRef<Device>) -> Self {
         Self {
             device,
             networks: Vec::new(),
-            irq,
         }
     }
 
-    pub(super) fn add_network(&mut self, network: SharedRef<Network>) -> Result<(), ErrorCode> {
+    pub fn add_network(&mut self, network: SharedRef<Network>) -> Result<(), ErrorCode> {
         self.networks
             .try_reserve(1)
             .map_err(|_| ErrorCode::OUT_OF_MEMORY)?;
@@ -76,7 +67,7 @@ impl Router {
         None
     }
 
-    pub(super) fn device(&self) -> SharedRef<Device> {
+    pub fn device(&self) -> SharedRef<Device> {
         self.device.clone()
     }
 
@@ -173,7 +164,7 @@ impl Router {
         network.enqueue_rx(rx);
     }
 
-    fn handle_interrupt(&self) {
+    pub fn handle_interrupt(&self) {
         let driver = self.device.driver();
         driver.handle_interrupt(&GLOBAL_ENV);
 
@@ -194,8 +185,6 @@ impl Router {
         }
     }
 }
-
-pub(super) static ROUTER: SpinLock<Option<Router>> = SpinLock::new(None);
 
 struct ReservedRx {
     token: usize,
@@ -350,44 +339,4 @@ struct Rx {
     buf: DmaBuf,
     payload_offset: usize,
     info: NetRxInfo,
-}
-
-pub fn init() {
-    let driver = virtio_net::VirtioNet::<PollNotifier>::init(&GLOBAL_ENV)
-        .expect("failed to initialize virtio-net");
-    let driver = SharedRef::new(driver).expect("failed to allocate virtio-net driver");
-    let driver: SharedRef<dyn Driver<Notifier = PollNotifier>> = driver;
-
-    for _ in 0..RX_BUFFER_COUNT {
-        let buf = GLOBAL_ENV
-            .alloc_dma(RX_BUFFER_SIZE)
-            .expect("failed to allocate virtio-net RX buffer");
-        if driver.provide(&GLOBAL_ENV, buf).is_err() {
-            panic!("failed to supply virtio-net RX buffer");
-        }
-    }
-
-    let device = Device::new(driver);
-    let device = SharedRef::new(device).expect("failed to allocate network device");
-    let pci_device =
-        ftl_driver::pci::find_virtio_device(&GLOBAL_ENV, 1).expect("virtio-net disappeared");
-    let irq = ftl_driver::pci::get_interrupt_line(&GLOBAL_ENV, &pci_device);
-
-    *ROUTER.lock() = Some(Router::new(device, irq));
-    crate::arch::interrupt_acquire(irq).expect("failed to enable virtio-net IRQ");
-    info!("net: listening for virtio-net IRQ {}", irq);
-}
-
-pub fn is_irq(irq: u8) -> bool {
-    let router = ROUTER.lock();
-    match router.as_ref() {
-        Some(router) => router.irq == irq,
-        None => false,
-    }
-}
-
-pub fn handle_interrupt() {
-    let router = ROUTER.lock();
-    let router = router.as_ref().expect("network router is not initialized");
-    router.handle_interrupt();
 }
