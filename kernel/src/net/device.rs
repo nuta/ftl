@@ -16,7 +16,7 @@ const DRIVER_HEADROOM: usize = 20;
 const ETHERNET_HEADROOM: usize = 14;
 const HEADROOM_TOTAL: usize = DRIVER_HEADROOM + ETHERNET_HEADROOM;
 
-pub(super) struct Tx {
+pub struct Tx {
     header_buf: DmaBuf,
     payload_buf: DmaBuf,
 }
