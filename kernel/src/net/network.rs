@@ -31,7 +31,7 @@ const GATEWAY_IP: Ipv4Addr = Ipv4Addr::new(0x0a00_0202);
 pub const NETWORK_KIND: usize = NET_IPV4 | NET_TCP | NET_LISTEN;
 
 #[derive(Clone, Copy)]
-struct NetworkRule {
+struct Rule {
     kind: usize,
     local_ip: Option<Ipv4Addr>,
     local_port: u16,
@@ -186,6 +186,12 @@ impl Router {
     }
 }
 
+struct Rx {
+    buf: DmaBuf,
+    payload_offset: usize,
+    info: NetRxInfo,
+}
+
 struct ReservedRx {
     token: usize,
     rx: Rx,
@@ -200,7 +206,7 @@ struct Mutable {
 
 pub struct Network {
     device: SharedRef<Device>,
-    rules: SpinLock<Vec<NetworkRule>>,
+    rules: SpinLock<Vec<Rule>>,
     mutable: SpinLock<Mutable>,
 }
 
@@ -245,7 +251,7 @@ impl Network {
         };
         let mut rules = self.rules.lock();
         rules.try_reserve(1).map_err(|_| ErrorCode::OUT_OF_MEMORY)?;
-        rules.push(NetworkRule {
+        rules.push(Rule {
             kind,
             local_ip,
             local_port,
@@ -322,6 +328,7 @@ impl Network {
         let Some(reserved) = mutable.reserved.as_ref() else {
             return Err(ErrorCode::EMPTY);
         };
+
         if reserved.token != token {
             return Err(ErrorCode::INVALID_ARG);
         }
@@ -342,9 +349,3 @@ impl Network {
 }
 
 impl Handleable for Network {}
-
-struct Rx {
-    buf: DmaBuf,
-    payload_offset: usize,
-    info: NetRxInfo,
-}
