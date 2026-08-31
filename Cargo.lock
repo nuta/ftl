@@ -105,6 +105,7 @@ dependencies = [
  "ftl_elf",
  "ftl_types",
  "ftl_utils",
+ "hashbrown",
 ]
 
 [[package]]

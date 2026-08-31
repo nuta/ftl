@@ -1,3 +1,5 @@
+use core::slice;
+
 use crate::thread::Thread;
 use crate::types::c_int;
 use crate::types::c_long;
@@ -5,10 +7,10 @@ use crate::types::c_void;
 use crate::types::errno::Errno;
 use crate::types::size_t;
 
-pub fn sys_write(
+pub fn sys_read(
     current: &Thread,
     fd: c_int,
-    buf: *const c_void,
+    buf: *mut c_void,
     count: size_t,
 ) -> Result<c_long, Errno> {
     let file = {
@@ -21,7 +23,6 @@ pub fn sys_write(
         return Ok(0);
     }
 
-    let bytes = unsafe { core::slice::from_raw_parts(buf.cast::<u8>(), count) };
-    let n = file.write(bytes, 0)?;
-    Ok(n.try_into().unwrap()) // FIXME: Handle overflow
+    let bytes = unsafe { slice::from_raw_parts_mut(buf.cast::<u8>(), count) };
+    Ok(file.read(bytes, 0)? as c_long)
 }

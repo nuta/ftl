@@ -1,19 +1,31 @@
+mod accept;
 mod arch_prctl;
+mod bind;
+mod close;
 mod execve;
 mod exit_group;
 mod fork;
+mod listen;
+mod read;
 mod set_tid_address;
+mod socket;
 mod wait4;
 mod write;
 mod writev;
 
 use ftl::info;
 
+use self::accept::sys_accept;
 use self::arch_prctl::sys_arch_prctl;
+use self::bind::sys_bind;
+use self::close::sys_close;
 use self::execve::sys_execve;
 use self::exit_group::sys_exit_group;
 use self::fork::sys_fork;
+use self::listen::sys_listen;
+use self::read::sys_read;
 use self::set_tid_address::sys_set_tid_address;
+use self::socket::sys_socket;
 use self::wait4::sys_wait4;
 use self::write::sys_write;
 use self::writev::sys_writev;
@@ -23,11 +35,17 @@ use crate::types::c_int;
 use crate::types::c_long;
 use crate::types::c_void;
 use crate::types::errno::Errno;
+use crate::types::sys::syscall::SYS_ACCEPT;
 use crate::types::sys::syscall::SYS_ARCH_PRCTL;
+use crate::types::sys::syscall::SYS_BIND;
+use crate::types::sys::syscall::SYS_CLOSE;
 use crate::types::sys::syscall::SYS_EXECVE;
 use crate::types::sys::syscall::SYS_EXIT_GROUP;
 use crate::types::sys::syscall::SYS_FORK;
+use crate::types::sys::syscall::SYS_LISTEN;
+use crate::types::sys::syscall::SYS_READ;
 use crate::types::sys::syscall::SYS_SET_TID_ADDRESS;
+use crate::types::sys::syscall::SYS_SOCKET;
 use crate::types::sys::syscall::SYS_WAIT4;
 use crate::types::sys::syscall::SYS_WRITE;
 use crate::types::sys::syscall::SYS_WRITEV;
@@ -54,8 +72,14 @@ pub extern "C" fn handle_syscall(frame: *const SyscallFrame) -> c_long {
 
     let result = match nr {
         SYS_WRITE => sys_write(&current, arg0 as c_int, arg1 as *const c_void, arg2),
+        SYS_READ => sys_read(&current, arg0 as c_int, arg1 as *mut c_void, arg2),
+        SYS_CLOSE => sys_close(&current, arg0 as c_int),
         SYS_WRITEV => sys_writev(&current, arg0 as c_int, arg1 as *const iovec, arg2 as c_int),
         SYS_FORK => sys_fork(&current, frame as *const SyscallFrame as usize),
+        SYS_SOCKET => sys_socket(&current, arg0 as c_int, arg1 as c_int, arg2 as c_int),
+        SYS_BIND => sys_bind(&current, arg0 as c_int, arg1 as *const u8, arg2),
+        SYS_LISTEN => sys_listen(&current, arg0 as c_int, arg1 as c_int),
+        SYS_ACCEPT => sys_accept(&current, arg0 as c_int, arg1 as *mut u8, arg2 as *mut u32),
         SYS_EXECVE => {
             sys_execve(
                 &current,

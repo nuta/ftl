@@ -16,7 +16,7 @@ pub struct Rule {
     remote_port: Option<NonZeroU16>,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub struct FiveTuple {
     pub eth_type: u16,
     pub ip_proto: u8,

@@ -1,48 +1,58 @@
+#include <arpa/inet.h>
+#include <errno.h>
 #include <stdio.h>
 #include <string.h>
-#include <sys/wait.h>
+#include <sys/socket.h>
 #include <unistd.h>
-#include <errno.h>
 
-int main(int argc, char **argv)
-{
-    if (argc > 1)
-    {
-        for (int i = 0; i < argc; i++)
-        {
-            printf("argv[%d] = %s\n", i, argv[i]);
-        }
-        return 123;
-    }
-
-    pid_t pid = fork();
-    if (pid < 0)
-    {
-        printf("failed to fork: %s\n", strerror(errno));
+int main(void) {
+    int listen_sock = socket(AF_INET, SOCK_STREAM, 0);
+    if (listen_sock < 0) {
+        fprintf(stderr, "socket failed: %s\n", strerror(errno));
         return 1;
     }
 
-    if (pid == 0)
-    {
-        printf("Hello from child\n");
-        char *const argv[] = {"hello.elf", "exec", NULL};
-        execve("hello.elf", argv, NULL);
-        printf("failed to exec: %s\n", strerror(errno));
-    }
-    else
-    {
-        printf("Hello from parent child=%d\n", pid);
+    struct sockaddr_in addr = {
+        .sin_family = AF_INET,
+        .sin_port = htons(80),
+        .sin_addr.s_addr = htonl(INADDR_ANY),
+    };
 
-        int status;
-        pid_t waited = waitpid(pid, &status, 0);
-        if (waited < 0)
-        {
-            printf("failed to wait: %s\n", strerror(errno));
-            return 1;
+    if (bind(listen_sock, (struct sockaddr *) &addr, sizeof(addr)) < 0) {
+        fprintf(stderr, "bind failed: %s\n", strerror(errno));
+        return 1;
+    }
+
+    int backlog = 16;
+    if (listen(listen_sock, backlog) < 0) {
+        fprintf(stderr, "listen failed: %s\n", strerror(errno));
+        return 1;
+    }
+
+    printf("HTTP server listening on port 80\n");
+    for (;;) {
+        int sock = accept(listen_sock, NULL, NULL);
+        if (sock < 0) {
+            fprintf(stderr, "accept failed: %s\n", strerror(errno));
+            continue;
         }
 
-        printf("child=%d exited with status=%d\n", waited, WEXITSTATUS(status));
-    }
+        char buf[1024];
+        ssize_t n = read(sock, buf, sizeof(buf));
+        if (n > 0) {
+            static const char response[] =
+                "HTTP/1.1 200 OK\r\n"
+                "Content-Length: 15\r\n"
+                "Content-Type: text/plain\r\n"
+                "Connection: close\r\n"
+                "\r\n"
+                "Hello from FTL\n";
 
-    return 0;
+            if (write(sock, response, sizeof(response) - 1) < 0) {
+                fprintf(stderr, "sock write failed: %s\n", strerror(errno));
+            }
+        }
+
+        close(sock);
+    }
 }

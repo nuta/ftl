@@ -4,6 +4,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 use core::fmt;
 use core::mem::MaybeUninit;
+use core::ops::Deref;
 use core::slice;
 
 use ftl::syscall::poll_create;
@@ -67,9 +68,37 @@ struct Mapping {
 
 #[derive(Clone)]
 pub struct FdTable {
-    open_files: Vec<Option<Arc<dyn FileLike>>>,
+    open_files: Vec<Option<Arc<OpenFile>>>,
     active_fds: usize,
     capacity: usize,
+}
+
+/// An opened file.
+///
+/// This is a simple wrapper that ensures that the underlying file is closed
+/// when all `Arc<OpenFile>` are dropped.
+pub struct OpenFile {
+    file: Arc<dyn FileLike>,
+}
+
+impl OpenFile {
+    fn new(file: Arc<dyn FileLike>) -> Self {
+        Self { file }
+    }
+}
+
+impl Deref for OpenFile {
+    type Target = dyn FileLike;
+
+    fn deref(&self) -> &Self::Target {
+        self.file.as_ref()
+    }
+}
+
+impl Drop for OpenFile {
+    fn drop(&mut self) {
+        self.file.close();
+    }
 }
 
 impl FdTable {
@@ -81,14 +110,15 @@ impl FdTable {
         }
     }
 
-    pub fn insert(&mut self, file: Arc<dyn FileLike>) -> Result<Option<Arc<dyn FileLike>>, Errno> {
+    pub fn insert(&mut self, file: Arc<dyn FileLike>) -> Result<c_int, Errno> {
         if self.active_fds >= self.capacity {
             return Err(Errno::EMFILE);
         }
 
         for fd in 0..self.capacity {
             if fd >= self.open_files.len() || self.open_files[fd].is_none() {
-                return self.insert_at(fd as c_int, file);
+                self.insert_at(fd as c_int, file)?;
+                return Ok(fd as c_int);
             }
         }
 
@@ -99,7 +129,7 @@ impl FdTable {
         &mut self,
         fd: c_int,
         file: Arc<dyn FileLike>,
-    ) -> Result<Option<Arc<dyn FileLike>>, Errno> {
+    ) -> Result<Option<Arc<OpenFile>>, Errno> {
         if fd < 0 {
             return Err(Errno::EBADF);
         }
@@ -113,14 +143,14 @@ impl FdTable {
             self.open_files.resize(fd + 1, None);
         }
 
-        let old = self.open_files[fd].replace(file);
+        let old = self.open_files[fd].replace(Arc::new(OpenFile::new(file)));
         if old.is_none() {
             self.active_fds += 1;
         }
         Ok(old)
     }
 
-    pub fn get(&self, fd: c_int) -> Result<&Arc<dyn FileLike>, Errno> {
+    pub fn get(&self, fd: c_int) -> Result<&Arc<OpenFile>, Errno> {
         if fd < 0 {
             return Err(Errno::EBADF);
         }
@@ -130,6 +160,26 @@ impl FdTable {
             Some(Some(file)) => Ok(file),
             _ => Err(Errno::EBADF),
         }
+    }
+
+    pub fn remove(&mut self, fd: c_int) -> Result<Arc<OpenFile>, Errno> {
+        if fd < 0 {
+            return Err(Errno::EBADF);
+        }
+
+        let slot = self.open_files.get_mut(fd as usize);
+        let file = match slot {
+            Some(file) => file.take().ok_or(Errno::EBADF)?,
+            _ => return Err(Errno::EBADF),
+        };
+
+        self.active_fds -= 1;
+        Ok(file)
+    }
+
+    fn clear(&mut self) {
+        self.active_fds = 0;
+        self.open_files.clear();
     }
 }
 
@@ -329,6 +379,11 @@ impl Process {
                 self.container.processes.lock().remove(child.tgid);
             }
         }
+
+        drop(mutable);
+
+        // Close all file descriptors.
+        self.fd_table.lock().clear();
         Ok(())
     }
 
@@ -367,6 +422,10 @@ impl Process {
 
     pub fn fd_table(&self) -> &SpinLock<FdTable> {
         &self.fd_table
+    }
+
+    pub fn container(&self) -> &Arc<Container> {
+        &self.container
     }
 }
 
