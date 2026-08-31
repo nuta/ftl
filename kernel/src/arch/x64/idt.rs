@@ -242,6 +242,8 @@ extern "C" fn interrupt_entry() -> ! {
         "mov [rax + {rsp_offset}], rbx",
         "pop rbx",
 
+        // Align the stack to 16 bytes.
+        "sub rsp, 8",
         "jmp {handle_user_interrupt}",
         current_thread_offset = const offset_of!(CpuVar, current_thread),
         xstate_mask_lo = const XSTATE_MASK & 0xffff_ffff,

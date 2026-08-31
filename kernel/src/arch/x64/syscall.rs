@@ -100,6 +100,7 @@ extern "C" fn syscall_handler() -> ! {
 
         // Switch to the kernel stack and handle the FTL syscall.
         "mov rsp, gs:[{kernel_rsp_offset}]",
+        "sub rsp, 8", // Align the stack to 16 bytes.
         "jmp {handle_syscall}",
 
         // System call trampoline: Build the trap frame and jump back to the

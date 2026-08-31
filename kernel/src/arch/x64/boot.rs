@@ -175,7 +175,10 @@ unsafe extern "C" fn x64_boot() -> ! {
         "or  rax, rbx",
         "or  rsp, rbx",
 
-        // Jump to main.
+        // Align the stack to 16 bytes.
+        "sub rsp, 8",
+
+        // Jump to pvh_main.
         "jmp rax",
 
         // The ELF note for PVH boot protocol.
