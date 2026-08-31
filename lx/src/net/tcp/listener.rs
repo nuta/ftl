@@ -2,13 +2,9 @@ use alloc::collections::VecDeque;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 
-use ftl::syscall::handle_close;
-use ftl::syscall::poll_create;
-use ftl::syscall::poll_notify;
-use ftl::syscall::poll_wait;
+use ftl::poll::Poll;
 use ftl::trace;
 use ftl_types::error::ErrorCode;
-use ftl_types::handle::HandleId;
 use ftl_utils::spinlock::SpinLock;
 
 use super::buffer::TCP_BUFFER_SIZE;
@@ -45,13 +41,13 @@ struct Mutable {
 
 pub struct TcpListener {
     io: Arc<Io>,
-    poll: HandleId,
+    poll: Poll,
     mutable: SpinLock<Mutable>,
 }
 
 impl TcpListener {
     pub fn new(io: Arc<Io>) -> Result<Arc<Self>, ErrorCode> {
-        let poll = poll_create()?;
+        let poll = Poll::create()?;
         let mutable = Mutable {
             local_port: None,
             backlog: 0,
@@ -272,7 +268,7 @@ impl TcpListener {
         // Add the connection to accept later.
         self.mutable.lock().established.push_back(conn);
 
-        if let Err(err) = poll_notify(self.poll) {
+        if let Err(err) = self.poll.notify() {
             trace!("failed to notify poll: {:?}", err);
         }
     }
@@ -315,10 +311,6 @@ impl Drop for TcpListener {
         if let Some(port) = local_port {
             self.io.unbind_listener(port);
         }
-
-        if let Err(error) = handle_close(self.poll) {
-            trace!("failed to close listener poll: {:?}", error);
-        }
     }
 }
 
@@ -342,7 +334,7 @@ impl FileLike for TcpListener {
                 return Ok(conn);
             }
 
-            poll_wait(self.poll)?;
+            self.poll.wait()?;
         }
     }
 }

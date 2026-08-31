@@ -1,10 +1,21 @@
 use core::fmt;
 
+use ftl_types::error::ErrorCode;
+use ftl_types::syscall::Syscall;
+
+use crate::arch::syscall2;
+
+fn sys_print(buf: *const u8, len: usize) -> Result<(), ErrorCode> {
+    let bytes = unsafe { core::slice::from_raw_parts(buf, len) };
+    let _ = syscall2(Syscall::Print, bytes.as_ptr() as usize, bytes.len())?;
+    Ok(())
+}
+
 pub struct Printer;
 
 impl fmt::Write for Printer {
     fn write_str(&mut self, s: &str) -> fmt::Result {
-        crate::syscall::print(s.as_bytes());
+        let _ = sys_print(s.as_ptr(), s.len());
         Ok(())
     }
 }

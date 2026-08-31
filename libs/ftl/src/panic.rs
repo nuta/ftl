@@ -4,5 +4,5 @@ fn panic(info: &core::panic::PanicInfo) -> ! {
     use ftl_types::thread::ExitReason;
 
     error!("panic: {info}");
-    crate::syscall::thread_exit(ExitReason::Panic);
+    crate::thread::exit(ExitReason::Panic);
 }

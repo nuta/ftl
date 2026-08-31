@@ -30,7 +30,7 @@ use self::wait4::sys_wait4;
 use self::write::sys_write;
 use self::writev::sys_writev;
 use crate::arch::SyscallFrame;
-use crate::thread::Thread;
+use crate::thread::LxThread;
 use crate::types::c_int;
 use crate::types::c_long;
 use crate::types::c_void;
@@ -60,7 +60,7 @@ pub extern "C" fn handle_syscall(frame: *const SyscallFrame) -> c_long {
     let arg2 = frame.arg2();
 
     // SAFETY: The kernel returns the cookie we gave.
-    let current = unsafe { Thread::from_cookie(frame.cookie) };
+    let current = unsafe { LxThread::from_cookie(frame.cookie) };
     info!(
         "syscall: tid={}, n={}, [{:#x}, {:#x}, {:#x}]",
         current.tid(),

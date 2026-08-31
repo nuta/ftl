@@ -1,13 +1,13 @@
 use core::slice;
 
-use crate::thread::Thread;
+use crate::thread::LxThread;
 use crate::types::c_int;
 use crate::types::c_long;
 use crate::types::errno::Errno;
 use crate::types::sys::uio::iovec;
 
 pub fn sys_writev(
-    current: &Thread,
+    current: &LxThread,
     fd: c_int,
     iov: *const iovec,
     iovcnt: c_int,

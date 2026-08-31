@@ -10,5 +10,5 @@ pub extern "C" fn start() {
         main();
     }
 
-    crate::syscall::thread_exit(ExitReason::Success);
+    crate::thread::exit(ExitReason::Success);
 }

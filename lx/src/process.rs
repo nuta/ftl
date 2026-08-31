@@ -7,19 +7,14 @@ use core::mem::MaybeUninit;
 use core::ops::Deref;
 use core::slice;
 
-use ftl::syscall::poll_create;
-use ftl::syscall::poll_notify;
-use ftl::syscall::poll_wait;
-use ftl::syscall::vmo_create;
-use ftl::syscall::vmo_write;
-use ftl::syscall::vmspace_clone;
-use ftl::syscall::vmspace_map;
+use ftl::poll::Poll;
+use ftl::vmo::Vmo;
+use ftl::vmspace::VmSpace;
 use ftl_elf::Elf;
 use ftl_elf::PF_R;
 use ftl_elf::PF_W;
 use ftl_elf::PF_X;
 use ftl_elf::PhdrType;
-use ftl_types::handle::HandleId;
 use ftl_types::thread::RegsKind;
 use ftl_types::vmspace::PageAttrs;
 use ftl_utils::alignment::align_down;
@@ -28,7 +23,7 @@ use ftl_utils::spinlock::SpinLock;
 
 use crate::arch::fork_child_entry;
 use crate::container::Container;
-use crate::thread::Thread;
+use crate::thread::LxThread;
 use crate::types::c_int;
 use crate::types::errno::Errno;
 use crate::vfs::Console;
@@ -185,7 +180,7 @@ impl FdTable {
 
 struct Mutable {
     parent: Option<Weak<Process>>,
-    threads: Vec<Arc<Thread>>,
+    threads: Vec<Arc<LxThread>>,
     mappings: Vec<Mapping>,
     children: Vec<Arc<Process>>,
     exit_status: Option<c_int>,
@@ -193,7 +188,7 @@ struct Mutable {
 
 pub struct Process {
     tgid: PId,
-    poll: HandleId,
+    poll: Poll,
     container: Arc<Container>,
     mutable: SpinLock<Mutable>,
     fd_table: SpinLock<FdTable>,
@@ -205,7 +200,7 @@ impl Process {
         elf_file: Arc<dyn FileLike>,
     ) -> Result<Arc<Process>, Errno> {
         let (vmspace, mappings, entry, sp) =
-            create_address_space(container.root_vmspace, elf_file, &[])?;
+            create_address_space(&container.root_vmspace, elf_file, &[])?;
 
         let mut fd_table = FdTable::new(1024); // TODO: make this configurable
         let console: Arc<dyn FileLike> = Arc::new(Console::new());
@@ -230,15 +225,15 @@ impl Process {
 
     pub fn exec(
         self: &Arc<Self>,
-        current: &Thread,
+        current: &LxThread,
         elf_file: Arc<dyn FileLike>,
         argv: &[&[u8]],
     ) -> Result<(), Errno> {
         let (vmspace, mappings, entry, sp) =
-            create_address_space(self.container.root_vmspace, elf_file, argv)?;
-        let thread = Thread::new(
-            self.container.isolate,
-            vmspace,
+            create_address_space(&self.container.root_vmspace, elf_file, argv)?;
+        let thread = LxThread::new(
+            &self.container.isolate,
+            &vmspace,
             entry,
             sp,
             Arc::downgrade(self),
@@ -257,7 +252,7 @@ impl Process {
 
     fn new<F>(
         container: Arc<Container>,
-        vmspace: HandleId,
+        vmspace: VmSpace,
         fd_table: FdTable,
         tgid: PId,
         parent: Option<Weak<Process>>,
@@ -267,9 +262,9 @@ impl Process {
         thread_prestart: F,
     ) -> Result<Arc<Self>, Errno>
     where
-        F: FnOnce(&Arc<Thread>) -> Result<(), Errno>,
+        F: FnOnce(&Arc<LxThread>) -> Result<(), Errno>,
     {
-        let poll = poll_create()?;
+        let poll = Poll::create()?;
         let process = Arc::new(Self {
             tgid,
             poll,
@@ -286,9 +281,9 @@ impl Process {
 
         // TODO: LX assumes that the cookie won't be dereferenced until the
         // thread is started. Should we document and guarantee this?
-        let thread = Thread::new(
-            container.isolate,
-            vmspace,
+        let thread = LxThread::new(
+            &container.isolate,
+            &vmspace,
             entry,
             sp,
             Arc::downgrade(&process),
@@ -303,19 +298,19 @@ impl Process {
         Ok(process)
     }
 
-    pub fn fork(self: &Arc<Self>, current: &Thread, syscall_sp: usize) -> Result<PId, Errno> {
-        let vmspace = vmspace_clone(self.container.root_vmspace)?;
+    pub fn fork(self: &Arc<Self>, current: &LxThread, syscall_sp: usize) -> Result<PId, Errno> {
+        let vmspace = self.container.root_vmspace.try_clone()?;
         let fd_table = self.fd_table.lock().clone();
 
         // Copy memory into the child's VM space.
         // TODO: copy on write
         let mappings = self.mutable.lock().mappings.clone();
         for mapping in &mappings {
-            let vmo = vmo_create(mapping.len)?;
+            let vmo = Vmo::create(mapping.len)?;
             let bytes =
                 unsafe { core::slice::from_raw_parts(mapping.start as *const u8, mapping.len) };
-            vmo_write(vmo, 0, bytes)?;
-            vmspace_map(vmspace, vmo, mapping.start, mapping.attrs)?;
+            vmo.write(0, bytes)?;
+            vmspace.map(&vmo, mapping.start, mapping.attrs)?;
         }
 
         // Allocate a new PID for the child process.
@@ -353,11 +348,11 @@ impl Process {
 
         let mut mutable = self.mutable.lock();
 
-        // Wake up the parent process while holding the lock. When poll_notify
+        // Wake up the parent process while holding the lock. When notification
         // fails, exit fails and keeps this process alive.
         let parent = mutable.parent.as_ref().and_then(Weak::upgrade);
         if let Some(parent) = &parent {
-            poll_notify(parent.poll)?;
+            parent.poll.notify()?;
         }
 
         // Mark the process as exited.
@@ -416,7 +411,7 @@ impl Process {
                 return Err(Errno::ECHILD);
             }
 
-            poll_wait(self.poll)?;
+            self.poll.wait()?;
         }
     }
 
@@ -430,7 +425,7 @@ impl Process {
 }
 
 fn prepare_stack(
-    stack: HandleId,
+    stack: &Vmo,
     sp_bottom: usize,
     stack_size: usize,
     argv: &[&[u8]],
@@ -446,7 +441,7 @@ fn prepare_stack(
     let args_offset = stack_size - strings_len;
     let mut offset = args_offset;
     for arg in argv {
-        vmo_write(stack, offset, arg)?;
+        stack.write(offset, arg)?;
         words.push(sp_bottom + offset);
         offset += arg.len();
     }
@@ -464,28 +459,23 @@ fn prepare_stack(
 
     // Copy argc, argv/envp pointers, and auxv.
     let bytes = unsafe { slice::from_raw_parts(words.as_ptr().cast(), len) };
-    vmo_write(stack, sp_offset, bytes)?;
+    stack.write(sp_offset, bytes)?;
     Ok(sp_bottom + sp_offset)
 }
 
 fn create_address_space(
-    root_vmspace: HandleId,
+    root_vmspace: &VmSpace,
     elf_file: Arc<dyn FileLike>,
     argv: &[&[u8]],
-) -> Result<(HandleId, Vec<Mapping>, usize, usize), Errno> {
-    let vmspace = vmspace_clone(root_vmspace)?;
+) -> Result<(VmSpace, Vec<Mapping>, usize, usize), Errno> {
+    let vmspace = root_vmspace.try_clone()?;
     let mut mappings = Vec::new();
-    let entry = load_elf(vmspace, elf_file.as_ref(), &mut mappings)?;
+    let entry = load_elf(&vmspace, elf_file.as_ref(), &mut mappings)?;
 
-    let stack = vmo_create(STACK_SIZE)?;
-    let sp = prepare_stack(stack, STACK_BOTTOM, STACK_SIZE, argv)?;
+    let stack = Vmo::create(STACK_SIZE)?;
+    let sp = prepare_stack(&stack, STACK_BOTTOM, STACK_SIZE, argv)?;
 
-    vmspace_map(
-        vmspace,
-        stack,
-        STACK_BOTTOM,
-        PageAttrs::READ | PageAttrs::WRITE,
-    )?;
+    vmspace.map(&stack, STACK_BOTTOM, PageAttrs::READ | PageAttrs::WRITE)?;
     mappings.push(Mapping {
         start: STACK_BOTTOM,
         len: STACK_SIZE,
@@ -536,7 +526,7 @@ fn read_uninit<T: Copy>(
 }
 
 fn load_elf(
-    vmspace: HandleId,
+    vmspace: &VmSpace,
     elf_file: &dyn FileLike,
     mappings: &mut Vec<Mapping>,
 ) -> Result<usize, Errno> {
@@ -557,17 +547,17 @@ fn load_elf(
         let region_base = align_down(vaddr, PAGE_SIZE);
         let page_offset = vaddr - region_base;
         let region_len = align_up(page_offset + phdr.p_memsz as usize, PAGE_SIZE);
-        let vmo = vmo_create(region_len).unwrap();
+        let vmo = Vmo::create(region_len).unwrap();
 
         let filesz = phdr.p_filesz as usize;
         if filesz > 0 {
             let mut buf = vec![0u8; filesz]; // FIXME: do not copy twice
             read_exact(elf_file, phdr.p_offset as usize, &mut buf)?;
-            vmo_write(vmo, page_offset, &buf)?;
+            vmo.write(page_offset, &buf)?;
         }
 
         let attrs = attrs_from_phdr(phdr);
-        vmspace_map(vmspace, vmo, region_base, attrs)?;
+        vmspace.map(&vmo, region_base, attrs)?;
         mappings.push(Mapping {
             start: region_base,
             len: region_len,

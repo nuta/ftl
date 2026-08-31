@@ -1,6 +1,6 @@
 use core::slice;
 
-use crate::thread::Thread;
+use crate::thread::LxThread;
 use crate::types::c_int;
 use crate::types::c_long;
 use crate::types::c_void;
@@ -8,7 +8,7 @@ use crate::types::errno::Errno;
 use crate::types::size_t;
 
 pub fn sys_read(
-    current: &Thread,
+    current: &LxThread,
     fd: c_int,
     buf: *mut c_void,
     count: size_t,

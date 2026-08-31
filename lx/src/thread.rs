@@ -2,43 +2,41 @@ use alloc::boxed::Box;
 use alloc::sync::Arc;
 use alloc::sync::Weak;
 
-use ftl::syscall::thread_copy_regs;
-use ftl::syscall::thread_create;
-use ftl::syscall::thread_start;
-use ftl::syscall::thread_write_regs;
+use ftl::isolate::Isolate;
+use ftl::thread::Thread;
+use ftl::vmspace::VmSpace;
 use ftl_types::error::ErrorCode;
-use ftl_types::handle::HandleId;
 use ftl_types::thread::Regs;
 use ftl_types::thread::RegsKind;
 
 use crate::process::PId;
 use crate::process::Process;
 
-pub struct Thread {
+pub struct LxThread {
     process: Weak<Process>,
     tid: PId,
-    handle: HandleId,
+    inner: Thread,
 }
 
 struct Cookie {
-    thread: Arc<Thread>,
+    thread: Arc<LxThread>,
 }
 
 impl Cookie {
     /// # Safety
     ///
     /// `cookie` must be the thread's cookie which we created in
-    /// [`Thread::new`].
-    unsafe fn from_raw(cookie: usize) -> Arc<Thread> {
+    /// [`LxThread::new`].
+    unsafe fn from_raw(cookie: usize) -> Arc<LxThread> {
         let ptr = cookie as *const Cookie;
         unsafe { (*ptr).thread.clone() }
     }
 }
 
-impl Thread {
+impl LxThread {
     pub fn new(
-        isolate: HandleId,
-        vmspace: HandleId,
+        isolate: &Isolate,
+        vmspace: &VmSpace,
         entry: usize,
         sp: usize,
         process: Weak<Process>,
@@ -50,12 +48,12 @@ impl Thread {
 
         // TODO: LX assumes that the cookie won't be derefernced until the
         //       thread is started. Should we document and guarantee this?
-        let handle = thread_create(isolate, vmspace, entry, sp, fault_pc, cookie)?;
+        let inner = Thread::create(isolate, vmspace, entry, sp, fault_pc, cookie)?;
 
-        let thread = Arc::new(Thread {
+        let thread = Arc::new(LxThread {
             process,
             tid,
-            handle,
+            inner,
         });
 
         // Initialize and leak the thread context. We'll free manually later.
@@ -70,7 +68,7 @@ impl Thread {
     }
 
     pub fn start(&self) -> Result<(), ErrorCode> {
-        thread_start(self.handle)
+        self.inner.start()
     }
 
     pub fn tid(&self) -> PId {
@@ -82,18 +80,19 @@ impl Thread {
     }
 
     pub fn set_fsbase(&self, fsbase: usize) -> Result<(), ErrorCode> {
-        thread_write_regs(self.handle, RegsKind::FsBase, Regs { fs_base: fsbase })
+        self.inner
+            .write_regs(RegsKind::FsBase, Regs { fs_base: fsbase })
     }
 
-    pub fn copy_regs_to(&self, dest: &Thread, kind: RegsKind) -> Result<(), ErrorCode> {
-        thread_copy_regs(self.handle, dest.handle, kind)
+    pub fn copy_regs_to(&self, dest: &LxThread, kind: RegsKind) -> Result<(), ErrorCode> {
+        self.inner.copy_regs_to(&dest.inner, kind)
     }
 
     /// # Safety
     ///
     /// `cookie` must be the thread's cookie which we created in
-    /// [`Thread::new`].
-    pub unsafe fn from_cookie(cookie: usize) -> Arc<Thread> {
+    /// [`LxThread::new`].
+    pub unsafe fn from_cookie(cookie: usize) -> Arc<LxThread> {
         unsafe { Cookie::from_raw(cookie) }
     }
 }

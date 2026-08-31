@@ -1,4 +1,4 @@
-use crate::thread::Thread;
+use crate::thread::LxThread;
 use crate::types::c_int;
 use crate::types::c_long;
 use crate::types::errno::Errno;
@@ -8,7 +8,7 @@ const SOCK_STREAM: c_int = 1;
 const IPPROTO_TCP: c_int = 6;
 
 pub fn sys_socket(
-    current: &Thread,
+    current: &LxThread,
     domain: c_int,
     socket_type: c_int,
     protocol: c_int,

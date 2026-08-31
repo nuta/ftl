@@ -5,13 +5,13 @@ use core::ffi::CStr;
 use ftl_types::thread::ExitReason;
 
 use crate::HELLO_ELF;
-use crate::thread::Thread;
+use crate::thread::LxThread;
 use crate::types::c_long;
 use crate::types::errno::Errno;
 use crate::vfs::EmbeddedFile;
 
 pub fn sys_execve(
-    current: &Thread,
+    current: &LxThread,
     _path: *const u8,
     argv: *const *const u8,
     _envp: *const *const u8,
@@ -34,5 +34,5 @@ pub fn sys_execve(
 
     // TODO: envp support
     current.process().exec(current, elf_file, &argv_vec)?;
-    ftl::syscall::thread_exit(ExitReason::Success)
+    ftl::thread::exit(ExitReason::Success)
 }

@@ -1,13 +1,9 @@
 use alloc::sync::Arc;
 use core::cmp::min;
 
-use ftl::syscall::handle_close;
-use ftl::syscall::poll_create;
-use ftl::syscall::poll_notify;
-use ftl::syscall::poll_wait;
+use ftl::poll::Poll;
 use ftl::trace;
 use ftl_types::error::ErrorCode;
-use ftl_types::handle::HandleId;
 use ftl_utils::spinlock::SpinLock;
 
 use super::buffer::TcpBuffer;
@@ -49,7 +45,7 @@ struct Mutable {
 
 pub struct TcpConn {
     io: Arc<Io>,
-    poll: HandleId,
+    poll: Poll,
     remote: Endpoint,
     local_port: u16,
     mutable: SpinLock<Mutable>,
@@ -65,7 +61,7 @@ impl TcpConn {
         remote_rcv_wnd: u16,
         rx_buffer: TcpBuffer,
     ) -> Result<Arc<Self>, ErrorCode> {
-        let poll = poll_create()?;
+        let poll = Poll::create()?;
         let snd_nxt = local_iss.wrapping_add(1);
         let mutable = Mutable {
             state: State::Established,
@@ -244,7 +240,7 @@ impl TcpConn {
             mutable.state = State::Closed;
             mutable.eof = true;
             drop(mutable);
-            if let Err(error) = poll_notify(self.poll) {
+            if let Err(error) = self.poll.notify() {
                 trace!("failed to notify poll: {:?}", error);
             }
             return;
@@ -301,7 +297,7 @@ impl TcpConn {
         drop(mutable);
 
         if acked_len > 0 || received_len > 0 || received_fin {
-            let _ = poll_notify(self.poll);
+            let _ = self.poll.notify();
         }
     }
 
@@ -310,14 +306,6 @@ impl TcpConn {
         let mut mutable = self.mutable.lock();
         mutable.closing = true;
         self.flush(&mut mutable);
-    }
-}
-
-impl Drop for TcpConn {
-    fn drop(&mut self) {
-        if let Err(error) = handle_close(self.poll) {
-            trace!("failed to close connection poll: {:?}", error);
-        }
     }
 }
 
@@ -345,7 +333,7 @@ impl FileLike for TcpConn {
 
             // Wait for more data.
             drop(mutable);
-            poll_wait(self.poll)?;
+            self.poll.wait()?;
         }
     }
 
@@ -371,7 +359,7 @@ impl FileLike for TcpConn {
             // Wait for the peer to acknowledge, and make room in our TX
             // buffer.
             drop(mutable);
-            poll_wait(self.poll)?;
+            self.poll.wait()?;
         }
     }
 

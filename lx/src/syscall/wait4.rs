@@ -1,4 +1,4 @@
-use crate::thread::Thread;
+use crate::thread::LxThread;
 use crate::types::c_int;
 use crate::types::c_long;
 use crate::types::errno::Errno;
@@ -8,7 +8,7 @@ fn encode_wait_status(exit_status: c_int) -> c_int {
 }
 
 pub fn sys_wait4(
-    current: &Thread,
+    current: &LxThread,
     pid: c_int,
     wstatus: *mut c_int,
     options: c_int,

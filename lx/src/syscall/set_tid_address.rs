@@ -1,9 +1,9 @@
-use crate::thread::Thread;
+use crate::thread::LxThread;
 use crate::types::c_int;
 use crate::types::c_long;
 use crate::types::errno::Errno;
 
-pub fn sys_set_tid_address(current: &Thread, tidptr: *mut c_int) -> Result<c_long, Errno> {
+pub fn sys_set_tid_address(current: &LxThread, tidptr: *mut c_int) -> Result<c_long, Errno> {
     // TODO: Support TID address
     let _ = tidptr;
 

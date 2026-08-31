@@ -4,12 +4,8 @@ use alloc::vec::Vec;
 use core::num::NonZeroU16;
 use core::num::NonZeroU32;
 
-use ftl::syscall::net_bind;
-use ftl::syscall::net_drop;
-use ftl::syscall::net_peek;
-use ftl::syscall::net_recv;
-use ftl::syscall::net_send;
-use ftl::syscall::net_unbind;
+use ftl::net::Net;
+use ftl::poll::Poll;
 use ftl::trace;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
@@ -28,20 +24,20 @@ use super::tcp::TcpListener;
 use super::tcp::TcpPacketInfo;
 
 pub struct Io {
-    handle: HandleId,
+    net: Net,
 }
 
 impl Io {
-    fn new(handle: HandleId) -> Self {
-        Self { handle }
+    fn new(net: Net) -> Self {
+        Self { net }
     }
 
     fn recv_payload(&self, payload: &mut [u8]) -> Result<(), ErrorCode> {
-        net_recv(self.handle, payload)
+        self.net.recv(payload)
     }
 
     fn drop_packet(&self) {
-        net_drop(self.handle).expect("failed to drop a network packet");
+        self.net.drop().expect("failed to drop a network packet");
     }
 
     pub fn send_segment(
@@ -51,7 +47,7 @@ impl Io {
         segment: Segment,
     ) -> Result<(), ErrorCode> {
         let header = HeaderBuilder::new().build(remote, local_port, &segment);
-        net_send(self.handle, &header, segment.payload)
+        self.net.send(&header, segment.payload)
     }
 
     pub fn bind_listener(&self, port: u16) -> Result<(), ErrorCode> {
@@ -64,7 +60,7 @@ impl Io {
             None,
             None,
         );
-        net_bind(self.handle, &rule, 0 /* cookie is unused */)
+        self.net.bind(&rule, 0 /* cookie is unused */)
     }
 
     pub fn unbind_listener(&self, port: u16) {
@@ -79,7 +75,7 @@ impl Io {
             None,
             None,
         );
-        let _ = net_unbind(self.handle, &rule);
+        let _ = self.net.unbind(&rule);
     }
 }
 
@@ -107,7 +103,7 @@ impl<'a> ListenerIo<'a> {
             Some(remote_port),
         );
 
-        net_bind(self.io.handle, &rule, 0 /* cookie is unused */)?;
+        self.io.net.bind(&rule, 0 /* cookie is unused */)?;
         let mut flows = self.flows.lock();
         flows.flows.insert(pkt.five_tuple(), Flow { conn, rule });
         Ok(())
@@ -221,12 +217,20 @@ pub struct TcpIp {
 }
 
 impl TcpIp {
-    pub fn new(network_handle: HandleId) -> Arc<Self> {
+    pub fn new(net: Net) -> Arc<Self> {
         Arc::new(Self {
-            io: Arc::new(Io::new(network_handle)),
+            io: Arc::new(Io::new(net)),
             listeners: SpinLock::new(ListenerTable::new()),
             flows: SpinLock::new(FlowTable::new()),
         })
+    }
+
+    pub fn id(&self) -> HandleId {
+        self.io.net.id()
+    }
+
+    pub fn subscribe(&self, poll: &Poll) -> Result<(), ErrorCode> {
+        self.io.net.subscribe(poll)
     }
 
     pub fn create_listener(self: &Arc<Self>) -> Result<Arc<TcpListener>, ErrorCode> {
@@ -239,7 +243,7 @@ impl TcpIp {
         let mut header = [0u8; 128];
         loop {
             // Read the packet header.
-            match net_peek(self.io.handle, &mut header) {
+            match self.io.net.peek(&mut header) {
                 Ok(_) => {}
                 Err(error) if error == ErrorCode::EMPTY => return,
                 Err(_) => panic!("failed to peek at a network packet"),
@@ -261,7 +265,7 @@ impl TcpIp {
             // TODO: This might take some time. Optimize this.
             let mut flows = self.flows.lock();
             while let Some(rule) = flows.pop_closed() {
-                if let Err(error) = net_unbind(self.io.handle, &rule) {
+                if let Err(error) = self.io.net.unbind(&rule) {
                     trace!("failed to unbind flow: {:?}", error);
                 }
             }

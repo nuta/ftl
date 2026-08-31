@@ -1,11 +1,11 @@
-use crate::thread::Thread;
+use crate::thread::LxThread;
 use crate::types::c_int;
 use crate::types::c_long;
 use crate::types::errno::Errno;
 use crate::types::sys::socket::SockAddr;
 
 pub fn sys_bind(
-    current: &Thread,
+    current: &LxThread,
     fd: c_int,
     addr: *const u8,
     addr_len: usize,

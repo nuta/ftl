@@ -1,11 +1,11 @@
 use ftl_types::thread::ExitReason;
 
-use crate::thread::Thread;
+use crate::thread::LxThread;
 use crate::types::c_int;
 use crate::types::c_long;
 use crate::types::errno::Errno;
 
-pub fn sys_exit_group(current: &Thread, status: c_int) -> Result<c_long, Errno> {
+pub fn sys_exit_group(current: &LxThread, status: c_int) -> Result<c_long, Errno> {
     let reason = match status {
         0 => ExitReason::Success,
         _ => ExitReason::Errored,
@@ -14,5 +14,5 @@ pub fn sys_exit_group(current: &Thread, status: c_int) -> Result<c_long, Errno> 
     current.process().exit(status)?;
 
     // TODO: temrinate other threads too
-    ftl::syscall::thread_exit(reason)
+    ftl::thread::exit(reason)
 }

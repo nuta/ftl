@@ -2,14 +2,14 @@ use core::cmp::min;
 use core::mem::size_of;
 use core::slice;
 
-use crate::thread::Thread;
+use crate::thread::LxThread;
 use crate::types::c_int;
 use crate::types::c_long;
 use crate::types::errno::Errno;
 use crate::types::sys::socket::SockAddrIn;
 
 pub fn sys_accept(
-    current: &Thread,
+    current: &LxThread,
     fd: c_int,
     addr: *mut u8,
     addr_len: *mut u32,
@@ -67,10 +67,8 @@ fn write_sockaddr(
 
     // Copy the socket address to the buffer.
     unsafe {
-        let src = slice::from_raw_parts(
-            sockaddr_in as *const SockAddrIn as *const u8,
-            sockaddr_len,
-        );
+        let src =
+            slice::from_raw_parts(sockaddr_in as *const SockAddrIn as *const u8, sockaddr_len);
         addr.copy_from_nonoverlapping(src.as_ptr(), copy_len);
         addr_len.write_unaligned(sockaddr_len as u32);
     }

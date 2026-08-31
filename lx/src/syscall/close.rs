@@ -1,9 +1,9 @@
-use crate::thread::Thread;
+use crate::thread::LxThread;
 use crate::types::c_int;
 use crate::types::c_long;
 use crate::types::errno::Errno;
 
-pub fn sys_close(current: &Thread, fd: c_int) -> Result<c_long, Errno> {
+pub fn sys_close(current: &LxThread, fd: c_int) -> Result<c_long, Errno> {
     let process = current.process();
     // Note: Do not call `file.close()` here. Other forked processes may still
     // have a reference to this file. Arc<OpenFile> will handle the clean-up.

@@ -1,6 +1,7 @@
 use alloc::sync::Arc;
 
-use ftl_types::handle::HandleId;
+use ftl::isolate::Isolate;
+use ftl::vmspace::VmSpace;
 use ftl_utils::spinlock::SpinLock;
 use pid_table::PIdTable;
 
@@ -13,16 +14,16 @@ use crate::vfs::FileLike;
 mod pid_table;
 
 pub struct Container {
-    pub isolate: HandleId,
-    pub root_vmspace: HandleId,
+    pub isolate: Isolate,
+    pub root_vmspace: VmSpace,
     pub processes: SpinLock<PIdTable>,
     network: Arc<TcpIp>,
 }
 
 impl Container {
     pub fn new(
-        isolate: HandleId,
-        root_vmspace: HandleId,
+        isolate: Isolate,
+        root_vmspace: VmSpace,
         network: Arc<TcpIp>,
         elf_file: Arc<dyn FileLike>,
     ) -> Result<Arc<Self>, Errno> {
