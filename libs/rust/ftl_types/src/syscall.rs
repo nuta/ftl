@@ -23,4 +23,5 @@ pub enum Syscall {
     NetSubscribe = SYSCALL_BASE + 19,
     NetPeek = SYSCALL_BASE + 20,
     NetDrop = SYSCALL_BASE + 21,
+    HandleClose = SYSCALL_BASE + 22,
 }

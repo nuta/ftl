@@ -87,4 +87,10 @@ impl HandleTable {
             .ok_or(ErrorCode::INVALID_TYPE)?
             .authorize(required)
     }
+
+    pub fn remove(&mut self, id: HandleId) -> Result<AnyHandle, ErrorCode> {
+        self.handles
+            .remove(&id.as_usize())
+            .ok_or(ErrorCode::INVALID_ARG)
+    }
 }

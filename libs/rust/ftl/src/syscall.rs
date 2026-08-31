@@ -84,6 +84,11 @@ pub fn poll_notify(poll: HandleId) -> Result<(), ErrorCode> {
     Ok(())
 }
 
+pub fn handle_close(handle: HandleId) -> Result<(), ErrorCode> {
+    syscall1(Syscall::HandleClose, handle.as_usize())?;
+    Ok(())
+}
+
 pub fn net_create() -> Result<HandleId, ErrorCode> {
     let ret = syscall0(Syscall::NetCreate)?;
     Ok(HandleId::new(ret))
