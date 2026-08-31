@@ -5,19 +5,19 @@ edition = "2024"
 
 [workspace]
 resolver = "2"
-members = ["kernel", "libs/rust/*", "lx"]
+members = ["kernel", "libs/*", "drivers/*", "lx"]
 
 [workspace.dependencies]
-ftl = { path = "libs/rust/ftl" }
-ftl_utils = { path = "libs/rust/ftl_utils" }
-ftl_bump_allocator = { path = "libs/rust/ftl_bump_allocator" }
-ftl_arrayvec = { path = "libs/rust/ftl_arrayvec" }
-ftl_malloc = { path = "libs/rust/ftl_malloc" }
-ftl_elf = { path = "libs/rust/ftl_elf" }
-ftl_types = { path = "libs/rust/ftl_types" }
-ftl_virtio = { path = "libs/rust/ftl_virtio" }
-ftl_driver = { path = "libs/rust/ftl_driver" }
-virtio_net = { path = "libs/rust/virtio_net" }
+ftl = { path = "libs/ftl" }
+ftl_utils = { path = "libs/ftl_utils" }
+ftl_bump_allocator = { path = "libs/ftl_bump_allocator" }
+ftl_arrayvec = { path = "libs/ftl_arrayvec" }
+ftl_malloc = { path = "libs/ftl_malloc" }
+ftl_elf = { path = "libs/ftl_elf" }
+ftl_types = { path = "libs/ftl_types" }
+ftl_virtio = { path = "libs/ftl_virtio" }
+ftl_driver = { path = "libs/ftl_driver" }
+virtio_net = { path = "drivers/virtio_net" }
 hashbrown = "0.17.1"
 
 [profile.dev]

@@ -11,7 +11,7 @@
   "pre-link-args": {
     "ld.lld": [
       "-T",
-      "libs/rust/ftl/src/arch/x64/user.ld"
+      "libs/ftl/src/arch/x64/user.ld"
     ]
   },
   "llvm-target": "x86_64-unknown-none-elf",

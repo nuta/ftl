@@ -29,7 +29,7 @@ zig cc -O2 -target x86_64-linux-musl -static -no-pie apps/hello/hello.c -o initf
 
 # Build userspace OS.
 FTL_LOG_PREFIX="[$(printf '%-10s' "lx")] " \
-    cargo build "${CARGOFLAGS[@]}" --target libs/rust/ftl/src/arch/$ARCH/user.json \
+    cargo build "${CARGOFLAGS[@]}" --target libs/ftl/src/arch/$ARCH/user.json \
        --manifest-path lx/Cargo.toml
 cp target/user/$target/lx initfs/lx.elf
 printf 'lx.elf\0' >> initfs.list
