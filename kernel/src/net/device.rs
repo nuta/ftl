@@ -126,6 +126,11 @@ impl Device {
         Ok(())
     }
 
+    pub fn send_ipv4_broadcast(&self, env: &dyn Env, mut tx: Tx) {
+        tx.write_ethernet_header(&[u8::MAX; 6], self.driver.mac_address(), ETHTYPE_IPV4);
+        self.send(env, tx);
+    }
+
     /// Sends a packet to the driver.
     fn send(&self, env: &dyn Env, tx: Tx) {
         let result = self

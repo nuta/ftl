@@ -14,19 +14,18 @@ use crate::memory::PAGE_ALLOCATOR;
 use crate::memory::PageType;
 use crate::net::device::Device;
 use crate::net::device::PollNotifier;
-use crate::net::packet::ipv4::Ipv4Addr;
-use crate::net::packet::ipv4::NetMask;
-use crate::net::route_table::Route;
 use crate::net::route_table::RouteTable;
 use crate::net::router::Router;
 use crate::shared_ref::SharedRef;
 
 mod arp;
 mod device;
+mod dhcp;
 mod network;
 mod packet;
 mod route_table;
 mod router;
+mod udp;
 
 pub use network::sys_net_bind;
 pub use network::sys_net_create;
@@ -117,26 +116,11 @@ fn virtio_net_init() -> (SharedRef<Device>, u8) {
 }
 pub fn init() {
     let (device, irq) = virtio_net_init();
-
-    // FIXME: support ip= in cmdline and DHCP
-    const OUR_IP: Ipv4Addr = Ipv4Addr::new(0x0a00_020f);
-    const GATEWAY_IP: Ipv4Addr = Ipv4Addr::new(0x0a00_0202);
-    let route = Route::new(
-        device.clone(),
-        OUR_IP,
-        NetMask::new(0),
-        GATEWAY_IP,
-        GATEWAY_IP,
-    );
-
     let route_table = SharedRef::new(RouteTable::new()).expect("failed to allocate route table");
-    let route = SharedRef::new(route).expect("failed to allocate route");
 
-    route_table
-        .add_route(route)
-        .expect("failed to add default route");
-
-    *GLOBAL_ROUTER.lock() = Some(Router::new(route_table));
-    *VIRTIO_NET_DEVICE.lock() = Some(device);
+    *GLOBAL_ROUTER.lock() = Some(Router::new(route_table.clone()));
+    *VIRTIO_NET_DEVICE.lock() = Some(device.clone());
     NET_IRQ.store(irq, Ordering::Relaxed);
+
+    dhcp::start(&device);
 }

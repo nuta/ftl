@@ -10,13 +10,21 @@ use ftl_types::net::FiveTuple;
 use ftl_types::net::IPPROTO_TCP;
 
 use super::device::Device;
+use super::dhcp;
+use super::dhcp::DhcpConfig;
 use super::network::Network;
 use super::packet::arp::ARP_OP_REQUEST;
 use super::packet::arp::ArpInspector;
+use super::packet::dhcp::DHCP_CLIENT_PORT;
+use super::packet::dhcp::DHCP_SERVER_PORT;
 use super::packet::ethernet::ETHERNET_HEADER_LEN;
 use super::packet::ethernet::EthernetInspector;
 use super::packet::ipv4::Ipv4Inspector;
+use super::packet::ipv4::NetMask;
 use super::packet::tcp::TcpInspector;
+use super::packet::udp::IPPROTO_UDP;
+use super::packet::udp::UdpInspector;
+use super::route_table::Route;
 use super::route_table::RouteTable;
 use crate::net::GLOBAL_ENV;
 use crate::shared_ref::SharedRef;
@@ -115,7 +123,7 @@ impl Router {
         let eth_type = frame.eth_type();
         match eth_type {
             ETHTYPE_ARP => self.handle_arp(device, frame.payload()),
-            ETHTYPE_IPV4 => self.handle_ipv4(buf, headroom, frame_len),
+            ETHTYPE_IPV4 => self.handle_ipv4(device, frame.src_mac(), buf, headroom, frame_len),
             _ => {
                 trace!("unsupported ethernet type: {:x}", eth_type);
             }
@@ -149,7 +157,14 @@ impl Router {
         }
     }
 
-    fn handle_ipv4(&self, buf: RxDmaBuf<'_>, headroom: usize, frame_len: usize) {
+    fn handle_ipv4(
+        &self,
+        device: &SharedRef<Device>,
+        src_mac: [u8; 6],
+        buf: RxDmaBuf<'_>,
+        headroom: usize,
+        frame_len: usize,
+    ) {
         let off = headroom + ETHERNET_HEADER_LEN;
         let len = frame_len - ETHERNET_HEADER_LEN;
         let packet = &buf.as_slice()[off..off + len];
@@ -169,9 +184,15 @@ impl Router {
             return;
         }
 
+        device.learn_arp(&GLOBAL_ENV, ipv4.src_ip(), src_mac);
+
         // Forward to the upper layer, and get the routing key.
         let five_tuple = match ipv4.ip_proto() {
             IPPROTO_TCP => self.handle_tcp(&ipv4),
+            IPPROTO_UDP => {
+                self.handle_udp(buf.device, &ipv4);
+                return;
+            }
             _ => {
                 trace!("unsupported IP protocol: {:x}", ipv4.ip_proto());
                 return;
@@ -223,6 +244,58 @@ impl Router {
         };
 
         Some((five_tuple, tcp.header_len()))
+    }
+
+    fn handle_udp(&self, device: &SharedRef<Device>, ipv4: &Ipv4Inspector<'_>) {
+        let udp = match UdpInspector::new(ipv4.payload()) {
+            Ok(udp) => udp,
+            Err(e) => {
+                trace!("failed to inspect UDP datagram: {:?}", e);
+                return;
+            }
+        };
+
+        if let Err(e) = udp.validate(ipv4) {
+            trace!("failed to validate UDP datagram: {:?}", e);
+            return;
+        }
+
+        if udp.src_port() == DHCP_SERVER_PORT && udp.dst_port() == DHCP_CLIENT_PORT {
+            if let Some(config) = dhcp::handle_rx(device, ipv4, &udp) {
+                match self.add_dhcp_route(device, &config) {
+                    Ok(()) => {
+                        info!(
+                            "DHCP configured: address {}, gateway {}, netmask {}",
+                            config.address, config.gateway, config.netmask,
+                        );
+                    }
+                    Err(error) => {
+                        warn!("failed to add DHCP route: {:?}", error);
+                    }
+                }
+            }
+
+            return;
+        }
+
+        // TODO: Forward to a UDP socket.
+    }
+
+    fn add_dhcp_route(
+        &self,
+        device: &SharedRef<Device>,
+        config: &DhcpConfig,
+    ) -> Result<(), ErrorCode> {
+        let route = SharedRef::new(Route::new(
+            device.clone(),
+            config.address,
+            NetMask::new(0),
+            config.gateway,
+            config.gateway,
+        ))?;
+
+        self.route_table.add_route(route)?;
+        Ok(())
     }
 
     pub fn handle_interrupt(&self, device: &SharedRef<Device>) {

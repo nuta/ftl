@@ -1,9 +1,12 @@
+use core::fmt;
 use core::mem::offset_of;
 use core::mem::size_of;
 
 use super::checksum::Checksum;
 use super::helper::read_u16;
 use super::helper::read_u32;
+use super::helper::write_u16;
+use super::helper::write_u32;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(transparent)]
@@ -19,6 +22,13 @@ impl Ipv4Addr {
     }
 }
 
+impl fmt::Display for Ipv4Addr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let [a, b, c, d] = self.0.to_be_bytes();
+        write!(f, "{a}.{b}.{c}.{d}")
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct NetMask(u32);
 
@@ -29,6 +39,12 @@ impl NetMask {
 
     pub fn contains(&self, ip: Ipv4Addr) -> bool {
         (ip.0 & self.0) == self.0
+    }
+}
+
+impl fmt::Display for NetMask {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        Ipv4Addr(self.0).fmt(f)
     }
 }
 
@@ -146,5 +162,67 @@ impl<'a> Ipv4Inspector<'a> {
     pub fn payload(&self) -> &'a [u8] {
         // TODO: How should we enforce the header_len/total_len validation?
         &self.buf[self.header_len..self.total_len]
+    }
+}
+
+pub struct Ipv4Rewriter<'a> {
+    buf: &'a mut [u8],
+}
+
+impl<'a> Ipv4Rewriter<'a> {
+    pub const HEADER_LEN: usize = MIN_HEADER_LEN;
+
+    pub fn new(buf: &'a mut [u8]) -> Result<Self, Error> {
+        if buf.len() < Self::HEADER_LEN {
+            return Err(Error::TooShort);
+        }
+
+        Ok(Self { buf })
+    }
+
+    pub fn set_version_and_header_len(&mut self) {
+        self.buf[offset_of!(Ipv4Header, version_ihl)] = 0x45;
+    }
+
+    pub fn set_total_len(&mut self, total_len: u16) {
+        write_u16(self.buf, offset_of!(Ipv4Header, total_len), total_len);
+    }
+
+    pub fn set_identification(&mut self, identification: u16) {
+        write_u16(
+            self.buf,
+            offset_of!(Ipv4Header, identification),
+            identification,
+        );
+    }
+
+    pub fn set_flags_and_fragment_offset(&mut self, value: u16) {
+        write_u16(
+            self.buf,
+            offset_of!(Ipv4Header, flags_fragment_offset),
+            value,
+        );
+    }
+
+    pub fn set_ttl(&mut self, ttl: u8) {
+        self.buf[offset_of!(Ipv4Header, ttl)] = ttl;
+    }
+
+    pub fn set_ip_proto(&mut self, protocol: u8) {
+        self.buf[offset_of!(Ipv4Header, protocol)] = protocol;
+    }
+
+    pub fn set_src_ip(&mut self, ip: Ipv4Addr) {
+        write_u32(self.buf, offset_of!(Ipv4Header, src_ip), ip.as_u32());
+    }
+
+    pub fn set_dst_ip(&mut self, ip: Ipv4Addr) {
+        write_u32(self.buf, offset_of!(Ipv4Header, dst_ip), ip.as_u32());
+    }
+
+    pub fn update_checksum(&mut self) {
+        write_u16(self.buf, offset_of!(Ipv4Header, checksum), 0);
+        let checksum = Checksum::new().finish(&self.buf[..Self::HEADER_LEN]);
+        write_u16(self.buf, offset_of!(Ipv4Header, checksum), checksum);
     }
 }

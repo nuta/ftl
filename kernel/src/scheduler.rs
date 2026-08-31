@@ -79,6 +79,7 @@ pub fn return_to_user() -> ! {
 
             // No threads to run. Enter the idle loop.
             arch::idle();
+            continue;
         };
 
         // Try resuming the thread if it is blocked.
