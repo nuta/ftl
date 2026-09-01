@@ -305,7 +305,7 @@ impl Router {
 
         // Process pending RX packets.
         loop {
-            match driver.try_receive() {
+            match driver.try_receive(&GLOBAL_ENV) {
                 Ok((buf, headroom, frame_len)) => {
                     self.handle_eth_frame(device, buf, headroom, frame_len);
                 }

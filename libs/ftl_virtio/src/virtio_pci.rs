@@ -5,6 +5,7 @@ use ftl_driver::env::Env;
 use ftl_utils::alignment::align_up;
 
 use crate::virtqueue::Desc;
+use crate::virtqueue::MAX_QUEUE_SIZE;
 use crate::virtqueue::UsedElem;
 use crate::virtqueue::VirtQueue;
 
@@ -34,6 +35,7 @@ pub enum DeviceType {
 #[derive(Debug)]
 pub enum Error {
     QueueSizeZero,
+    QueueSizeTooLarge,
     TooHighPAddr,
     AllocFailed,
 }
@@ -120,6 +122,10 @@ impl VirtioPci {
             return Err(Error::QueueSizeZero);
         }
 
+        if queue_size as usize > MAX_QUEUE_SIZE {
+            return Err(Error::QueueSizeTooLarge);
+        }
+
         let size = vring_size(queue_size);
 
         // 3. Allocate and zero virtqueue in contiguous physical memory, on a
@@ -135,7 +141,8 @@ impl VirtioPci {
             env.out32(self.iobase + PCI_IOPORT_QUEUE_PFN, pfn);
         }
 
-        Ok(VirtQueue::new(queue_index, queue_size, dmabuf))
+        let queue = VirtQueue::new(queue_index, queue_size, dmabuf);
+        Ok(queue)
     }
 
     pub fn read_device_config8(&self, env: &dyn Env, offset: u16) -> u8 {

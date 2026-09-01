@@ -10,8 +10,6 @@
 
 #![no_std]
 
-extern crate alloc;
-
 pub mod virtqueue;
 
 #[cfg(target_arch = "x86_64")]

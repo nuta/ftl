@@ -206,12 +206,18 @@ impl<N: Notifier> Driver for VirtioNet<N> {
         Ok(())
     }
 
-    fn try_receive(&self) -> Result<(DmaBuf, usize, usize), (Error, Option<DmaBuf>)> {
+    fn try_receive(
+        &self,
+        env: &dyn Env,
+    ) -> Result<(DmaBuf, usize, usize), (Error, Option<DmaBuf>)> {
         let mut mutable = self.mutable.lock();
         let (buf, total_len) = match mutable.rxq.pop() {
             Ok(Some((RxData { buf }, total_len))) => (buf, total_len),
             Ok(None) => return Err((Error::RxEmpty, None)),
-            Err(_) => return Err((Error::BadDevice, None)),
+            Err(err) => {
+                trace!(env, "rxq pop error: {err:?}");
+                return Err((Error::BadDevice, None));
+            }
         };
 
         if total_len > buf.len() {
@@ -266,7 +272,10 @@ impl<N: Notifier> Driver for VirtioNet<N> {
                     }
                     Ok(None) => break,
                     // Ignore bad descriptors.
-                    Err(_) => continue,
+                    Err(err) => {
+                        warn!(env, "txq pop error: {err:?}");
+                        continue;
+                    }
                 }
             }
 

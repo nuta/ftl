@@ -67,6 +67,7 @@ version = "0.0.0"
 name = "ftl_virtio"
 version = "0.0.0"
 dependencies = [
+ "ftl_arrayvec",
  "ftl_driver",
  "ftl_utils",
 ]

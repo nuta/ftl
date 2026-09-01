@@ -1,15 +1,17 @@
-use alloc::vec::Vec;
 use core::mem::size_of;
 use core::ptr::read_volatile;
 use core::ptr::write_volatile;
 use core::sync::atomic::Ordering;
 use core::sync::atomic::fence;
 
+use ftl_arrayvec::ArrayVec;
 use ftl_driver::dma::DmaBuf;
 use ftl_utils::alignment::align_up;
 
 const DESC_F_NEXT: u16 = 1;
 const DESC_F_WRITE: u16 = 2;
+
+pub(crate) const MAX_QUEUE_SIZE: usize = 256;
 
 #[repr(C, packed)]
 pub(crate) struct Desc {
@@ -46,13 +48,17 @@ pub enum ChainEntry {
     Read { paddr: u64, len: u32 },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct BadDeviceError;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug)]
 pub enum PushError {
     ZeroDescs,
     TooManyDescs,
+}
+
+#[derive(Debug)]
+pub enum PopError {
+    BadIndex,
+    FreeListFull,
+    ContextNotSet,
 }
 
 pub struct VirtQueue<C> {
@@ -61,33 +67,28 @@ pub struct VirtQueue<C> {
     dmabuf: DmaBuf,
     avail_offset: usize,
     used_offset: usize,
-    free_indices: Vec<u16>, // TODO: Avoid Vec
+    free_indices: ArrayVec<u16, MAX_QUEUE_SIZE>,
     last_used_idx: u16,
-    contexts: Vec<Option<C>>, // TODO: Avoid Vec
+    contexts: [Option<C>; MAX_QUEUE_SIZE],
 }
 
 impl<C> VirtQueue<C> {
-    pub fn new(queue_index: u16, queue_size: u16, mut dmabuf: DmaBuf) -> Self {
+    pub(crate) fn new(queue_index: u16, queue_size: u16, mut dmabuf: DmaBuf) -> Self {
         let avail_offset = size_of::<Desc>() * queue_size as usize;
         let used_offset = align_up(
             avail_offset + size_of::<u16>() * (2 + queue_size as usize),
             4096,
         );
 
-        let mut free_indices = Vec::with_capacity(queue_size as usize);
+        let mut free_indices = ArrayVec::new();
         for index in 0..queue_size {
-            free_indices.push(index);
+            free_indices.try_push(index).unwrap();
         }
 
         let avail =
             unsafe { &mut *(dmabuf.as_mut_slice().as_mut_ptr().add(avail_offset) as *mut Avail) };
         avail.flags = 0;
         avail.idx = 0;
-
-        let mut contexts = Vec::with_capacity(queue_size as usize);
-        for _ in 0..queue_size {
-            contexts.push(None);
-        }
 
         Self {
             queue_index,
@@ -97,7 +98,7 @@ impl<C> VirtQueue<C> {
             used_offset,
             free_indices,
             last_used_idx: 0,
-            contexts,
+            contexts: [const { None }; MAX_QUEUE_SIZE],
         }
     }
 
@@ -203,7 +204,7 @@ impl<C> VirtQueue<C> {
     ///
     /// Returns `(ctx, total_len)`, where `total_len` is the total length
     /// written by the device.
-    pub fn pop(&mut self) -> Result<Option<(C, usize)>, BadDeviceError> {
+    pub fn pop(&mut self) -> Result<Option<(C, usize)>, PopError> {
         if !self.can_pop() {
             return Ok(None);
         }
@@ -219,14 +220,18 @@ impl<C> VirtQueue<C> {
         let elem = unsafe { read_volatile((*used).ring.as_ptr().add(index)) };
         self.last_used_idx = self.last_used_idx.wrapping_add(1);
 
-        if elem.id >= self.queue_size as u32 {
-            return Err(BadDeviceError);
-        }
-
         let head = elem.id as u16;
-        let Some(ctx) = self.contexts.get_mut(head as usize).and_then(Option::take) else {
-            // Bad head index from the device.
-            return Err(BadDeviceError);
+        let ctx = match self.contexts.get_mut(head as usize) {
+            Some(ctx) => {
+                match ctx.take() {
+                    Some(ctx) => ctx,
+                    // The context is not set for this index. Could be a bug
+                    // in this driver, or in the device.
+                    None => return Err(PopError::ContextNotSet),
+                }
+            }
+            // The index is out of bounds. The device returned a bad index.
+            None => return Err(PopError::BadIndex),
         };
 
         let descs = unsafe { self.dmabuf.as_mut_slice().as_mut_ptr().add(0) as *mut Desc };
@@ -240,7 +245,12 @@ impl<C> VirtQueue<C> {
                 break;
             }
 
-            self.free_indices.push(index);
+            if self.free_indices.try_push(index).is_err() {
+                // Too many descriptors. This should not happen, but if it
+                // does, ignore it.
+                return Err(PopError::FreeListFull);
+            }
+
             let desc = unsafe { read_volatile(descs.add(index as usize)) };
             count += 1;
             if desc.flags & DESC_F_NEXT == 0 {
