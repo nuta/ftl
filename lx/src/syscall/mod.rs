@@ -4,6 +4,7 @@ mod bind;
 mod close;
 mod execve;
 mod exit_group;
+mod fcntl;
 mod fork;
 mod listen;
 mod poll;
@@ -22,6 +23,7 @@ use self::bind::sys_bind;
 use self::close::sys_close;
 use self::execve::sys_execve;
 use self::exit_group::sys_exit_group;
+use self::fcntl::sys_fcntl;
 use self::fork::sys_fork;
 use self::listen::sys_listen;
 use self::poll::sys_poll;
@@ -45,6 +47,7 @@ use crate::types::sys::syscall::SYS_BIND;
 use crate::types::sys::syscall::SYS_CLOSE;
 use crate::types::sys::syscall::SYS_EXECVE;
 use crate::types::sys::syscall::SYS_EXIT_GROUP;
+use crate::types::sys::syscall::SYS_FCNTL;
 use crate::types::sys::syscall::SYS_FORK;
 use crate::types::sys::syscall::SYS_LISTEN;
 use crate::types::sys::syscall::SYS_POLL;
@@ -95,6 +98,7 @@ pub extern "C" fn handle_syscall(frame: *const SyscallFrame) -> c_long {
             )
         }
         SYS_WAIT4 => sys_wait4(&current, arg0 as c_int, arg1 as *mut c_int, arg2 as c_int),
+        SYS_FCNTL => sys_fcntl(&current, arg0 as c_int, arg1 as c_int, arg2 as c_long),
         SYS_ARCH_PRCTL => sys_arch_prctl(&current, arg0 as c_int, arg1),
         SYS_SET_TID_ADDRESS => sys_set_tid_address(&current, arg0 as *mut c_int),
         SYS_EXIT_GROUP => sys_exit_group(&current, arg0 as c_int),

@@ -23,7 +23,8 @@ pub trait FileLike: Send + Sync {
         Err(Errno::ENOTSUP)
     }
 
-    fn accept(&self) -> Result<Arc<dyn FileLike>, Errno> {
+    fn accept(&self, nonblocking: bool) -> Result<Arc<dyn FileLike>, Errno> {
+        let _ = nonblocking;
         Err(Errno::ENOTSUP)
     }
 
@@ -33,15 +34,17 @@ pub trait FileLike: Send + Sync {
 
     fn close(&self) {}
 
-    fn read(&self, buf: &mut [u8], offset: usize) -> Result<usize, Errno> {
+    fn read(&self, buf: &mut [u8], offset: usize, nonblocking: bool) -> Result<usize, Errno> {
         let _ = buf;
         let _ = offset;
+        let _ = nonblocking;
         Err(Errno::ENOTSUP)
     }
 
-    fn write(&self, buf: &[u8], offset: usize) -> Result<usize, Errno> {
+    fn write(&self, buf: &[u8], offset: usize, nonblocking: bool) -> Result<usize, Errno> {
         let _ = buf;
         let _ = offset;
+        let _ = nonblocking;
         Err(Errno::ENOTSUP)
     }
 

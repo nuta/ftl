@@ -14,11 +14,11 @@ impl Console {
 }
 
 impl FileLike for Console {
-    fn read(&self, _buf: &mut [u8], _offset: usize) -> Result<usize, Errno> {
+    fn read(&self, _buf: &mut [u8], _offset: usize, _nonblocking: bool) -> Result<usize, Errno> {
         todo!()
     }
 
-    fn write(&self, buf: &[u8], _offset: usize) -> Result<usize, Errno> {
+    fn write(&self, buf: &[u8], _offset: usize, _nonblocking: bool) -> Result<usize, Errno> {
         if let Ok(s) = core::str::from_utf8(buf) {
             println!("[console] {}", s);
         } else {

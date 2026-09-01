@@ -4,7 +4,6 @@ use alloc::vec;
 use alloc::vec::Vec;
 use core::fmt;
 use core::mem::MaybeUninit;
-use core::ops::Deref;
 use core::slice;
 
 use ftl::vmo::Vmo;
@@ -25,6 +24,8 @@ use crate::container::Container;
 use crate::thread::LxThread;
 use crate::types::c_int;
 use crate::types::errno::Errno;
+use crate::types::sys::fcntl::O_RDONLY;
+use crate::types::sys::fcntl::O_WRONLY;
 use crate::vfs::Console;
 use crate::vfs::FileLike;
 use crate::wait_queue::WaitQueue;
@@ -61,39 +62,13 @@ struct Mapping {
     attrs: PageAttrs,
 }
 
+pub use crate::open_file::OpenFile;
+
 #[derive(Clone)]
 pub struct FdTable {
     open_files: Vec<Option<Arc<OpenFile>>>,
     active_fds: usize,
     capacity: usize,
-}
-
-/// An opened file.
-///
-/// This is a simple wrapper that ensures that the underlying file is closed
-/// when all `Arc<OpenFile>` are dropped.
-pub struct OpenFile {
-    file: Arc<dyn FileLike>,
-}
-
-impl OpenFile {
-    fn new(file: Arc<dyn FileLike>) -> Self {
-        Self { file }
-    }
-}
-
-impl Deref for OpenFile {
-    type Target = dyn FileLike;
-
-    fn deref(&self) -> &Self::Target {
-        self.file.as_ref()
-    }
-}
-
-impl Drop for OpenFile {
-    fn drop(&mut self) {
-        self.file.close();
-    }
 }
 
 impl FdTable {
@@ -105,14 +80,14 @@ impl FdTable {
         }
     }
 
-    pub fn insert(&mut self, file: Arc<dyn FileLike>) -> Result<c_int, Errno> {
+    pub fn insert(&mut self, file: Arc<dyn FileLike>, flags: c_int) -> Result<c_int, Errno> {
         if self.active_fds >= self.capacity {
             return Err(Errno::EMFILE);
         }
 
         for fd in 0..self.capacity {
             if fd >= self.open_files.len() || self.open_files[fd].is_none() {
-                self.insert_at(fd as c_int, file)?;
+                self.insert_at(fd as c_int, file, flags)?;
                 return Ok(fd as c_int);
             }
         }
@@ -124,6 +99,7 @@ impl FdTable {
         &mut self,
         fd: c_int,
         file: Arc<dyn FileLike>,
+        flags: c_int,
     ) -> Result<Option<Arc<OpenFile>>, Errno> {
         if fd < 0 {
             return Err(Errno::EBADF);
@@ -138,7 +114,7 @@ impl FdTable {
             self.open_files.resize(fd + 1, None);
         }
 
-        let old = self.open_files[fd].replace(Arc::new(OpenFile::new(file)));
+        let old = self.open_files[fd].replace(Arc::new(OpenFile::new(file, flags)));
         if old.is_none() {
             self.active_fds += 1;
         }
@@ -204,9 +180,9 @@ impl Process {
 
         let mut fd_table = FdTable::new(1024); // TODO: make this configurable
         let console: Arc<dyn FileLike> = Arc::new(Console::new());
-        fd_table.insert_at(0, console.clone())?;
-        fd_table.insert_at(1, console.clone())?;
-        fd_table.insert_at(2, console)?;
+        fd_table.insert_at(0, console.clone(), O_RDONLY)?;
+        fd_table.insert_at(1, console.clone(), O_WRONLY)?;
+        fd_table.insert_at(2, console, O_WRONLY)?;
 
         let process = Self::new(
             container,
@@ -507,7 +483,7 @@ fn attrs_from_phdr(phdr: &ftl_elf::Phdr) -> PageAttrs {
 fn read_exact(file: &dyn FileLike, mut offset: usize, buf: &mut [u8]) -> Result<(), Errno> {
     let mut total = 0;
     while total < buf.len() {
-        let n = file.read(&mut buf[total..], offset)?;
+        let n = file.read(&mut buf[total..], offset, false)?;
         assert!(n > 0); // FIXME: proper errno
         total += n;
         offset += n;

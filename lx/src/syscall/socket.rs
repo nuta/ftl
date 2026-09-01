@@ -2,6 +2,7 @@ use crate::thread::LxThread;
 use crate::types::c_int;
 use crate::types::c_long;
 use crate::types::errno::Errno;
+use crate::types::sys::fcntl::O_RDWR;
 
 const AF_INET: c_int = 2;
 const SOCK_STREAM: c_int = 1;
@@ -31,6 +32,6 @@ pub fn sys_socket(
     // FIXME: support other socket types
     let listener = network.create_listener().map_err(Errno::from)?;
 
-    let fd = process.fd_table().lock().insert(listener)?;
+    let fd = process.fd_table().lock().insert(listener, O_RDWR)?;
     Ok(fd as c_long)
 }

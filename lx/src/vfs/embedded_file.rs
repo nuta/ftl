@@ -15,7 +15,7 @@ impl EmbeddedFile {
 }
 
 impl FileLike for EmbeddedFile {
-    fn read(&self, buf: &mut [u8], offset: usize) -> Result<usize, Errno> {
+    fn read(&self, buf: &mut [u8], offset: usize, _nonblocking: bool) -> Result<usize, Errno> {
         let len = self.data.len();
         if offset >= len {
             return Err(Errno::EINVAL);

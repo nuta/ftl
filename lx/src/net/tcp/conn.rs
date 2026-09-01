@@ -317,7 +317,7 @@ impl TcpConn {
 }
 
 impl FileLike for TcpConn {
-    fn read(&self, buf: &mut [u8], _offset: usize) -> Result<usize, Errno> {
+    fn read(&self, buf: &mut [u8], _offset: usize, nonblocking: bool) -> Result<usize, Errno> {
         if buf.is_empty() {
             return Ok(0);
         }
@@ -339,12 +339,16 @@ impl FileLike for TcpConn {
                 return Ok(0);
             }
 
+            if nonblocking {
+                return Err(Errno::EAGAIN);
+            }
+
             drop(mutable);
             wq.wait()?;
         }
     }
 
-    fn write(&self, buf: &[u8], _offset: usize) -> Result<usize, Errno> {
+    fn write(&self, buf: &[u8], _offset: usize, nonblocking: bool) -> Result<usize, Errno> {
         if buf.is_empty() {
             return Ok(0);
         }
@@ -362,6 +366,10 @@ impl FileLike for TcpConn {
             if written_len > 0 {
                 self.flush(&mut mutable);
                 return Ok(written_len);
+            }
+
+            if nonblocking {
+                return Err(Errno::EAGAIN);
             }
 
             drop(mutable);

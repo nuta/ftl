@@ -6,6 +6,7 @@ use crate::thread::LxThread;
 use crate::types::c_int;
 use crate::types::c_long;
 use crate::types::errno::Errno;
+use crate::types::sys::fcntl::O_RDWR;
 use crate::types::sys::socket::SockAddrIn;
 
 pub fn sys_accept(
@@ -40,7 +41,7 @@ pub fn sys_accept(
     }
 
     // Add the accepted socket to fhe file descriptor table.
-    let conn_fd = match process.fd_table().lock().insert(conn.clone()) {
+    let conn_fd = match process.fd_table().lock().insert(conn.clone(), O_RDWR) {
         Ok(fd) => fd,
         Err(error) => {
             conn.close();

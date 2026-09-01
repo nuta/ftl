@@ -330,11 +330,15 @@ impl FileLike for TcpListener {
         self.do_listen(backlog)
     }
 
-    fn accept(&self) -> Result<Arc<dyn FileLike>, Errno> {
+    fn accept(&self, nonblocking: bool) -> Result<Arc<dyn FileLike>, Errno> {
         let wq = self.wait_queue.subscribe();
         loop {
             if let Some(conn) = self.try_accept() {
                 return Ok(conn);
+            }
+
+            if nonblocking {
+                return Err(Errno::EAGAIN);
             }
 
             wq.wait()?;

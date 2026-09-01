@@ -6,6 +6,7 @@ extern crate alloc;
 mod arch;
 mod container;
 mod net;
+mod open_file;
 mod process;
 mod syscall;
 mod thread;
