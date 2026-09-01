@@ -7,9 +7,6 @@ use ftl_types::net::ETHTYPE_IPV4;
 use ftl_types::net::FiveTuple;
 use ftl_types::net::IPPROTO_TCP;
 
-// FIXME:
-const OUR_IP: u32 = 0x0a00_020f;
-
 #[repr(C, packed)]
 struct Ipv4Header {
     version_ihl: u8,
@@ -180,6 +177,9 @@ impl HeaderBuilder {
         self.header
     }
 
+    /// FIlls the IPv4 header.
+    ///
+    /// `checksum` and `src_ip` are filled by the kernel.
     fn write_ipv4_header(&mut self, remote: Endpoint, segment: &Segment<'_>) {
         let total_len = IPV4_HEADER_LEN + TCP_HEADER_LEN + segment.payload.len();
         self.write_u8(offset_of!(Ipv4Header, version_ihl), 0x45);
@@ -187,15 +187,13 @@ impl HeaderBuilder {
         self.write_u8(offset_of!(Ipv4Header, protocol), IPPROTO_TCP);
         self.write_u16(offset_of!(Ipv4Header, total_len), total_len as u16);
         self.write_u16(offset_of!(Ipv4Header, flags_and_frag), 0x4000);
-        self.write_u32(offset_of!(Ipv4Header, src_ip), OUR_IP);
+        self.write_u32(offset_of!(Ipv4Header, src_ip), 0); // Kernel fills this
         self.write_u32(offset_of!(Ipv4Header, dst_ip), remote.ip);
-
-        // Calculate and fill IPv4 checksum.
-        // TODO: Move this into the kernel's packet rewriter
-        let checksum = Checksum::new().finish(&self.header[..IPV4_HEADER_LEN]);
-        self.write_u16(offset_of!(Ipv4Header, checksum), checksum);
     }
 
+    /// FIlls the TCP header.
+    ///
+    /// `checksum` is filled by the kernel.
     fn write_tcp_header(&mut self, remote: Endpoint, local_port: u16, segment: &Segment<'_>) {
         let base = IPV4_HEADER_LEN;
 
@@ -207,20 +205,6 @@ impl HeaderBuilder {
         self.write_u32(base + offset_of!(TcpHeader, seq), segment.seq);
         self.write_u32(base + offset_of!(TcpHeader, ack), segment.ack);
         self.write_u16(base + offset_of!(TcpHeader, window_size), window_size);
-
-        // Calculate and fill TCP checksum.
-        // TODO: Move this into the kernel's packet rewriter
-        let mut checksum = Checksum::new();
-        checksum.add_ipv4(OUR_IP);
-        checksum.add_ipv4(remote.ip);
-        checksum.add_u16(u16::from(IPPROTO_TCP));
-        checksum.add_u16((TCP_HEADER_LEN + segment.payload.len()) as u16);
-        for chunk in self.header[base..].chunks_exact(2) {
-            checksum.add_u16(u16::from_be_bytes([chunk[0], chunk[1]]));
-        }
-
-        let tcp_checksum = checksum.finish(segment.payload);
-        self.write_u16(base + offset_of!(TcpHeader, checksum), tcp_checksum);
     }
 
     fn write_u8(&mut self, offset: usize, value: u8) {
@@ -233,47 +217,5 @@ impl HeaderBuilder {
 
     fn write_u32(&mut self, offset: usize, value: u32) {
         self.header[offset..offset + size_of::<u32>()].copy_from_slice(&value.to_be_bytes());
-    }
-}
-
-struct Checksum {
-    sum: u32,
-}
-
-impl Checksum {
-    const fn new() -> Self {
-        Self { sum: 0 }
-    }
-
-    fn add_u16(&mut self, value: u16) {
-        self.sum += u32::from(value);
-    }
-
-    fn add_ipv4(&mut self, ip: u32) {
-        let bytes = ip.to_be_bytes();
-        self.add_u16(u16::from_be_bytes([bytes[0], bytes[1]]));
-        self.add_u16(u16::from_be_bytes([bytes[2], bytes[3]]));
-    }
-
-    /// Adds the `bytes` to the checksum and returns the final checksum value.
-    fn finish(mut self, bytes: &[u8]) -> u16 {
-        // Sum 16-bit words.
-        let mut chunks = bytes.chunks_exact(2);
-        for chunk in &mut chunks {
-            self.sum += u32::from(u16::from_be_bytes([chunk[0], chunk[1]]));
-        }
-
-        // Sum the final byte if bytes are not 16-bit aligned.
-        if bytes.len() % 2 != 0 {
-            self.sum += u32::from(bytes[bytes.len() - 1]) << 8;
-        }
-
-        // Fold the sum into a 16-bit value.
-        while self.sum >> 16 != 0 {
-            self.sum = (self.sum & 0xffff) + (self.sum >> 16);
-        }
-
-        // Return the one's complement of the sum.
-        !(self.sum as u16)
     }
 }

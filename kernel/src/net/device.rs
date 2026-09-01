@@ -67,6 +67,15 @@ impl Tx {
             .map(|payload_buf| payload_buf.as_mut_slice())
     }
 
+    pub fn header_and_payload_bytes(&mut self) -> (&mut [u8], Option<&mut [u8]>) {
+        let header = &mut self.header_buf.as_mut_slice()[HEADROOM_TOTAL..];
+        let payload = self
+            .payload_buf
+            .as_mut()
+            .map(|payload_buf| payload_buf.as_mut_slice());
+        (header, payload)
+    }
+
     fn write_ethernet_header(&mut self, dst_mac: &[u8; 6], src_mac: &[u8; 6], eth_type: u16) {
         let mut ethernet = EthernetRewriter::new(self.ethernet_header_bytes()).unwrap();
         ethernet.set_dst_mac(*dst_mac);

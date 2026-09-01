@@ -118,9 +118,10 @@ impl<'a> Ipv4Inspector<'a> {
         }
 
         // Calculate the checksum, including the checksum field.
-        let checksum = Checksum::new();
+        let mut checksum = Checksum::new();
         let ipv4_header_bytes = &self.buf[..self.header_len];
-        if checksum.finish(ipv4_header_bytes) != 0 {
+        checksum.add_bytes(ipv4_header_bytes);
+        if checksum.finish() != 0 {
             return Err(Error::InvalidChecksum);
         }
 
@@ -222,7 +223,9 @@ impl<'a> Ipv4Rewriter<'a> {
 
     pub fn update_checksum(&mut self) {
         write_u16(self.buf, offset_of!(Ipv4Header, checksum), 0);
-        let checksum = Checksum::new().finish(&self.buf[..Self::HEADER_LEN]);
+        let mut checksum = Checksum::new();
+        checksum.add_bytes(&self.buf[..Self::HEADER_LEN]);
+        let checksum = checksum.finish();
         write_u16(self.buf, offset_of!(Ipv4Header, checksum), checksum);
     }
 }

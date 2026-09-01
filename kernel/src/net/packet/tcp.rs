@@ -6,6 +6,8 @@ use ftl_types::net::IPPROTO_TCP;
 use super::checksum::Checksum;
 use super::helper::read_u16;
 use super::helper::read_u32;
+use super::helper::write_u16;
+use super::ipv4::Ipv4Addr;
 use super::ipv4::Ipv4Inspector;
 
 #[derive(Debug, PartialEq, Eq)]
@@ -61,7 +63,8 @@ impl<'a> TcpInspector<'a> {
         checksum.add_ipv4(ipv4.dst_ip());
         checksum.add_u16(IPPROTO_TCP as u16);
         checksum.add_u16(self.buf.len() as u16);
-        if checksum.finish(self.buf) != 0 {
+        checksum.add_bytes(self.buf);
+        if checksum.finish() != 0 {
             return Err(Error::InvalidTcpChecksum);
         }
 
@@ -102,5 +105,43 @@ impl<'a> TcpInspector<'a> {
 
     pub fn payload_len(&self) -> usize {
         self.buf.len() - self.header_len
+    }
+}
+
+pub struct TcpRewriter<'a> {
+    buf: &'a mut [u8],
+}
+
+impl<'a> TcpRewriter<'a> {
+    pub fn new(buf: &'a mut [u8]) -> Result<Self, Error> {
+        if buf.len() < MIN_HEADER_LEN {
+            return Err(Error::TcpHeaderTooShort);
+        }
+
+        Ok(Self { buf })
+    }
+
+    pub fn update_checksum(&mut self, src_ip: Ipv4Addr, dst_ip: Ipv4Addr, payload: Option<&[u8]>) {
+        write_u16(self.buf, offset_of!(TcpHeader, checksum), 0);
+
+        let payload_len = if let Some(payload) = payload {
+            payload.len()
+        } else {
+            0
+        };
+
+        let mut checksum = Checksum::new();
+        checksum.add_ipv4(src_ip);
+        checksum.add_ipv4(dst_ip);
+        checksum.add_u16(IPPROTO_TCP as u16);
+        checksum.add_u16((self.buf.len() + payload_len) as u16);
+        checksum.add_bytes(self.buf);
+
+        if let Some(payload) = payload {
+            checksum.add_bytes(payload);
+        }
+
+        let checksum = checksum.finish();
+        write_u16(self.buf, offset_of!(TcpHeader, checksum), checksum);
     }
 }

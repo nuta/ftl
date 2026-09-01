@@ -60,7 +60,8 @@ impl<'a> UdpInspector<'a> {
         checksum.add_ipv4(ipv4.dst_ip());
         checksum.add_u16(IPPROTO_UDP as u16);
         checksum.add_u16(self.len as u16);
-        if checksum.finish(&self.buf[..self.len]) != 0 {
+        checksum.add_bytes(&self.buf[..self.len]);
+        if checksum.finish() != 0 {
             return Err(Error::InvalidChecksum);
         }
 
@@ -119,7 +120,8 @@ impl<'a> UdpRewriter<'a> {
         checksum.add_ipv4(dst_ip);
         checksum.add_u16(IPPROTO_UDP as u16);
         checksum.add_u16(self.buf.len() as u16);
-        let checksum = checksum.finish(self.buf);
+        checksum.add_bytes(self.buf);
+        let checksum = checksum.finish();
         write_u16(
             self.buf,
             offset_of!(UdpHeader, checksum),

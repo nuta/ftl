@@ -16,6 +16,8 @@ use ftl_utils::spinlock::SpinLock;
 use super::device::Device;
 use super::device::Tx;
 use super::packet::ipv4::Ipv4Inspector;
+use super::packet::ipv4::Ipv4Rewriter;
+use super::packet::tcp::TcpRewriter;
 use super::route_table::RouteTable;
 use crate::address::UAddr;
 use crate::address::USlice;
@@ -160,14 +162,48 @@ impl Network {
             payload.read_bytes(payload_bytes)?;
         }
 
+        // Parse the IPv4 header.
+        let ipv4 = match Ipv4Inspector::new(tx.header_bytes()) {
+            Ok(ipv4) => ipv4,
+            Err(e) => {
+                trace!("invalid IPv4 header: {:?}", e);
+                return Err(ErrorCode::INVALID_ARG);
+            }
+        };
+
         // Select the route from the destination in the IPv4 header.
-        let dst_ip = Ipv4Inspector::new(tx.header_bytes())
-            .map_err(|_| ErrorCode::INVALID_ARG)?
-            .dst_ip();
+        let dst_ip = ipv4.dst_ip();
         let route = self
             .route_table
             .lookup(dst_ip)
             .ok_or(ErrorCode::INVALID_ARG)?;
+        let our_ip = route.our_ip();
+
+        // Parse the TCP header.
+        let ipv4_header_len = ipv4.header_len();
+        let (header, payload) = tx.header_and_payload_bytes();
+        let tcp_bytes = &mut header[ipv4_header_len..];
+        let mut tcp = match TcpRewriter::new(tcp_bytes) {
+            Ok(tcp) => tcp,
+            Err(e) => {
+                trace!("invalid TCP header: {:?}", e);
+                return Err(ErrorCode::INVALID_ARG);
+            }
+        };
+
+        // Update the TCP header.
+        tcp.update_checksum(our_ip, dst_ip, payload.map(|p| &p[..]));
+
+        // Update the IPv4 header.
+        let mut ipv4 = match Ipv4Rewriter::new(header) {
+            Ok(ipv4) => ipv4,
+            Err(e) => {
+                trace!("invalid IPv4 header: {:?}", e);
+                return Err(ErrorCode::INVALID_ARG);
+            }
+        };
+        ipv4.set_src_ip(our_ip);
+        ipv4.update_checksum();
 
         // Send the packet through the route's next hop.
         route

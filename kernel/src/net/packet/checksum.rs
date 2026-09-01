@@ -19,8 +19,7 @@ impl Checksum {
         self.add_u16(u16::from_be_bytes([bytes[2], bytes[3]]));
     }
 
-    /// Adds the `bytes` to the checksum and returns the final checksum value.
-    pub fn finish(mut self, bytes: &[u8]) -> u16 {
+    pub fn add_bytes(&mut self, bytes: &[u8]) {
         // Sum 16-bit words.
         let mut chunks = bytes.chunks_exact(2);
         for chunk in &mut chunks {
@@ -31,7 +30,9 @@ impl Checksum {
         if bytes.len() % 2 != 0 {
             self.sum += u32::from(bytes[bytes.len() - 1]) << 8;
         }
+    }
 
+    pub fn finish(mut self) -> u16 {
         // Fold the sum into a 16-bit value.
         while self.sum >> 16 != 0 {
             self.sum = (self.sum & 0xffff) + (self.sum >> 16);
