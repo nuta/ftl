@@ -1,17 +1,15 @@
+use alloc::vec::Vec;
 use core::mem::size_of;
 use core::ptr::read_volatile;
 use core::ptr::write_volatile;
 use core::sync::atomic::Ordering;
 use core::sync::atomic::fence;
 
-use ftl_arrayvec::ArrayVec;
 use ftl_driver::dma::DmaBuf;
 use ftl_utils::alignment::align_up;
 
 const DESC_F_NEXT: u16 = 1;
 const DESC_F_WRITE: u16 = 2;
-
-pub(crate) const MAX_QUEUE_SIZE: usize = 256;
 
 #[repr(C, packed)]
 pub(crate) struct Desc {
@@ -67,9 +65,9 @@ pub struct VirtQueue<C> {
     dmabuf: DmaBuf,
     avail_offset: usize,
     used_offset: usize,
-    free_indices: ArrayVec<u16, MAX_QUEUE_SIZE>,
+    free_indices: Vec<u16>,
     last_used_idx: u16,
-    contexts: [Option<C>; MAX_QUEUE_SIZE],
+    contexts: Vec<Option<C>>,
 }
 
 impl<C> VirtQueue<C> {
@@ -80,9 +78,11 @@ impl<C> VirtQueue<C> {
             4096,
         );
 
-        let mut free_indices = ArrayVec::new();
+        let mut free_indices = Vec::with_capacity(queue_size as usize);
+        let mut contexts = Vec::with_capacity(queue_size as usize);
         for index in 0..queue_size {
-            free_indices.try_push(index).unwrap();
+            free_indices.push(index);
+            contexts.push(None);
         }
 
         let avail =
@@ -98,7 +98,7 @@ impl<C> VirtQueue<C> {
             used_offset,
             free_indices,
             last_used_idx: 0,
-            contexts: [const { None }; MAX_QUEUE_SIZE],
+            contexts,
         }
     }
 
@@ -245,11 +245,12 @@ impl<C> VirtQueue<C> {
                 break;
             }
 
-            if self.free_indices.try_push(index).is_err() {
+            if self.free_indices.len() >= self.queue_size as usize {
                 // Too many descriptors. This should not happen, but if it
                 // does, ignore it.
                 return Err(PopError::FreeListFull);
             }
+            self.free_indices.push(index);
 
             let desc = unsafe { read_volatile(descs.add(index as usize)) };
             count += 1;

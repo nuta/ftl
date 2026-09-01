@@ -5,7 +5,6 @@ use ftl_driver::env::Env;
 use ftl_utils::alignment::align_up;
 
 use crate::virtqueue::Desc;
-use crate::virtqueue::MAX_QUEUE_SIZE;
 use crate::virtqueue::UsedElem;
 use crate::virtqueue::VirtQueue;
 
@@ -35,7 +34,6 @@ pub enum DeviceType {
 #[derive(Debug)]
 pub enum Error {
     QueueSizeZero,
-    QueueSizeTooLarge,
     TooHighPAddr,
     AllocFailed,
 }
@@ -120,10 +118,6 @@ impl VirtioPci {
         if queue_size == 0 {
             // If this field is 0, the virtqueue does not exist.
             return Err(Error::QueueSizeZero);
-        }
-
-        if queue_size as usize > MAX_QUEUE_SIZE {
-            return Err(Error::QueueSizeTooLarge);
         }
 
         let size = vring_size(queue_size);
