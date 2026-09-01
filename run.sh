@@ -6,7 +6,7 @@ set -eu
 set +e
 qemu-system-x86_64 \
   -m 128 -cpu qemu64,+fsgsbase,+xsave,+xsaveopt -kernel ftl.elf \
-  -initrd initfs.cpio \
+  -initrd lx.elf \
   -nographic -serial mon:stdio --no-reboot -gdb tcp::7778 \
   -d cpu_reset,unimp,guest_errors,int -D qemu.log \
   -device isa-debug-exit,iobase=0x501,iosize=0x04 \

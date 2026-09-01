@@ -4,7 +4,7 @@ use core::ffi::CStr;
 
 use ftl_types::thread::ExitReason;
 
-use crate::HELLO_ELF;
+use crate::hello_elf;
 use crate::thread::LxThread;
 use crate::types::c_long;
 use crate::types::errno::Errno;
@@ -30,7 +30,7 @@ pub fn sys_execve(
     }
 
     // TODO: load from the path
-    let elf_file = Arc::new(EmbeddedFile::new(&HELLO_ELF.0));
+    let elf_file = Arc::new(EmbeddedFile::new(hello_elf()));
 
     // TODO: envp support
     current.process().exec(current, elf_file, &argv_vec)?;

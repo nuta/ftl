@@ -26,18 +26,18 @@ mkdir -p initfs
 # Build apps.
 mkdir -p initfs/bin
 zig cc -O2 -target x86_64-linux-musl -static -no-pie apps/hello/hello.c -o initfs/bin/hello
-
-# Build userspace OS.
-FTL_LOG_PREFIX="[$(printf '%-10s' "lx")] " \
-    cargo build "${CARGOFLAGS[@]}" --target libs/ftl/src/arch/$ARCH/user.json \
-       --manifest-path lx/Cargo.toml
-cp target/user/$target/lx initfs/lx.elf
-printf 'lx.elf\0' >> initfs.list
+printf 'bin/hello\0' >> initfs.list
 
 # Build initfs.
 pushd initfs
 cpio -o -H newc -0 < ../initfs.list > ../initfs.cpio
 popd
+
+# Build userspace OS.
+FTL_LOG_PREFIX="[$(printf '%-10s' "lx")] " \
+    cargo build "${CARGOFLAGS[@]}" --target libs/ftl/src/arch/$ARCH/user.json \
+       --manifest-path lx/Cargo.toml
+cp target/user/$target/lx lx.elf
 
 # Build kernel.
 FTL_LOG_PREFIX="[$(printf '%-10s' "kernel")] " \

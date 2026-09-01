@@ -1,10 +1,6 @@
 use core::mem::offset_of;
-use core::slice;
 
 use ftl_utils::alignment::align_up;
-
-use crate::arch;
-use crate::boot::Module;
 
 /// New CPIO header format.
 ///
@@ -37,7 +33,7 @@ fn parse_hex(s: &[u8]) -> Option<usize> {
             _ => return None,
         };
 
-        value = value * 16 + (digit as usize);
+        value = value * 16 + digit as usize;
     }
 
     Some(value)
@@ -54,11 +50,7 @@ pub struct InitFsLoader<'a> {
 }
 
 impl<'a> InitFsLoader<'a> {
-    pub fn new(module: &Module) -> Self {
-        let start: *const u8 = arch::paddr2vaddr(module.start).as_ptr();
-        let end: *const u8 = arch::paddr2vaddr(module.end).as_ptr();
-        let len = (end as usize).saturating_sub(start as usize);
-        let file = unsafe { slice::from_raw_parts(start, len) };
+    pub const fn new(file: &'a [u8]) -> Self {
         Self { file, offset: 0 }
     }
 }
@@ -73,17 +65,13 @@ impl<'a> Iterator for InitFsLoader<'a> {
         }
 
         let namesize_offset = self.offset + offset_of!(CpioHeader, namesize);
-        let namesize_bytes = self.file.get(namesize_offset..namesize_offset + 8)?;
-        let namesize = parse_hex(namesize_bytes)?;
+        let namesize = parse_hex(self.file.get(namesize_offset..namesize_offset + 8)?)?;
 
         let filesize_offset = self.offset + offset_of!(CpioHeader, filesize);
-        let filesize_bytes = self.file.get(filesize_offset..filesize_offset + 8)?;
-        let filesize = parse_hex(filesize_bytes)?;
+        let filesize = parse_hex(self.file.get(filesize_offset..filesize_offset + 8)?)?;
 
         let name_offset = self.offset + size_of::<CpioHeader>();
         let mut name = self.file.get(name_offset..name_offset + namesize)?;
-
-        // Remove the trailing null byte.
         if name.ends_with(b"\0") {
             name = &name[..name.len() - 1];
         }

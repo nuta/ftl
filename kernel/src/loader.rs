@@ -12,8 +12,6 @@ use crate::address::UAddr;
 use crate::arch::MIN_PAGE_SIZE;
 use crate::boot::BootInfo;
 use crate::handle::Handle;
-use crate::initfs::File;
-use crate::initfs::InitFsLoader;
 use crate::isolate::Isolate;
 use crate::shared_ref::SharedRef;
 use crate::thread::Thread;
@@ -56,19 +54,6 @@ fn load_elf(vmspace: &SharedRef<VmSpace>, elf_file: &[u8]) -> usize {
     elf.ehdr.e_entry as usize
 }
 
-fn find_file<'a>(bootinfo: &'a BootInfo, name: &[u8]) -> File<'a> {
-    for module in &bootinfo.modules {
-        let initfs = InitFsLoader::new(module);
-        for file in initfs {
-            if file.name == name {
-                return file;
-            }
-        }
-    }
-
-    panic!("ELF file not found in initfs");
-}
-
 fn prepare_stack(vmspace: &SharedRef<VmSpace>) -> usize {
     let stack_size = 256 * 1024;
     let vmo = VmObject::new_anonymous(stack_size).unwrap();
@@ -82,9 +67,10 @@ fn prepare_stack(vmspace: &SharedRef<VmSpace>) -> usize {
 }
 
 pub fn load(bootinfo: &BootInfo) {
-    let elf_file = find_file(bootinfo, b"lx.elf");
+    let initrd = bootinfo.modules.get(0).expect("initrd not found");
+    let elf_file = initrd.as_bytes();
     let vmspace = VmSpace::new().and_then(SharedRef::new).unwrap();
-    let entry = load_elf(&vmspace, elf_file.data);
+    let entry = load_elf(&vmspace, elf_file);
     let sp = prepare_stack(&vmspace);
 
     let isolate = SharedRef::new(Isolate::new()).unwrap();

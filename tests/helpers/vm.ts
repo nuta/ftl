@@ -23,7 +23,7 @@ function buildQemuArgs({ hostPort }: { hostPort: number }) {
         "-m", "128",
         "-cpu", "qemu64,+fsgsbase,+xsave,+xsaveopt",
         "-kernel", "ftl.elf",
-        "-initrd", "initfs.cpio",
+        "-initrd", "lx.elf",
         "-nographic",
         "-serial", "mon:stdio",
         "--no-reboot",
