@@ -11,6 +11,7 @@ mod syscall;
 mod thread;
 mod types;
 mod vfs;
+mod wait_queue;
 
 use alloc::sync::Arc;
 

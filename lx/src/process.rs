@@ -7,7 +7,6 @@ use core::mem::MaybeUninit;
 use core::ops::Deref;
 use core::slice;
 
-use ftl::poll::Poll;
 use ftl::vmo::Vmo;
 use ftl::vmspace::VmSpace;
 use ftl_elf::Elf;
@@ -28,6 +27,7 @@ use crate::types::c_int;
 use crate::types::errno::Errno;
 use crate::vfs::Console;
 use crate::vfs::FileLike;
+use crate::wait_queue::WaitQueue;
 
 const PAGE_SIZE: usize = 4096; // TODO: system call?
 const STACK_BOTTOM: usize = 0x0200_0000;
@@ -188,7 +188,7 @@ struct Mutable {
 
 pub struct Process {
     tgid: PId,
-    poll: Poll,
+    child_exit: WaitQueue,
     container: Arc<Container>,
     mutable: SpinLock<Mutable>,
     fd_table: SpinLock<FdTable>,
@@ -264,10 +264,10 @@ impl Process {
     where
         F: FnOnce(&Arc<LxThread>) -> Result<(), Errno>,
     {
-        let poll = Poll::create()?;
+        let child_exit = WaitQueue::new()?;
         let process = Arc::new(Self {
             tgid,
-            poll,
+            child_exit,
             container: container.clone(),
             mutable: SpinLock::new(Mutable {
                 parent,
@@ -352,7 +352,7 @@ impl Process {
         // fails, exit fails and keeps this process alive.
         let parent = mutable.parent.as_ref().and_then(Weak::upgrade);
         if let Some(parent) = &parent {
-            parent.poll.notify()?;
+            parent.child_exit.notify_all()?;
         }
 
         // Mark the process as exited.
@@ -387,6 +387,7 @@ impl Process {
             return Err(Errno::EINVAL);
         }
 
+        let wq = self.child_exit.subscribe();
         loop {
             let mut mutable = self.mutable.lock();
             let mut matched_any = false;
@@ -411,7 +412,8 @@ impl Process {
                 return Err(Errno::ECHILD);
             }
 
-            self.poll.wait()?;
+            drop(mutable);
+            wq.wait()?;
         }
     }
 

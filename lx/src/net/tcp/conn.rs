@@ -1,7 +1,6 @@
 use alloc::sync::Arc;
 use core::cmp::min;
 
-use ftl::poll::Poll;
 use ftl::trace;
 use ftl_types::error::ErrorCode;
 use ftl_utils::spinlock::SpinLock;
@@ -16,6 +15,7 @@ use crate::net::tcpip::RecvGuard;
 use crate::types::errno::Errno;
 use crate::types::sys::socket::SockAddr;
 use crate::vfs::FileLike;
+use crate::wait_queue::WaitQueue;
 
 // TODO: Should we make this configurable?
 const MAX_SEGMENT_DATA_LEN: usize = 1460;
@@ -45,7 +45,7 @@ struct Mutable {
 
 pub struct TcpConn {
     io: Arc<Io>,
-    poll: Poll,
+    wait_queue: WaitQueue,
     remote: Endpoint,
     local_port: u16,
     mutable: SpinLock<Mutable>,
@@ -61,7 +61,7 @@ impl TcpConn {
         remote_rcv_wnd: u16,
         rx_buffer: TcpBuffer,
     ) -> Result<Arc<Self>, ErrorCode> {
-        let poll = Poll::create()?;
+        let wait_queue = WaitQueue::new()?;
         let snd_nxt = local_iss.wrapping_add(1);
         let mutable = Mutable {
             state: State::Established,
@@ -77,11 +77,17 @@ impl TcpConn {
 
         Ok(Arc::new(Self {
             io,
-            poll,
+            wait_queue,
             remote,
             local_port,
             mutable: SpinLock::new(mutable),
         }))
+    }
+
+    fn notify(&self) {
+        if let Err(error) = self.wait_queue.notify_all() {
+            trace!("failed to notify connection waiters: {:?}", error);
+        }
     }
 
     pub fn is_closed(&self) -> bool {
@@ -240,9 +246,7 @@ impl TcpConn {
             mutable.state = State::Closed;
             mutable.eof = true;
             drop(mutable);
-            if let Err(error) = self.poll.notify() {
-                trace!("failed to notify poll: {:?}", error);
-            }
+            self.notify();
             return;
         }
 
@@ -297,7 +301,7 @@ impl TcpConn {
         drop(mutable);
 
         if acked_len > 0 || received_len > 0 || received_fin {
-            let _ = self.poll.notify();
+            let _ = self.notify();
         }
     }
 
@@ -315,6 +319,7 @@ impl FileLike for TcpConn {
             return Ok(0);
         }
 
+        let wq = self.wait_queue.subscribe();
         loop {
             let mut mutable = self.mutable.lock();
             if !mutable.rx_buffer.is_empty() {
@@ -331,9 +336,8 @@ impl FileLike for TcpConn {
                 return Ok(0);
             }
 
-            // Wait for more data.
             drop(mutable);
-            self.poll.wait()?;
+            wq.wait()?;
         }
     }
 
@@ -342,6 +346,7 @@ impl FileLike for TcpConn {
             return Ok(0);
         }
 
+        let wq = self.wait_queue.subscribe();
         loop {
             let mut mutable = self.mutable.lock();
             if mutable.state != State::Established && mutable.state != State::CloseWait {
@@ -356,10 +361,8 @@ impl FileLike for TcpConn {
                 return Ok(written_len);
             }
 
-            // Wait for the peer to acknowledge, and make room in our TX
-            // buffer.
             drop(mutable);
-            self.poll.wait()?;
+            wq.wait()?;
         }
     }
 

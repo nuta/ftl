@@ -2,7 +2,6 @@ use alloc::collections::VecDeque;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 
-use ftl::poll::Poll;
 use ftl::trace;
 use ftl_types::error::ErrorCode;
 use ftl_utils::spinlock::SpinLock;
@@ -21,6 +20,7 @@ use crate::types::c_int;
 use crate::types::errno::Errno;
 use crate::types::sys::socket::SockAddr;
 use crate::vfs::FileLike;
+use crate::wait_queue::WaitQueue;
 
 const INITIAL_SEND_SEQ: u32 = 1234;
 
@@ -41,13 +41,13 @@ struct Mutable {
 
 pub struct TcpListener {
     io: Arc<Io>,
-    poll: Poll,
+    wait_queue: WaitQueue,
     mutable: SpinLock<Mutable>,
 }
 
 impl TcpListener {
     pub fn new(io: Arc<Io>) -> Result<Arc<Self>, ErrorCode> {
-        let poll = Poll::create()?;
+        let wait_queue = WaitQueue::new()?;
         let mutable = Mutable {
             local_port: None,
             backlog: 0,
@@ -56,7 +56,7 @@ impl TcpListener {
         };
         Ok(Arc::new(Self {
             io,
-            poll,
+            wait_queue,
             mutable: SpinLock::new(mutable),
         }))
     }
@@ -268,8 +268,8 @@ impl TcpListener {
         // Add the connection to accept later.
         self.mutable.lock().established.push_back(conn);
 
-        if let Err(err) = self.poll.notify() {
-            trace!("failed to notify poll: {:?}", err);
+        if let Err(error) = self.wait_queue.notify_all() {
+            trace!("failed to notify listener waiters: {:?}", error);
         }
     }
 
@@ -329,12 +329,13 @@ impl FileLike for TcpListener {
     }
 
     fn accept(&self) -> Result<Arc<dyn FileLike>, Errno> {
+        let wq = self.wait_queue.subscribe();
         loop {
             if let Some(conn) = self.try_accept() {
                 return Ok(conn);
             }
 
-            self.poll.wait()?;
+            wq.wait()?;
         }
     }
 }
