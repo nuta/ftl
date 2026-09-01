@@ -1,8 +1,10 @@
 use alloc::sync::Arc;
 
 use crate::types::c_int;
+use crate::types::c_short;
 use crate::types::errno::Errno;
 use crate::types::sys::socket::SockAddr;
+use crate::wait_queue::WaitQueue;
 
 mod console;
 mod embedded_file;
@@ -41,5 +43,13 @@ pub trait FileLike: Send + Sync {
         let _ = buf;
         let _ = offset;
         Err(Errno::ENOTSUP)
+    }
+
+    fn poll(&self) -> Result<c_short, Errno> {
+        Ok(0)
+    }
+
+    fn wait_queue(&self) -> Option<&WaitQueue> {
+        None
     }
 }

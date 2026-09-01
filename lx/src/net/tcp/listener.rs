@@ -17,7 +17,9 @@ use crate::net::tcpip::Io;
 use crate::net::tcpip::ListenerIo;
 use crate::net::tcpip::RecvGuard;
 use crate::types::c_int;
+use crate::types::c_short;
 use crate::types::errno::Errno;
+use crate::types::sys::poll::POLLIN;
 use crate::types::sys::socket::SockAddr;
 use crate::vfs::FileLike;
 use crate::wait_queue::WaitQueue;
@@ -337,5 +339,20 @@ impl FileLike for TcpListener {
 
             wq.wait()?;
         }
+    }
+
+    fn poll(&self) -> Result<c_short, Errno> {
+        let mut status = 0;
+
+        let mutable = self.mutable.lock();
+        if !mutable.established.is_empty() {
+            status |= POLLIN;
+        }
+
+        Ok(status)
+    }
+
+    fn wait_queue(&self) -> Option<&WaitQueue> {
+        Some(&self.wait_queue)
     }
 }

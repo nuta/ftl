@@ -6,6 +6,7 @@ mod execve;
 mod exit_group;
 mod fork;
 mod listen;
+mod poll;
 mod read;
 mod set_tid_address;
 mod socket;
@@ -23,6 +24,7 @@ use self::execve::sys_execve;
 use self::exit_group::sys_exit_group;
 use self::fork::sys_fork;
 use self::listen::sys_listen;
+use self::poll::sys_poll;
 use self::read::sys_read;
 use self::set_tid_address::sys_set_tid_address;
 use self::socket::sys_socket;
@@ -35,6 +37,8 @@ use crate::types::c_int;
 use crate::types::c_long;
 use crate::types::c_void;
 use crate::types::errno::Errno;
+use crate::types::sys::poll::PollFd;
+use crate::types::sys::poll::nfds_t;
 use crate::types::sys::syscall::SYS_ACCEPT;
 use crate::types::sys::syscall::SYS_ARCH_PRCTL;
 use crate::types::sys::syscall::SYS_BIND;
@@ -43,6 +47,7 @@ use crate::types::sys::syscall::SYS_EXECVE;
 use crate::types::sys::syscall::SYS_EXIT_GROUP;
 use crate::types::sys::syscall::SYS_FORK;
 use crate::types::sys::syscall::SYS_LISTEN;
+use crate::types::sys::syscall::SYS_POLL;
 use crate::types::sys::syscall::SYS_READ;
 use crate::types::sys::syscall::SYS_SET_TID_ADDRESS;
 use crate::types::sys::syscall::SYS_SOCKET;
@@ -74,6 +79,7 @@ pub extern "C" fn handle_syscall(frame: *const SyscallFrame) -> c_long {
         SYS_WRITE => sys_write(&current, arg0 as c_int, arg1 as *const c_void, arg2),
         SYS_READ => sys_read(&current, arg0 as c_int, arg1 as *mut c_void, arg2),
         SYS_CLOSE => sys_close(&current, arg0 as c_int),
+        SYS_POLL => sys_poll(&current, arg0 as *mut PollFd, arg1 as nfds_t, arg2 as c_int),
         SYS_WRITEV => sys_writev(&current, arg0 as c_int, arg1 as *const iovec, arg2 as c_int),
         SYS_FORK => sys_fork(&current, frame as *const SyscallFrame as usize),
         SYS_SOCKET => sys_socket(&current, arg0 as c_int, arg1 as c_int, arg2 as c_int),

@@ -1,6 +1,7 @@
 pub const SYS_WRITE: usize = 1;
 pub const SYS_READ: usize = 0;
 pub const SYS_CLOSE: usize = 3;
+pub const SYS_POLL: usize = 7;
 pub const SYS_WRITEV: usize = 20;
 pub const SYS_FORK: usize = 57;
 pub const SYS_SOCKET: usize = 41;

@@ -12,7 +12,10 @@ use super::packet::TcpFlags;
 use super::packet::TcpPacketInfo;
 use crate::net::tcpip::Io;
 use crate::net::tcpip::RecvGuard;
+use crate::types::c_short;
 use crate::types::errno::Errno;
+use crate::types::sys::poll::POLLIN;
+use crate::types::sys::poll::POLLOUT;
 use crate::types::sys::socket::SockAddr;
 use crate::vfs::FileLike;
 use crate::wait_queue::WaitQueue;
@@ -375,5 +378,27 @@ impl FileLike for TcpConn {
 
     fn close(&self) {
         self.do_close();
+    }
+
+    fn poll(&self) -> Result<c_short, Errno> {
+        let mut status = 0;
+        let mutable = self.mutable.lock();
+
+        // This is readable if read() would return 0 anyway (EOF/closed).
+        if !mutable.rx_buffer.is_empty() || mutable.eof || mutable.state == State::Closed {
+            status |= POLLIN;
+        }
+
+        if (mutable.state == State::Established || mutable.state == State::CloseWait)
+            && mutable.tx_buffer.writable_len() > 0
+        {
+            status |= POLLOUT;
+        }
+
+        Ok(status)
+    }
+
+    fn wait_queue(&self) -> Option<&WaitQueue> {
+        Some(&self.wait_queue)
     }
 }
