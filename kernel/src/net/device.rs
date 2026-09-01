@@ -38,10 +38,13 @@ impl Tx {
         let payload_buf = if payload_len == 0 {
             None
         } else {
-            let buf = env
-                .alloc_dma(payload_len)
-                .map_err(|_| ErrorCode::INVALID_ARG)?;
-            Some(buf)
+            match env.alloc_dma(payload_len) {
+                Ok(buf) => Some(buf),
+                Err(_) => {
+                    env.free_dma(header_buf);
+                    return Err(ErrorCode::INVALID_ARG);
+                }
+            }
         };
 
         Ok(Self {
@@ -136,8 +139,12 @@ impl Device {
         let result = self
             .driver
             .try_send(env, tx.header_buf, DRIVER_HEADROOM, tx.payload_buf);
-        if let Err((_, _, error)) = result {
+        if let Err((header_buf, payload_buf, error)) = result {
             warn!("failed to send packet: {:?}", error);
+            env.free_dma(header_buf);
+            if let Some(payload_buf) = payload_buf {
+                env.free_dma(payload_buf);
+            }
         }
     }
 

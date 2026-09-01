@@ -1,3 +1,4 @@
+use alloc::collections::VecDeque;
 use core::fmt;
 use core::sync::atomic::AtomicU8;
 use core::sync::atomic::Ordering;
@@ -9,6 +10,7 @@ use ftl_utils::alignment::align_up;
 use ftl_utils::spinlock::SpinLock;
 
 use crate::arch;
+use crate::arch::MIN_PAGE_SIZE;
 use crate::arch::paddr2vaddr;
 use crate::memory::PAGE_ALLOCATOR;
 use crate::memory::PageType;
@@ -45,20 +47,51 @@ impl EnvImpl {
 }
 
 static GLOBAL_ENV: EnvImpl = EnvImpl::new();
+static DMA_FREE_LIST: SpinLock<VecDeque<DmaBuf>> = SpinLock::new(VecDeque::new());
+const DMA_FREE_LIST_MAX: usize = 16;
 
 impl ftl_driver::env::Env for EnvImpl {
-    fn alloc_dma(&self, size: usize) -> Result<DmaBuf, ftl_driver::env::OutOfMemoryError> {
-        let alloc_len = align_up(size.max(1), crate::arch::MIN_PAGE_SIZE);
-        let paddr = PAGE_ALLOCATOR
-            .alloc(alloc_len, PageType::Zeroed)
-            .ok_or(ftl_driver::env::OutOfMemoryError)?;
-        let vaddr = paddr2vaddr(paddr);
+    fn alloc_dma(&self, len: usize) -> Result<DmaBuf, ftl_driver::env::OutOfMemoryError> {
+        let len = len.max(1);
 
-        Ok(unsafe { DmaBuf::new(vaddr.as_usize(), paddr.as_usize(), size) })
+        // Try reusing a buffer from the free list.
+        {
+            let mut free_list = DMA_FREE_LIST.lock();
+            if let Some(buf) = free_list.back() {
+                if buf.capacity() >= len {
+                    let mut buf = free_list.pop_back().unwrap();
+
+                    // SAFETY: We've checked the capacity is sufficient.
+                    unsafe {
+                        buf.set_len(len);
+                    }
+                    return Ok(buf);
+                }
+            }
+        }
+
+        // Allocate a new buffer.
+        let capacity = align_up(len, MIN_PAGE_SIZE);
+        let paddr = PAGE_ALLOCATOR
+            .alloc(capacity, PageType::Zeroed)
+            .ok_or(ftl_driver::env::OutOfMemoryError)?;
+        let vaddr = paddr2vaddr(paddr).as_usize();
+
+        // SAFETY: paddr/vaddr are valid, and capacity >= len.
+        let buf = unsafe { DmaBuf::new(vaddr, paddr.as_usize(), capacity, len) };
+        Ok(buf)
     }
 
-    fn free_dma(&self, _buf: DmaBuf) {
-        // TODO:
+    fn free_dma(&self, buf: DmaBuf) {
+        let mut free_list = DMA_FREE_LIST.lock();
+        if free_list.len() >= DMA_FREE_LIST_MAX {
+            if let Some(buf) = free_list.pop_front() {
+                // TODO: free the buffer.
+                let _ = buf;
+            }
+        }
+
+        free_list.push_back(buf);
     }
 
     fn print(&self, args: fmt::Arguments<'_>) {
