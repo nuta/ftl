@@ -134,27 +134,33 @@ impl Device {
         // Fill the ethernet header and send it to the driver.
         tx.write_ethernet_header(dst_mac, self.driver.mac_address(), ETHTYPE_IPV4);
         drop(arp_table);
-        self.send(env, tx);
-        Ok(())
+        self.send(env, tx)
     }
 
-    pub fn send_ipv4_broadcast(&self, env: &dyn Env, mut tx: Tx) {
+    pub fn send_ipv4_broadcast(&self, env: &dyn Env, mut tx: Tx) -> Result<(), ErrorCode> {
         tx.write_ethernet_header(&[u8::MAX; 6], self.driver.mac_address(), ETHTYPE_IPV4);
-        self.send(env, tx);
+        self.send(env, tx)
     }
 
     /// Sends a packet to the driver.
-    fn send(&self, env: &dyn Env, tx: Tx) {
+    fn send(&self, env: &dyn Env, tx: Tx) -> Result<(), ErrorCode> {
         let result = self
             .driver
             .try_send(env, tx.header_buf, DRIVER_HEADROOM, tx.payload_buf);
+
         if let Err((header_buf, payload_buf, error)) = result {
             warn!("failed to send packet: {:?}", error);
+
+            // Free DMA buffers returned back by the driver.
             env.free_dma(header_buf);
             if let Some(payload_buf) = payload_buf {
                 env.free_dma(payload_buf);
             }
+
+            return Err(ErrorCode::INVALID_STATE);
         }
+
+        Ok(())
     }
 
     pub fn driver(&self) -> &SharedRef<dyn Driver<Notifier = PollNotifier>> {
@@ -174,7 +180,9 @@ impl Device {
         // Flush pending TX packets.
         for mut tx in txs {
             tx.write_ethernet_header(&mac, self.driver.mac_address(), ETHTYPE_IPV4);
-            self.send(env, tx);
+            if let Err(error) = self.send(env, tx) {
+                warn!("failed to send pending IPv4 packet: {:?}", error);
+            }
         }
     }
 
@@ -193,7 +201,9 @@ impl Device {
         let our_mac = self.driver.mac_address();
         tx.write_ethernet_header(&dst_mac, our_mac, ETHTYPE_ARP);
         tx.write_arp_reply(our_mac, our_ip, &dst_mac, dst_ip);
-        self.send(env, tx);
+        if let Err(error) = self.send(env, tx) {
+            warn!("failed to send ARP reply: {:?}", error);
+        }
     }
 }
 

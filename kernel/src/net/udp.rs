@@ -45,6 +45,5 @@ pub fn send_broadcast(
     ipv4.set_dst_ip(IPV4_BROADCAST);
     ipv4.update_checksum();
 
-    device.send_ipv4_broadcast(&GLOBAL_ENV, tx);
-    Ok(())
+    device.send_ipv4_broadcast(&GLOBAL_ENV, tx)
 }
