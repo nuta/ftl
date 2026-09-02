@@ -55,9 +55,8 @@ pub(super) extern "C" fn syscall_copy_recover() -> ! {
 #[unsafe(no_mangle)]
 extern "C" fn syscall_handler() -> ! {
     naked_asm!(
-        "cli",
+        // CLI/CLD are automatically done through IA32_FMASK MSR.
         "swapgs",
-        "cld",
 
         // Is the syscall number in the FTL range? If not, jump to the
         // trampoline. Compare RAX as an unsigned usize value.
@@ -199,7 +198,7 @@ pub(super) fn init() {
     const EFER_SCE: u64 = 1 << 0;
 
     // RFLAGS bits to clear on SYSCALL entry.
-    const SYSCALL_FMASK: u64 = (1 << 8) | (1 << 9); // TF | IF
+    const SYSCALL_FMASK: u64 = (1 << 8) | (1 << 9) | (1 << 10); // TF | IF | DF
 
     unsafe {
         let syscall_handler = syscall_handler as *const () as u64;
