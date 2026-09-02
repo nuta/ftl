@@ -14,7 +14,7 @@ FTL is a new operating system aiming to be the drop-in third choice, next to Lin
 │ ┃ ╌╌╌╌╌╌╌╌ Linux ABI ╌╌╌╌╌╌╌╌┃ │     │ ┃╌╌╌╌╌╌╌╌╌╌╌╌╌┃ │
 │ ┃   Linux compat library     ┃ │     │ ┃  Your own   ┃ │
 │ ┃  (Process, VFS, TCP, ...)  ┃◀┄┄┐   │ ┃  custom OS  ┃ │
-│ ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘ │ ┆   │ ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▘ │
+│ ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛ │ ┆   │ ┗━━━━━━━━━━━━━┛ │
 └────────────────────────────────┘ ┆   └─────────────────┘
    ┆  Minimalistic system calls    ┆
    ▼                               ┆ user faults (syscalls)
