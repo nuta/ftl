@@ -1,3 +1,4 @@
+use ftl_types::error::ErrorCode;
 use ftl_types::syscall::Syscall;
 
 use crate::arch::get_cpuvar;
@@ -51,7 +52,7 @@ fn do_handle_syscall() {
         n if n == Syscall::NetDrop as usize => crate::net::sys_net_drop(&thread, &regs),
         n if n == Syscall::NetSend as usize => crate::net::sys_net_send(&thread, &regs),
         n if n == Syscall::HandleClose as usize => crate::handle::sys_handle_close(&thread, &regs),
-        _ => todo!(),
+        _ => Err(ErrorCode::Unsupported),
     };
 
     let retval = match retval {
