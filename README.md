@@ -2,8 +2,6 @@
 
 FTL is a new operating system aiming to be the drop-in third choice, next to Linux and BSDs.
 
-<div align="center">
-
 ```
 Container #1           Container #2
 ┌─────────────────┐   ┌────────────────────────────────┐
@@ -26,8 +24,6 @@ Kernel
 ║        (memory, vCPU, network multiplexing, ...)     ║
 ╚══════════════════════════════════════════════════════╝
 ```
-
-</div>
 
 - **Secure:** A small kernel provides minimalistic hypervisor-shaped system calls. OS features such as Linux system calls and TCP are implemented in a userspace library called _userspace OS_.
 - **Linux compatible:** FTL aims to be a drop-in alternative to Linux in the cloud environment. Linux binary compatibilty layer is implemented as a library.
