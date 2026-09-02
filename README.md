@@ -19,7 +19,7 @@ FTL is a new operating system aiming to be the drop-in third choice, next to Lin
    ┆  Minimalistic system calls    ┆
    ▼                               ┆ user faults (syscalls)
 ╔════════════════════════════════════════════════════════╗
-║                        Hybrid kernel                   ║
+║                      Hybrid kernel                     ║
 ║         (memory, vCPU, network multiplexing, ...)      ║
 ╚════════════════════════════════════════════════════════╝
 ```
