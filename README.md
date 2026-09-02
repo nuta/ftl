@@ -3,19 +3,19 @@
 FTL is a new operating system aiming to be the drop-in third choice, next to Linux and BSDs.
 
 ```
-Container #1           Container #2
-┌─────────────────┐   ┌────────────────────────────────┐
-│ VmSpace         │   │  VM space       VM space       │
-│ ┏━━━━━━━━━━━━━┓ │   │ ┏━━━━━━━━━━━━┓  ┏━━━━━━━━━━━━┓ │
-│ ┃             ┃ │   │ ┃            ┃  ┃            ┃ │
-│ ┃ FTL native  ┃ │   │ ┃   Linux    ┃  ┃   Linux    ┃ │
-│ ┃  unikernel  ┃ │   │ ┃  Process   ┃  ┃  Process   ┃ │
-│ ┃             ┃ │   │ ┃            ┃  ┃            ┃ │
-│ ┃╌╌╌╌╌╌╌╌╌╌╌╌╌┃ │   │ ┃ ╌╌╌╌╌╌╌╌ Linux ABI ╌╌╌╌╌╌╌╌┃ │
-│ ┃  Your own   ┃ │   │ ┃   Linux compat library     ┃ │
-│ ┃  custom OS  ┃ │   │ ┃  (Process, VFS, TCP, ...)  ┃ │
-│ ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▘ │   │ ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘ │
-└─────────────────┘   └────────────────────────────────┘
+Container #1                         Container #2
+┌────────────────────────────────┐   ┌─────────────────┐
+│  VM space       VM space       │   │ VmSpace         │
+│ ┏━━━━━━━━━━━━┓  ┏━━━━━━━━━━━━┓ │   │ ┏━━━━━━━━━━━━━┓ │
+│ ┃            ┃  ┃            ┃ │   │ ┃             ┃ │
+│ ┃   Linux    ┃  ┃   Linux    ┃ │   │ ┃ FTL native  ┃ │
+│ ┃  Process   ┃  ┃  Process   ┃ │   │ ┃  unikernel  ┃ │
+│ ┃            ┃  ┃            ┃ │   │ ┃             ┃ │
+│ ┃ ╌╌╌╌╌╌╌╌ Linux ABI ╌╌╌╌╌╌╌╌┃ │   │ ┃╌╌╌╌╌╌╌╌╌╌╌╌╌┃ │
+│ ┃   Linux compat library     ┃ │   │ ┃  Your own   ┃ │
+│ ┃  (Process, VFS, TCP, ...)  ┃ │   │ ┃  custom OS  ┃ │
+│ ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘ │   │ ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▘ │
+└────────────────────────────────┘   └─────────────────┘
                                                Userspace
 ╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶
                                                   Kernel
