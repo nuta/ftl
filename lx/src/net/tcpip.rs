@@ -60,7 +60,7 @@ impl Io {
             None,
             None,
         );
-        self.net.bind(&rule, 0 /* cookie is unused */)
+        self.net.bind(&rule)
     }
 
     pub fn unbind_listener(&self, port: u16) {
@@ -103,7 +103,7 @@ impl<'a> ListenerIo<'a> {
             Some(remote_port),
         );
 
-        self.io.net.bind(&rule, 0 /* cookie is unused */)?;
+        self.io.net.bind(&rule)?;
         let mut flows = self.flows.lock();
         flows.flows.insert(pkt.five_tuple(), Flow { conn, rule });
         Ok(())

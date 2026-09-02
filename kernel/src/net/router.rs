@@ -85,11 +85,11 @@ impl Router {
         Ok(())
     }
 
-    fn find_network(&self, five_tuple: FiveTuple) -> Option<(SharedRef<Network>, usize)> {
+    fn find_network(&self, five_tuple: FiveTuple) -> Option<SharedRef<Network>> {
         // TODO: 5-tuple hash map to avoid scanning all networks.
         for network in &self.networks {
-            if let Some(cookie) = network.matches(five_tuple) {
-                return Some((network.clone(), cookie));
+            if network.matches(five_tuple) {
+                return Some(network.clone());
             }
         }
 
@@ -201,7 +201,7 @@ impl Router {
 
         if let Some((five_tuple, trans_header_len)) = five_tuple {
             // Find the network to forward the packet to.
-            let Some((network, cookie)) = self.find_network(five_tuple) else {
+            let Some(network) = self.find_network(five_tuple) else {
                 return;
             };
 
@@ -209,7 +209,7 @@ impl Router {
             let total_len = ipv4.total_len();
             let header_len = ipv4.header_len() + trans_header_len;
             let (device, buf) = buf.take();
-            network.receive(device, buf, off, total_len, header_len, cookie);
+            network.receive(device, buf, off, total_len, header_len);
         }
     }
 

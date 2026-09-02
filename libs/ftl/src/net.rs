@@ -41,31 +41,32 @@ impl Net {
         Ok(())
     }
 
-    pub fn bind(&self, rule: &Rule, cookie: usize) -> Result<(), ErrorCode> {
-        syscall3(
+    pub fn bind(&self, rule: &Rule) -> Result<(), ErrorCode> {
+        syscall2(
             Syscall::NetBind,
             self.handle.id().as_usize(),
             rule as *const Rule as usize,
-            cookie,
         )?;
         Ok(())
     }
 
-    pub fn unbind(&self, rule: &Rule) -> Result<usize, ErrorCode> {
+    pub fn unbind(&self, rule: &Rule) -> Result<(), ErrorCode> {
         syscall2(
             Syscall::NetUnbind,
             self.handle.id().as_usize(),
             rule as *const Rule as usize,
-        )
+        )?;
+        Ok(())
     }
 
-    pub fn peek(&self, header: &mut [u8]) -> Result<usize, ErrorCode> {
+    pub fn peek(&self, header: &mut [u8]) -> Result<(), ErrorCode> {
         syscall3(
             Syscall::NetPeek,
             self.handle.id().as_usize(),
             header.as_mut_ptr() as usize,
             header.len(),
-        )
+        )?;
+        Ok(())
     }
 
     pub fn recv(&self, payload: &mut [u8]) -> Result<(), ErrorCode> {

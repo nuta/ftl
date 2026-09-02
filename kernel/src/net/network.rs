@@ -34,12 +34,8 @@ use crate::thread::Thread;
 const MAX_RX_QUEUE_DEPTH: usize = 128;
 
 /// A registered rule.
-///
-/// This struct must not be `Clone`-able to preserve the uniqueness of the
-/// cookie.
 struct Binding {
     rule: Rule,
-    cookie: usize,
 }
 
 /// A received packet.
@@ -53,11 +49,6 @@ struct RxPacket {
     packet_len: usize,
     /// The total length of the IP and TCP/UDP headers.
     header_len: usize,
-    /// The cookie of the matching rule.
-    ///
-    /// FIXME: Remove this field. What if we `net_unbind` concurrently, while
-    ///        this cookie is still in the RX queue?
-    cookie: usize,
 }
 
 struct Mutable {
@@ -102,7 +93,7 @@ impl Network {
         Ok(())
     }
 
-    pub fn bind(&self, rule: Rule, cookie: usize) -> Result<(), ErrorCode> {
+    pub fn bind(&self, rule: Rule) -> Result<(), ErrorCode> {
         // TODO: Do we need a validation for the rule?
 
         let mut bindings = self.bindings.lock();
@@ -113,38 +104,31 @@ impl Network {
         bindings
             .try_reserve(1)
             .map_err(|_| ErrorCode::OUT_OF_MEMORY)?;
-        bindings.push(Binding { rule, cookie });
+        bindings.push(Binding { rule });
         Ok(())
     }
 
-    pub fn unbind(&self, rule: &Rule) -> Result<usize, ErrorCode> {
+    pub fn unbind(&self, rule: &Rule) -> Result<(), ErrorCode> {
         let mut bindings = self.bindings.lock();
         for (index, binding) in bindings.iter().enumerate() {
             if binding.rule == *rule {
-                let cookie = binding.cookie;
                 bindings.remove(index);
-                return Ok(cookie);
+                return Ok(());
             }
         }
 
         Err(ErrorCode::NOT_FOUND)
     }
 
-    /// Returns a cookie of the matching rule if found.
-    pub fn matches(&self, five_tuple: FiveTuple) -> Option<usize> {
-        let mut best_specificity = 0;
-        let mut best_cookie = None;
+    pub fn matches(&self, five_tuple: FiveTuple) -> bool {
         // TODO: Sort the bindings by specificity to avoid iterating through all of them.
         for binding in self.bindings.lock().iter() {
-            if let Some(specificity) = binding.rule.matches(five_tuple) {
-                if specificity > best_specificity {
-                    best_specificity = specificity;
-                    best_cookie = Some(binding.cookie);
-                }
+            if let Some(_specificity) = binding.rule.matches(five_tuple) {
+                return true;
             }
         }
 
-        best_cookie
+        false
     }
 
     /// Sends a packet to the network.
@@ -219,7 +203,6 @@ impl Network {
         packet_offset: usize,
         packet_len: usize,
         header_len: usize,
-        cookie: usize,
     ) {
         let mut mutable = self.mutable.lock();
         if mutable.rx_queue.len() >= MAX_RX_QUEUE_DEPTH {
@@ -241,7 +224,6 @@ impl Network {
             packet_offset,
             packet_len,
             header_len,
-            cookie,
         });
 
         // Notify a poll.
@@ -252,7 +234,7 @@ impl Network {
         }
     }
 
-    pub fn peek(&self, header: USlice) -> Result<usize, ErrorCode> {
+    pub fn peek(&self, header: USlice) -> Result<(), ErrorCode> {
         let mut mutable = self.mutable.lock();
         if mutable.peeked.is_none() {
             // No peeked packet. Pop the first one from the queue.
@@ -273,7 +255,7 @@ impl Network {
             .subslice(0, rx.header_len)?
             .write_bytes(&rx.buf.as_slice()[start..end])?;
 
-        Ok(rx.cookie)
+        Ok(())
     }
 
     // TODO: How should we handle `peek` and `recv` from multiple threads?
@@ -367,8 +349,6 @@ pub fn sys_net_bind(
 ) -> Result<SyscallOutput, ErrorCode> {
     let network_id = HandleId::new(ctx.a0);
     let rule_uslice = USlice::new(UAddr::new(ctx.a1), size_of::<Rule>())?;
-    let cookie = ctx.a2;
-
     let mut rule_buf = MaybeUninit::<Rule>::uninit();
     let rule = unsafe { rule_uslice.read_uninit(&mut rule_buf)? };
 
@@ -378,7 +358,7 @@ pub fn sys_net_bind(
         .lock()
         .get::<Network>(network_id, HandleRight::WRITE)?;
 
-    network.bind(*rule, cookie)?;
+    network.bind(*rule)?;
     Ok(SyscallOutput::Done(0))
 }
 
@@ -397,8 +377,8 @@ pub fn sys_net_unbind(
         .lock()
         .get::<Network>(network_id, HandleRight::WRITE)?;
 
-    let cookie = network.unbind(rule)?;
-    Ok(SyscallOutput::Done(cookie))
+    network.unbind(rule)?;
+    Ok(SyscallOutput::Done(0))
 }
 
 pub fn sys_net_recv(
@@ -430,8 +410,8 @@ pub fn sys_net_peek(
         .lock()
         .get::<Network>(network_id, HandleRight::READ)?;
 
-    let cookie = network.peek(header)?;
-    Ok(SyscallOutput::Done(cookie as usize))
+    network.peek(header)?;
+    Ok(SyscallOutput::Done(0))
 }
 
 pub fn sys_net_drop(
