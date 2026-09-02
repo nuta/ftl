@@ -33,10 +33,10 @@ struct Aligned<const N: usize>([u8; N]);
 static INITFS: Aligned<{ include_bytes!("../../initfs.cpio").len() }> =
     Aligned(*include_bytes!("../../initfs.cpio"));
 
-fn hello_elf() -> &'static [u8] {
+fn httpd_elf() -> &'static [u8] {
     InitFsLoader::new(&INITFS.0)
-        .find(|file| file.name == b"bin/hello")
-        .expect("hello not found in initfs")
+        .find(|file| file.name == b"bin/httpd")
+        .expect("httpd not found in initfs")
         .data
 }
 
@@ -44,11 +44,11 @@ fn hello_elf() -> &'static [u8] {
 fn main() {
     let root_isolate = unsafe { Isolate::from_handle(HandleId::new(1)) };
     let root_vmspace = unsafe { VmSpace::from_handle(HandleId::new(2)) };
-    let hello_elf = Arc::new(EmbeddedFile::new(hello_elf()));
+    let httpd_elf = Arc::new(EmbeddedFile::new(httpd_elf()));
 
     let net = Net::create().expect("failed to create network");
     let network = net::TcpIp::new(net);
-    let _container = Container::new(root_isolate, root_vmspace, network.clone(), hello_elf)
+    let _container = Container::new(root_isolate, root_vmspace, network.clone(), httpd_elf)
         .expect("failed to start LX");
 
     let poll = Poll::create().expect("failed to create poll");

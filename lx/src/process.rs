@@ -515,7 +515,7 @@ fn load_elf(
     let mut header_region = vec![0u8; phdrs_end]; // TODO: Use MaybeUninit
     read_exact(elf_file, 0, &mut header_region)?;
 
-    let elf = Elf::parse(&header_region, ftl_elf::ET_EXEC).expect("failed to parse hello ELF");
+    let elf = Elf::parse(&header_region, ftl_elf::ET_EXEC).expect("failed to parse httpd ELF");
     for phdr in elf.phdrs {
         if phdr.p_type != PhdrType::Load as u32 {
             continue;

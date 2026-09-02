@@ -1,7 +1,7 @@
 #!/bin/bash
 set -eu
 
-APPS=(hello)
+APPS=(httpd)
 RELEASE=${RELEASE:-}
 ARCH=${ARCH:-x64}
 
@@ -25,8 +25,11 @@ mkdir -p initfs
 
 # Build apps.
 mkdir -p initfs/bin
-zig cc -O2 -target x86_64-linux-musl -static -no-pie apps/hello/hello.c -o initfs/bin/hello
-printf 'bin/hello\0' >> initfs.list
+zig cc -std=c23 -O2 -target x86_64-linux-musl -static -no-pie \
+    -DINDEX_HTML_LENGTH="$(wc -c < apps/httpd/index.html | xargs)" \
+    -DNOT_FOUND_HTML_LENGTH="$(wc -c < apps/httpd/404.html | xargs)" \
+    apps/httpd/main.c -o initfs/bin/httpd
+printf 'bin/httpd\0' >> initfs.list
 
 # Build initfs.
 pushd initfs
