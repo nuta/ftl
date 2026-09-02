@@ -3,26 +3,25 @@
 FTL is a new operating system aiming to be the drop-in third choice, next to Linux and BSDs.
 
 ```
-Container #1                         Container #2
-┌────────────────────────────────┐   ┌─────────────────┐
-│  VM space       VM space       │   │ VmSpace         │
-│ ┏━━━━━━━━━━━━┓  ┏━━━━━━━━━━━━┓ │   │ ┏━━━━━━━━━━━━━┓ │
-│ ┃            ┃  ┃            ┃ │   │ ┃             ┃ │
-│ ┃   Linux    ┃  ┃   Linux    ┃ │   │ ┃ FTL native  ┃ │
-│ ┃  Process   ┃  ┃  Process   ┃ │   │ ┃  unikernel  ┃ │
-│ ┃            ┃  ┃            ┃ │   │ ┃             ┃ │
-│ ┃ ╌╌╌╌╌╌╌╌ Linux ABI ╌╌╌╌╌╌╌╌┃ │   │ ┃╌╌╌╌╌╌╌╌╌╌╌╌╌┃ │
-│ ┃   Linux compat library     ┃ │   │ ┃  Your own   ┃ │
-│ ┃  (Process, VFS, TCP, ...)  ┃ │   │ ┃  custom OS  ┃ │
-│ ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘ │   │ ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▘ │
-└────────────────────────────────┘   └─────────────────┘
-                                               Userspace
-╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶
-                                                  Kernel
-╔══════════════════════════════════════════════════════╗
-║                    Hybrid kernel                     ║
-║        (memory, vCPU, network multiplexing, ...)     ║
-╚══════════════════════════════════════════════════════╝
+    Container #1 (Linux compat)      Container #2 (custom OS)
+┌────────────────────────────────┐     ┌─────────────────┐
+│  VM space       VM space       │     │ VmSpace         │
+│ ┏━━━━━━━━━━━━┓  ┏━━━━━━━━━━━━┓ │     │ ┏━━━━━━━━━━━━━┓ │
+│ ┃            ┃  ┃            ┃ │     │ ┃             ┃ │
+│ ┃   Linux    ┃  ┃   Linux    ┃ │     │ ┃ FTL native  ┃ │
+│ ┃  Process   ┃  ┃  Process   ┃ │     │ ┃  unikernel  ┃ │
+│ ┃            ┃  ┃            ┃ │     │ ┃             ┃ │
+│ ┃ ╌╌╌╌╌╌╌╌ Linux ABI ╌╌╌╌╌╌╌╌┃ │     │ ┃╌╌╌╌╌╌╌╌╌╌╌╌╌┃ │
+│ ┃   Linux compat library     ┃ │     │ ┃  Your own   ┃ │
+│ ┃  (Process, VFS, TCP, ...)  ┃◀┄┄┐   │ ┃  custom OS  ┃ │
+│ ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘ │ ┆   │ ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▘ │
+└────────────────────────────────┘ ┆   └─────────────────┘
+   ┆  Minimalistic system calls    ┆
+   ▼                               ┆ user faults (syscalls)
+╔════════════════════════════════════════════════════════╗
+║                        Hybrid kernel                   ║
+║         (memory, vCPU, network multiplexing, ...)      ║
+╚════════════════════════════════════════════════════════╝
 ```
 
 - **Secure:** A small kernel provides minimalistic hypervisor-shaped system calls. OS features such as Linux system calls and TCP are implemented in a userspace library called _userspace OS_.
