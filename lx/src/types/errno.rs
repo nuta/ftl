@@ -29,14 +29,14 @@ impl Errno {
 impl From<ErrorCode> for Errno {
     fn from(error: ErrorCode) -> Self {
         match error {
-            ErrorCode::OUT_OF_MEMORY => Self::ENOMEM,
-            ErrorCode::NOT_ALLOWED => Self::EPERM,
-            ErrorCode::ALREADY_EXISTS => Self::EEXIST,
-            ErrorCode::INVALID_STATE => Self::EBUSY,
-            ErrorCode::PAGE_FAULT => Self::EFAULT,
-            ErrorCode::UNSUPPORTED => Self::ENOTSUP,
-            ErrorCode::TOO_MANY_HANDLES => Self::EMFILE,
-            ErrorCode::INVALID_ARG | ErrorCode::INVALID_TYPE | ErrorCode::OUT_OF_BOUNDS => {
+            ErrorCode::OutOfMemory => Self::ENOMEM,
+            ErrorCode::NotAllowed => Self::EPERM,
+            ErrorCode::AlreadyExists => Self::EEXIST,
+            ErrorCode::InvalidState => Self::EBUSY,
+            ErrorCode::PageFault => Self::EFAULT,
+            ErrorCode::Unsupported => Self::ENOTSUP,
+            ErrorCode::TooManyHandles => Self::EMFILE,
+            ErrorCode::InvalidArg | ErrorCode::InvalidType | ErrorCode::OutOfBounds => {
                 Self::EINVAL
             }
             // TODO: better errno

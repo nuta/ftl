@@ -51,7 +51,7 @@ impl Io {
     }
 
     pub fn bind_listener(&self, port: u16) -> Result<(), ErrorCode> {
-        let local_port = NonZeroU16::new(port).ok_or(ErrorCode::INVALID_ARG)?;
+        let local_port = NonZeroU16::new(port).ok_or(ErrorCode::InvalidArg)?;
         let rule = Rule::new(
             ETHTYPE_IPV4,
             IPPROTO_TCP,
@@ -90,10 +90,10 @@ impl<'a> ListenerIo<'a> {
     }
 
     pub fn add_connection(&self, conn: Arc<TcpConn>, pkt: &TcpPacketInfo) -> Result<(), ErrorCode> {
-        let local_ip = NonZeroU32::new(pkt.local_ip).ok_or(ErrorCode::INVALID_ARG)?;
-        let local_port = NonZeroU16::new(pkt.local_port).ok_or(ErrorCode::INVALID_ARG)?;
-        let remote_ip = NonZeroU32::new(pkt.remote_ip).ok_or(ErrorCode::INVALID_ARG)?;
-        let remote_port = NonZeroU16::new(pkt.remote_port).ok_or(ErrorCode::INVALID_ARG)?;
+        let local_ip = NonZeroU32::new(pkt.local_ip).ok_or(ErrorCode::InvalidArg)?;
+        let local_port = NonZeroU16::new(pkt.local_port).ok_or(ErrorCode::InvalidArg)?;
+        let remote_ip = NonZeroU32::new(pkt.remote_ip).ok_or(ErrorCode::InvalidArg)?;
+        let remote_port = NonZeroU16::new(pkt.remote_port).ok_or(ErrorCode::InvalidArg)?;
         let rule = Rule::new(
             ETHTYPE_IPV4,
             IPPROTO_TCP,
@@ -245,7 +245,7 @@ impl TcpIp {
             // Read the packet header.
             match self.io.net.peek(&mut header) {
                 Ok(_) => {}
-                Err(error) if error == ErrorCode::EMPTY => return,
+                Err(error) if error == ErrorCode::Empty => return,
                 Err(_) => panic!("failed to peek at a network packet"),
             }
 

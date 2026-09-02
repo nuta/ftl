@@ -210,14 +210,14 @@ impl Client {
             // This should not fail, but option_writer may add too many
             // options.
             warn!("failed to write DHCP options: {:?}", error);
-            return Err(ErrorCode::INVALID_ARG);
+            return Err(ErrorCode::InvalidArg);
         }
 
         if let Err(error) = packet.finish() {
             // This should not fail, but option_writer may add too many
             // options.
             warn!("failed to finish DHCP packet: {:?}", error);
-            return Err(ErrorCode::INVALID_ARG);
+            return Err(ErrorCode::InvalidArg);
         }
 
         udp::send_broadcast(device, DHCP_CLIENT_PORT, DHCP_SERVER_PORT, &bytes)

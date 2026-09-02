@@ -40,7 +40,7 @@ impl Poll {
         mutable
             .queue
             .try_reserve(1)
-            .map_err(|_| ErrorCode::OUT_OF_MEMORY)?;
+            .map_err(|_| ErrorCode::OutOfMemory)?;
 
         mutable.queue.push_back(event);
 
@@ -64,7 +64,7 @@ impl Poll {
             mutable
                 .waiters
                 .try_reserve(1)
-                .map_err(|_| ErrorCode::OUT_OF_MEMORY)?;
+                .map_err(|_| ErrorCode::OutOfMemory)?;
             mutable.waiters.push_back(thread.clone());
             return Ok(None);
         };

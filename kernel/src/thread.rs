@@ -67,7 +67,7 @@ impl Thread {
         // SYSRET-ing to the kernel pages should trigger a page fault, but it
         // is obviously invalid. Reject it early.
         if fault_pc >= USER_ADDR_END {
-            return Err(ErrorCode::INVALID_ARG);
+            return Err(ErrorCode::InvalidArg);
         }
 
         let mutable = Mutable {
@@ -110,7 +110,7 @@ impl Thread {
     ) -> Result<SyscallOutput, ErrorCode> {
         let mut mutable = self.mutable.lock();
         if !matches!(mutable.state, State::Runnable) {
-            return Err(ErrorCode::INVALID_STATE);
+            return Err(ErrorCode::InvalidState);
         }
 
         match poll.try_wait(self)? {
@@ -155,7 +155,7 @@ impl Thread {
     pub fn start(self: &SharedRef<Self>) -> Result<(), ErrorCode> {
         let mut mutable = self.mutable.lock();
         if !matches!(mutable.state, State::NotStarted) {
-            return Err(ErrorCode::INVALID_STATE);
+            return Err(ErrorCode::InvalidState);
         }
 
         self.resume_locked(&mut mutable)
@@ -164,7 +164,7 @@ impl Thread {
     pub fn exit(&self) -> Result<(), ErrorCode> {
         let mut mutable = self.mutable.lock();
         if !matches!(mutable.state, State::Runnable) {
-            return Err(ErrorCode::INVALID_STATE);
+            return Err(ErrorCode::InvalidState);
         }
 
         mutable.state = State::Exited;
@@ -174,7 +174,7 @@ impl Thread {
     pub fn write_regs(&self, kind: RegsKind, regs: USlice) -> Result<(), ErrorCode> {
         let mutable = self.mutable.lock();
         if !matches!(mutable.state, State::NotStarted) {
-            return Err(ErrorCode::INVALID_STATE);
+            return Err(ErrorCode::InvalidState);
         }
 
         // SAFETY: The thread is blocked and we hold the mutable lock to prevent
@@ -204,7 +204,7 @@ impl Thread {
     ) -> Result<(), ErrorCode> {
         let mutable = self.mutable.lock();
         if !matches!(mutable.state, State::NotStarted) {
-            return Err(ErrorCode::INVALID_STATE);
+            return Err(ErrorCode::InvalidState);
         }
 
         // SAFETY: The thread is blocked and we hold the mutable lock to prevent
@@ -259,7 +259,7 @@ pub fn sys_thread_write_regs(
     ctx: &SyscallRegs,
 ) -> Result<SyscallOutput, ErrorCode> {
     let thread_id = HandleId::new(ctx.a0);
-    let kind = RegsKind::from_usize(ctx.a1).ok_or(ErrorCode::INVALID_ARG)?;
+    let kind = RegsKind::from_usize(ctx.a1).ok_or(ErrorCode::InvalidArg)?;
     let regs = USlice::new(UAddr::new(ctx.a2), size_of::<Regs>())?;
     let thread = current
         .isolate()
@@ -283,19 +283,19 @@ pub fn sys_thread_copy_regs(
 ) -> Result<SyscallOutput, ErrorCode> {
     let src_id = HandleId::new(ctx.a0);
     let dest_id = HandleId::new(ctx.a1);
-    let kind = RegsKind::from_usize(ctx.a2).ok_or(ErrorCode::INVALID_ARG)?;
+    let kind = RegsKind::from_usize(ctx.a2).ok_or(ErrorCode::InvalidArg)?;
     let handles = current.isolate().handles().lock();
     let src = handles.get::<Thread>(src_id, HandleRight::READ)?;
     let dest = handles.get::<Thread>(dest_id, HandleRight::WRITE)?;
     drop(handles);
 
     if SharedRef::eq(&src, &dest) {
-        return Err(ErrorCode::INVALID_ARG);
+        return Err(ErrorCode::InvalidArg);
     }
 
     if !SharedRef::eq(&src, current) {
         // TODO: How should the lock ordering be for src/dest threads?
-        return Err(ErrorCode::UNSUPPORTED);
+        return Err(ErrorCode::Unsupported);
     }
 
     dest.copy_regs_from_current(current_arch, kind)?;

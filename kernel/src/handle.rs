@@ -26,7 +26,7 @@ impl<T: Handleable + ?Sized> Handle<T> {
         if self.rights.contains(required) {
             Ok(self.object)
         } else {
-            Err(ErrorCode::NOT_ALLOWED)
+            Err(ErrorCode::NotAllowed)
         }
     }
 }

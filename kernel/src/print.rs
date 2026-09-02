@@ -74,7 +74,7 @@ pub fn sys_print(ctx: &SyscallRegs) -> Result<SyscallOutput, ErrorCode> {
         crate::arch::console_write(slice);
 
         // TODO: Handle this in USlice (USliceReader?)
-        addr = addr.add(copy_len).ok_or(ErrorCode::OUT_OF_BOUNDS)?;
+        addr = addr.add(copy_len).ok_or(ErrorCode::OutOfBounds)?;
         len -= copy_len;
     }
 

@@ -91,7 +91,7 @@ fn paddr_to_table_mut(paddr: PAddr) -> &'static mut Table {
 fn alloc_table() -> Result<PAddr, ErrorCode> {
     let paddr = PAGE_ALLOCATOR
         .alloc(MIN_PAGE_SIZE, PageType::Zeroed)
-        .ok_or(ErrorCode::OUT_OF_MEMORY)?;
+        .ok_or(ErrorCode::OutOfMemory)?;
 
     Ok(paddr)
 }
@@ -105,7 +105,7 @@ fn ensure_next_table(table: &mut Table, index: usize) -> Result<&mut Table, Erro
         paddr
     } else {
         if entry.is_huge() {
-            return Err(ErrorCode::UNSUPPORTED);
+            return Err(ErrorCode::Unsupported);
         }
 
         entry.paddr()
@@ -145,7 +145,7 @@ impl VmSpace {
         let pdpt_paddr = vaddr2paddr(pdpt_vaddr);
         let pml4_paddr = PAGE_ALLOCATOR
             .alloc(4096, PageType::Zeroed)
-            .ok_or(ErrorCode::OUT_OF_MEMORY)?;
+            .ok_or(ErrorCode::OutOfMemory)?;
         let pml4_vaddr = paddr2vaddr(pml4_paddr);
         let pml4 = unsafe { &mut *(pml4_vaddr.as_usize() as *mut Table) };
 
@@ -186,7 +186,7 @@ impl VmSpace {
             || !paddr.is_aligned(MIN_PAGE_SIZE)
             || !is_aligned(len, MIN_PAGE_SIZE)
         {
-            return Err(ErrorCode::INVALID_ARG);
+            return Err(ErrorCode::InvalidArg);
         }
 
         let mutable = self.mutable.lock();
@@ -197,7 +197,7 @@ impl VmSpace {
         let entry = &mut pt.0[pt_index(uaddr)];
 
         if entry.is_present() {
-            return Err(ErrorCode::ALREADY_EXISTS);
+            return Err(ErrorCode::AlreadyExists);
         }
 
         *entry = Pte::new(paddr, PTE_V | PTE_U | attrs.as_raw() as u64);

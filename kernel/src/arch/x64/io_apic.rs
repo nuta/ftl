@@ -58,7 +58,7 @@ impl IoApic {
 
     pub(super) fn enable_irq_at(&mut self, redir_index: u8, irq: u8) -> Result<(), ErrorCode> {
         if redir_index >= self.num_entries {
-            return Err(ErrorCode::OUT_OF_BOUNDS);
+            return Err(ErrorCode::OutOfBounds);
         }
 
         let vector = IRQ_VECTOR_BASE + irq;

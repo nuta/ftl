@@ -80,7 +80,7 @@ impl Router {
     pub fn add_network(&mut self, network: SharedRef<Network>) -> Result<(), ErrorCode> {
         self.networks
             .try_reserve(1)
-            .map_err(|_| ErrorCode::OUT_OF_MEMORY)?;
+            .map_err(|_| ErrorCode::OutOfMemory)?;
         self.networks.push(network);
         Ok(())
     }

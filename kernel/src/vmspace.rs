@@ -72,12 +72,12 @@ impl VmSpace {
         attrs: PageAttrs,
     ) -> Result<(), ErrorCode> {
         if !uaddr.is_aligned_to(MIN_PAGE_SIZE) {
-            return Err(ErrorCode::INVALID_ARG);
+            return Err(ErrorCode::InvalidArg);
         }
 
-        let end = uaddr.add(vmo.len()).ok_or(ErrorCode::OUT_OF_BOUNDS)?;
+        let end = uaddr.add(vmo.len()).ok_or(ErrorCode::OutOfBounds)?;
         if end.as_usize() > arch::USER_ADDR_END {
-            return Err(ErrorCode::NOT_ALLOWED);
+            return Err(ErrorCode::NotAllowed);
         }
 
         let mut mutable = self.mutable.lock();
@@ -86,13 +86,13 @@ impl VmSpace {
             .iter()
             .any(|mapping| mapping.overlaps_with(uaddr, end))
         {
-            return Err(ErrorCode::ALREADY_EXISTS);
+            return Err(ErrorCode::AlreadyExists);
         }
 
         mutable
             .mappings
             .try_reserve(1)
-            .map_err(|_| ErrorCode::OUT_OF_MEMORY)?;
+            .map_err(|_| ErrorCode::OutOfMemory)?;
 
         // Map the VM area to the virtual address space.
         // TODO: Map lazily when pages are accessed.
@@ -154,7 +154,7 @@ pub fn sys_vmspace_map(
     let attrs = PageAttrs::from_raw(ctx.a3);
     let allowed_attrs = PageAttrs::READ | PageAttrs::WRITE | PageAttrs::EXEC;
     if !allowed_attrs.contains(attrs) {
-        return Err(ErrorCode::INVALID_ARG);
+        return Err(ErrorCode::InvalidArg);
     }
 
     let handles = current.isolate().handles().lock();

@@ -31,7 +31,7 @@ impl Scheduler {
     pub fn push_back(&self, thread: SharedRef<Thread>) -> Result<(), ErrorCode> {
         let mut runqueue = self.runqueue.lock();
         if runqueue.try_reserve(1).is_err() {
-            return Err(ErrorCode::OUT_OF_MEMORY);
+            return Err(ErrorCode::OutOfMemory);
         }
 
         runqueue.push_back(thread);
@@ -43,7 +43,7 @@ impl Scheduler {
     pub fn push_front(&self, thread: SharedRef<Thread>) -> Result<(), ErrorCode> {
         let mut runqueue = self.runqueue.lock();
         if runqueue.try_reserve(1).is_err() {
-            return Err(ErrorCode::OUT_OF_MEMORY);
+            return Err(ErrorCode::OutOfMemory);
         }
 
         runqueue.push_front(thread);

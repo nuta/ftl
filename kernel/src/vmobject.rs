@@ -43,7 +43,7 @@ impl Mutable {
         if page.is_none() {
             let paddr = PAGE_ALLOCATOR
                 .alloc(MIN_PAGE_SIZE, PageType::Zeroed)
-                .ok_or(ErrorCode::OUT_OF_MEMORY)?;
+                .ok_or(ErrorCode::OutOfMemory)?;
             *page = Some(Page { paddr });
         }
 
@@ -62,14 +62,14 @@ pub struct VmObject {
 impl VmObject {
     pub fn new_anonymous(len: usize) -> Result<SharedRef<Self>, ErrorCode> {
         if len == 0 || !is_aligned(len, MIN_PAGE_SIZE) {
-            return Err(ErrorCode::INVALID_ARG);
+            return Err(ErrorCode::InvalidArg);
         }
 
         //　Mark all pages as empty.
         let mut pages = Vec::new();
         let n = len / MIN_PAGE_SIZE;
         if pages.try_reserve_exact(n).is_err() {
-            return Err(ErrorCode::OUT_OF_MEMORY);
+            return Err(ErrorCode::OutOfMemory);
         }
         pages.resize_with(n, Default::default);
 
@@ -87,7 +87,7 @@ impl VmObject {
     pub fn ensure_page(&self, index: usize) -> Result<PAddr, ErrorCode> {
         let mut mutable = self.mutable.lock();
         if index >= mutable.pages.len() {
-            return Err(ErrorCode::OUT_OF_BOUNDS);
+            return Err(ErrorCode::OutOfBounds);
         }
 
         let page = mutable.get_or_fill(index)?;
@@ -139,10 +139,10 @@ impl VmObject {
     {
         let end = vmo_offset
             .checked_add(copy_len)
-            .ok_or(ErrorCode::OUT_OF_BOUNDS)?;
+            .ok_or(ErrorCode::OutOfBounds)?;
 
         if end > self.len {
-            return Err(ErrorCode::OUT_OF_BOUNDS);
+            return Err(ErrorCode::OutOfBounds);
         }
 
         let mut mutable = self.mutable.lock();
@@ -179,14 +179,14 @@ struct PageSlice<'a> {
 
 impl<'a> PageSlice<'a> {
     fn new(page: &'a Page, offset: usize, len: usize) -> Result<Self, ErrorCode> {
-        let end = offset.checked_add(len).ok_or(ErrorCode::OUT_OF_BOUNDS)?;
+        let end = offset.checked_add(len).ok_or(ErrorCode::OutOfBounds)?;
         if end > MIN_PAGE_SIZE {
-            return Err(ErrorCode::OUT_OF_BOUNDS);
+            return Err(ErrorCode::OutOfBounds);
         }
 
         let vaddr = arch::paddr2vaddr(page.paddr)
             .add(offset)
-            .ok_or(ErrorCode::OUT_OF_BOUNDS)?;
+            .ok_or(ErrorCode::OutOfBounds)?;
 
         Ok(Self {
             _page: page,
@@ -201,7 +201,7 @@ impl<'a> PageSlice<'a> {
 
     fn read(&self, buf: &mut [u8]) -> Result<(), ErrorCode> {
         if buf.len() != self.len {
-            return Err(ErrorCode::INVALID_ARG);
+            return Err(ErrorCode::InvalidArg);
         }
 
         unsafe {
@@ -215,7 +215,7 @@ impl<'a> PageSlice<'a> {
 
     fn write(&self, buf: &[u8]) -> Result<(), ErrorCode> {
         if buf.len() != self.len {
-            return Err(ErrorCode::INVALID_ARG);
+            return Err(ErrorCode::InvalidArg);
         }
 
         unsafe {

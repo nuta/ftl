@@ -61,7 +61,7 @@ impl RouteTable {
         let mut routes = self.routes.lock();
         routes
             .try_reserve(1)
-            .map_err(|_| ErrorCode::OUT_OF_MEMORY)?;
+            .map_err(|_| ErrorCode::OutOfMemory)?;
         routes.push(route);
         Ok(())
     }

@@ -54,7 +54,7 @@ impl Thread {
     pub fn new(pc: usize, sp: usize, fault_pc: usize, cookie: usize) -> Result<Self, ErrorCode> {
         let paddr = PAGE_ALLOCATOR
             .alloc(MIN_PAGE_SIZE, PageType::Zeroed)
-            .ok_or(ErrorCode::OUT_OF_MEMORY)?;
+            .ok_or(ErrorCode::OutOfMemory)?;
 
         Ok(Self {
             cs: GDT_USER_CS as u64,
@@ -93,12 +93,12 @@ impl Thread {
             RegsKind::FsBase => {
                 let fs_base = unsafe { regs.fs_base };
                 if fs_base >= USER_ADDR_END {
-                    return Err(ErrorCode::INVALID_ARG);
+                    return Err(ErrorCode::InvalidArg);
                 }
 
                 self.fsbase = fs_base as u64;
             }
-            RegsKind::FpAndVector => return Err(ErrorCode::UNSUPPORTED),
+            RegsKind::FpAndVector => return Err(ErrorCode::Unsupported),
         }
 
         Ok(())

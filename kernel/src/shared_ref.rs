@@ -75,7 +75,7 @@ impl<T> SharedRef<T> {
         let layout = Layout::new::<RefCounted<T>>();
         let ptr = unsafe { alloc(layout) as *mut RefCounted<T> };
         if ptr.is_null() {
-            return Err(ErrorCode::OUT_OF_MEMORY);
+            return Err(ErrorCode::OutOfMemory);
         }
 
         unsafe {

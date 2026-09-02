@@ -24,7 +24,7 @@ pub unsafe fn usercopy_read(src: UAddr, dst: *mut u8, len: usize) -> Result<(), 
     }
 
     if retval != 0 {
-        return Err(ErrorCode::PAGE_FAULT);
+        return Err(ErrorCode::PageFault);
     }
 
     Ok(())
@@ -47,7 +47,7 @@ pub unsafe fn usercopy_write(src: *const u8, dst: UAddr, len: usize) -> Result<(
     }
 
     if retval != 0 {
-        return Err(ErrorCode::PAGE_FAULT);
+        return Err(ErrorCode::PageFault);
     }
 
     Ok(())

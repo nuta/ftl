@@ -48,7 +48,7 @@ impl TcpBuffer {
         let old_len = self.bytes.len();
         self.bytes
             .try_reserve(copyable_len)
-            .map_err(|_| ErrorCode::OUT_OF_MEMORY)?;
+            .map_err(|_| ErrorCode::OutOfMemory)?;
         self.bytes.resize(old_len + copyable_len, 0);
 
         // Let callback write the new data.

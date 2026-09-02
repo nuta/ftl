@@ -20,7 +20,7 @@ pub fn send_broadcast(
     payload: &[u8],
 ) -> Result<(), ErrorCode> {
     let packet_len = Ipv4Rewriter::HEADER_LEN + UDP_HEADER_LEN + payload.len();
-    let total_len = u16::try_from(packet_len).map_err(|_| ErrorCode::INVALID_ARG)?;
+    let total_len = u16::try_from(packet_len).map_err(|_| ErrorCode::InvalidArg)?;
     let mut tx = Tx::alloc(&GLOBAL_ENV, packet_len, 0)?;
     let packet = tx.header_bytes();
     packet.fill(0);
@@ -28,13 +28,13 @@ pub fn send_broadcast(
     let udp_offset = Ipv4Rewriter::HEADER_LEN;
     let udp_packet = &mut packet[udp_offset..];
     udp_packet[UDP_HEADER_LEN..].copy_from_slice(payload);
-    let mut udp = UdpRewriter::new(udp_packet).map_err(|_| ErrorCode::INVALID_ARG)?;
+    let mut udp = UdpRewriter::new(udp_packet).map_err(|_| ErrorCode::InvalidArg)?;
     udp.set_src_port(src_port);
     udp.set_dst_port(dst_port);
     udp.set_len();
     udp.update_checksum(IPV4_UNSPECIFIED, IPV4_BROADCAST);
 
-    let mut ipv4 = Ipv4Rewriter::new(packet).map_err(|_| ErrorCode::INVALID_ARG)?;
+    let mut ipv4 = Ipv4Rewriter::new(packet).map_err(|_| ErrorCode::InvalidArg)?;
     ipv4.set_version_and_header_len();
     ipv4.set_total_len(total_len);
     ipv4.set_identification(0);

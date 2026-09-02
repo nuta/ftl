@@ -88,7 +88,7 @@ impl Network {
         mutable
             .emitters
             .try_reserve(1)
-            .map_err(|_| ErrorCode::OUT_OF_MEMORY)?;
+            .map_err(|_| ErrorCode::OutOfMemory)?;
         mutable.emitters.push_back(emitter);
         Ok(())
     }
@@ -98,12 +98,12 @@ impl Network {
 
         let mut bindings = self.bindings.lock();
         if bindings.iter().any(|binding| binding.rule == rule) {
-            return Err(ErrorCode::ALREADY_EXISTS);
+            return Err(ErrorCode::AlreadyExists);
         }
 
         bindings
             .try_reserve(1)
-            .map_err(|_| ErrorCode::OUT_OF_MEMORY)?;
+            .map_err(|_| ErrorCode::OutOfMemory)?;
         bindings.push(Binding { rule });
         Ok(())
     }
@@ -117,7 +117,7 @@ impl Network {
             }
         }
 
-        Err(ErrorCode::NOT_FOUND)
+        Err(ErrorCode::NotFound)
     }
 
     pub fn matches(&self, five_tuple: FiveTuple) -> bool {
@@ -151,7 +151,7 @@ impl Network {
             Ok(ipv4) => ipv4,
             Err(e) => {
                 trace!("invalid IPv4 header: {:?}", e);
-                return Err(ErrorCode::INVALID_ARG);
+                return Err(ErrorCode::InvalidArg);
             }
         };
 
@@ -160,7 +160,7 @@ impl Network {
         let route = self
             .route_table
             .lookup(dst_ip)
-            .ok_or(ErrorCode::INVALID_ARG)?;
+            .ok_or(ErrorCode::InvalidArg)?;
         let our_ip = route.our_ip();
 
         // Parse the TCP header.
@@ -171,7 +171,7 @@ impl Network {
             Ok(tcp) => tcp,
             Err(e) => {
                 trace!("invalid TCP header: {:?}", e);
-                return Err(ErrorCode::INVALID_ARG);
+                return Err(ErrorCode::InvalidArg);
             }
         };
 
@@ -183,7 +183,7 @@ impl Network {
             Ok(ipv4) => ipv4,
             Err(e) => {
                 trace!("invalid IPv4 header: {:?}", e);
-                return Err(ErrorCode::INVALID_ARG);
+                return Err(ErrorCode::InvalidArg);
             }
         };
         ipv4.set_src_ip(our_ip);
@@ -241,11 +241,11 @@ impl Network {
             mutable.peeked = mutable.rx_queue.pop_front();
         }
 
-        let rx = mutable.peeked.as_ref().ok_or(ErrorCode::EMPTY)?;
+        let rx = mutable.peeked.as_ref().ok_or(ErrorCode::Empty)?;
 
         if header.len() < rx.header_len {
             // The user-provided buffer is not large enough.
-            return Err(ErrorCode::OUT_OF_BOUNDS);
+            return Err(ErrorCode::OutOfBounds);
         }
 
         // Copy the header.
@@ -263,13 +263,13 @@ impl Network {
         let mut mutable = self.mutable.lock();
         let Some(rx) = mutable.peeked.as_ref() else {
             // You must peek first.
-            return Err(ErrorCode::EMPTY);
+            return Err(ErrorCode::Empty);
         };
 
         let payload_len = rx.packet_len - rx.header_len;
         if payload.len() != payload_len {
             // The user-provided buffer is not large enough.
-            return Err(ErrorCode::OUT_OF_BOUNDS);
+            return Err(ErrorCode::OutOfBounds);
         }
 
         // Copy the payload.
@@ -289,7 +289,7 @@ impl Network {
     pub fn drop_peeked(&self) -> Result<(), ErrorCode> {
         let mut mutable = self.mutable.lock();
         let Some(rx) = mutable.peeked.take() else {
-            return Err(ErrorCode::EMPTY);
+            return Err(ErrorCode::Empty);
         };
 
         drop(mutable);
@@ -309,7 +309,7 @@ pub fn sys_net_create(
     let route_table = GLOBAL_ROUTER
         .lock()
         .as_ref()
-        .ok_or(ErrorCode::INVALID_STATE)?
+        .ok_or(ErrorCode::InvalidState)?
         .route_table()
         .clone();
 
@@ -320,7 +320,7 @@ pub fn sys_net_create(
     GLOBAL_ROUTER
         .lock()
         .as_mut()
-        .ok_or(ErrorCode::INVALID_STATE)?
+        .ok_or(ErrorCode::InvalidState)?
         .add_network(network.clone())?;
     Ok(SyscallOutput::Done(handle_id.as_usize()))
 }

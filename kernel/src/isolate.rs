@@ -53,7 +53,7 @@ impl HandleTable {
             }
         }
 
-        Err(ErrorCode::TOO_MANY_HANDLES)
+        Err(ErrorCode::TooManyHandles)
     }
 
     pub fn insert_at<H: Into<AnyHandle>>(
@@ -63,11 +63,11 @@ impl HandleTable {
     ) -> Result<(), ErrorCode> {
         let raw_id = id.as_usize();
         if raw_id == 0 || raw_id > NUM_HANDLES_MAX {
-            return Err(ErrorCode::INVALID_ARG);
+            return Err(ErrorCode::InvalidArg);
         }
 
         if self.handles.contains_key(&raw_id) {
-            return Err(ErrorCode::ALREADY_EXISTS);
+            return Err(ErrorCode::AlreadyExists);
         }
 
         self.handles.insert(raw_id, handle.into());
@@ -82,15 +82,15 @@ impl HandleTable {
         self.handles
             .get(&id.as_usize())
             .cloned()
-            .ok_or(ErrorCode::INVALID_ARG)?
+            .ok_or(ErrorCode::InvalidArg)?
             .downcast::<T>()
-            .ok_or(ErrorCode::INVALID_TYPE)?
+            .ok_or(ErrorCode::InvalidType)?
             .authorize(required)
     }
 
     pub fn remove(&mut self, id: HandleId) -> Result<AnyHandle, ErrorCode> {
         self.handles
             .remove(&id.as_usize())
-            .ok_or(ErrorCode::INVALID_ARG)
+            .ok_or(ErrorCode::InvalidArg)
     }
 }

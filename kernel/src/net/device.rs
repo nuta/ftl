@@ -33,7 +33,7 @@ impl Tx {
         // Allocate DMA buffers.
         let header_buf = env
             .alloc_dma(ip_header_len + HEADROOM_TOTAL)
-            .map_err(|_| ErrorCode::INVALID_ARG)?;
+            .map_err(|_| ErrorCode::InvalidArg)?;
 
         let payload_buf = if payload_len == 0 {
             None
@@ -42,7 +42,7 @@ impl Tx {
                 Ok(buf) => Some(buf),
                 Err(_) => {
                     env.free_dma(header_buf);
-                    return Err(ErrorCode::INVALID_ARG);
+                    return Err(ErrorCode::InvalidArg);
                 }
             }
         };
@@ -170,7 +170,7 @@ impl Device {
                 env.free_dma(payload_buf);
             }
 
-            return Err(ErrorCode::INVALID_STATE);
+            return Err(ErrorCode::InvalidState);
         }
 
         Ok(())

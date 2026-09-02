@@ -145,11 +145,11 @@ pub struct USlice {
 impl USlice {
     pub const fn new(addr: UAddr, len: usize) -> Result<Self, ErrorCode> {
         let Some(end) = addr.add(len) else {
-            return Err(ErrorCode::INVALID_ARG);
+            return Err(ErrorCode::InvalidArg);
         };
 
         if end.as_usize() > USER_ADDR_END {
-            return Err(ErrorCode::NOT_ALLOWED);
+            return Err(ErrorCode::NotAllowed);
         }
 
         Ok(Self { addr, end })
@@ -161,14 +161,14 @@ impl USlice {
 
     pub fn subslice(self, start: usize, len: usize) -> Result<Self, ErrorCode> {
         let Some(new_start) = self.addr.add(start) else {
-            return Err(ErrorCode::OUT_OF_BOUNDS);
+            return Err(ErrorCode::OutOfBounds);
         };
         let Some(new_end) = new_start.add(len) else {
-            return Err(ErrorCode::OUT_OF_BOUNDS);
+            return Err(ErrorCode::OutOfBounds);
         };
 
         if new_end.as_usize() > self.end.as_usize() {
-            return Err(ErrorCode::OUT_OF_BOUNDS);
+            return Err(ErrorCode::OutOfBounds);
         }
 
         Ok(Self {
@@ -184,7 +184,7 @@ impl USlice {
 
     pub fn write_bytes(self, src: &[u8]) -> Result<(), ErrorCode> {
         if src.len() != self.len() {
-            return Err(ErrorCode::INVALID_ARG);
+            return Err(ErrorCode::InvalidArg);
         }
 
         unsafe { usercopy_write(src.as_ptr(), self.addr, src.len()) }
@@ -212,7 +212,7 @@ impl USlice {
     /// - The buffer must be at least `len` bytes long.
     pub unsafe fn read(self, ptr: *mut u8, len: usize) -> Result<(), ErrorCode> {
         if len != self.len() {
-            return Err(ErrorCode::INVALID_ARG);
+            return Err(ErrorCode::InvalidArg);
         }
 
         unsafe { usercopy_read(self.addr, ptr, len) }
