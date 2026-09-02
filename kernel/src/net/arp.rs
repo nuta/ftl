@@ -5,6 +5,8 @@ use hashbrown::HashMap;
 use super::device::Tx;
 use super::packet::ipv4::Ipv4Addr;
 
+const MAX_PENDING_TX_QUEUE_DEPTH: usize = 128;
+
 enum ArpEntry {
     Resolved {
         mac: [u8; 6],
@@ -21,6 +23,14 @@ pub struct Inserter<'a> {
 }
 
 impl<'a> Inserter<'a> {
+    pub fn new(txs: &'a mut VecDeque<Tx>) -> Option<Self> {
+        if txs.len() < MAX_PENDING_TX_QUEUE_DEPTH {
+            Some(Self { txs })
+        } else {
+            None
+        }
+    }
+
     pub fn enqueue(self, tx: Tx) {
         self.txs.push_back(tx);
     }
@@ -37,7 +47,7 @@ impl ArpTable {
         }
     }
 
-    pub fn lookup_or_insert(&mut self, ip: Ipv4Addr) -> Result<&[u8; 6], Inserter<'_>> {
+    pub fn lookup_or_insert(&mut self, ip: Ipv4Addr) -> Result<&[u8; 6], Option<Inserter<'_>>> {
         let entry = self.entries.entry(ip).or_insert_with(|| {
             ArpEntry::Pending {
                 txs: VecDeque::new(),
@@ -46,7 +56,7 @@ impl ArpTable {
 
         match entry {
             ArpEntry::Resolved { mac } => Ok(mac),
-            ArpEntry::Pending { txs } => Err(Inserter { txs }),
+            ArpEntry::Pending { txs } => Err(Inserter::new(txs)),
         }
     }
 

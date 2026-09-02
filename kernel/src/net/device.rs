@@ -101,6 +101,13 @@ impl Tx {
         arp.set_dst_mac(*dst_mac);
         arp.set_dst_ip(dst_ip);
     }
+
+    fn free(self, env: &dyn Env) {
+        env.free_dma(self.header_buf);
+        if let Some(payload_buf) = self.payload_buf {
+            env.free_dma(payload_buf);
+        }
+    }
 }
 
 pub struct Device {
@@ -125,8 +132,14 @@ impl Device {
         let mut arp_table = self.arp_table.lock();
         let dst_mac = match arp_table.lookup_or_insert(next_hop_ip) {
             Ok(dst_mac) => dst_mac,
-            Err(inserter) => {
+            Err(Some(inserter)) => {
                 inserter.enqueue(tx);
+                return Ok(());
+            }
+            Err(None) => {
+                // The queue in the ARP table is full. Drop the packet.
+                trace!("dropped a packet because the ARP table is full");
+                tx.free(env);
                 return Ok(());
             }
         };
