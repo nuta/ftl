@@ -24,12 +24,13 @@ pub enum ErrorCode {
 
 impl ErrorCode {
     pub const fn from_usize(raw: usize) -> Self {
-        if raw > Self::NotFound as usize {
+        let raw = raw as i8;
+        if raw > Self::OutOfMemory as i8 || raw <= Self::BadErrorCode as i8 {
             return Self::BadErrorCode;
         }
 
-        // SAFETY: `rax` is range-checked above.
-        unsafe { core::mem::transmute(raw as u8) }
+        // SAFETY: The range is checked above.
+        unsafe { core::mem::transmute(raw) }
     }
 
     pub const fn as_usize(self) -> usize {
