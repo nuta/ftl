@@ -58,7 +58,7 @@ fn prepare_stack(vmspace: &SharedRef<VmSpace>) -> usize {
     let stack_size = 256 * 1024;
     let vmo = VmObject::new_anonymous(stack_size).unwrap();
 
-    let start = UAddr::new(0x100000 - stack_size); // TODO: find an empty region in vmspace
+    let start = UAddr::new(0x40000000 - stack_size); // TODO: find an empty region in vmspace
 
     vmspace
         .map(vmo, start, PageAttrs::READ | PageAttrs::WRITE)
