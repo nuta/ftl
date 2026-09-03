@@ -1,6 +1,6 @@
 # FTL
 
-FTL is a new operating system aiming to be an alternative cloud OS to Linux/BSDs/Illumos.
+FTL is a new operating system aiming to be an alternative OS in cloud environments to Linux/BSDs/Illumos.
 
 ```
     Container #1 (Linux compat)      Container #2 (custom OS)
@@ -25,8 +25,8 @@ FTL is a new operating system aiming to be an alternative cloud OS to Linux/BSDs
 ```
 
 - **Secure:** A small kernel provides minimalistic hypervisor-shaped system calls. OS features such as Linux system calls and TCP are implemented in a userspace library called _userspace OS_.
-- **Linux compatible:** FTL aims to be a drop-in alternative to Linux in the cloud environment. Linux binary compatibilty layer is implemented as a library.
 - **Programmable:** Key OS features are in a userspace library. You can write your OS just like [unikernels](https://en.wikipedia.org/wiki/Unikernel), simply by patching the library (without kernel programming).
+- **Linux compatible:** FTL aims to be a drop-in alternative to Linux in the cloud environment. Linux binary compatibilty layer is implemented as a library.
 - **Approachable:** Easy-to-understand and testable codebase, handy end-to-end testing in TypeScript, and quick edit-compile-run cycle.
 - **Lightweight:** Keep its footprint small to run even on constrained devices, and to develop the OS quickly.
 
@@ -62,7 +62,6 @@ You can upgrade, add your own features, inject `printf`s for debugging, or optim
 ### Hypervisor-shaped kernel interface
 
 FTL enables you to build your own OS best suited for your application. For example, the concept of Linux process is implemented in a userspace library, not in the kernel. VFS and TCP are also implemented in a library. This means the FTL kernel is more like a hypervisor, which multiplexes hardware resources and provides minimalistic interface like virtio.
-
 
 FTL kernel interface is heavily inspired by hypervisors to narrow the attack surface, and to make userspace OS flexible. The difference from hypervisors is FTL uses the user mode to catch exceptions (not hardware-accelerated virtualization).
 
