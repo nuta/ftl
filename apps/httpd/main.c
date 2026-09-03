@@ -15,7 +15,7 @@
 #define STRINGIFY(value) STRINGIFY_(value)
 #define RESPONSE_HEADER(status, content_length) \
     "HTTP/1.0 " status "\r\n" \
-    "Server: FTL\r\n" \
+    "X-Powered-By: FTL\r\n" \
     "Content-Length: " STRINGIFY(content_length) "\r\n" \
     "Content-Type: text/html\r\n" \
     "Connection: close\r\n" \
