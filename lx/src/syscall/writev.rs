@@ -37,12 +37,10 @@ pub fn sys_writev(
         let bytes = unsafe { slice::from_raw_parts(ptr, iovec.iov_len) };
 
         let n = file.write(bytes, 0)?;
-        if n == 0 {
-            // TODO: should we break if n < iovec.iov_len?
+        total += n;
+        if n < iovec.iov_len {
             break;
         }
-
-        total += n;
     }
 
     Ok(total.try_into().unwrap()) // FIXME: Handle overflow
