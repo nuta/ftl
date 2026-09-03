@@ -48,7 +48,7 @@ pub struct IoApic {
 impl IoApic {
     fn init(base: VAddr) -> Self {
         let ver = read_ioapic(base, REG_IOAPICVER);
-        let num_entries = ((ver >> 16) & 0xff) as u8;
+        let num_entries = ((ver >> 16) & 0xff) as u8 + 1;
         Self { base, num_entries }
     }
 
