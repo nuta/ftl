@@ -30,7 +30,6 @@ zig cc -std=c23 -Os -target x86_64-linux-musl -static -no-pie \
     -DINDEX_HTML_LENGTH="$(wc -c < apps/httpd/index.html | xargs)" \
     -DNOT_FOUND_HTML_LENGTH="$(wc -c < apps/httpd/404.html | xargs)" \
     apps/httpd/main.c -o initfs/bin/httpd
-llvm-strip initfs/bin/httpd
 printf 'bin/httpd\0' >> initfs.list
 
 # Build initfs.
