@@ -45,6 +45,10 @@ impl Rule {
         }
     }
 
+    pub const fn local_port(&self) -> Option<NonZeroU16> {
+        self.local_port
+    }
+
     /// Returns `Some(specificity)` if the rule matches.
     ///
     /// Like CSS selectors, multiple rules may match the same packet. The

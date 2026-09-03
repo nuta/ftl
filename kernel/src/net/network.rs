@@ -94,7 +94,9 @@ impl Network {
     }
 
     pub fn bind(&self, rule: Rule) -> Result<(), ErrorCode> {
-        // TODO: Do we need a validation for the rule?
+        if rule.local_port().is_none() {
+            return Err(ErrorCode::InvalidArg);
+        }
 
         let mut bindings = self.bindings.lock();
         if bindings.iter().any(|binding| binding.rule == rule) {
