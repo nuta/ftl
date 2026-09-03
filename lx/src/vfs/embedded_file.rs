@@ -18,7 +18,7 @@ impl FileLike for EmbeddedFile {
     fn read(&self, buf: &mut [u8], offset: usize, _nonblocking: bool) -> Result<usize, Errno> {
         let len = self.data.len();
         if offset >= len {
-            return Err(Errno::EINVAL);
+            return Ok(0);
         }
 
         let copy_len = min(buf.len(), len - offset);
