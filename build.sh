@@ -48,3 +48,19 @@ FTL_LOG_PREFIX="[$(printf '%-10s' "kernel")] " \
   cargo build "${CARGOFLAGS[@]}" --target kernel/src/arch/$ARCH/kernel.json \
     --manifest-path kernel/Cargo.toml
 cp target/kernel/$target/kernel ftl.elf
+
+# Build ISO if $ISO is set.
+if [[ -n "${ISO:-}" ]]; then
+  if [[ "$ARCH" != "x64" ]]; then
+    echo "ISO is only supported for x64"
+    exit 1
+  fi
+  
+  echo "Building ISO..."
+  mkdir -p isofiles/boot/grub
+  cp kernel/src/arch/x64/grub.cfg isofiles/boot/grub/
+  cp ftl.elf lx.elf isofiles/
+
+  export PATH="$PATH:/opt/homebrew/opt/i686-elf-grub/bin"
+  i686-elf-grub-mkrescue -o ftl.iso isofiles
+fi
