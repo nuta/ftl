@@ -362,7 +362,7 @@ impl FileLike for TcpConn {
                 return Err(Errno::EINVAL);
             }
 
-            let written_len = mutable.tx_buffer.write(buf);
+            let written_len = mutable.tx_buffer.write(buf).map_err(Errno::from)?;
             if written_len > 0 {
                 self.flush(&mut mutable);
                 return Ok(written_len);

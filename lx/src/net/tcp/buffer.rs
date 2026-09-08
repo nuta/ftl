@@ -27,10 +27,11 @@ impl TcpBuffer {
     }
 
     /// Appends `bytes` to the buffer.
-    pub fn write(&mut self, bytes: &[u8]) -> usize {
-        let len = min(bytes.len(), self.writable_len());
-        self.bytes.extend_from_slice(&bytes[..len]);
-        len
+    pub fn write(&mut self, bytes: &[u8]) -> Result<usize, ErrorCode> {
+        self.write_with(bytes.len(), |output| {
+            output.copy_from_slice(&bytes[..output.len()]);
+            output.len()
+        })
     }
 
     /// Appends up to `len` bytes to the buffer, using accessing its
