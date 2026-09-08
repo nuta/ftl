@@ -10,8 +10,12 @@ pub struct TcpBuffer {
 }
 
 impl TcpBuffer {
-    pub const fn new() -> Self {
-        Self { bytes: Vec::new() }
+    pub fn new() -> Result<Self, ErrorCode> {
+        let mut bytes = Vec::new();
+        bytes
+            .try_reserve_exact(TCP_BUFFER_SIZE)
+            .map_err(|_| ErrorCode::OutOfMemory)?;
+        Ok(Self { bytes })
     }
 
     pub fn is_empty(&self) -> bool {

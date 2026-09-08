@@ -7,7 +7,6 @@ use ftl_types::error::ErrorCode;
 use ftl_utils::spinlock::SpinLock;
 
 use super::buffer::TCP_BUFFER_SIZE;
-use super::buffer::TcpBuffer;
 use super::conn::TcpConn;
 use super::packet::Endpoint;
 use super::packet::Segment;
@@ -244,7 +243,6 @@ impl TcpListener {
             handshake.local_iss,
             handshake.remote_rcv_nxt,
             handshake.remote_rcv_wnd,
-            TcpBuffer::new(),
         ) {
             Ok(conn) => conn,
             Err(error) => {

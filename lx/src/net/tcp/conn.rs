@@ -62,7 +62,6 @@ impl TcpConn {
         local_iss: u32,
         remote_rcv_nxt: u32,
         remote_rcv_wnd: u16,
-        rx_buffer: TcpBuffer,
     ) -> Result<Arc<Self>, ErrorCode> {
         let wait_queue = WaitQueue::new()?;
         let snd_nxt = local_iss.wrapping_add(1);
@@ -73,8 +72,8 @@ impl TcpConn {
             snd_nxt,
             snd_wnd: remote_rcv_wnd,
             rcv_nxt: remote_rcv_nxt,
-            tx_buffer: TcpBuffer::new(),
-            rx_buffer,
+            tx_buffer: TcpBuffer::new()?,
+            rx_buffer: TcpBuffer::new()?,
             eof: false,
         };
 
