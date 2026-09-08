@@ -1,6 +1,7 @@
 use core::fmt;
 use core::mem::MaybeUninit;
 use core::mem::size_of;
+use core::slice;
 
 use ftl_types::error::ErrorCode;
 use ftl_utils::alignment::is_aligned;
@@ -188,6 +189,13 @@ impl USlice {
         }
 
         unsafe { usercopy_write(src.as_ptr(), self.addr, src.len()) }
+    }
+
+    pub fn write<T: Copy>(self, src: T) -> Result<(), ErrorCode> {
+        // TODO: Should we introduce a trait to explicitly mark the type as
+        //       user-copyable?
+        let bytes = unsafe { slice::from_raw_parts(&src as *const T as *const u8, size_of::<T>()) };
+        self.write_bytes(bytes)
     }
 
     /// Reads the user address into a kernel's uninitialized buffer.

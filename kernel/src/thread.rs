@@ -8,6 +8,7 @@ use ftl_types::handle::HandleRight;
 use ftl_types::thread::Regs;
 use ftl_types::thread::RegsKind;
 use ftl_types::thread::SyscallRegs;
+use ftl_types::time::MonoTime;
 use ftl_utils::spinlock::SpinLock;
 use ftl_utils::static_assert;
 
@@ -18,10 +19,12 @@ use crate::arch::USER_ADDR_END;
 use crate::handle::Handle;
 use crate::handle::Handleable;
 use crate::isolate::Isolate;
+use crate::poll::EventEmitter;
 use crate::poll::Poll;
 use crate::scheduler::SCHEDULER;
 use crate::shared_ref::SharedRef;
 use crate::syscall::SyscallOutput;
+use crate::time::GLOBAL_TIMER;
 use crate::vmspace::VmSpace;
 
 enum State {
@@ -107,6 +110,7 @@ impl Thread {
         self: &SharedRef<Self>,
         current_thread: &CurrentThread,
         poll: SharedRef<Poll>,
+        deadline: Option<(MonoTime, HandleId)>,
     ) -> Result<SyscallOutput, ErrorCode> {
         let mut mutable = self.mutable.lock();
         if !matches!(mutable.state, State::Runnable) {
@@ -116,6 +120,11 @@ impl Thread {
         match poll.try_wait(self)? {
             Some(output) => Ok(SyscallOutput::Done(output.as_raw())),
             None => {
+                if let Some((deadline, handle_id)) = deadline {
+                    let emitter = EventEmitter::new(poll.clone(), handle_id);
+                    GLOBAL_TIMER.add(deadline, emitter)?;
+                }
+
                 mutable.state = State::Blocked(poll);
 
                 // Avoid enqueuing this thread twice: in Poll::enqueue (by

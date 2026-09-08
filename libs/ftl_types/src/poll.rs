@@ -4,6 +4,7 @@ use crate::handle::HandleId;
 #[repr(u8)]
 pub enum EventKind {
     PollNotified = 1,
+    PollTimeout = 2,
 }
 
 #[derive(Debug)]
@@ -33,6 +34,7 @@ impl Event {
         let kind_id = self.0 as usize >> 24;
         match kind_id {
             1 => EventKind::PollNotified,
+            2 => EventKind::PollTimeout,
             _ => panic!("invalid event kind: {}", kind_id),
         }
     }

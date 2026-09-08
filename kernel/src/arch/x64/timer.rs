@@ -4,7 +4,10 @@
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
 
+use ftl_types::time::MonoTime;
+
 use super::ioport::out8;
+use crate::time::GLOBAL_TIMER;
 
 pub(super) const TIMER_IRQ: u8 = 0;
 
@@ -25,8 +28,19 @@ const DIVISOR: u16 = (PIT_HZ / TIMER_HZ) as u16;
 static TICKS: AtomicU64 = AtomicU64::new(0xffff_ffff_ffff_0000);
 
 pub(super) fn handle_interrupt() {
+    // Increment the counter.
     TICKS.fetch_add(1, Ordering::Relaxed);
+
+    // Do timekeeping job.
+    GLOBAL_TIMER.tick(monotime_read());
+
+    // Acknowledge the interrupt.
     super::get_cpuvar().arch.local_apic.acknowledge_irq();
+}
+
+pub fn monotime_read() -> MonoTime {
+    let ticks = TICKS.load(Ordering::Relaxed);
+    MonoTime::from_nanos(ticks.wrapping_mul(NANOS_PER_TICK))
 }
 
 pub(super) fn init() {

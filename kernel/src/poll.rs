@@ -1,4 +1,6 @@
 use alloc::collections::VecDeque;
+use core::mem::MaybeUninit;
+use core::mem::size_of;
 
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
@@ -6,8 +8,11 @@ use ftl_types::handle::HandleRight;
 use ftl_types::poll::Event;
 use ftl_types::poll::EventKind;
 use ftl_types::thread::SyscallRegs;
+use ftl_types::time::MonoTime;
 use ftl_utils::spinlock::SpinLock;
 
+use crate::address::UAddr;
+use crate::address::USlice;
 use crate::handle::Handle;
 use crate::handle::Handleable;
 use crate::scheduler::SCHEDULER;
@@ -113,7 +118,27 @@ pub fn sys_poll_wait(
         .lock()
         .get::<Poll>(handle_id, HandleRight::READ)?;
 
-    current.start_polling(current_thread, poll)
+    current.start_polling(current_thread, poll, None)
+}
+
+pub fn sys_poll_wait_until(
+    current: &SharedRef<Thread>,
+    current_thread: &CurrentThread,
+    ctx: &SyscallRegs,
+) -> Result<SyscallOutput, ErrorCode> {
+    let handle_id = HandleId::new(ctx.a0);
+    let deadline_uslice = USlice::new(UAddr::new(ctx.a1), size_of::<MonoTime>())?;
+
+    let poll = current
+        .isolate()
+        .handles()
+        .lock()
+        .get::<Poll>(handle_id, HandleRight::READ)?;
+
+    let mut deadline_buf = MaybeUninit::uninit();
+    let deadline = unsafe { deadline_uslice.read_uninit(&mut deadline_buf)? };
+
+    current.start_polling(current_thread, poll, Some((*deadline, handle_id)))
 }
 
 pub fn sys_poll_notify(

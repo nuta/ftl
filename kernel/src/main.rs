@@ -26,5 +26,6 @@ mod scheduler;
 mod shared_ref;
 mod syscall;
 mod thread;
+mod time;
 mod vmobject;
 mod vmspace;

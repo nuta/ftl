@@ -2,8 +2,10 @@ use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use ftl_types::poll::Event;
 use ftl_types::syscall::Syscall;
+use ftl_types::time::MonoTime;
 
 use crate::arch::syscall1;
+use crate::arch::syscall2;
 use crate::handle::OwnedHandle;
 
 pub struct Poll {
@@ -25,6 +27,15 @@ impl Poll {
 
     pub fn wait(&self) -> Result<Event, ErrorCode> {
         let event = syscall1(Syscall::PollWait, self.handle.id().as_usize())?;
+        Ok(Event::from_raw(event as u32))
+    }
+
+    pub fn wait_until(&self, deadline: MonoTime) -> Result<Event, ErrorCode> {
+        let event = syscall2(
+            Syscall::PollWaitUntil,
+            self.handle.id().as_usize(),
+            &deadline as *const MonoTime as usize,
+        )?;
         Ok(Event::from_raw(event as u32))
     }
 

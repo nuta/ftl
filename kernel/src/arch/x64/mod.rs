@@ -29,6 +29,7 @@ pub use idle::idle;
 pub use io_apic::interrupt_acquire;
 // pub use semihosting::semihosting_exit;
 pub use thread::Thread;
+pub use timer::monotime_read;
 pub use usercopy::usercopy_read;
 pub use usercopy::usercopy_write;
 pub use vmspace::DIRECT_MAP_END;

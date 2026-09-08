@@ -13,5 +13,6 @@ mod panic;
 pub mod poll;
 mod start;
 pub mod thread;
+pub mod time;
 pub mod vmo;
 pub mod vmspace;

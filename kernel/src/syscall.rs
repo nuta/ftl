@@ -42,6 +42,9 @@ fn do_handle_syscall() {
         n if n == Syscall::PollWait as usize => {
             crate::poll::sys_poll_wait(&thread, &cpuvar.current_thread, &regs)
         }
+        n if n == Syscall::PollWaitUntil as usize => {
+            crate::poll::sys_poll_wait_until(&thread, &cpuvar.current_thread, &regs)
+        }
         n if n == Syscall::PollNotify as usize => crate::poll::sys_poll_notify(&thread, &regs),
         n if n == Syscall::NetCreate as usize => crate::net::sys_net_create(&thread, &regs),
         n if n == Syscall::NetSubscribe as usize => crate::net::sys_net_subscribe(&thread, &regs),
@@ -52,6 +55,7 @@ fn do_handle_syscall() {
         n if n == Syscall::NetDrop as usize => crate::net::sys_net_drop(&thread, &regs),
         n if n == Syscall::NetSend as usize => crate::net::sys_net_send(&thread, &regs),
         n if n == Syscall::HandleClose as usize => crate::handle::sys_handle_close(&thread, &regs),
+        n if n == Syscall::MonoTimeRead as usize => crate::time::sys_monotime_read(&thread, &regs),
         _ => Err(ErrorCode::Unsupported),
     };
 

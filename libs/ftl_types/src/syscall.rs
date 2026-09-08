@@ -24,4 +24,6 @@ pub enum Syscall {
     NetPeek = SYSCALL_BASE + 20,
     NetDrop = SYSCALL_BASE + 21,
     HandleClose = SYSCALL_BASE + 22,
+    MonoTimeRead = SYSCALL_BASE + 23,
+    PollWaitUntil = SYSCALL_BASE + 24,
 }
