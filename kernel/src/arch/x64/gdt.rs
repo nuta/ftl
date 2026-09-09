@@ -34,7 +34,7 @@ pub(super) struct Tss {
     ///
     /// - Each bit corresponds to an I/O port. If set, the port is not accessible.
     /// - The last byte must be `0xff`.
-    io_permission_map: [u8; 8192],
+    io_permission_map: [u8; 1],
 }
 
 static mut GDT_ENTRIES: [MaybeUninit<[u64; NUM_GDT_ENTRIES]>; NUM_CPUS_MAX] =
@@ -84,7 +84,7 @@ fn write_tss(cpu_id: usize) -> u64 {
             reserved2: 0,
             reserved3: 0,
             iomap_offset: offset_of!(Tss, io_permission_map) as u16,
-            io_permission_map: [0xff; 8192],
+            io_permission_map: [0xff; 1],
         });
 
         let vaddr = VAddr::new(tss.as_ptr() as usize);
