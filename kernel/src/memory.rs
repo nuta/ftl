@@ -158,6 +158,24 @@ impl PageAllocator {
 
         Some(paddr)
     }
+
+    /// Frees memory pages.
+    ///
+    /// # Safety
+    ///
+    /// The caller must provide a pair of `paddr` and `len` that are allocated
+    /// from this allocator.
+    pub unsafe fn free(&self, paddr: PAddr, len: usize) {
+        if !is_aligned(len, MIN_PAGE_SIZE) {
+            trace!("tried to free unaligned size: {len}");
+            return;
+        }
+
+        let num_pages = len / MIN_PAGE_SIZE;
+        if let Err(err) = unsafe { self.inner.free(paddr.as_usize(), num_pages) } {
+            trace!("failed to free memory pages: {err:?}");
+        }
+    }
 }
 
 /// Calls `f` for each unused region between `addr` and `end`, excluding

@@ -9,6 +9,7 @@ use ftl_driver::net::Driver;
 use ftl_utils::alignment::align_up;
 use ftl_utils::spinlock::SpinLock;
 
+use crate::address::PAddr;
 use crate::arch;
 use crate::arch::MIN_PAGE_SIZE;
 use crate::arch::paddr2vaddr;
@@ -86,8 +87,12 @@ impl ftl_driver::env::Env for EnvImpl {
         let mut free_list = DMA_FREE_LIST.lock();
         if free_list.len() >= DMA_FREE_LIST_MAX {
             if let Some(buf) = free_list.pop_front() {
-                // TODO: free the buffer.
-                let _ = buf;
+                let paddr = PAddr::new(buf.paddr());
+                // SAFETY: This page is allocated by global PAGE_ALLOCATOR, and
+                //         capacity is unchanged.
+                unsafe {
+                    PAGE_ALLOCATOR.free(paddr, buf.capacity());
+                }
             }
         }
 
