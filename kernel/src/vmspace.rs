@@ -5,6 +5,7 @@ use ftl_types::handle::HandleId;
 use ftl_types::handle::HandleRight;
 use ftl_types::thread::SyscallRegs;
 use ftl_types::vmspace::PageAttrs;
+use ftl_utils::alignment::align_down;
 use ftl_utils::spinlock::SpinLock;
 
 use crate::address::UAddr;
@@ -27,6 +28,10 @@ struct Mapping {
 impl Mapping {
     pub fn overlaps_with(&self, start: UAddr, end: UAddr) -> bool {
         start < self.end && self.start < end
+    }
+
+    pub fn contains(&self, uaddr: UAddr) -> bool {
+        self.start <= uaddr && uaddr < self.end
     }
 }
 
@@ -95,13 +100,15 @@ impl VmSpace {
             .map_err(|_| ErrorCode::OutOfMemory)?;
 
         // Map the VM area to the virtual address space.
-        // TODO: Map lazily when pages are accessed.
         let num_pages = vmo.len() / MIN_PAGE_SIZE;
         let start = uaddr;
         let mut uaddr = uaddr;
         for index in 0..num_pages {
-            let paddr = vmo.ensure_page(index)?;
-            self.arch.map(uaddr, paddr, MIN_PAGE_SIZE, attrs)?;
+            // Map only existing pages. Unfilled pages are lazily filled on fault.
+            if let Some(paddr) = vmo.page_paddr(index) {
+                self.arch.map(uaddr, paddr, MIN_PAGE_SIZE, attrs)?;
+            }
+
             // SAFETY: `end` guarantees that `uaddr` will not overflow.
             uaddr = uaddr.add(MIN_PAGE_SIZE).unwrap();
         }
@@ -121,6 +128,24 @@ impl VmSpace {
             },
         );
         Ok(())
+    }
+
+    /// Handles a user page fault in this address space.
+    pub fn handle_page_fault(&self, fault_addr: UAddr) -> Result<(), ErrorCode> {
+        let aligned_uaddr = UAddr::new(align_down(fault_addr.as_usize(), MIN_PAGE_SIZE));
+        let mutable = self.mutable.lock();
+        for mapping in &mutable.mappings {
+            if mapping.contains(aligned_uaddr) {
+                // Found a mapping that contains the fault address.
+                let index = (aligned_uaddr.as_usize() - mapping.start.as_usize()) / MIN_PAGE_SIZE;
+                let paddr = mapping.vmo.ensure_page(index)?;
+                let len = MIN_PAGE_SIZE;
+                self.arch.map(aligned_uaddr, paddr, len, mapping.attrs)?;
+                return Ok(());
+            }
+        }
+
+        Err(ErrorCode::OutOfBounds)
     }
 }
 

@@ -3,14 +3,18 @@ use core::arch::global_asm;
 use core::arch::naked_asm;
 use core::mem::offset_of;
 
+use ftl_types::error::ErrorCode;
 use ftl_utils::spinlock::SpinLock;
 
+use super::USER_ADDR_END;
 use super::gdt::GDT_KERNEL_CS;
+use super::get_cpuvar;
 use super::io_apic::IRQ_VECTOR_BASE;
 use super::syscall::syscall_copy_recover;
 use super::thread::Thread;
 use super::thread::XSTATE_MASK;
 use super::timer::TIMER_IRQ;
+use crate::address::UAddr;
 use crate::address::VAddr;
 use crate::cpuvar::CpuVar;
 
@@ -307,20 +311,49 @@ fn recover_from_kernel_page_fault(rip: u64) -> Option<u64> {
     None
 }
 
+fn read_cr2() -> u64 {
+    let cr2: u64;
+    unsafe {
+        asm!("mov {cr2}, cr2", cr2 = out(reg) cr2);
+    }
+    cr2
+}
+
+const PF_PRESENT: u64 = 1 << 0;
+
+fn handle_user_page_fault(cr2: u64) -> Result<(), ErrorCode> {
+    if (cr2 as usize) >= USER_ADDR_END {
+        return Err(ErrorCode::OutOfBounds);
+    }
+
+    let Some(thread) = get_cpuvar().current_thread.thread() else {
+        return Err(ErrorCode::InvalidState);
+    };
+
+    let vmspace = thread.vmspace();
+    let uaddr = UAddr::new(cr2 as usize);
+    vmspace.handle_page_fault(uaddr)
+}
+
 extern "C" fn handle_kernel_interrupt(frame: &mut InterruptFrame) {
     match frame.vector as u8 {
         EXCEPTION_PAGE_FAULT => {
             if let Some(recover_rip) = recover_from_kernel_page_fault(frame.rip) {
+                if frame.error_code & PF_PRESENT == 0 {
+                    // The page is not present. Handle it as a user page fault,
+                    // and retry the usercopy if it succeeds.
+                    if handle_user_page_fault(read_cr2()).is_ok() {
+                        return;
+                    }
+                }
+
                 frame.rip = recover_rip;
                 frame.rax = 1;
                 return;
             }
 
             // Unknown kernel page fault. This is a bug.
-            let cr2: u64;
-            unsafe {
-                asm!("mov {cr2}, cr2", cr2 = out(reg) cr2);
-            }
+            let cr2 = read_cr2();
             panic!(
                 "kernel page fault (CR2={cr2:#x}, RIP={:#x}, error_code={:#x})",
                 frame.rip, frame.error_code
@@ -350,12 +383,14 @@ extern "C" fn handle_kernel_interrupt(frame: &mut InterruptFrame) {
 extern "C" fn handle_user_interrupt(vector: u8, error_code: u64) -> ! {
     match vector {
         EXCEPTION_PAGE_FAULT => {
-            let cr2: u64;
-            unsafe {
-                asm!("mov {cr2}, cr2", cr2 = out(reg) cr2);
+            let cr2 = read_cr2();
+            if error_code & PF_PRESENT != 0 {
+                panic!("user protection fault (CR2={cr2:#x}, error_code={error_code:#x})");
             }
 
-            trace!("Page Fault (CR2={:x})", cr2);
+            if handle_user_page_fault(cr2).is_err() {
+                panic!("unhandled user page fault (CR2={cr2:#x})");
+            }
         }
         vector if vector >= IRQ_VECTOR_BASE => {
             let irq = vector - IRQ_VECTOR_BASE;

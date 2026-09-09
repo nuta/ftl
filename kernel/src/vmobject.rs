@@ -94,6 +94,22 @@ impl VmObject {
         Ok(page.paddr)
     }
 
+    /// Returns the physical address of the page if it is already filled.
+    ///
+    /// Returns `None` if the page is not filled.
+    pub fn page_paddr(&self, index: usize) -> Option<PAddr> {
+        let mutable = self.mutable.lock();
+        let Some(page) = mutable.pages.get(index) else {
+            return None;
+        };
+
+        let Some(page) = page.as_ref() else {
+            return None;
+        };
+
+        Some(page.paddr)
+    }
+
     pub fn write(&self, offset: usize, buf: &[u8]) -> Result<(), ErrorCode> {
         let mut off = 0;
         self.read_write(offset, buf.len(), |page_slice| {

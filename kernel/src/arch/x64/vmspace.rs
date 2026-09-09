@@ -217,6 +217,12 @@ impl VmSpace {
         }
 
         *entry = Pte::new(paddr, flags);
+
+        // Invalidate the page in the TLB to let CPU reread the new entry.
+        unsafe {
+            asm!("invlpg [{}]", in(reg) uaddr, options(nostack, preserves_flags));
+        }
+
         Ok(())
     }
 }
