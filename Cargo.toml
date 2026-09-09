@@ -10,7 +10,7 @@ members = ["kernel", "libs/*", "drivers/*", "lx"]
 [workspace.dependencies]
 ftl = { path = "libs/ftl" }
 ftl_utils = { path = "libs/ftl_utils" }
-ftl_bump_allocator = { path = "libs/ftl_bump_allocator" }
+ftl_bitmap_allocator = { path = "libs/ftl_bitmap_allocator" }
 ftl_arrayvec = { path = "libs/ftl_arrayvec" }
 ftl_malloc = { path = "libs/ftl_malloc" }
 ftl_elf = { path = "libs/ftl_elf" }

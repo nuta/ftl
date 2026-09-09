@@ -5,8 +5,10 @@ use core::ops::Range;
 use core::ptr::null_mut;
 
 use ftl_arrayvec::ArrayVec;
-use ftl_bump_allocator::BumpAllocator;
+use ftl_bitmap_allocator::BitmapAllocator;
 use ftl_malloc::LinkedListAllocator;
+use ftl_utils::alignment::align_down;
+use ftl_utils::alignment::align_up;
 use ftl_utils::alignment::is_aligned;
 use ftl_utils::formatter::ByteSize;
 use ftl_utils::spinlock::SpinLock;
@@ -93,22 +95,29 @@ pub enum PageType {
 }
 
 pub struct PageAllocator {
-    regions: SpinLock<ArrayVec<BumpAllocator, 8>>,
+    inner: BitmapAllocator,
 }
 
 impl PageAllocator {
     const fn new() -> Self {
         Self {
-            regions: SpinLock::new(ArrayVec::new()),
+            inner: BitmapAllocator::new(MIN_PAGE_SIZE),
         }
     }
 
     pub fn add_region(&self, start: PAddr, end: PAddr) {
-        let mut regions = self.regions.lock();
+        let start = align_up(start.as_usize(), MIN_PAGE_SIZE);
+        let end = align_down(end.as_usize(), MIN_PAGE_SIZE);
+        let len = end.saturating_sub(start);
+        if len == 0 {
+            warn!("free RAM region is empty: {start:x}");
+            return;
+        }
 
-        let allocator = BumpAllocator::new(start.as_usize(), end.as_usize());
-        if regions.try_push(allocator).is_err() {
-            trace!("too many free RAM regions");
+        let paddr = PAddr::new(start);
+        let ptr = arch::paddr2vaddr(paddr).as_mut_ptr();
+        if let Err(err) = unsafe { self.inner.add_chunk(ptr, start, len) } {
+            trace!("failed to add free RAM region: {err:?}");
         }
     }
 
@@ -117,32 +126,37 @@ impl PageAllocator {
     /// `len` is the size in bytes to allocate, and must be a multiple of the
     /// minimum page size (typically 4096 bytes).
     pub fn alloc(&self, len: usize, page_type: PageType) -> Option<PAddr> {
-        debug_assert!(len > 0);
-        debug_assert!(is_aligned(len, MIN_PAGE_SIZE));
+        if len == 0 {
+            trace!("tried to allocate 0 bytes");
+            return None;
+        }
 
-        let mut regions = self.regions.lock();
-        for region in regions.iter_mut() {
-            if let Some(addr) = region.alloc(len, MIN_PAGE_SIZE) {
-                let paddr = PAddr::new(addr);
+        if !is_aligned(len, MIN_PAGE_SIZE) {
+            trace!("tried to allocate unaligned size: {len}");
+            return None;
+        }
 
-                match page_type {
-                    PageType::Dirty => {
-                        // Do nothing.
-                    }
-                    PageType::Zeroed => {
-                        let vaddr = arch::paddr2vaddr(paddr);
-                        let ptr = vaddr.as_usize() as *mut u8;
-                        unsafe {
-                            core::ptr::write_bytes(ptr, 0, len);
-                        }
-                    }
+        let paddr = match unsafe { self.inner.alloc(len / MIN_PAGE_SIZE) } {
+            Ok(addr) => addr,
+            Err(err) => {
+                trace!("failed to allocate from page allocator: {err:?}");
+                return None;
+            }
+        };
+
+        let paddr = PAddr::new(paddr);
+        match page_type {
+            PageType::Dirty => {}
+            PageType::Zeroed => {
+                let vaddr = arch::paddr2vaddr(paddr);
+                let ptr = vaddr.as_usize() as *mut u8;
+                unsafe {
+                    core::ptr::write_bytes(ptr, 0, len);
                 }
-
-                return Some(paddr);
             }
         }
 
-        None
+        Some(paddr)
     }
 }
 

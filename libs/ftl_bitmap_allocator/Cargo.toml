@@ -1,8 +1,9 @@
 [package]
-name = "ftl_bump_allocator"
+name = "ftl_bitmap_allocator"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
 
 [dependencies]
+ftl_arrayvec = { workspace = true }
 ftl_utils = { workspace = true }

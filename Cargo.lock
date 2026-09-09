@@ -34,9 +34,10 @@ name = "ftl_arrayvec"
 version = "0.0.0"
 
 [[package]]
-name = "ftl_bump_allocator"
+name = "ftl_bitmap_allocator"
 version = "0.0.0"
 dependencies = [
+ "ftl_arrayvec",
  "ftl_utils",
 ]
 
@@ -87,7 +88,7 @@ name = "kernel"
 version = "0.0.0"
 dependencies = [
  "ftl_arrayvec",
- "ftl_bump_allocator",
+ "ftl_bitmap_allocator",
  "ftl_driver",
  "ftl_elf",
  "ftl_malloc",
