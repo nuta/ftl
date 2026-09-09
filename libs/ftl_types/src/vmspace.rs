@@ -5,24 +5,10 @@ use core::ops::BitOrAssign;
 pub struct PageAttrs(usize);
 
 impl PageAttrs {
-    // X64 PTE flags.
-    #[cfg(target_arch = "x86_64")]
+    // Permission bits, translated into hardware flags by the kernel.
     pub const EMPTY: Self = Self(0);
-    #[cfg(target_arch = "x86_64")]
-    pub const READ: Self = Self(1 << 0); // TODO: This is Pbit actually. Should we use 0?
-    #[cfg(target_arch = "x86_64")]
-    pub const WRITE: Self = Self(1 << 1);
-    #[cfg(target_arch = "x86_64")]
-    pub const EXEC: Self = Self(1 << 2);
-
-    // Host environment page attributes.
-    #[cfg(not(target_os = "none"))]
-    pub const EMPTY: Self = Self(0);
-    #[cfg(not(target_os = "none"))]
     pub const READ: Self = Self(1 << 0);
-    #[cfg(not(target_os = "none"))]
     pub const WRITE: Self = Self(1 << 1);
-    #[cfg(not(target_os = "none"))]
     pub const EXEC: Self = Self(1 << 2);
 
     pub const fn contains(self, other: Self) -> bool {

@@ -139,7 +139,7 @@ unsafe extern "C" fn x64_boot() -> ! {
         // Enable Long Mode.
         "mov ecx, 0xc0000080", // EFER MSR
         "rdmsr",
-        "or eax, 1 << 8", // Long Mode Enable
+        "or eax, 1 << 8 | 1 << 11", // Long Mode Enable, NX bit enable
         "wrmsr",
 
         // Enable paging.

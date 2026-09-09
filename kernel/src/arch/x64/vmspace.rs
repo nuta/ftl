@@ -26,6 +26,7 @@ const PTE_V: u64 = 1 << 0;
 const PTE_W: u64 = 1 << 1;
 const PTE_U: u64 = 1 << 2;
 const PTE_HUGE: u64 = 1 << 7;
+const PTE_NX: u64 = 1 << 63;
 
 /// The boot-time PML4. The boot code will populate this.
 pub(super) static mut BOOT_PML4: Table = Table([Pte(0); ENTRIES_PER_TABLE]);
@@ -182,6 +183,12 @@ impl VmSpace {
     ) -> Result<(), ErrorCode> {
         let uaddr = uaddr.as_usize();
 
+        // Validate the page attributes.
+        let allowed_attrs = PageAttrs::READ | PageAttrs::WRITE | PageAttrs::EXEC;
+        if !allowed_attrs.contains(attrs) {
+            return Err(ErrorCode::InvalidArg);
+        }
+
         if !is_aligned(uaddr, MIN_PAGE_SIZE)
             || !paddr.is_aligned(MIN_PAGE_SIZE)
             || !is_aligned(len, MIN_PAGE_SIZE)
@@ -200,7 +207,16 @@ impl VmSpace {
             return Err(ErrorCode::AlreadyExists);
         }
 
-        *entry = Pte::new(paddr, PTE_V | PTE_U | attrs.as_raw() as u64);
+        // Translate the page attributes into page table entry flags.
+        let mut flags = PTE_V | PTE_U;
+        if attrs.contains(PageAttrs::WRITE) {
+            flags |= PTE_W;
+        }
+        if !attrs.contains(PageAttrs::EXEC) {
+            flags |= PTE_NX;
+        }
+
+        *entry = Pte::new(paddr, flags);
         Ok(())
     }
 }
