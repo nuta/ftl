@@ -78,7 +78,11 @@ fn enable_sse() {
 }
 
 /// The per-CPU kernel stack size.
-pub(super) const KERNEL_STACK_SIZE: usize = 1024 * 1024;
+pub(super) const KERNEL_STACK_SIZE: usize = if cfg!(debug_assertions) {
+    1024 * 1024
+} else {
+    128 * 1024
+};
 
 /// A kernel stack. Aligned to 16 bytes for ABI.
 #[repr(align(16))]
