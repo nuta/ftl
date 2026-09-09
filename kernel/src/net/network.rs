@@ -7,7 +7,9 @@ use ftl_driver::dma::DmaBuf;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use ftl_types::handle::HandleRight;
+use ftl_types::net::ETHTYPE_IPV4;
 use ftl_types::net::FiveTuple;
+use ftl_types::net::IPPROTO_TCP;
 use ftl_types::net::Rule;
 use ftl_types::poll::EventKind;
 use ftl_types::thread::SyscallRegs;
@@ -17,6 +19,7 @@ use super::device::Device;
 use super::device::Tx;
 use super::packet::ipv4::Ipv4Inspector;
 use super::packet::ipv4::Ipv4Rewriter;
+use super::packet::tcp::TcpInspector;
 use super::packet::tcp::TcpRewriter;
 use super::route_table::RouteTable;
 use crate::address::UAddr;
@@ -122,6 +125,7 @@ impl Network {
         Err(ErrorCode::NotFound)
     }
 
+    /// Returns true if the given five-tuple matches any of bindings.
     pub fn matches(&self, five_tuple: FiveTuple) -> bool {
         // TODO: Sort the bindings by specificity to avoid iterating through all of them.
         for binding in self.bindings.lock().iter() {
@@ -140,9 +144,6 @@ impl Network {
         // Copy the header from the user.
         header.read_bytes(tx.header_bytes())?;
 
-        // FIXME: Check if the network owns the binding (our IP/port), and figure out
-        //        the expected protocols, then validate the IP and TCP headers.
-
         // Copy the payload from the user.
         if let Some(payload_bytes) = tx.payload_bytes() {
             payload.read_bytes(payload_bytes)?;
@@ -157,6 +158,16 @@ impl Network {
             }
         };
 
+        // Only TCP is supported for now.
+        if ipv4.ip_proto() != IPPROTO_TCP {
+            return Err(ErrorCode::InvalidArg);
+        }
+
+        // Fragmented packets are not supported.
+        if ipv4.fragment_offset() & 0x3fff != 0 {
+            return Err(ErrorCode::InvalidArg);
+        }
+
         // Select the route from the destination in the IPv4 header.
         let dst_ip = ipv4.dst_ip();
         let route = self
@@ -169,6 +180,28 @@ impl Network {
         let ipv4_header_len = ipv4.header_len();
         let (header, payload) = tx.header_and_payload_bytes();
         let tcp_bytes = &mut header[ipv4_header_len..];
+        let tcp = match TcpInspector::new(tcp_bytes) {
+            Ok(tcp) => tcp,
+            Err(e) => {
+                trace!("invalid TCP header: {:?}", e);
+                return Err(ErrorCode::InvalidArg);
+            }
+        };
+
+        let five_tuple = FiveTuple {
+            eth_type: ETHTYPE_IPV4,
+            ip_proto: IPPROTO_TCP,
+            local_ip: our_ip.as_u32(),
+            local_port: tcp.src_port(),
+            remote_ip: dst_ip.as_u32(),
+            remote_port: tcp.dst_port(),
+        };
+
+        // Check if this network owns the five-tuple.
+        if !self.matches(five_tuple) {
+            return Err(ErrorCode::NotAllowed);
+        }
+
         let mut tcp = match TcpRewriter::new(tcp_bytes) {
             Ok(tcp) => tcp,
             Err(e) => {
