@@ -66,7 +66,7 @@ pub fn return_to_user() -> ! {
     {
         // The current thread is runnable. Push it back to the scheduler.
         SCHEDULER
-            .push_front(current)
+            .push_back(current)
             .expect("out of memory in runqueue"); // FIXME:
     }
 
