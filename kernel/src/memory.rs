@@ -18,7 +18,7 @@ use crate::boot::BootInfo;
 use crate::boot::FreeRam;
 use crate::boot::NUM_MODULES_MAX;
 
-const MALLOC_CHUNK_SIZE: usize = 512 * 1024; // 512 KB
+const MALLOC_CHUNK_SIZE: usize = 128 * 1024; // 128 KB
 
 #[global_allocator]
 static GLOBAL_ALLOCATOR: GlobalAllocator = GlobalAllocator::new();
