@@ -9,7 +9,9 @@ use ftl_types::thread::SyscallRegs;
 
 use super::gdt::GDT_USER_CS;
 use super::gdt::GDT_USER_DS;
+use super::vaddr2paddr;
 use crate::address::USlice;
+use crate::address::VAddr;
 use crate::arch;
 use crate::arch::MIN_PAGE_SIZE;
 use crate::arch::USER_ADDR_END;
@@ -48,6 +50,14 @@ pub struct Thread {
     pub(super) xsave_ptr: u64,
     pub(super) fault_pc: u64,
     pub(super) cookie: u64,
+}
+
+impl Drop for Thread {
+    fn drop(&mut self) {
+        let paddr = vaddr2paddr(VAddr::new(self.xsave_ptr as usize));
+        // SAFETY: This thread owns the XSAVE page allocated by Thread::new.
+        unsafe { PAGE_ALLOCATOR.free(paddr, MIN_PAGE_SIZE) };
+    }
 }
 
 impl Thread {

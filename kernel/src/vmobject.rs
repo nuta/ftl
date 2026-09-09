@@ -27,6 +27,13 @@ struct Page {
     paddr: PAddr,
 }
 
+impl Drop for Page {
+    fn drop(&mut self) {
+        // SAFETY: This page owns the allocation from PAGE_ALLOCATOR.
+        unsafe { PAGE_ALLOCATOR.free(self.paddr, MIN_PAGE_SIZE) };
+    }
+}
+
 /// A page initializer.
 enum Pager {
     /// Pages are filled with zeros.
