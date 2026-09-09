@@ -70,6 +70,10 @@ impl Pte {
         self.0 & PTE_HUGE != 0
     }
 
+    const fn is_user(self) -> bool {
+        self.0 & PTE_U != 0
+    }
+
     const fn paddr(self) -> PAddr {
         let paddr = self.0 & 0x000f_ffff_ffff_f000;
         PAddr::new(paddr as usize)
@@ -140,6 +144,50 @@ pub struct VmSpace {
     cr3: u64,
 }
 
+fn read_cr3() -> u64 {
+    let cr3: u64;
+    unsafe {
+        asm!("mov {cr3}, cr3", cr3 = out(reg) cr3);
+    }
+    cr3
+}
+
+fn write_cr3(cr3: u64) {
+    unsafe {
+        asm!("mov cr3, {cr3}", cr3 = in(reg) cr3);
+    }
+}
+
+impl Drop for VmSpace {
+    fn drop(&mut self) {
+        let current_cr3 = read_cr3();
+        if current_cr3 == self.cr3 {
+            // This CPU is still using this VM space. Switch to the boot time
+            // one before freeing the space.
+            let pml4_vaddr = VAddr::new(&raw const BOOT_PML4 as usize);
+            let pml4_paddr = vaddr2paddr(pml4_vaddr);
+            write_cr3(pml4_paddr.as_u64());
+        }
+
+        unsafe { free_table(PAddr::new(self.cr3 as usize), 4) };
+    }
+}
+
+unsafe fn free_table(paddr: PAddr, level: usize) {
+    // Free child tables first.
+    if level > 1 {
+        let table = paddr_to_table_mut(paddr);
+        for pte in &table.0[..] {
+            if pte.is_present() && pte.is_user() && !pte.is_huge() {
+                unsafe { free_table(pte.paddr(), level - 1) };
+            }
+        }
+    }
+
+    // Free this page.
+    unsafe { PAGE_ALLOCATOR.free(paddr, MIN_PAGE_SIZE) };
+}
+
 impl VmSpace {
     pub fn new() -> Result<Self, ErrorCode> {
         let pdpt_vaddr = VAddr::new(BOOT_PDPT.0.as_ptr() as usize);
@@ -160,18 +208,11 @@ impl VmSpace {
     }
 
     pub fn switch(&self) {
-        let current_cr3: u64;
-        unsafe {
-            asm!("mov {prev_cr3}, cr3", prev_cr3 = out(reg) current_cr3);
-        }
-
-        if current_cr3 == self.cr3 {
+        if read_cr3() == self.cr3 {
             return;
         }
 
-        unsafe {
-            asm!("mov cr3, {cr3}", cr3 = in(reg) self.cr3);
-        }
+        write_cr3(self.cr3);
     }
 
     pub fn map(

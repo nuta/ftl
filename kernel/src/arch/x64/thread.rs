@@ -9,7 +9,7 @@ use ftl_types::thread::SyscallRegs;
 
 use super::gdt::GDT_USER_CS;
 use super::gdt::GDT_USER_DS;
-use super::vaddr2paddr;
+use super::vmspace::vaddr2paddr;
 use crate::address::USlice;
 use crate::address::VAddr;
 use crate::arch;
