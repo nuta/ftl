@@ -102,7 +102,7 @@ impl Tx {
         arp.set_dst_ip(dst_ip);
     }
 
-    fn free(self, env: &dyn Env) {
+    pub(super) fn free(self, env: &dyn Env) {
         env.free_dma(self.header_buf);
         if let Some(payload_buf) = self.payload_buf {
             env.free_dma(payload_buf);

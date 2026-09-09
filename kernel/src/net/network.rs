@@ -21,6 +21,7 @@ use super::packet::ipv4::Ipv4Inspector;
 use super::packet::ipv4::Ipv4Rewriter;
 use super::packet::tcp::TcpInspector;
 use super::packet::tcp::TcpRewriter;
+use super::route_table::Route;
 use super::route_table::RouteTable;
 use crate::address::UAddr;
 use crate::address::USlice;
@@ -161,7 +162,26 @@ impl Network {
     /// Sends a packet to the network.
     pub fn send(&self, header: USlice, payload: USlice) -> Result<(), ErrorCode> {
         let mut tx = Tx::alloc(&GLOBAL_ENV, header.len(), payload.len())?;
+        let route = match self.prepare_tx(&mut tx, header, payload) {
+            Ok(route) => route,
+            Err(error) => {
+                tx.free(&GLOBAL_ENV);
+                return Err(error);
+            }
+        };
 
+        // Send the packet through the route's next hop.
+        route
+            .device()
+            .send_ipv4(&GLOBAL_ENV, route.next_hop_ip(), tx)
+    }
+
+    fn prepare_tx(
+        &self,
+        tx: &mut Tx,
+        header: USlice,
+        payload: USlice,
+    ) -> Result<SharedRef<Route>, ErrorCode> {
         // Copy the header from the user.
         header.read_bytes(tx.header_bytes())?;
 
@@ -245,10 +265,7 @@ impl Network {
         ipv4.set_src_ip(our_ip);
         ipv4.update_checksum();
 
-        // Send the packet through the route's next hop.
-        route
-            .device()
-            .send_ipv4(&GLOBAL_ENV, route.next_hop_ip(), tx)
+        Ok(route)
     }
 
     /// Receives a packet from the driver.
