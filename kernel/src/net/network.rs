@@ -101,6 +101,16 @@ impl Network {
             return Err(ErrorCode::InvalidArg);
         }
 
+        // Check conflicting bindings.
+        let router = GLOBAL_ROUTER.lock();
+        let Some(router) = router.as_ref() else {
+            return Err(ErrorCode::InvalidState);
+        };
+
+        if router.find_by_rule(&rule, self).is_some() {
+            return Err(ErrorCode::AlreadyExists);
+        }
+
         let mut bindings = self.bindings.lock();
         if bindings.iter().any(|binding| binding.rule == rule) {
             return Err(ErrorCode::AlreadyExists);
@@ -126,10 +136,21 @@ impl Network {
     }
 
     /// Returns true if the given five-tuple matches any of bindings.
-    pub fn matches(&self, five_tuple: FiveTuple) -> bool {
+    pub fn matches_five_tuple(&self, five_tuple: FiveTuple) -> bool {
         // TODO: Sort the bindings by specificity to avoid iterating through all of them.
         for binding in self.bindings.lock().iter() {
             if let Some(_specificity) = binding.rule.matches(five_tuple) {
+                return true;
+            }
+        }
+
+        false
+    }
+
+    /// Returns true if a binding conflicts with the given rule.
+    pub fn conflicts_with(&self, rule: &Rule) -> bool {
+        for binding in self.bindings.lock().iter() {
+            if binding.rule.local_port() == rule.local_port() {
                 return true;
             }
         }
@@ -198,7 +219,7 @@ impl Network {
         };
 
         // Check if this network owns the five-tuple.
-        if !self.matches(five_tuple) {
+        if !self.matches_five_tuple(five_tuple) {
             return Err(ErrorCode::NotAllowed);
         }
 

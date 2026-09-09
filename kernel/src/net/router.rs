@@ -8,6 +8,7 @@ use ftl_types::net::ETHTYPE_ARP;
 use ftl_types::net::ETHTYPE_IPV4;
 use ftl_types::net::FiveTuple;
 use ftl_types::net::IPPROTO_TCP;
+use ftl_types::net::Rule;
 
 use super::device::Device;
 use super::dhcp;
@@ -85,10 +86,20 @@ impl Router {
         Ok(())
     }
 
-    fn find_network(&self, five_tuple: FiveTuple) -> Option<SharedRef<Network>> {
+    fn find_by_five_tuple(&self, five_tuple: FiveTuple) -> Option<SharedRef<Network>> {
         // TODO: 5-tuple hash map to avoid scanning all networks.
         for network in &self.networks {
-            if network.matches(five_tuple) {
+            if network.matches_five_tuple(five_tuple) {
+                return Some(network.clone());
+            }
+        }
+
+        None
+    }
+
+    pub fn find_by_rule(&self, rule: &Rule, exclude: &Network) -> Option<SharedRef<Network>> {
+        for network in &self.networks {
+            if !core::ptr::eq(exclude, network.as_ptr()) && network.conflicts_with(rule) {
                 return Some(network.clone());
             }
         }
@@ -201,7 +212,7 @@ impl Router {
 
         if let Some((five_tuple, trans_header_len)) = five_tuple {
             // Find the network to forward the packet to.
-            let Some(network) = self.find_network(five_tuple) else {
+            let Some(network) = self.find_by_five_tuple(five_tuple) else {
                 return;
             };
 
