@@ -62,21 +62,18 @@ macro_rules! println {
     }};
 }
 
+const MAX_PRINT_LEN: usize = 512;
+
 pub fn sys_print(ctx: &SyscallRegs) -> Result<SyscallOutput, ErrorCode> {
-    let mut addr = UAddr::new(ctx.a0);
-    let mut len = ctx.a1;
-
-    let mut buf = [0; 512];
-    while len > 0 {
-        let copy_len = min(len, buf.len());
-        let slice = &mut buf[..copy_len];
-        USlice::new(addr, copy_len)?.read_bytes(slice)?;
-        crate::arch::console_write(slice);
-
-        // TODO: Handle this in USlice (USliceReader?)
-        addr = addr.add(copy_len).ok_or(ErrorCode::OutOfBounds)?;
-        len -= copy_len;
+    let len = min(ctx.a1, MAX_PRINT_LEN);
+    if len == 0 {
+        return Ok(SyscallOutput::Done(0));
     }
 
-    Ok(SyscallOutput::Done(0))
+    let mut buf = [0; MAX_PRINT_LEN];
+    let slice = &mut buf[..len];
+    USlice::new(UAddr::new(ctx.a0), len)?.read_bytes(slice)?;
+    crate::arch::console_write(slice);
+
+    Ok(SyscallOutput::Done(len))
 }

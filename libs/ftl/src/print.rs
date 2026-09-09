@@ -6,8 +6,14 @@ use ftl_types::syscall::Syscall;
 use crate::arch::syscall2;
 
 fn sys_print(buf: *const u8, len: usize) -> Result<(), ErrorCode> {
-    let bytes = unsafe { core::slice::from_raw_parts(buf, len) };
-    let _ = syscall2(Syscall::Print, bytes.as_ptr() as usize, bytes.len())?;
+    let mut bytes = unsafe { core::slice::from_raw_parts(buf, len) };
+    while !bytes.is_empty() {
+        let written = syscall2(Syscall::Print, bytes.as_ptr() as usize, bytes.len())?;
+        if written == 0 {
+            break;
+        }
+        bytes = &bytes[written..];
+    }
     Ok(())
 }
 
