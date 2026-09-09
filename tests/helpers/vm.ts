@@ -20,6 +20,7 @@ export async function getAvailablePort(): Promise<number> {
 function buildQemuArgs({ hostPort }: { hostPort: number }) {
     return [
         "qemu-system-x86_64",
+        "-machine", "pc,acpi=off",
         "-m", "128",
         "-cpu", "qemu64,+fsgsbase,+xsave,+xsaveopt",
         "-kernel", "ftl.elf",
@@ -29,7 +30,7 @@ function buildQemuArgs({ hostPort }: { hostPort: number }) {
         "--no-reboot",
         "-device", "isa-debug-exit,iobase=0x501,iosize=0x04",
         "-netdev", `user,id=net0,hostfwd=tcp:127.0.0.1:${hostPort}-:80`,
-        "-device", "virtio-net-pci,netdev=net0",
+        "-device", "virtio-net-pci,netdev=net0,romfile=",
     ]
 }
 
