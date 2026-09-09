@@ -2,6 +2,7 @@ use core::alloc::GlobalAlloc;
 use core::alloc::Layout;
 use core::cmp::min;
 use core::ops::Range;
+use core::ptr::null_mut;
 
 use ftl_arrayvec::ArrayVec;
 use ftl_bump_allocator::BumpAllocator;
@@ -50,11 +51,7 @@ unsafe impl GlobalAlloc for GlobalAllocator {
         // The global allocator is out of memory. Try to allocate more from the
         // page allocator.
         let Some(paddr) = PAGE_ALLOCATOR.alloc(MALLOC_CHUNK_SIZE, PageType::Dirty) else {
-            panic!(
-                "out of memory: size={}, align={}",
-                layout.size(),
-                layout.align()
-            );
+            return null_mut();
         };
 
         let ptr = arch::paddr2vaddr(paddr).as_mut_ptr();
@@ -68,11 +65,12 @@ unsafe impl GlobalAlloc for GlobalAllocator {
             return ptr;
         }
 
-        panic!(
+        trace!(
             "failed to malloc from new chunk: size={}, align={}",
             layout.size(),
             layout.align()
         );
+        return null_mut();
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, _layout: Layout) {
