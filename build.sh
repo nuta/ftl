@@ -1,7 +1,6 @@
 #!/bin/bash
 set -eu
 
-APPS=(httpd)
 RELEASE=${RELEASE:-}
 ARCH=${ARCH:-x64}
 
@@ -29,6 +28,7 @@ zig cc -std=c23 -Os -target x86_64-linux-musl -static -no-pie \
     -ffunction-sections -fdata-sections -Wl,--gc-sections \
     -DINDEX_HTML_LENGTH="$(wc -c < apps/httpd/index.html | xargs)" \
     -DNOT_FOUND_HTML_LENGTH="$(wc -c < apps/httpd/404.html | xargs)" \
+    -DHILL_WEBP_LENGTH="$(wc -c < apps/httpd/hill.webp | xargs)" \
     apps/httpd/main.c -o initfs/bin/httpd
 printf 'bin/httpd\0' >> initfs.list
 

@@ -13,11 +13,11 @@
 
 #define STRINGIFY_(value) #value
 #define STRINGIFY(value) STRINGIFY_(value)
-#define RESPONSE_HEADER(status, content_length) \
+#define RESPONSE_HEADER(status, content_length, content_type) \
     "HTTP/1.0 " status "\r\n" \
     "X-Powered-By: FTL\r\n" \
     "Content-Length: " STRINGIFY(content_length) "\r\n" \
-    "Content-Type: text/html\r\n" \
+    "Content-Type: " content_type "\r\n" \
     "Connection: close\r\n" \
     "\r\n"
 
@@ -29,8 +29,13 @@ static const unsigned char not_found_html_body[] = {
 #embed "404.html"
 };
 
-static const char index_header[] = RESPONSE_HEADER("200 OK", INDEX_HTML_LENGTH);
-static const char not_found_header[] = RESPONSE_HEADER("404 Not Found", NOT_FOUND_HTML_LENGTH);
+static const unsigned char hill_webp_body[] = {
+#embed "hill.webp"
+};
+
+static const char index_header[] = RESPONSE_HEADER("200 OK", INDEX_HTML_LENGTH, "text/html");
+static const char not_found_header[] = RESPONSE_HEADER("404 Not Found", NOT_FOUND_HTML_LENGTH, "text/html");
+static const char hill_header[] = RESPONSE_HEADER("200 OK", HILL_WEBP_LENGTH, "image/webp");
 
 struct response {
     const char *header;
@@ -51,6 +56,13 @@ static const struct response not_found_html = {
     .header_len = sizeof(not_found_header) - 1,
     .body = not_found_html_body,
     .body_len = sizeof(not_found_html_body),
+};
+
+static const struct response hill_webp = {
+    .header = hill_header,
+    .header_len = sizeof(hill_header) - 1,
+    .body = hill_webp_body,
+    .body_len = sizeof(hill_webp_body),
 };
 
 struct client {
@@ -137,6 +149,8 @@ static void read_request(struct client *c) {
         if (strstr(c->request, "GET / ") != NULL ||
             strstr(c->request, "GET /index.html ") != NULL) {
             c->response = &index_html;
+        } else if (strstr(c->request, "GET /hill.webp ") != NULL) {
+            c->response = &hill_webp;
         } else {
             c->response = &not_found_html;
         }
