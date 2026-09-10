@@ -15,7 +15,7 @@ mod wait4;
 mod write;
 mod writev;
 
-use ftl::info;
+use ftl::trace;
 
 use self::accept::sys_accept;
 use self::arch_prctl::sys_arch_prctl;
@@ -69,7 +69,7 @@ pub extern "C" fn handle_syscall(frame: *const SyscallFrame) -> c_long {
 
     // SAFETY: The kernel returns the cookie we gave.
     let current = unsafe { LxThread::from_cookie(frame.cookie) };
-    info!(
+    trace!(
         "syscall: tid={}, n={}, [{:#x}, {:#x}, {:#x}]",
         current.tid(),
         nr,

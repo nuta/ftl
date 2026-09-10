@@ -53,7 +53,10 @@ macro_rules! error {
 #[macro_export]
 macro_rules! trace {
     ($($arg:tt)+) => {{
-        $crate::println!("{}", format_args!($($arg)+));
+        #[cfg(debug_assertions)]
+        {
+            $crate::println!("{}", format_args!($($arg)+));
+        }
     }};
 }
 
