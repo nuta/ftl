@@ -20,7 +20,7 @@ use crate::memory::PageType;
 
 pub(super) const XSTATE_MASK: u64 = (1 << 0) | (1 << 1); // x87 | SSE
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
 #[repr(C, packed)]
 pub struct Thread {
     // IRET frame. The order is important!
@@ -75,7 +75,23 @@ impl Thread {
             fault_pc: fault_pc as u64,
             xsave_ptr: arch::paddr2vaddr(paddr).as_usize() as u64,
             cookie: cookie as u64,
-            ..Default::default()
+            rax: 0,
+            rbx: 0,
+            rcx: 0,
+            rdx: 0,
+            rsi: 0,
+            rdi: 0,
+            rbp: 0,
+            r8: 0,
+            r9: 0,
+            r10: 0,
+            r11: 0,
+            r12: 0,
+            r13: 0,
+            r14: 0,
+            r15: 0,
+            gsbase: 0,
+            fsbase: 0,
         })
     }
 
