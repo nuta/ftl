@@ -88,10 +88,6 @@ impl<'a> ArpInspector<'a> {
         Ipv4Addr::new(read_u32(self.buf, offset_of!(ArpLayout, src_ip)))
     }
 
-    pub fn dst_mac(&self) -> [u8; 6] {
-        read_array(self.buf, offset_of!(ArpLayout, dst_mac))
-    }
-
     pub fn dst_ip(&self) -> Ipv4Addr {
         Ipv4Addr::new(read_u32(self.buf, offset_of!(ArpLayout, dst_ip)))
     }

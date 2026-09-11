@@ -5,3 +5,5 @@ authors.workspace = true
 edition.workspace = true
 
 [dependencies]
+hashbrown = { workspace = true }
+rustc-hash = { workspace = true }

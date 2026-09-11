@@ -1,13 +1,14 @@
 use core::mem::offset_of;
 use core::mem::size_of;
 
+use ftl_types::net::IPPROTO_UDP;
+
 use super::checksum::Checksum;
 use super::helper::read_u16;
 use super::helper::write_u16;
 use super::ipv4::Ipv4Addr;
 use super::ipv4::Ipv4Inspector;
 
-pub const IPPROTO_UDP: u8 = 17;
 pub const UDP_HEADER_LEN: usize = size_of::<UdpHeader>();
 
 #[derive(Debug, PartialEq, Eq)]

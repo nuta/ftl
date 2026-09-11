@@ -1,4 +1,4 @@
-use crate::net::packet::ipv4::Ipv4Addr;
+use crate::packet::ipv4::Ipv4Addr;
 
 pub struct Checksum {
     sum: u32,
@@ -27,7 +27,7 @@ impl Checksum {
         }
 
         // Sum the final byte if bytes are not 16-bit aligned.
-        if bytes.len() % 2 != 0 {
+        if !bytes.len().is_multiple_of(2) {
             self.sum += u32::from(bytes[bytes.len() - 1]) << 8;
         }
     }

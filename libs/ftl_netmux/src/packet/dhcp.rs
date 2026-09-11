@@ -21,7 +21,6 @@ pub const DHCP_DISCOVER: u8 = 1;
 pub const DHCP_OFFER: u8 = 2;
 pub const DHCP_REQUEST: u8 = 3;
 pub const DHCP_ACK: u8 = 5;
-pub const DHCP_NAK: u8 = 6;
 
 pub const OPTION_SUBNET_MASK: u8 = 1;
 pub const OPTION_ROUTER: u8 = 3;
@@ -142,22 +141,22 @@ impl<'a> DhcpInspector<'a> {
     }
 
     pub fn message_type(&self) -> Result<Option<u8>, Error> {
-        if let Some(value) = self.option(OPTION_MESSAGE_TYPE)? {
-            if value.len() == 1 {
-                return Ok(Some(value[0]));
-            }
+        if let Some(value) = self.option(OPTION_MESSAGE_TYPE)?
+            && value.len() == 1
+        {
+            return Ok(Some(value[0]));
         }
 
         Ok(None)
     }
 
     pub fn ipv4_option(&self, code: u8) -> Result<Option<Ipv4Addr>, Error> {
-        if let Some(value) = self.option(code)? {
-            if let Some(ip_slice) = value.get(..4) {
-                let ip_array = ip_slice.try_into().unwrap();
-                let ip_u32 = u32::from_be_bytes(ip_array);
-                return Ok(Some(Ipv4Addr::new(ip_u32)));
-            }
+        if let Some(value) = self.option(code)?
+            && let Some(ip_slice) = value.get(..4)
+        {
+            let ip_array = ip_slice.try_into().unwrap();
+            let ip_u32 = u32::from_be_bytes(ip_array);
+            return Ok(Some(Ipv4Addr::new(ip_u32)));
         }
 
         Ok(None)

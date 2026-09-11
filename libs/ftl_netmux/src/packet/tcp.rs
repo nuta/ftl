@@ -5,7 +5,6 @@ use ftl_types::net::IPPROTO_TCP;
 
 use super::checksum::Checksum;
 use super::helper::read_u16;
-use super::helper::read_u32;
 use super::helper::write_u16;
 use super::ipv4::Ipv4Addr;
 use super::ipv4::Ipv4Inspector;
@@ -79,32 +78,8 @@ impl<'a> TcpInspector<'a> {
         read_u16(self.buf, offset_of!(TcpHeader, src_port))
     }
 
-    pub fn seq(&self) -> u32 {
-        read_u32(self.buf, offset_of!(TcpHeader, seq))
-    }
-
-    pub fn ack(&self) -> u32 {
-        read_u32(self.buf, offset_of!(TcpHeader, ack))
-    }
-
-    pub fn flags(&self) -> u8 {
-        self.buf[offset_of!(TcpHeader, flags)]
-    }
-
-    pub fn window_size(&self) -> u16 {
-        read_u16(self.buf, offset_of!(TcpHeader, window_size))
-    }
-
-    pub fn checksum(&self) -> u16 {
-        read_u16(self.buf, offset_of!(TcpHeader, checksum))
-    }
-
     pub fn header_len(&self) -> usize {
         self.header_len
-    }
-
-    pub fn payload_len(&self) -> usize {
-        self.buf.len() - self.header_len
     }
 }
 

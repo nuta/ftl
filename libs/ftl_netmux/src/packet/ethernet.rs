@@ -33,10 +33,6 @@ impl<'a> EthernetInspector<'a> {
         Ok(Self { buf })
     }
 
-    pub fn dst_mac(&self) -> [u8; 6] {
-        read_array(self.buf, offset_of!(EthernetHeader, dst_mac))
-    }
-
     pub fn src_mac(&self) -> [u8; 6] {
         read_array(self.buf, offset_of!(EthernetHeader, src_mac))
     }

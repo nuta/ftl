@@ -1,4 +1,11 @@
 #[macro_export]
+macro_rules! info {
+    ($io:expr, $($arg:tt)+) => {{
+        $crate::println!($io, "[driver   ] \x1b[32mINFO\x1b[0m   {}", format_args!($($arg)+));
+    }};
+}
+
+#[macro_export]
 macro_rules! warn {
     ($io:expr, $($arg:tt)+) => {{
         $crate::println!(

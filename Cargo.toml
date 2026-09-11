@@ -17,6 +17,7 @@ ftl_elf = { path = "libs/ftl_elf" }
 ftl_types = { path = "libs/ftl_types" }
 ftl_virtio = { path = "libs/ftl_virtio" }
 ftl_driver = { path = "libs/ftl_driver" }
+ftl_netmux = { path = "libs/ftl_netmux" }
 virtio_net = { path = "drivers/virtio_net" }
 hashbrown = "0.17.1"
 rustc-hash = { version = "2.1", default-features = false }

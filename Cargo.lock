@@ -57,12 +57,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "ftl_netmux"
+version = "0.0.0"
+dependencies = [
+ "ftl_driver",
+ "ftl_types",
+ "ftl_utils",
+]
+
+[[package]]
 name = "ftl_types"
 version = "0.0.0"
 
 [[package]]
 name = "ftl_utils"
 version = "0.0.0"
+dependencies = [
+ "hashbrown",
+ "rustc-hash",
+]
 
 [[package]]
 name = "ftl_virtio"
@@ -92,6 +105,7 @@ dependencies = [
  "ftl_driver",
  "ftl_elf",
  "ftl_malloc",
+ "ftl_netmux",
  "ftl_types",
  "ftl_utils",
  "hashbrown",

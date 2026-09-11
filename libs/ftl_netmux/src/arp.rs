@@ -1,29 +1,29 @@
 use alloc::collections::VecDeque;
 
-use hashbrown::HashMap;
+use ftl_utils::fxhash::FxHashMap;
 
-use super::device::Tx;
-use super::packet::ipv4::Ipv4Addr;
+use crate::device::Tx;
+use crate::packet::ipv4::Ipv4Addr;
 
 const MAX_PENDING_TX_QUEUE_DEPTH: usize = 128;
 
-enum ArpEntry {
+enum ArpEntry<'a> {
     Resolved {
         mac: [u8; 6],
     },
     Pending {
         /// TX packets that are waiting for the ARP response.
-        txs: VecDeque<Tx>,
+        txs: VecDeque<Tx<'a>>,
     },
 }
 
 /// A guard struct to enqueue TX packets safely.
-pub struct Inserter<'a> {
-    txs: &'a mut VecDeque<Tx>,
+pub struct Inserter<'q, 'a> {
+    txs: &'q mut VecDeque<Tx<'a>>,
 }
 
-impl<'a> Inserter<'a> {
-    pub fn new(txs: &'a mut VecDeque<Tx>) -> Option<Self> {
+impl<'q, 'a> Inserter<'q, 'a> {
+    pub fn new(txs: &'q mut VecDeque<Tx<'a>>) -> Option<Self> {
         if txs.len() < MAX_PENDING_TX_QUEUE_DEPTH {
             Some(Self { txs })
         } else {
@@ -31,23 +31,23 @@ impl<'a> Inserter<'a> {
         }
     }
 
-    pub fn enqueue(self, tx: Tx) {
+    pub fn enqueue(self, tx: Tx<'a>) {
         self.txs.push_back(tx);
     }
 }
 
-pub struct ArpTable {
-    entries: HashMap<Ipv4Addr, ArpEntry>,
+pub struct ArpTable<'a> {
+    entries: FxHashMap<Ipv4Addr, ArpEntry<'a>>,
 }
 
-impl ArpTable {
+impl<'a> ArpTable<'a> {
     pub fn new() -> Self {
         Self {
-            entries: HashMap::new(),
+            entries: FxHashMap::new(),
         }
     }
 
-    pub fn lookup_or_insert(&mut self, ip: Ipv4Addr) -> Result<&[u8; 6], Option<Inserter<'_>>> {
+    pub fn lookup_or_insert(&mut self, ip: Ipv4Addr) -> Result<&[u8; 6], Option<Inserter<'_, 'a>>> {
         let entry = self.entries.entry(ip).or_insert_with(|| {
             ArpEntry::Pending {
                 txs: VecDeque::new(),
@@ -60,7 +60,7 @@ impl ArpTable {
         }
     }
 
-    pub fn resolve(&mut self, ip: Ipv4Addr, mac: [u8; 6]) -> VecDeque<Tx> {
+    pub fn resolve(&mut self, ip: Ipv4Addr, mac: [u8; 6]) -> VecDeque<Tx<'a>> {
         match self.entries.insert(ip, ArpEntry::Resolved { mac }) {
             Some(ArpEntry::Pending { txs }) => txs,
             _ => VecDeque::new(),

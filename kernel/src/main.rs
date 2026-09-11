@@ -15,6 +15,7 @@ mod address;
 mod arch;
 mod boot;
 mod cpuvar;
+mod driver;
 mod handle;
 mod isolate;
 mod loader;

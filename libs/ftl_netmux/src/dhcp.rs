@@ -1,31 +1,31 @@
+use ftl_driver::env::Env;
 use ftl_types::error::ErrorCode;
-use ftl_utils::spinlock::SpinLock;
 
-use super::device::Device;
-use super::packet::dhcp::DHCP_ACK;
-use super::packet::dhcp::DHCP_BROADCAST;
-use super::packet::dhcp::DHCP_CLIENT_PORT;
-use super::packet::dhcp::DHCP_DISCOVER;
-use super::packet::dhcp::DHCP_ETHERNET_ADDR_LEN;
-use super::packet::dhcp::DHCP_HW_ETHERNET;
-use super::packet::dhcp::DHCP_OFFER;
-use super::packet::dhcp::DHCP_OP_REQUEST;
-use super::packet::dhcp::DHCP_REQUEST;
-use super::packet::dhcp::DHCP_SERVER_PORT;
-use super::packet::dhcp::DhcpInspector;
-use super::packet::dhcp::DhcpRewriter;
-use super::packet::dhcp::OPTION_MESSAGE_TYPE;
-use super::packet::dhcp::OPTION_PARAM_REQUEST_LIST;
-use super::packet::dhcp::OPTION_REQUESTED_IP;
-use super::packet::dhcp::OPTION_ROUTER;
-use super::packet::dhcp::OPTION_SERVER_ID;
-use super::packet::dhcp::OPTION_SUBNET_MASK;
-use super::packet::ipv4::Ipv4Addr;
-use super::packet::ipv4::Ipv4Inspector;
-use super::packet::ipv4::NetMask;
-use super::packet::udp::UdpInspector;
-use super::udp;
-use crate::shared_ref::SharedRef;
+use crate::device::Device;
+use crate::packet::dhcp::DHCP_ACK;
+use crate::packet::dhcp::DHCP_BROADCAST;
+use crate::packet::dhcp::DHCP_CLIENT_PORT;
+use crate::packet::dhcp::DHCP_DISCOVER;
+use crate::packet::dhcp::DHCP_ETHERNET_ADDR_LEN;
+use crate::packet::dhcp::DHCP_HW_ETHERNET;
+use crate::packet::dhcp::DHCP_OFFER;
+use crate::packet::dhcp::DHCP_OP_REQUEST;
+use crate::packet::dhcp::DHCP_REQUEST;
+use crate::packet::dhcp::DHCP_SERVER_PORT;
+use crate::packet::dhcp::DhcpInspector;
+use crate::packet::dhcp::DhcpRewriter;
+use crate::packet::dhcp::Error;
+use crate::packet::dhcp::OPTION_MESSAGE_TYPE;
+use crate::packet::dhcp::OPTION_PARAM_REQUEST_LIST;
+use crate::packet::dhcp::OPTION_REQUESTED_IP;
+use crate::packet::dhcp::OPTION_ROUTER;
+use crate::packet::dhcp::OPTION_SERVER_ID;
+use crate::packet::dhcp::OPTION_SUBNET_MASK;
+use crate::packet::ipv4::Ipv4Addr;
+use crate::packet::ipv4::Ipv4Inspector;
+use crate::packet::ipv4::NetMask;
+use crate::packet::udp::UdpInspector;
+use crate::udp;
 
 const DHCP_PACKET_LEN: usize = 300;
 const TX_ID: u32 = 0x1234_5678;
@@ -51,29 +51,30 @@ struct Request {
 }
 
 /// A DHCP client.
-struct Client {
+pub(crate) struct Client {
     mac: [u8; 6],
     state: State,
 }
 
 impl Client {
-    fn new(mac: [u8; 6]) -> Self {
+    pub(crate) fn new(mac: [u8; 6]) -> Self {
         Self {
             mac,
             state: State::Discovering,
         }
     }
 
-    fn handle_rx(
+    pub(crate) fn handle_rx<'a>(
         &mut self,
-        device: &SharedRef<Device>,
+        env: &'a dyn Env,
+        device: &Device<'a>,
         ipv4: &Ipv4Inspector<'_>,
         udp: &UdpInspector<'_>,
     ) -> Option<DhcpConfig> {
         let packet = match DhcpInspector::new(udp.payload()) {
             Ok(packet) => packet,
             Err(error) => {
-                trace!("failed to inspect DHCP packet: {:?}", error);
+                ftl_driver::trace!(env, "failed to inspect DHCP packet: {:?}", error);
                 return None;
             }
         };
@@ -82,7 +83,7 @@ impl Client {
             Ok(Some(message_type)) => message_type,
             Ok(None) => return None,
             Err(error) => {
-                trace!("failed to inspect DHCP options: {:?}", error);
+                ftl_driver::trace!(env, "failed to inspect DHCP options: {:?}", error);
                 return None;
             }
         };
@@ -104,8 +105,8 @@ impl Client {
         }
 
         let request = self.handle_offer(&packet, ipv4.src_ip())?;
-        if let Err(error) = self.send_request(device, request) {
-            warn!("failed to send DHCP request: {:?}", error);
+        if let Err(error) = self.send_request(env, device, request) {
+            ftl_driver::warn!(env, "failed to send DHCP request: {:?}", error);
         }
         None
     }
@@ -165,8 +166,12 @@ impl Client {
         })
     }
 
-    fn send_discover(&self, device: &SharedRef<Device>) -> Result<(), ErrorCode> {
-        self.do_send(device, DHCP_DISCOVER, |packet| {
+    pub(crate) fn send_discover<'a>(
+        &self,
+        env: &'a dyn Env,
+        device: &Device<'a>,
+    ) -> Result<(), ErrorCode> {
+        self.do_send(env, device, DHCP_DISCOVER, |packet| {
             packet.write_option(
                 OPTION_PARAM_REQUEST_LIST,
                 &[OPTION_SUBNET_MASK, OPTION_ROUTER, OPTION_SERVER_ID],
@@ -175,8 +180,13 @@ impl Client {
         })
     }
 
-    fn send_request(&self, device: &SharedRef<Device>, req: Request) -> Result<(), ErrorCode> {
-        self.do_send(device, DHCP_REQUEST, |packet| {
+    fn send_request<'a>(
+        &self,
+        env: &'a dyn Env,
+        device: &Device<'a>,
+        req: Request,
+    ) -> Result<(), ErrorCode> {
+        self.do_send(env, device, DHCP_REQUEST, |packet| {
             packet.write_option(OPTION_REQUESTED_IP, &req.address.as_u32().to_be_bytes())?;
             packet.write_option(OPTION_SERVER_ID, &req.server.as_u32().to_be_bytes())?;
             packet.write_option(
@@ -187,11 +197,12 @@ impl Client {
         })
     }
 
-    fn do_send(
+    fn do_send<'a>(
         &self,
-        device: &SharedRef<Device>,
+        env: &'a dyn Env,
+        device: &Device<'a>,
         message_type: u8,
-        option_writer: impl FnOnce(&mut DhcpRewriter<'_>) -> Result<(), super::packet::dhcp::Error>,
+        option_writer: impl FnOnce(&mut DhcpRewriter<'_>) -> Result<(), Error>,
     ) -> Result<(), ErrorCode> {
         let mut bytes = [0u8; DHCP_PACKET_LEN];
         let mut packet = DhcpRewriter::new(&mut bytes).unwrap();
@@ -209,36 +220,17 @@ impl Client {
         if let Err(error) = option_writer(&mut packet) {
             // This should not fail, but option_writer may add too many
             // options.
-            warn!("failed to write DHCP options: {:?}", error);
+            ftl_driver::warn!(env, "failed to write DHCP options: {:?}", error);
             return Err(ErrorCode::InvalidArg);
         }
 
         if let Err(error) = packet.finish() {
             // This should not fail, but option_writer may add too many
             // options.
-            warn!("failed to finish DHCP packet: {:?}", error);
+            ftl_driver::warn!(env, "failed to finish DHCP packet: {:?}", error);
             return Err(ErrorCode::InvalidArg);
         }
 
-        udp::send_broadcast(device, DHCP_CLIENT_PORT, DHCP_SERVER_PORT, &bytes)
+        udp::send_broadcast(env, device, DHCP_CLIENT_PORT, DHCP_SERVER_PORT, &bytes)
     }
-}
-
-static CLIENT: SpinLock<Option<Client>> = SpinLock::new(None);
-
-pub fn start(device: &SharedRef<Device>) {
-    let mac = *device.driver().mac_address();
-    let mut client = CLIENT.lock();
-    *client = Some(Client::new(mac));
-    if let Err(error) = client.as_ref().unwrap().send_discover(device) {
-        warn!("failed to send DHCP discover: {:?}", error);
-    }
-}
-
-pub fn handle_rx(
-    device: &SharedRef<Device>,
-    ipv4: &Ipv4Inspector<'_>,
-    udp: &UdpInspector<'_>,
-) -> Option<DhcpConfig> {
-    CLIENT.lock().as_mut()?.handle_rx(device, ipv4, udp)
 }

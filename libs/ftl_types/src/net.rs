@@ -4,8 +4,9 @@ use core::num::NonZeroU32;
 pub const ETHTYPE_IPV4: u16 = 0x0800;
 pub const ETHTYPE_ARP: u16 = 0x0806;
 pub const IPPROTO_TCP: u8 = 0x06;
+pub const IPPROTO_UDP: u8 = 0x11;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(C)]
 pub struct Rule {
     eth_type: u16, // eth type
@@ -24,6 +25,55 @@ pub struct FiveTuple {
     pub local_port: u16,
     pub remote_ip: u32,
     pub remote_port: u16,
+}
+
+impl FiveTuple {
+    pub fn matchers(self) -> FiveTupleMatchers {
+        FiveTupleMatchers {
+            tuple: self,
+            state: MatcherState::Exact,
+        }
+    }
+}
+
+enum MatcherState {
+    Exact,
+    LocalPort,
+    Done,
+}
+
+/// An iterator that yields rules that matches the five tuple.
+pub struct FiveTupleMatchers {
+    tuple: FiveTuple,
+    state: MatcherState,
+}
+
+impl Iterator for FiveTupleMatchers {
+    type Item = Rule;
+
+    fn next(&mut self) -> Option<Rule> {
+        let remote_ip = NonZeroU32::new(self.tuple.remote_ip);
+        let remote_port = NonZeroU16::new(self.tuple.remote_port);
+        let (next, remote_ip, remote_port) = match self.state {
+            MatcherState::Exact => (MatcherState::LocalPort, remote_ip, remote_port),
+            MatcherState::LocalPort => (MatcherState::Done, None, None),
+            MatcherState::Done => return None,
+        };
+
+        // The local port must be already matched.
+        let local_port = NonZeroU16::new(self.tuple.local_port)?;
+
+        self.state = next;
+        Some(Rule::new(
+            self.tuple.eth_type,
+            self.tuple.ip_proto,
+            // TODO: binding to a specific local IP
+            None,
+            Some(local_port),
+            remote_ip,
+            remote_port,
+        ))
+    }
 }
 
 impl Rule {
@@ -47,55 +97,5 @@ impl Rule {
 
     pub const fn local_port(&self) -> Option<NonZeroU16> {
         self.local_port
-    }
-
-    /// Returns `Some(specificity)` if the rule matches.
-    ///
-    /// Like CSS selectors, multiple rules may match the same packet. The
-    /// specificity is a number to compare the priority of the rules. Higher is
-    /// more specific, and is non-zero.
-    pub const fn matches(&self, tuple: FiveTuple) -> Option<u8> {
-        if self.eth_type != tuple.eth_type {
-            return None;
-        }
-
-        if self.ip_proto != tuple.ip_proto {
-            return None;
-        }
-
-        let mut specificity = 1;
-        if let Some(expected) = self.local_ip {
-            if expected.get() != tuple.local_ip {
-                return None;
-            }
-
-            specificity += 1;
-        }
-
-        if let Some(expected) = self.remote_ip {
-            if expected.get() != tuple.remote_ip {
-                return None;
-            }
-
-            specificity += 1;
-        }
-
-        if let Some(expected) = self.local_port {
-            if expected.get() != tuple.local_port {
-                return None;
-            }
-
-            specificity += 1;
-        }
-
-        if let Some(expected) = self.remote_port {
-            if expected.get() != tuple.remote_port {
-                return None;
-            }
-
-            specificity += 1;
-        }
-
-        Some(specificity)
     }
 }

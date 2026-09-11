@@ -5,7 +5,7 @@ use crate::dma::DmaBuf;
 #[derive(Debug)]
 pub struct OutOfMemoryError;
 
-pub trait Env {
+pub trait Env: Send + Sync {
     fn alloc_dma(&self, size: usize) -> Result<DmaBuf, OutOfMemoryError>;
     fn free_dma(&self, buf: DmaBuf);
     fn print(&self, args: fmt::Arguments<'_>);

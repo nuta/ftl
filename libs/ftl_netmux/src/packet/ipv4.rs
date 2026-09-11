@@ -136,10 +136,6 @@ impl<'a> Ipv4Inspector<'a> {
         self.buf[offset_of!(Ipv4Header, protocol)]
     }
 
-    pub fn checksum(&self) -> u16 {
-        read_u16(self.buf, offset_of!(Ipv4Header, checksum))
-    }
-
     pub fn dst_ip(&self) -> Ipv4Addr {
         Ipv4Addr(read_u32(self.buf, offset_of!(Ipv4Header, dst_ip)))
     }
@@ -154,10 +150,6 @@ impl<'a> Ipv4Inspector<'a> {
 
     pub fn header_len(&self) -> usize {
         self.header_len
-    }
-
-    pub fn payload_len(&self) -> usize {
-        self.total_len - self.header_len
     }
 
     pub fn payload(&self) -> &'a [u8] {
