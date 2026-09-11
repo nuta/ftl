@@ -37,17 +37,25 @@ pushd initfs
 cpio -o -H newc -0 < ../initfs.list > ../initfs.cpio
 popd
 
+cargo_command=build
+if [[ -n "${CHECK:-}" ]]; then
+  cargo_command=check
+fi
+
 # Build userspace OS.
 FTL_LOG_PREFIX="[$(printf '%-10s' "lx")] " \
-    cargo build "${CARGOFLAGS[@]}" --target libs/ftl/src/arch/$ARCH/user.json \
+    cargo "${cargo_command}" "${CARGOFLAGS[@]}" --target libs/ftl/src/arch/$ARCH/user.json \
        --manifest-path lx/Cargo.toml
-cp target/user/$target/lx lx.elf
 
 # Build kernel.
 FTL_LOG_PREFIX="[$(printf '%-10s' "kernel")] " \
-  cargo build "${CARGOFLAGS[@]}" --target kernel/src/arch/$ARCH/kernel.json \
+  cargo "${cargo_command}" "${CARGOFLAGS[@]}" --target kernel/src/arch/$ARCH/kernel.json \
     --manifest-path kernel/Cargo.toml
-cp target/kernel/$target/kernel ftl.elf
+
+if [[ "$cargo_command" != "check" ]]; then
+  cp target/user/$target/lx lx.elf
+  cp target/kernel/$target/kernel ftl.elf
+fi
 
 # Build ISO if $ISO is set.
 if [[ -n "${ISO:-}" ]]; then
