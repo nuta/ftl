@@ -14,6 +14,7 @@ use crate::packet::arp::ARP_HW_ETHERNET;
 use crate::packet::arp::ARP_HWADDR_LEN;
 use crate::packet::arp::ARP_IPADDR_LEN;
 use crate::packet::arp::ARP_OP_REPLY;
+use crate::packet::arp::ARP_OP_REQUEST;
 use crate::packet::arp::ArpRewriter;
 use crate::packet::ethernet::ETHERNET_HEADER_LEN;
 use crate::packet::ethernet::EthernetRewriter;
@@ -86,8 +87,9 @@ impl<'a> Tx<'a> {
         ethernet.set_eth_type(eth_type);
     }
 
-    fn write_arp_reply(
+    fn write_arp(
         &mut self,
+        op: u16,
         src_mac: &[u8; 6],
         src_ip: Ipv4Addr,
         dst_mac: &[u8; 6],
@@ -98,7 +100,7 @@ impl<'a> Tx<'a> {
         arp.set_protocol_type(ETHTYPE_IPV4);
         arp.set_hardware_addr_len(ARP_HWADDR_LEN);
         arp.set_protocol_addr_len(ARP_IPADDR_LEN);
-        arp.set_operation(ARP_OP_REPLY);
+        arp.set_operation(op);
         arp.set_src_mac(*src_mac);
         arp.set_src_ip(src_ip);
         arp.set_dst_mac(*dst_mac);
@@ -143,12 +145,29 @@ impl<'a> Device<'a> {
         }
     }
 
-    pub fn send_ipv4(&self, next_hop_ip: Ipv4Addr, mut tx: Tx<'a>) -> Result<(), ErrorCode> {
+    pub fn send_ipv4(
+        &self,
+        our_ip: Ipv4Addr,
+        next_hop_ip: Ipv4Addr,
+        mut tx: Tx<'a>,
+    ) -> Result<(), ErrorCode> {
+        // Look up the destination MAC address in the ARP table.
         let mut arp_table = self.arp_table.lock();
         let dst_mac = match arp_table.lookup(next_hop_ip) {
             Ok(dst_mac) => dst_mac,
             Err(Some(inserter)) => {
+                // We don't know the destination MAC address.
                 inserter.enqueue(tx);
+                drop(arp_table);
+
+                // Send an ARP request.
+                let mut request = Tx::alloc(self.env, ArpRewriter::PACKET_LEN, 0)?;
+                let our_mac = self.driver.mac_address();
+                request.write_ethernet_header(&[0xff; 6], our_mac, ETHTYPE_ARP);
+                request.write_arp(ARP_OP_REQUEST, our_mac, our_ip, &[0; 6], next_hop_ip);
+                self.send(request)?;
+
+                // We'll send the enqueued packet later. Finish successfully.
                 return Ok(());
             }
             Err(None) => {
@@ -219,7 +238,7 @@ impl<'a> Device<'a> {
 
         let our_mac = self.driver.mac_address();
         tx.write_ethernet_header(&dst_mac, our_mac, ETHTYPE_ARP);
-        tx.write_arp_reply(our_mac, our_ip, &dst_mac, dst_ip);
+        tx.write_arp(ARP_OP_REPLY, our_mac, our_ip, &dst_mac, dst_ip);
         if let Err(error) = self.send(tx) {
             ftl_driver::warn!(self.env, "failed to send ARP reply: {:?}", error);
         }

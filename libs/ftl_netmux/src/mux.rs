@@ -99,14 +99,14 @@ impl<'a, N: RxNotify> NetMux<'a, N> {
         };
 
         let mut tx = Tx::alloc(self.env, header.len(), payload_len)?;
-        let (device_id, next_hop_ip) = self.prepare_tx(nic, &mut tx, header, payload)?;
+        let (device_id, our_ip, next_hop_ip) = self.prepare_tx(nic, &mut tx, header, payload)?;
 
         // Send the packet through the route's next hop.
         let Some(device) = self.devices.get(&device_id) else {
             return Err(ErrorCode::NotFound);
         };
 
-        device.send_ipv4(next_hop_ip, tx)
+        device.send_ipv4(our_ip, next_hop_ip, tx)
     }
 
     pub fn peek(&mut self, nic: NicId, writer: &mut dyn BufWriter) -> Result<(), ErrorCode> {

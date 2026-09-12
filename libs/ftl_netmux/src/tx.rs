@@ -90,7 +90,7 @@ impl<'a, N: RxNotify> NetMux<'a, N> {
         tx: &mut Tx<'a>,
         header: &mut dyn BufReader,
         payload: Option<&mut dyn BufReader>,
-    ) -> Result<(DeviceId, Ipv4Addr), ErrorCode> {
+    ) -> Result<(DeviceId, Ipv4Addr, Ipv4Addr), ErrorCode> {
         let (header_buf, mut payload_buf) = tx.header_and_payload_bytes();
 
         // Read the header from the user buffer.
@@ -175,6 +175,6 @@ impl<'a, N: RxNotify> NetMux<'a, N> {
         ipv4.set_src_ip(our_ip);
         ipv4.update_checksum();
 
-        Ok((device_id, next_hop_ip))
+        Ok((device_id, our_ip, next_hop_ip))
     }
 }
