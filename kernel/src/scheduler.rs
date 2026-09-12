@@ -9,45 +9,58 @@ use crate::thread::Thread;
 
 pub static SCHEDULER: Scheduler = Scheduler::new();
 
+struct Mutable {
+    run_queue: VecDeque<SharedRef<Thread>>,
+    /// The number of threads in this system.
+    num_threads: usize,
+}
+
 pub struct Scheduler {
-    runqueue: SpinLock<VecDeque<SharedRef<Thread>>>,
+    mutable: SpinLock<Mutable>,
 }
 
 impl Scheduler {
     const fn new() -> Self {
         Self {
-            runqueue: SpinLock::new(VecDeque::new()),
+            mutable: SpinLock::new(Mutable {
+                run_queue: VecDeque::new(),
+                num_threads: 0,
+            }),
         }
+    }
+
+    pub fn reserve_capacity(&self) -> Result<(), ErrorCode> {
+        let mut mutable = self.mutable.lock();
+
+        mutable.num_threads += 1;
+        if mutable.run_queue.capacity() < mutable.num_threads {
+            // The runqueue is not large enough, allocate additional capacity.
+            let additional = mutable.num_threads - mutable.run_queue.len();
+            if mutable.run_queue.try_reserve(additional).is_err() {
+                mutable.num_threads -= 1;
+                return Err(ErrorCode::OutOfMemory);
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn release_capacity(&self) {
+        let mut mutable = self.mutable.lock();
+        debug_assert!(mutable.num_threads > 0);
+        mutable.num_threads -= 1;
     }
 
     /// Picks the next thread to run.
     pub fn pop(&self) -> Option<SharedRef<Thread>> {
-        let mut runqueue = self.runqueue.lock();
-        let thread = runqueue.pop_front()?;
-        Some(thread)
+        self.mutable.lock().run_queue.pop_front()
     }
 
     /// Pushes a runnable thread to the runqueue.
-    pub fn push_back(&self, thread: SharedRef<Thread>) -> Result<(), ErrorCode> {
-        let mut runqueue = self.runqueue.lock();
-        if runqueue.try_reserve(1).is_err() {
-            return Err(ErrorCode::OutOfMemory);
-        }
-
-        runqueue.push_back(thread);
-        Ok(())
-    }
-
-    /// Pushes a runnable thread to the front of the runqueue, so that it willl
-    /// be picked first.
-    pub fn push_front(&self, thread: SharedRef<Thread>) -> Result<(), ErrorCode> {
-        let mut runqueue = self.runqueue.lock();
-        if runqueue.try_reserve(1).is_err() {
-            return Err(ErrorCode::OutOfMemory);
-        }
-
-        runqueue.push_front(thread);
-        Ok(())
+    pub fn push_back(&self, thread: SharedRef<Thread>) {
+        let mut m = self.mutable.lock();
+        debug_assert!(m.run_queue.len() < m.num_threads);
+        m.run_queue.push_back(thread);
     }
 }
 
@@ -65,9 +78,7 @@ pub fn return_to_user() -> ! {
         && current.is_runnable()
     {
         // The current thread is runnable. Push it back to the scheduler.
-        SCHEDULER
-            .push_back(current)
-            .expect("out of memory in runqueue"); // FIXME:
+        SCHEDULER.push_back(current);
     }
 
     let next = loop {

@@ -78,14 +78,19 @@ impl Thread {
         };
 
         let arch_thread = arch::Thread::new(pc, sp, fault_pc, cookie)?;
-        let thread = SharedRef::new(Thread {
+        SCHEDULER.reserve_capacity()?;
+        match SharedRef::new(Thread {
             arch: UnsafeCell::new(arch_thread),
             isolate,
             vmspace,
             mutable: SpinLock::new(mutable),
-        })?;
-
-        Ok(thread)
+        }) {
+            Ok(thread) => Ok(thread),
+            Err(e) => {
+                SCHEDULER.release_capacity();
+                Err(e)
+            }
+        }
     }
 
     pub fn arch(&self) -> &UnsafeCell<arch::Thread> {
@@ -157,10 +162,9 @@ impl Thread {
         mutable.state = State::Runnable;
     }
 
-    fn resume_locked(self: &SharedRef<Self>, mutable: &mut Mutable) -> Result<(), ErrorCode> {
-        SCHEDULER.push_back(self.clone())?;
+    fn resume_locked(self: &SharedRef<Self>, mutable: &mut Mutable) {
+        SCHEDULER.push_back(self.clone());
         mutable.state = State::Runnable;
-        Ok(())
     }
 
     /// Starts the thread.
@@ -170,7 +174,8 @@ impl Thread {
             return Err(ErrorCode::InvalidState);
         }
 
-        self.resume_locked(&mut mutable)
+        self.resume_locked(&mut mutable);
+        Ok(())
     }
 
     pub fn exit(&self) -> Result<(), ErrorCode> {
@@ -226,6 +231,12 @@ impl Thread {
 }
 
 impl Handleable for Thread {}
+
+impl Drop for Thread {
+    fn drop(&mut self) {
+        SCHEDULER.release_capacity();
+    }
+}
 
 pub fn sys_thread_create(
     current: &SharedRef<Thread>,
