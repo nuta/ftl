@@ -54,8 +54,15 @@ impl<'a> ArpTable<'a> {
     }
 
     pub fn lookup(&mut self, ip: Ipv4Addr) -> Result<&[u8; 6], Option<Inserter<'_, 'a>>> {
-        if !self.reserve(true) {
-            return Err(None);
+        if !self.entries.contains_key(&ip) {
+            // The entry does not exist. Reserve a space for it first.
+            if self.entries.try_reserve(1).is_err() {
+                return Err(None);
+            }
+
+            if !self.reserve(true) {
+                return Err(None);
+            }
         }
 
         let entry = self.entries.entry(ip).or_insert_with(|| {
@@ -88,6 +95,10 @@ impl<'a> ArpTable<'a> {
                 }
             }
             Entry::Vacant(_) => {
+                if self.entries.try_reserve(1).is_err() {
+                    return None;
+                }
+
                 if self.reserve(evict_on_full) {
                     self.entries.insert(ip, ArpEntry::Resolved { mac });
                 }
