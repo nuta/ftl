@@ -76,6 +76,11 @@ impl VmSpace {
         uaddr: UAddr,
         attrs: PageAttrs,
     ) -> Result<(), ErrorCode> {
+        let allowed_attrs = PageAttrs::READ | PageAttrs::WRITE | PageAttrs::EXEC;
+        if !allowed_attrs.contains(attrs) {
+            return Err(ErrorCode::InvalidArg);
+        }
+
         if !uaddr.is_aligned_to(MIN_PAGE_SIZE) {
             return Err(ErrorCode::InvalidArg);
         }
@@ -99,29 +104,15 @@ impl VmSpace {
             .try_reserve(1)
             .map_err(|_| ErrorCode::OutOfMemory)?;
 
-        // Map the VM area to the virtual address space.
-        let num_pages = vmo.len() / MIN_PAGE_SIZE;
-        let start = uaddr;
-        let mut uaddr = uaddr;
-        for index in 0..num_pages {
-            // Map only existing pages. Unfilled pages are lazily filled on fault.
-            if let Some(paddr) = vmo.page_paddr(index) {
-                self.arch.map(uaddr, paddr, MIN_PAGE_SIZE, attrs)?;
-            }
-
-            // SAFETY: `end` guarantees that `uaddr` will not overflow.
-            uaddr = uaddr.add(MIN_PAGE_SIZE).unwrap();
-        }
-
         // Insert the mapping at the correct position to keep mappings sorted.
         let insert_at = mutable
             .mappings
-            .partition_point(|mapping| mapping.start < start);
+            .partition_point(|mapping| mapping.start < uaddr);
 
         mutable.mappings.insert(
             insert_at,
             Mapping {
-                start,
+                start: uaddr,
                 end,
                 vmo,
                 attrs,
