@@ -41,7 +41,7 @@ impl Timer {
     pub fn tick(&self, now: MonoTime) {
         let mut entries = self.entries.lock();
         entries.retain(|entry| {
-            let expired = now >= entry.deadline;
+            let expired = now.duration_since(entry.deadline).is_some();
             if expired {
                 if let Err(e) = entry.emitter.emit(EventKind::PollTimeout) {
                     trace!("failed to emit timeout event: {:?}", e);

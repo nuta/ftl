@@ -1,6 +1,7 @@
 use core::ops::Add;
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+// Note: MonoTime wraps at 2^64.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[repr(transparent)]
 pub struct MonoTime(u64);
 
@@ -11,6 +12,20 @@ impl MonoTime {
 
     pub const fn as_nanos(&self) -> u64 {
         self.0
+    }
+
+    /// Returns the elapsed duration, or None if `earlier` is later than this
+    /// time.
+    ///
+    /// This assumes the duration between two MonoTimes is less than 2^63
+    /// nanoseconds (292 years - restart your computers by then).
+    pub const fn duration_since(&self, earlier: Self) -> Option<Duration> {
+        let nanos = self.0.wrapping_sub(earlier.0);
+        if (nanos as i64) >= 0 {
+            Some(Duration::from_nanos(nanos))
+        } else {
+            None
+        }
     }
 }
 
