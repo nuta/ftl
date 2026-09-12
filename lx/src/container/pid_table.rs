@@ -1,5 +1,6 @@
-use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
+
+use ftl_utils::fxhash::FxHashMap;
 
 use crate::process::PId;
 use crate::process::Process;
@@ -7,7 +8,7 @@ use crate::types::c_int;
 use crate::types::errno::Errno;
 
 pub struct PIdTable {
-    pids: BTreeMap<c_int, Arc<Process>>,
+    pids: FxHashMap<c_int, Arc<Process>>,
     next: c_int,
     max: c_int,
 }
@@ -15,7 +16,7 @@ pub struct PIdTable {
 impl PIdTable {
     pub fn new() -> Self {
         Self {
-            pids: BTreeMap::new(),
+            pids: FxHashMap::new(),
             next: 2,   // skip init process (PID=1) which always exists
             max: 1024, // TODO: make this configurable
         }
