@@ -210,7 +210,7 @@ pub(super) fn init() {
     const EFER_SCE: u64 = 1 << 0;
 
     // RFLAGS bits to clear on SYSCALL entry.
-    const SYSCALL_FMASK: u64 = (1 << 8) | (1 << 9) | (1 << 10); // TF | IF | DF
+    const SYSCALL_FMASK: u64 = (1 << 8) | (1 << 9) | (1 << 10) | (1 << 14); // TF | IF | DF | NT
 
     unsafe {
         let syscall_handler = syscall_handler as *const () as u64;
