@@ -145,7 +145,7 @@ impl<'a> Device<'a> {
 
     pub fn send_ipv4(&self, next_hop_ip: Ipv4Addr, mut tx: Tx<'a>) -> Result<(), ErrorCode> {
         let mut arp_table = self.arp_table.lock();
-        let dst_mac = match arp_table.lookup_or_insert(next_hop_ip) {
+        let dst_mac = match arp_table.lookup(next_hop_ip) {
             Ok(dst_mac) => dst_mac,
             Err(Some(inserter)) => {
                 inserter.enqueue(tx);
@@ -207,12 +207,13 @@ impl<'a> Device<'a> {
 
     /// Fills an ARP table entry.
     pub fn learn_arp(&self, ip: Ipv4Addr, mac: [u8; 6]) {
-        let txs = self.arp_table.lock().resolve(ip, mac);
-        // Flush pending TX packets.
-        for mut tx in txs {
-            tx.write_ethernet_header(&mac, self.driver.mac_address(), ETHTYPE_IPV4);
-            if let Err(error) = self.send(tx) {
-                ftl_driver::warn!(self.env, "failed to send pending IPv4 packet: {:?}", error);
+        if let Some(txs) = self.arp_table.lock().learn(ip, mac, false) {
+            // Flush pending TX packets.
+            for mut tx in txs {
+                tx.write_ethernet_header(&mac, self.driver.mac_address(), ETHTYPE_IPV4);
+                if let Err(error) = self.send(tx) {
+                    ftl_driver::warn!(self.env, "failed to send pending IPv4 packet: {:?}", error);
+                }
             }
         }
     }

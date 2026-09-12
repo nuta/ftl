@@ -5,6 +5,14 @@ use hashbrown::HashMap;
 use hashbrown::HashSet;
 use rustc_hash::FxBuildHasher;
 
+pub mod hash_map {
+    pub use hashbrown::hash_map::Entry;
+}
+
+pub mod hash_set {
+    pub use hashbrown::hash_set::Entry;
+}
+
 pub struct FxHashMap<K, V>(HashMap<K, V, FxBuildHasher>);
 
 impl<K, V> Default for FxHashMap<K, V> {
