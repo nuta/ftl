@@ -229,6 +229,16 @@ extern "C" fn interrupt_entry() -> ! {
         "mov [rax + {r14_offset}], r14",
         "mov [rax + {r15_offset}], r15",
 
+        // Save the user FS base.
+        "rdfsbase rdi",
+        "mov [rax + {fsbase_offset}], rdi",
+        "swapgs",
+
+        // Save the user GS base.
+        "rdgsbase rdi",
+        "swapgs",
+        "mov [rax + {gsbase_offset}], rdi",
+
         // Save the user XSTATE.
         "push rax",
         "mov rdi, [rax + {xsave_ptr_offset}]",
@@ -261,6 +271,8 @@ extern "C" fn interrupt_entry() -> ! {
         current_thread_offset = const offset_of!(CpuVar, current_thread),
         xstate_mask_lo = const XSTATE_MASK & 0xffff_ffff,
         xstate_mask_hi = const XSTATE_MASK >> 32,
+        fsbase_offset = const offset_of!(Thread, fsbase),
+        gsbase_offset = const offset_of!(Thread, gsbase),
         xsave_ptr_offset = const offset_of!(Thread, xsave_ptr),
         rip_offset = const offset_of!(Thread, rip),
         rflags_offset = const offset_of!(Thread, rflags),

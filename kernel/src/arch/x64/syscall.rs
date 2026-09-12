@@ -91,6 +91,16 @@ extern "C" fn syscall_handler() -> ! {
         "mov rdi, gs:[{scratch_offset}]",
         "mov [rax + {rax_offset}], rdi",
 
+        // Save the user FS base.
+        "rdfsbase rdi",
+        "mov [rax + {fsbase_offset}], rdi",
+        "swapgs",
+
+        // Save the user GS base.
+        "rdgsbase rdi",
+        "swapgs",
+        "mov [rax + {gsbase_offset}], rdi",
+
         // Save the user XSTATE.
         "mov rdi, [rax + {xsave_ptr_offset}]",
         "mov eax, {xstate_mask_lo}",
@@ -154,6 +164,8 @@ extern "C" fn syscall_handler() -> ! {
         current_thread_offset = const offset_of!(CpuVar, current_thread),
         xstate_mask_lo = const XSTATE_MASK & 0xffff_ffff,
         xstate_mask_hi = const XSTATE_MASK >> 32,
+        fsbase_offset = const offset_of!(Thread, fsbase),
+        gsbase_offset = const offset_of!(Thread, gsbase),
         xsave_ptr_offset = const offset_of!(Thread, xsave_ptr),
         fault_pc_offset = const offset_of!(Thread, fault_pc),
         cookie_offset = const offset_of!(Thread, cookie),
