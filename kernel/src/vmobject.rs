@@ -176,14 +176,20 @@ impl VmObject {
             return Err(ErrorCode::OutOfBounds);
         }
 
-        let mut mutable = self.mutable.lock();
         let mut remaining = copy_len;
         while remaining > 0 {
             let page_index = vmo_offset / MIN_PAGE_SIZE;
             let page_offset = vmo_offset % MIN_PAGE_SIZE;
             let len = min(remaining, MIN_PAGE_SIZE - page_offset);
 
-            let page = mutable.get_or_fill(page_index)?.clone();
+            let page = {
+                // Release the VMO lock before calling the callback. When the
+                // callback accesses an unmapped user page, it may cause a page
+                // fault on this VMO, causing a dead lock.
+                let mut mutable = self.mutable.lock();
+                mutable.get_or_fill(page_index)?.clone()
+            };
+
             let page_slice = PageSlice::new(page, page_offset, len)?;
             f(page_slice)?;
 
