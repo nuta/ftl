@@ -198,13 +198,6 @@ impl<'a> Device<'a> {
         self.driver
     }
 
-    /// Pushes the RX buffer back to the driver.
-    pub fn recycle_rx_buffer(&self, buf: DmaBuf) {
-        if self.driver.provide(self.env, buf).is_err() {
-            ftl_driver::warn!(self.env, "failed to recycle an RX buffer");
-        }
-    }
-
     /// Fills an ARP table entry.
     pub fn learn_arp(&self, ip: Ipv4Addr, mac: [u8; 6]) {
         if let Some(txs) = self.arp_table.lock().learn(ip, mac, false) {

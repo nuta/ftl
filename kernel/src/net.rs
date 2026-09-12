@@ -21,6 +21,8 @@ use crate::shared_ref::SharedRef;
 use crate::syscall::SyscallOutput;
 use crate::thread::Thread;
 
+const RX_BUFFER_SIZE: usize = 2048;
+
 pub struct Network {
     nic_id: ftl_netmux::NicId,
 }
@@ -206,7 +208,7 @@ pub fn sys_net_send(
 }
 
 pub static NET_MUX: SpinLock<NetMux<'static, EventEmitter>> =
-    SpinLock::new(NetMux::new(&DRIVER_ENV));
+    SpinLock::new(NetMux::new(&DRIVER_ENV, RX_BUFFER_SIZE));
 
 impl ftl_netmux::RxNotify for EventEmitter {
     fn notify(self) -> Result<(), ErrorCode> {

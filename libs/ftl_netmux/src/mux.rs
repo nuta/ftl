@@ -21,16 +21,18 @@ pub trait RxNotify: Send + 'static {
 pub struct NetMux<'a, N: RxNotify> {
     pub(crate) env: &'a dyn Env,
     next_device_id: u64,
+    pub(crate) rx_buffer_size: usize,
     pub(crate) devices: FxHashMap<DeviceId, Device<'a>>,
     pub(crate) rx: RxRouteTable<'a, N>,
     pub(crate) tx: TxRouteTable,
 }
 
 impl<'a, N: RxNotify> NetMux<'a, N> {
-    pub const fn new(env: &'a dyn Env) -> Self {
+    pub const fn new(env: &'a dyn Env, rx_buffer_size: usize) -> Self {
         Self {
             env,
             next_device_id: 0,
+            rx_buffer_size,
             devices: FxHashMap::new(),
             rx: RxRouteTable::new(),
             tx: TxRouteTable::new(),
@@ -44,6 +46,8 @@ impl<'a, N: RxNotify> NetMux<'a, N> {
         self.devices
             .try_reserve(1)
             .map_err(|_| ErrorCode::OutOfMemory)?;
+
+        self.provide_rx_buffers(self.env, driver, 64);
 
         let id = self.alloc_device_id()?;
         self.devices.insert(id, Device::new(self.env, driver));

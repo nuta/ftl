@@ -46,8 +46,7 @@ pub trait Driver: Send + Sync {
     /// Tries to pop a packet `(buf, headroom, len)` from the RX queue.
     ///
     /// If the queue is empty, returns [`Error::RxEmpty`].
-    fn try_receive(&self, env: &dyn Env)
-    -> Result<(DmaBuf, usize, usize), (Error, Option<DmaBuf>)>;
+    fn try_receive(&self, env: &dyn Env) -> Result<(DmaBuf, usize, usize), Error>;
 
     /// Subscribes to TX events.
     ///

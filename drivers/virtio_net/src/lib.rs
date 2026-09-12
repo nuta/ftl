@@ -2,6 +2,7 @@
 use core::mem::size_of;
 
 use ftl_driver::dma::DmaBuf;
+use ftl_driver::dma::DmaBufWithDrop;
 use ftl_driver::env::Env;
 use ftl_driver::net::Driver;
 use ftl_driver::net::Error;
@@ -206,30 +207,28 @@ impl<N: Notifier> Driver for VirtioNet<N> {
         Ok(())
     }
 
-    fn try_receive(
-        &self,
-        env: &dyn Env,
-    ) -> Result<(DmaBuf, usize, usize), (Error, Option<DmaBuf>)> {
+    fn try_receive(&self, env: &dyn Env) -> Result<(DmaBuf, usize, usize), Error> {
         let mut mutable = self.mutable.lock();
         let (buf, total_len) = match mutable.rxq.pop() {
             Ok(Some((RxData { buf }, total_len))) => (buf, total_len),
-            Ok(None) => return Err((Error::RxEmpty, None)),
+            Ok(None) => return Err(Error::RxEmpty),
             Err(err) => {
                 trace!(env, "rxq pop error: {err:?}");
-                return Err((Error::BadDevice, None));
+                return Err(Error::BadDevice);
             }
         };
 
+        let buf = DmaBufWithDrop::new(env, buf);
         if total_len > buf.len() {
-            return Err((Error::BadDevice, Some(buf)));
+            return Err(Error::BadDevice);
         }
 
         let header_size = size_of::<VirtioNetHdr>();
         let Some(payload_len) = total_len.checked_sub(header_size) else {
-            return Err((Error::BadDevice, Some(buf)));
+            return Err(Error::BadDevice);
         };
 
-        Ok((buf, header_size, payload_len))
+        Ok((buf.take(), header_size, payload_len))
     }
 
     fn subscribe_tx(&self, notifier: Self::Notifier) -> Result<(), Error> {

@@ -4,7 +4,6 @@ use core::sync::atomic::AtomicU8;
 use core::sync::atomic::Ordering;
 
 use ftl_driver::dma::DmaBuf;
-use ftl_driver::env::Env;
 use ftl_driver::net::Driver;
 use ftl_netmux::DeviceId;
 use ftl_netmux::PollNotifier;
@@ -115,9 +114,6 @@ fn virtio_net_init() -> (&'static dyn Driver<Notifier = PollNotifier>, u8) {
     use ftl_driver::pci::find_virtio_device;
     use ftl_driver::pci::get_interrupt_line;
 
-    const RX_BUFFER_SIZE: usize = 2048;
-    const RX_BUFFER_COUNT: usize = 64;
-
     let driver = virtio_net::VirtioNet::<PollNotifier>::init(&DRIVER_ENV)
         .expect("failed to initialize virtio-net");
     *VIRTIO_NET_DRIVER.lock() = Some(driver);
@@ -128,15 +124,6 @@ fn virtio_net_init() -> (&'static dyn Driver<Notifier = PollNotifier>, u8) {
         // SAFETY: The driver is never removed from VIRTIO_NET_DRIVER.
         unsafe { &*ptr }
     };
-
-    for _ in 0..RX_BUFFER_COUNT {
-        let buf = DRIVER_ENV
-            .alloc_dma(RX_BUFFER_SIZE)
-            .expect("failed to allocate virtio-net RX buffer");
-        if driver.provide(&DRIVER_ENV, buf).is_err() {
-            panic!("failed to supply virtio-net RX buffer");
-        }
-    }
 
     let pci_device = find_virtio_device(&DRIVER_ENV, 1).expect("virtio-net disappeared");
     let irq = get_interrupt_line(&DRIVER_ENV, &pci_device);

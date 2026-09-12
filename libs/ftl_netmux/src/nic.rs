@@ -1,13 +1,11 @@
 use alloc::collections::VecDeque;
-use core::mem::ManuallyDrop;
 
 use ftl_driver::dma::DmaBuf;
+use ftl_driver::dma::DmaBufWithDrop;
 use ftl_driver::env::Env;
-use ftl_driver::net::Driver;
 use ftl_types::error::ErrorCode;
 use ftl_utils::spinlock::SpinLock;
 
-use crate::device::PollNotifier;
 use crate::mux::RxNotify;
 
 const MAX_RX_QUEUE_DEPTH: usize = 128;
@@ -23,9 +21,7 @@ impl NicId {
 
 /// A received packet.
 pub(crate) struct RxPacket<'a> {
-    env: &'a dyn Env,
-    driver: &'a dyn Driver<Notifier = PollNotifier>,
-    buf: ManuallyDrop<DmaBuf>,
+    buf: DmaBufWithDrop<'a>,
     /// The offset of the IP header in the packet. This is also the length of
     /// the device's header, Ethernet header, and some headroom in `buf`.
     packet_offset: usize,
@@ -38,29 +34,16 @@ pub(crate) struct RxPacket<'a> {
 impl<'a> RxPacket<'a> {
     pub(crate) fn new(
         env: &'a dyn Env,
-        driver: &'a dyn Driver<Notifier = PollNotifier>,
         buf: DmaBuf,
         packet_offset: usize,
         packet_len: usize,
         header_len: usize,
     ) -> Self {
         Self {
-            env,
-            driver,
-            buf: ManuallyDrop::new(buf),
+            buf: DmaBufWithDrop::new(env, buf),
             packet_offset,
             packet_len,
             header_len,
-        }
-    }
-}
-
-impl<'a> Drop for RxPacket<'a> {
-    fn drop(&mut self) {
-        // SAFETY: We don't use this buffer after dropping the packet.
-        let buf = unsafe { ManuallyDrop::take(&mut self.buf) };
-        if self.driver.provide(self.env, buf).is_err() {
-            ftl_driver::warn!(self.env, "failed to recycle an RX buffer");
         }
     }
 }

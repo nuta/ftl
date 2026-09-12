@@ -1,6 +1,5 @@
-use core::ops::Deref;
-
 use ftl_driver::dma::DmaBuf;
+use ftl_driver::dma::DmaBufWithDrop;
 use ftl_driver::env::Env;
 use ftl_driver::net::Driver;
 use ftl_driver::net::Error;
@@ -15,8 +14,8 @@ use ftl_utils::fxhash::FxHashMap;
 use ftl_utils::fxhash::FxHashSet;
 
 use crate::NetMux;
+use crate::PollNotifier;
 use crate::device::DeviceId;
-use crate::device::PollNotifier;
 use crate::dhcp::DhcpConfig;
 use crate::mux::RxNotify;
 use crate::nic::Nic;
@@ -33,49 +32,6 @@ use crate::packet::ipv4::NetMask;
 use crate::packet::tcp::TcpInspector;
 use crate::packet::udp::UdpInspector;
 use crate::tx::Route;
-
-/// Pushes the RX buffer back to the driver when dropped, if not taken.
-struct RxDmaBuf<'a> {
-    env: &'a dyn Env,
-    driver: &'a dyn Driver<Notifier = PollNotifier>,
-    buf: Option<DmaBuf>,
-}
-
-impl<'a> RxDmaBuf<'a> {
-    pub fn new(
-        env: &'a dyn Env,
-        driver: &'a dyn Driver<Notifier = PollNotifier>,
-        buf: DmaBuf,
-    ) -> Self {
-        Self {
-            env,
-            driver,
-            buf: Some(buf),
-        }
-    }
-
-    pub fn take(mut self) -> DmaBuf {
-        self.buf.take().unwrap()
-    }
-}
-
-impl<'a> Deref for RxDmaBuf<'a> {
-    type Target = DmaBuf;
-
-    fn deref(&self) -> &Self::Target {
-        self.buf.as_ref().unwrap()
-    }
-}
-
-impl<'a> Drop for RxDmaBuf<'a> {
-    fn drop(&mut self) {
-        if let Some(buf) = self.buf.take()
-            && self.driver.provide(self.env, buf).is_err()
-        {
-            ftl_driver::warn!(self.env, "failed to recycle an RX buffer");
-        }
-    }
-}
 
 struct PortBinding {
     nic_id: NicId,
@@ -203,10 +159,7 @@ impl<'a, N: RxNotify> NetMux<'a, N> {
         headroom: usize,
         frame_len: usize,
     ) {
-        let Some(driver) = self.devices.get(&device_id).map(|device| device.driver()) else {
-            return;
-        };
-        let buf = RxDmaBuf::new(self.env, driver, buf);
+        let buf = DmaBufWithDrop::new(self.env, buf);
 
         // Device driver might return a bogus frame length.
         let Some(end) = headroom.checked_add(frame_len) else {
@@ -278,7 +231,7 @@ impl<'a, N: RxNotify> NetMux<'a, N> {
         &mut self,
         device_id: DeviceId,
         src_mac: [u8; 6],
-        buf: RxDmaBuf<'a>,
+        buf: DmaBufWithDrop<'a>,
         headroom: usize,
         frame_len: usize,
     ) {
@@ -335,12 +288,9 @@ impl<'a, N: RxNotify> NetMux<'a, N> {
         // Build a RX packet.
         let total_len = ipv4.total_len();
         let header_len = ipv4.header_len() + trans_header_len;
-        let Some(driver) = self.devices.get(&device_id).map(|device| device.driver()) else {
-            return;
-        };
-        let packet = RxPacket::new(self.env, driver, buf.take(), off, total_len, header_len);
 
         // Forward the packet to the NIC.
+        let packet = RxPacket::new(self.env, buf.take(), off, total_len, header_len);
         nic.receive(packet);
     }
 
@@ -446,25 +396,51 @@ impl<'a, N: RxNotify> NetMux<'a, N> {
         driver.handle_interrupt(env);
 
         // Process pending RX packets.
+        let mut num_popped = 0;
         loop {
             match driver.try_receive(env) {
                 Ok((buf, headroom, frame_len)) => {
+                    num_popped += 1;
                     self.handle_eth_frame(device_id, buf, headroom, frame_len);
                 }
-                Err((error, buf)) => {
+                Err(error) => {
                     if error != Error::RxEmpty {
                         // Something went wrong.
                         ftl_driver::warn!(env, "failed to receive packet: {:?}", error);
-                        if let Some(buf) = buf
-                            && let Some(device) = self.devices.get(&device_id)
-                        {
-                            device.recycle_rx_buffer(buf);
-                        }
+                        num_popped += 1;
                     }
 
                     break;
                 }
-            };
+            }
+        }
+
+        self.provide_rx_buffers(env, driver, num_popped);
+    }
+
+    pub(crate) fn provide_rx_buffers(
+        &mut self,
+        env: &dyn Env,
+        driver: &dyn Driver<Notifier = PollNotifier>,
+        max_count: usize,
+    ) {
+        for _ in 0..max_count {
+            match env.alloc_dma(self.rx_buffer_size) {
+                Ok(buf) => {
+                    if let Err((e, buf)) = driver.provide(env, buf) {
+                        if e != Error::RxFull {
+                            ftl_driver::warn!(env, "failed to provide RX buffer: {:?}", e);
+                        }
+
+                        env.free_dma(buf);
+                        break;
+                    }
+                }
+                Err(err) => {
+                    ftl_driver::warn!(env, "failed to allocate RX buffer: {:?}", err);
+                    break;
+                }
+            }
         }
     }
 }
