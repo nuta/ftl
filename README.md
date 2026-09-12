@@ -45,7 +45,15 @@ Build and run:
 ./run.sh
 ```
 
-You can also run FTL on cloud such as Google Compute Engine. See the [deploy script](tools/deploy-to-google-cloud.sh).
+To get an ISO image to run FTL on cloud:
+
+```
+ISO=1 ./build.sh
+```
+
+> [!TIP]
+>
+> Fun fact: [ftl-os.org](https://ftl-os.org) is served by FTL running on Google Compute Engine.
 
 ## Design
 
