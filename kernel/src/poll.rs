@@ -49,12 +49,15 @@ impl Poll {
 
         mutable.queue.push_back(event);
 
-        let Some(thread) = mutable.waiters.pop_front() else {
+        // Reference the front but don't pop it yet. SCHEDULER.push_back()
+        // may fail on OOM.
+        let Some(thread) = mutable.waiters.front() else {
             return Ok(());
         };
 
         // FIXME: How can we ensure this won't fail?
         SCHEDULER.push_back(thread.clone())?;
+        mutable.waiters.pop_front();
         Ok(())
     }
 

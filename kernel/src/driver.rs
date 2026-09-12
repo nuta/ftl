@@ -80,6 +80,15 @@ impl ftl_driver::env::Env for DriverEnv {
             }
         }
 
+        // Try to reserve a space in the free list. If it fails, free it
+        // immediately.
+        if free_list.try_reserve(1).is_err() {
+            // SAFETY: The buffer is allocated by global PAGE_ALLOCATOR, and
+            //         capacity is unchanged.
+            unsafe { PAGE_ALLOCATOR.free(PAddr::new(buf.paddr()), buf.capacity()) };
+            return;
+        }
+
         free_list.push_back(buf);
     }
 
