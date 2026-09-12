@@ -21,6 +21,7 @@ use crate::shared_ref::SharedRef;
 use crate::syscall::SyscallOutput;
 use crate::thread::Thread;
 
+const MAX_TX_PACKET_LEN: usize = 16 * 1024; // 16 KiB
 const RX_BUFFER_SIZE: usize = 2048;
 
 pub struct Network {
@@ -195,8 +196,19 @@ pub fn sys_net_send(
     ctx: &SyscallRegs,
 ) -> Result<SyscallOutput, ErrorCode> {
     let network_id = HandleId::new(ctx.a0);
-    let header = USlice::new(UAddr::new(ctx.a2), ctx.a3)?;
-    let payload = USlice::new(UAddr::new(ctx.a4), ctx.a5)?;
+    let header_len = ctx.a3;
+    let payload_len = ctx.a5;
+
+    // Reject too long packets.
+    let packet_len = header_len
+        .checked_add(payload_len)
+        .ok_or(ErrorCode::InvalidArg)?;
+    if packet_len > MAX_TX_PACKET_LEN {
+        return Err(ErrorCode::InvalidArg);
+    }
+
+    let header = USlice::new(UAddr::new(ctx.a2), header_len)?;
+    let payload = USlice::new(UAddr::new(ctx.a4), payload_len)?;
     let network = current
         .isolate()
         .handles()
