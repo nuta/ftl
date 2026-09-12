@@ -122,6 +122,9 @@ impl Thread {
             None => {
                 if let Some((deadline, handle_id)) = deadline {
                     let emitter = EventEmitter::new(poll.clone(), handle_id);
+                    // FIXME: GLOBAL_TIMER.add may fail on OOM, and thread may
+                    //        be in the poll's waiters list forever. Can we
+                    //        reserve GLOBAL_TIMER space in advance?
                     GLOBAL_TIMER.add(deadline, emitter)?;
                 }
 
