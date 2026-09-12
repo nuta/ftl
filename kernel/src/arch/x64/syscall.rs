@@ -21,7 +21,7 @@ use crate::scheduler;
 const USER_RFLAGS: u64 = 0x202;
 const RED_ZONE_SIZE: usize = 128;
 
-fn try_exit_current() {
+pub(super) fn try_exit_current() {
     let cpuvar = super::get_cpuvar();
     let Some(thread) = cpuvar.current_thread.thread() else {
         return;

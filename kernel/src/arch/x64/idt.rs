@@ -63,7 +63,16 @@ const IDT_ENTRY_DEFAULT: IdtEntry = IdtEntry {
 static IDT: SpinLock<[IdtEntry; NUM_IDT_ENTRIES]> =
     SpinLock::new([IDT_ENTRY_DEFAULT; NUM_IDT_ENTRIES]);
 
+const EXCEPTION_DIVIDE_ERROR: u8 = 0;
+const EXCEPTION_DEBUG: u8 = 1;
+const EXCEPTION_BREAKPOINT: u8 = 3;
+const EXCEPTION_INVALID_OPCODE: u8 = 6;
+const EXCEPTION_STACK_SEGMENT_FAULT: u8 = 12;
+const EXCEPTION_GENERAL_PROTECTION_FAULT: u8 = 13;
 const EXCEPTION_PAGE_FAULT: u8 = 14;
+const EXCEPTION_X87_FLOATING_POINT: u8 = 16;
+const EXCEPTION_ALIGNMENT_CHECK: u8 = 17;
+const EXCEPTION_SIMD_FLOATING_POINT: u8 = 19;
 
 #[repr(C)]
 struct InterruptFrame {
@@ -321,7 +330,11 @@ fn read_cr2() -> u64 {
 
 const PF_PRESENT: u64 = 1 << 0;
 
-fn handle_user_page_fault(cr2: u64) -> Result<(), ErrorCode> {
+fn handle_user_page_fault(cr2: u64, error_code: u64) -> Result<(), ErrorCode> {
+    if error_code & PF_PRESENT != 0 {
+        return Err(ErrorCode::NotAllowed);
+    }
+
     if (cr2 as usize) >= USER_ADDR_END {
         return Err(ErrorCode::OutOfBounds);
     }
@@ -342,7 +355,7 @@ extern "C" fn handle_kernel_interrupt(frame: &mut InterruptFrame) {
                 if frame.error_code & PF_PRESENT == 0 {
                     // The page is not present. Handle it as a user page fault,
                     // and retry the usercopy if it succeeds.
-                    if handle_user_page_fault(read_cr2()).is_ok() {
+                    if handle_user_page_fault(read_cr2(), frame.error_code).is_ok() {
                         return;
                     }
                 }
@@ -384,13 +397,26 @@ extern "C" fn handle_user_interrupt(vector: u8, error_code: u64) -> ! {
     match vector {
         EXCEPTION_PAGE_FAULT => {
             let cr2 = read_cr2();
-            if error_code & PF_PRESENT != 0 {
-                panic!("user protection fault (CR2={cr2:#x}, error_code={error_code:#x})");
+            if let Err(err) = handle_user_page_fault(cr2, error_code) {
+                trace!(
+                    "exiting thread due to user page fault: {err:?}, (CR2={cr2:#x}, error_code={error_code:#x})"
+                );
+                super::syscall::try_exit_current();
             }
-
-            if handle_user_page_fault(cr2).is_err() {
-                panic!("unhandled user page fault (CR2={cr2:#x})");
-            }
+        }
+        EXCEPTION_DIVIDE_ERROR
+        | EXCEPTION_DEBUG
+        | EXCEPTION_BREAKPOINT
+        | EXCEPTION_INVALID_OPCODE
+        | EXCEPTION_STACK_SEGMENT_FAULT
+        | EXCEPTION_GENERAL_PROTECTION_FAULT
+        | EXCEPTION_X87_FLOATING_POINT
+        | EXCEPTION_ALIGNMENT_CHECK
+        | EXCEPTION_SIMD_FLOATING_POINT => {
+            trace!(
+                "exiting thread due to user exception: exception={vector}, error_code={error_code:#x}"
+            );
+            super::syscall::try_exit_current();
         }
         vector if vector >= IRQ_VECTOR_BASE => {
             let irq = vector - IRQ_VECTOR_BASE;
@@ -406,7 +432,7 @@ extern "C" fn handle_user_interrupt(vector: u8, error_code: u64) -> ! {
             }
         }
         _ => {
-            panic!("unhandled exception ({vector}), error_code={error_code:#x}");
+            panic!("unhandled user exception: exception={vector}, error_code={error_code:#x}");
         }
     }
 
