@@ -1,10 +1,8 @@
-use alloc::collections::BTreeMap;
-use alloc::collections::btree_map::Entry;
-
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HANDLE_ID_MAX;
 use ftl_types::handle::HandleId;
 use ftl_types::handle::HandleRight;
+use ftl_utils::fxhash::FxHashMap;
 use ftl_utils::spinlock::SpinLock;
 use ftl_utils::static_assert;
 
@@ -35,21 +33,22 @@ const NUM_HANDLES_MAX: usize = 1024;
 static_assert!(NUM_HANDLES_MAX <= HANDLE_ID_MAX);
 
 pub struct HandleTable {
-    handles: BTreeMap<usize, AnyHandle>,
+    handles: FxHashMap<usize, AnyHandle>,
 }
 
 impl HandleTable {
     pub const fn new() -> Self {
         Self {
-            handles: BTreeMap::new(),
+            handles: FxHashMap::new(),
         }
     }
 
     pub fn insert<H: Into<AnyHandle>>(&mut self, handle: H) -> Result<HandleId, ErrorCode> {
         for raw_id in 1..=NUM_HANDLES_MAX {
-            if let Entry::Vacant(e) = self.handles.entry(raw_id) {
-                e.insert(handle.into());
-                return Ok(HandleId::new(raw_id));
+            if !self.handles.contains_key(&raw_id) {
+                let id = HandleId::new(raw_id);
+                self.insert_at(id, handle)?;
+                return Ok(id);
             }
         }
 
@@ -70,6 +69,9 @@ impl HandleTable {
             return Err(ErrorCode::AlreadyExists);
         }
 
+        self.handles
+            .try_reserve(1)
+            .map_err(|_| ErrorCode::OutOfMemory)?;
         self.handles.insert(raw_id, handle.into());
         Ok(())
     }
