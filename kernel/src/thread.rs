@@ -79,18 +79,12 @@ impl Thread {
 
         let arch_thread = arch::Thread::new(pc, sp, fault_pc, cookie)?;
         SCHEDULER.reserve_capacity()?;
-        match SharedRef::new(Thread {
+        SharedRef::new(Thread {
             arch: UnsafeCell::new(arch_thread),
             isolate,
             vmspace,
             mutable: SpinLock::new(mutable),
-        }) {
-            Ok(thread) => Ok(thread),
-            Err(e) => {
-                SCHEDULER.release_capacity();
-                Err(e)
-            }
-        }
+        })
     }
 
     pub fn arch(&self) -> &UnsafeCell<arch::Thread> {
