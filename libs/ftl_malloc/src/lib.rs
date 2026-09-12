@@ -9,7 +9,7 @@ use ftl_utils::alignment::is_aligned;
 
 const MAGIC_FREE: u32 = 0x5f5f_5f5f;
 const MAGIC_ALLOCATED: u32 = 0x5a5a_5a5a;
-const HEADER_SIZE: usize = size_of::<Header>();
+pub const HEADER_SIZE: usize = size_of::<Header>();
 const MIN_CAPACITY: usize = 16;
 
 /// The minimum size of the data area, and also serves as the alignment of the

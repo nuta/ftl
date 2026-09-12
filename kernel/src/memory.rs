@@ -50,6 +50,16 @@ unsafe impl GlobalAlloc for GlobalAllocator {
             return ptr;
         }
 
+        if layout.size() > MALLOC_CHUNK_SIZE - ftl_malloc::HEADER_SIZE {
+            // It is too large to allocate.
+            warn!(
+                "failed to malloc: size={}, align={}",
+                layout.size(),
+                layout.align()
+            );
+            return null_mut();
+        }
+
         // The global allocator is out of memory. Try to allocate more from the
         // page allocator.
         let Some(paddr) = PAGE_ALLOCATOR.alloc(MALLOC_CHUNK_SIZE, PageType::Dirty) else {
