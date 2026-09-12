@@ -425,6 +425,7 @@ impl<'a, N: RxNotify> NetMux<'a, N> {
         max_count: usize,
     ) {
         for _ in 0..max_count {
+            // TODO: What if the allocation fails? Should we call this function periodically?
             match env.alloc_dma(self.rx_buffer_size) {
                 Ok(buf) => {
                     if let Err((e, buf)) = driver.provide(env, buf) {
