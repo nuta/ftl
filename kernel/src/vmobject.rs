@@ -27,9 +27,19 @@ struct Page {
     paddr: PAddr,
 }
 
+impl Page {
+    fn new() -> Result<SharedRef<Self>, ErrorCode> {
+        let paddr = PAGE_ALLOCATOR
+            .alloc(MIN_PAGE_SIZE, PageType::Zeroed)
+            .ok_or(ErrorCode::OutOfMemory)?;
+
+        SharedRef::new(Self { paddr })
+    }
+}
+
 impl Drop for Page {
     fn drop(&mut self) {
-        // SAFETY: This page owns the allocation from PAGE_ALLOCATOR.
+        // SAFETY: This struct owns the page.
         unsafe { PAGE_ALLOCATOR.free(self.paddr, MIN_PAGE_SIZE) };
     }
 }
@@ -41,21 +51,19 @@ enum Pager {
 }
 
 struct Mutable {
-    pages: Vec<Option<Page>>,
+    pages: Vec<Option<SharedRef<Page>>>,
 }
 
 impl Mutable {
-    fn get_or_fill(&mut self, index: usize) -> Result<&mut Page, ErrorCode> {
+    fn get_or_fill(&mut self, index: usize) -> Result<&SharedRef<Page>, ErrorCode> {
         let page = &mut self.pages[index];
         if page.is_none() {
-            let paddr = PAGE_ALLOCATOR
-                .alloc(MIN_PAGE_SIZE, PageType::Zeroed)
-                .ok_or(ErrorCode::OutOfMemory)?;
-            *page = Some(Page { paddr });
+            *page = Some(Page::new()?);
         }
 
         // SAFETY: We always fill the page if it is none.
-        Ok(unsafe { page.as_mut().unwrap_unchecked() })
+        // TODO: Use get_or_try_insert_with once it gets stabilized.
+        Ok(unsafe { page.as_ref().unwrap_unchecked() })
     }
 }
 
@@ -158,7 +166,7 @@ impl VmObject {
         mut f: F,
     ) -> Result<(), ErrorCode>
     where
-        F: FnMut(PageSlice<'_>) -> Result<(), ErrorCode>,
+        F: FnMut(PageSlice) -> Result<(), ErrorCode>,
     {
         let end = vmo_offset
             .checked_add(copy_len)
@@ -175,7 +183,7 @@ impl VmObject {
             let page_offset = vmo_offset % MIN_PAGE_SIZE;
             let len = min(remaining, MIN_PAGE_SIZE - page_offset);
 
-            let page = mutable.get_or_fill(page_index)?;
+            let page = mutable.get_or_fill(page_index)?.clone();
             let page_slice = PageSlice::new(page, page_offset, len)?;
             f(page_slice)?;
 
@@ -193,15 +201,15 @@ impl Handleable for VmObject {}
 ///
 /// This provides access without creating a Rust reference to the page data,
 /// which might also be mapped into userspace.
-struct PageSlice<'a> {
-    /// Keeps the page borrowed while this slice exists.
-    _page: &'a Page,
+struct PageSlice {
+    /// Keeps the page alive while this slice exists.
+    _page: SharedRef<Page>,
     vaddr: VAddr,
     len: usize,
 }
 
-impl<'a> PageSlice<'a> {
-    fn new(page: &'a Page, offset: usize, len: usize) -> Result<Self, ErrorCode> {
+impl PageSlice {
+    fn new(page: SharedRef<Page>, offset: usize, len: usize) -> Result<Self, ErrorCode> {
         let end = offset.checked_add(len).ok_or(ErrorCode::OutOfBounds)?;
         if end > MIN_PAGE_SIZE {
             return Err(ErrorCode::OutOfBounds);
@@ -251,7 +259,7 @@ impl<'a> PageSlice<'a> {
     }
 
     fn read_user(&self, uslice: USlice) -> Result<(), ErrorCode> {
-        // SAFETY: We keep `self._page` borrowed while copying.
+        // SAFETY: We keep `self._page` alive while copying.
         unsafe { uslice.read(self.vaddr.as_mut_ptr(), self.len) }
     }
 }
