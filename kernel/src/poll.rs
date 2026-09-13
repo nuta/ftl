@@ -134,7 +134,7 @@ pub fn sys_poll_create(
 ) -> Result<SyscallOutput, ErrorCode> {
     let poll = SharedRef::new(Poll::new())?;
     let handle = Handle::new(poll, HandleRight::READ | HandleRight::WRITE);
-    let handle_id = current.isolate().handles().lock().insert(handle)?;
+    let handle_id = current.hspace().insert(handle)?;
     Ok(SyscallOutput::Done(handle_id.as_usize()))
 }
 
@@ -145,11 +145,7 @@ pub fn sys_poll_wait(
 ) -> Result<SyscallOutput, ErrorCode> {
     let handle_id = HandleId::new(ctx.a0);
 
-    let poll = current
-        .isolate()
-        .handles()
-        .lock()
-        .get::<Poll>(handle_id, HandleRight::READ)?;
+    let poll = current.hspace().get::<Poll>(handle_id, HandleRight::READ)?;
 
     current.start_polling(current_thread, poll, handle_id, None)
 }
@@ -162,11 +158,7 @@ pub fn sys_poll_wait_until(
     let handle_id = HandleId::new(ctx.a0);
     let deadline_uslice = USlice::new(UAddr::new(ctx.a1), size_of::<MonoTime>())?;
 
-    let poll = current
-        .isolate()
-        .handles()
-        .lock()
-        .get::<Poll>(handle_id, HandleRight::READ)?;
+    let poll = current.hspace().get::<Poll>(handle_id, HandleRight::READ)?;
 
     let mut deadline_buf = MaybeUninit::uninit();
     let deadline = unsafe { deadline_uslice.read_uninit(&mut deadline_buf)? };
@@ -181,9 +173,7 @@ pub fn sys_poll_notify(
     let handle_id = HandleId::new(ctx.a0);
 
     current
-        .isolate()
-        .handles()
-        .lock()
+        .hspace()
         .get::<Poll>(handle_id, HandleRight::WRITE)?
         .notify(handle_id)?;
 

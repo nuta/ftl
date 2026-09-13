@@ -244,7 +244,7 @@ pub fn sys_vmo_create(
     let vmo = VmObject::new_anonymous(len)?;
     let rights = HandleRight::READ | HandleRight::WRITE | HandleRight::MAP;
     let handle = Handle::new(vmo, rights);
-    let id = current.isolate().handles().lock().insert(handle)?;
+    let id = current.hspace().insert(handle)?;
     Ok(SyscallOutput::Done(id.as_usize()))
 }
 
@@ -258,11 +258,7 @@ pub fn sys_vmo_read(
     let len = ctx.a3;
 
     let uslice = USlice::new(uaddr, len)?;
-    let vmo = current
-        .isolate()
-        .handles()
-        .lock()
-        .get::<VmObject>(id, HandleRight::READ)?;
+    let vmo = current.hspace().get::<VmObject>(id, HandleRight::READ)?;
 
     vmo.read_user(offset, uslice)?;
     Ok(SyscallOutput::Done(0))
@@ -278,11 +274,7 @@ pub fn sys_vmo_write(
     let len = ctx.a3;
 
     let uslice = USlice::new(uaddr, len)?;
-    let vmo = current
-        .isolate()
-        .handles()
-        .lock()
-        .get::<VmObject>(id, HandleRight::WRITE)?;
+    let vmo = current.hspace().get::<VmObject>(id, HandleRight::WRITE)?;
 
     vmo.write_user(offset, uslice)?;
     Ok(SyscallOutput::Done(0))

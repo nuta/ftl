@@ -1,0 +1,130 @@
+use ftl_types::error::ErrorCode;
+use ftl_types::handle::HANDLE_ID_MAX;
+use ftl_types::handle::HandleId;
+use ftl_types::handle::HandleRight;
+use ftl_utils::fxhash::FxHashMap;
+use ftl_utils::spinlock::SpinLock;
+use ftl_utils::static_assert;
+
+use crate::handle::AnyHandle;
+use crate::handle::Handleable;
+use crate::shared_ref::SharedRef;
+
+const NUM_HANDLES_MAX: usize = 1024;
+
+static_assert!(NUM_HANDLES_MAX <= HANDLE_ID_MAX);
+
+struct Mutable {
+    handles: FxHashMap<usize, AnyHandle>,
+}
+
+/// A handle space.
+pub struct HandleSpace {
+    mutable: SpinLock<Mutable>,
+}
+
+impl HandleSpace {
+    pub fn new() -> Self {
+        Self {
+            mutable: SpinLock::new(Mutable {
+                handles: FxHashMap::new(),
+            }),
+        }
+    }
+
+    pub fn insert<H: Into<AnyHandle>>(&self, handle: H) -> Result<HandleId, ErrorCode> {
+        let mut mutable = self.mutable.lock();
+        for raw_id in 1..=NUM_HANDLES_MAX {
+            if !mutable.handles.contains_key(&raw_id) {
+                let id = HandleId::new(raw_id);
+                self.do_insert(&mut mutable, id, handle)?;
+                return Ok(id);
+            }
+        }
+
+        Err(ErrorCode::TooManyHandles)
+    }
+
+    pub fn insert_at<H: Into<AnyHandle>>(&self, id: HandleId, handle: H) -> Result<(), ErrorCode> {
+        let mut mutable = self.mutable.lock();
+        self.do_insert(&mut mutable, id, handle)
+    }
+
+    fn do_insert<H: Into<AnyHandle>>(
+        &self,
+        mutable: &mut Mutable,
+        id: HandleId,
+        handle: H,
+    ) -> Result<(), ErrorCode> {
+        let raw_id = id.as_usize();
+        if raw_id == 0 || raw_id > NUM_HANDLES_MAX {
+            return Err(ErrorCode::InvalidArg);
+        }
+
+        if mutable.handles.contains_key(&raw_id) {
+            return Err(ErrorCode::AlreadyExists);
+        }
+
+        mutable
+            .handles
+            .try_reserve(1)
+            .map_err(|_| ErrorCode::OutOfMemory)?;
+        mutable.handles.insert(raw_id, handle.into());
+        Ok(())
+    }
+
+    pub fn get<T: Handleable>(
+        &self,
+        id: HandleId,
+        required: HandleRight,
+    ) -> Result<SharedRef<T>, ErrorCode> {
+        let mutable = self.mutable.lock();
+        mutable
+            .handles
+            .get(&id.as_usize())
+            .cloned()
+            .ok_or(ErrorCode::InvalidArg)?
+            .downcast::<T>()
+            .ok_or(ErrorCode::InvalidType)?
+            .authorize(required)
+    }
+
+    pub fn get2<T1: Handleable, T2: Handleable>(
+        &self,
+        id1: HandleId,
+        required1: HandleRight,
+        id2: HandleId,
+        required2: HandleRight,
+    ) -> Result<(SharedRef<T1>, SharedRef<T2>), ErrorCode> {
+        let mutable = self.mutable.lock();
+        let Some(handle1) = mutable.handles.get(&id1.as_usize()) else {
+            return Err(ErrorCode::InvalidArg);
+        };
+
+        let Some(handle2) = mutable.handles.get(&id2.as_usize()) else {
+            return Err(ErrorCode::InvalidArg);
+        };
+
+        let handle1 = handle1
+            .clone()
+            .downcast::<T1>()
+            .ok_or(ErrorCode::InvalidType)?
+            .authorize(required1)?;
+        let handle2 = handle2
+            .clone()
+            .downcast::<T2>()
+            .ok_or(ErrorCode::InvalidType)?
+            .authorize(required2)?;
+        Ok((handle1, handle2))
+    }
+
+    pub fn remove(&self, id: HandleId) -> Result<AnyHandle, ErrorCode> {
+        let mut mutable = self.mutable.lock();
+        mutable
+            .handles
+            .remove(&id.as_usize())
+            .ok_or(ErrorCode::InvalidArg)
+    }
+}
+
+impl Handleable for HandleSpace {}

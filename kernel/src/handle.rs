@@ -73,7 +73,7 @@ pub fn sys_handle_close(
     ctx: &SyscallRegs,
 ) -> Result<SyscallOutput, ErrorCode> {
     let handle_id = HandleId::new(ctx.a0);
-    let handle = current.isolate().handles().lock().remove(handle_id)?;
+    let handle = current.hspace().remove(handle_id)?;
     handle.close();
     Ok(SyscallOutput::Done(0))
 }

@@ -2,11 +2,12 @@ use ftl_types::handle::HandleId;
 
 use crate::handle::OwnedHandle;
 
-pub struct Isolate {
+/// A handle space.
+pub struct HandleSpace {
     handle: OwnedHandle,
 }
 
-impl Isolate {
+impl HandleSpace {
     pub const unsafe fn from_handle(id: HandleId) -> Self {
         let handle = OwnedHandle::new(id);
         Self { handle }

@@ -36,9 +36,7 @@ impl From<ErrorCode> for Errno {
             ErrorCode::PageFault => Self::EFAULT,
             ErrorCode::Unsupported => Self::ENOTSUP,
             ErrorCode::TooManyHandles => Self::EMFILE,
-            ErrorCode::InvalidArg | ErrorCode::InvalidType | ErrorCode::OutOfBounds => {
-                Self::EINVAL
-            }
+            ErrorCode::InvalidArg | ErrorCode::InvalidType | ErrorCode::OutOfBounds => Self::EINVAL,
             // TODO: better errno
             _ => {
                 warn!("unmapped error code: {:?}", error);

@@ -13,7 +13,7 @@ use crate::address::UAddr;
 use crate::arch::MIN_PAGE_SIZE;
 use crate::boot::BootInfo;
 use crate::handle::Handle;
-use crate::isolate::Isolate;
+use crate::hspace::HandleSpace;
 use crate::shared_ref::SharedRef;
 use crate::thread::Thread;
 use crate::vmobject::VmObject;
@@ -101,17 +101,14 @@ pub fn load(bootinfo: &BootInfo) {
     let entry = load_elf(&vmspace, elf_file);
     let sp = prepare_stack(&vmspace, bootinfo.cmdline);
 
-    let isolate = SharedRef::new(Isolate::new()).unwrap();
-    {
-        let mut handles = isolate.handles().lock();
-        let isolate_handle = Handle::new(isolate.clone(), HandleRight::WRITE);
-        let vmspace_handle = Handle::new(
-            vmspace.clone(),
-            HandleRight::READ | HandleRight::WRITE | HandleRight::MAP,
-        );
-        handles.insert_at(HandleId::new(1), isolate_handle).unwrap();
-        handles.insert_at(HandleId::new(2), vmspace_handle).unwrap();
-    }
-    let thread = Thread::new(isolate, vmspace, entry, sp, 0, 0).unwrap();
+    let hspace = SharedRef::new(HandleSpace::new()).unwrap();
+    let hspace_handle = Handle::new(hspace.clone(), HandleRight::WRITE);
+    let vmspace_handle = Handle::new(
+        vmspace.clone(),
+        HandleRight::READ | HandleRight::WRITE | HandleRight::MAP,
+    );
+    hspace.insert_at(HandleId::new(1), hspace_handle).unwrap();
+    hspace.insert_at(HandleId::new(2), vmspace_handle).unwrap();
+    let thread = Thread::new(hspace, vmspace, entry, sp, 0, 0).unwrap();
     thread.start().unwrap();
 }

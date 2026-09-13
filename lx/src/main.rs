@@ -20,7 +20,7 @@ mod wait_queue;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 
-use ftl::isolate::Isolate;
+use ftl::hspace::HandleSpace;
 use ftl::net::Net;
 use ftl::poll::Poll;
 use ftl::vmspace::VmSpace;
@@ -39,7 +39,7 @@ static INITFS: Aligned<{ include_bytes!("../../initfs.cpio").len() }> =
 #[cfg(not(test))]
 #[unsafe(no_mangle)]
 fn main(cmdline: &[u8]) {
-    let root_isolate = unsafe { Isolate::from_handle(HandleId::new(1)) };
+    let root_hspace = unsafe { HandleSpace::from_handle(HandleId::new(1)) };
     let root_vmspace = unsafe { VmSpace::from_handle(HandleId::new(2)) };
 
     let init =
@@ -59,7 +59,7 @@ fn main(cmdline: &[u8]) {
 
     let net = Net::create().expect("failed to create network");
     let network = net::TcpIp::new(net);
-    let _container = Container::new(root_isolate, root_vmspace, network.clone(), elf_file, &argv)
+    let _container = Container::new(root_hspace, root_vmspace, network.clone(), elf_file, &argv)
         .expect("failed to start LX");
 
     let poll = Poll::create().expect("failed to create poll");

@@ -148,15 +148,13 @@ pub fn sys_vmspace_clone(
 ) -> Result<SyscallOutput, ErrorCode> {
     let source_id = HandleId::new(ctx.a0);
     let source = current
-        .isolate()
-        .handles()
-        .lock()
+        .hspace()
         .get::<VmSpace>(source_id, HandleRight::READ)?;
     let vmspace = VmSpace::clone(&source)?;
     let vmspace = SharedRef::new(vmspace)?;
     let rights = HandleRight::READ | HandleRight::WRITE | HandleRight::MAP;
     let handle = Handle::new(vmspace, rights);
-    let id = current.isolate().handles().lock().insert(handle)?;
+    let id = current.hspace().insert(handle)?;
     Ok(SyscallOutput::Done(id.as_usize()))
 }
 
@@ -173,10 +171,9 @@ pub fn sys_vmspace_map(
         return Err(ErrorCode::InvalidArg);
     }
 
-    let handles = current.isolate().handles().lock();
-    let vmspace = handles.get::<VmSpace>(vmspace_id, HandleRight::MAP)?;
-    let vmo = handles.get::<VmObject>(vmo_id, HandleRight::MAP)?;
-    drop(handles);
+    let hspace = current.hspace();
+    let (vmspace, vmo) =
+        hspace.get2::<VmSpace, VmObject>(vmspace_id, HandleRight::MAP, vmo_id, HandleRight::MAP)?;
 
     vmspace.map(vmo, uaddr, attrs)?;
     Ok(SyscallOutput::Done(0))

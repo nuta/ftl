@@ -209,7 +209,7 @@ impl Process {
         let (vmspace, mappings, entry, sp) =
             create_address_space(&self.container.root_vmspace, elf_file, argv)?;
         let thread = LxThread::new(
-            &self.container.isolate,
+            &self.container.hspace,
             &vmspace,
             entry,
             sp,
@@ -259,7 +259,7 @@ impl Process {
         // TODO: LX assumes that the cookie won't be dereferenced until the
         // thread is started. Should we document and guarantee this?
         let thread = LxThread::new(
-            &container.isolate,
+            &container.hspace,
             &vmspace,
             entry,
             sp,

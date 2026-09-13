@@ -18,7 +18,7 @@ use crate::arch;
 use crate::arch::USER_ADDR_END;
 use crate::handle::Handle;
 use crate::handle::Handleable;
-use crate::isolate::Isolate;
+use crate::hspace::HandleSpace;
 use crate::poll::Poll;
 use crate::scheduler::SCHEDULER;
 use crate::shared_ref::SharedRef;
@@ -48,7 +48,8 @@ pub struct Thread {
     /// This is an [`UnsafeCell`] because the interrupt handler updates this
     /// field directly.
     arch: UnsafeCell<arch::Thread>,
-    isolate: SharedRef<Isolate>,
+    /// The handle space this thread belongs to.
+    hspace: SharedRef<HandleSpace>,
     vmspace: SharedRef<VmSpace>,
     mutable: SpinLock<Mutable>,
 }
@@ -63,7 +64,7 @@ unsafe impl Sync for Thread {}
 
 impl Thread {
     pub fn new(
-        isolate: SharedRef<Isolate>,
+        hspace: SharedRef<HandleSpace>,
         vmspace: SharedRef<VmSpace>,
         pc: usize,
         sp: usize,
@@ -84,7 +85,7 @@ impl Thread {
         SCHEDULER.reserve_capacity()?;
         SharedRef::new(Thread {
             arch: UnsafeCell::new(arch_thread),
-            isolate,
+            hspace,
             vmspace,
             mutable: SpinLock::new(mutable),
         })
@@ -104,8 +105,8 @@ impl Thread {
         &self.vmspace
     }
 
-    pub fn isolate(&self) -> &SharedRef<Isolate> {
-        &self.isolate
+    pub fn hspace(&self) -> &SharedRef<HandleSpace> {
+        &self.hspace
     }
 
     pub fn start_polling(
@@ -253,23 +254,21 @@ pub fn sys_thread_create(
     current: &SharedRef<Thread>,
     ctx: &SyscallRegs,
 ) -> Result<SyscallOutput, ErrorCode> {
-    let isolate_id = HandleId::new(ctx.a0);
+    let hspace_id = HandleId::new(ctx.a0);
     let vmspace_id = HandleId::new(ctx.a1);
     let pc = ctx.a2;
     let sp = ctx.a3;
     let fault_pc = ctx.a4;
     let cookie = ctx.a5;
 
-    let handle_table = current.isolate().handles();
-    let handles = handle_table.lock();
-    let isolate = handles.get::<Isolate>(isolate_id, HandleRight::WRITE)?;
-    let vmspace = handles.get::<VmSpace>(vmspace_id, HandleRight::READ)?;
-    drop(handles);
+    let current_hspace = current.hspace();
+    let (hspace, vmspace) =
+        current_hspace.get2(hspace_id, HandleRight::WRITE, vmspace_id, HandleRight::READ)?;
 
-    let thread = Thread::new(isolate, vmspace, pc, sp, fault_pc, cookie)?;
+    let thread = Thread::new(hspace, vmspace, pc, sp, fault_pc, cookie)?;
     let rights = HandleRight::READ | HandleRight::WRITE;
     let handle = Handle::new(thread, rights);
-    let id = handle_table.lock().insert(handle)?;
+    let id = current_hspace.insert(handle)?;
     Ok(SyscallOutput::Done(id.as_usize()))
 }
 
@@ -279,9 +278,7 @@ pub fn sys_thread_start(
 ) -> Result<SyscallOutput, ErrorCode> {
     let thread_id = HandleId::new(ctx.a0);
     let thread = current
-        .isolate()
-        .handles()
-        .lock()
+        .hspace()
         .get::<Thread>(thread_id, HandleRight::WRITE)?;
     thread.start()?;
     Ok(SyscallOutput::Done(0))
@@ -296,9 +293,7 @@ pub fn sys_thread_write_regs(
     let kind = RegsKind::from_usize(ctx.a1).ok_or(ErrorCode::InvalidArg)?;
     let regs = USlice::new(UAddr::new(ctx.a2), size_of::<Regs>())?;
     let thread = current
-        .isolate()
-        .handles()
-        .lock()
+        .hspace()
         .get::<Thread>(thread_id, HandleRight::WRITE)?;
 
     if SharedRef::eq(&thread, current) {
@@ -318,10 +313,9 @@ pub fn sys_thread_copy_regs(
     let src_id = HandleId::new(ctx.a0);
     let dest_id = HandleId::new(ctx.a1);
     let kind = RegsKind::from_usize(ctx.a2).ok_or(ErrorCode::InvalidArg)?;
-    let handles = current.isolate().handles().lock();
-    let src = handles.get::<Thread>(src_id, HandleRight::READ)?;
-    let dest = handles.get::<Thread>(dest_id, HandleRight::WRITE)?;
-    drop(handles);
+    let hspace = current.hspace();
+    let (src, dest) =
+        hspace.get2::<Thread, Thread>(src_id, HandleRight::READ, dest_id, HandleRight::WRITE)?;
 
     if SharedRef::eq(&src, &dest) {
         return Err(ErrorCode::InvalidArg);

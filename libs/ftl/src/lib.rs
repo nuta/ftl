@@ -7,7 +7,7 @@ pub mod print;
 pub mod allocator;
 mod arch;
 pub mod handle;
-pub mod isolate;
+pub mod hspace;
 pub mod net;
 mod panic;
 pub mod poll;

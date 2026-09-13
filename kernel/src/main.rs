@@ -17,7 +17,7 @@ mod boot;
 mod cpuvar;
 mod driver;
 mod handle;
-mod isolate;
+mod hspace;
 mod loader;
 mod memory;
 mod net;

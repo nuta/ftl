@@ -2,7 +2,7 @@ use alloc::boxed::Box;
 use alloc::sync::Arc;
 use alloc::sync::Weak;
 
-use ftl::isolate::Isolate;
+use ftl::hspace::HandleSpace;
 use ftl::thread::Thread;
 use ftl::vmspace::VmSpace;
 use ftl_types::error::ErrorCode;
@@ -35,7 +35,7 @@ impl Cookie {
 
 impl LxThread {
     pub fn new(
-        isolate: &Isolate,
+        hspace: &HandleSpace,
         vmspace: &VmSpace,
         entry: usize,
         sp: usize,
@@ -48,7 +48,7 @@ impl LxThread {
 
         // TODO: LX assumes that the cookie won't be derefernced until the
         //       thread is started. Should we document and guarantee this?
-        let inner = Thread::create(isolate, vmspace, entry, sp, fault_pc, cookie)?;
+        let inner = Thread::create(hspace, vmspace, entry, sp, fault_pc, cookie)?;
 
         let thread = Arc::new(LxThread {
             process,

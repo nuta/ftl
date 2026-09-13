@@ -9,7 +9,7 @@ use crate::arch::syscall1;
 use crate::arch::syscall3;
 use crate::arch::syscall6;
 use crate::handle::OwnedHandle;
-use crate::isolate::Isolate;
+use crate::hspace::HandleSpace;
 use crate::vmspace::VmSpace;
 
 pub struct Thread {
@@ -23,7 +23,7 @@ impl Thread {
     }
 
     pub fn create(
-        isolate: &Isolate,
+        hspace: &HandleSpace,
         vmspace: &VmSpace,
         pc: usize,
         sp: usize,
@@ -32,7 +32,7 @@ impl Thread {
     ) -> Result<Self, ErrorCode> {
         let id = syscall6(
             Syscall::ThreadCreate,
-            isolate.handle().id().as_usize(),
+            hspace.handle().id().as_usize(),
             vmspace.handle().id().as_usize(),
             pc,
             sp,

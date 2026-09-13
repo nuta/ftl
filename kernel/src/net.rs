@@ -77,12 +77,10 @@ pub fn sys_net_create(
     current: &SharedRef<Thread>,
     _ctx: &SyscallRegs,
 ) -> Result<SyscallOutput, ErrorCode> {
-    let handle_table = current.isolate().handles();
-
     let network = Network::new()?;
     let network = SharedRef::new(network)?;
     let handle = Handle::new(network.clone(), HandleRight::READ | HandleRight::WRITE);
-    let handle_id = handle_table.lock().insert(handle)?;
+    let handle_id = current.hspace().insert(handle)?;
 
     Ok(SyscallOutput::Done(handle_id.as_usize()))
 }
@@ -93,13 +91,9 @@ pub fn sys_net_subscribe(
 ) -> Result<SyscallOutput, ErrorCode> {
     let network_id = HandleId::new(ctx.a0);
     let poll_id = HandleId::new(ctx.a1);
-    let handle_table = current.isolate().handles();
-    let network = handle_table
-        .lock()
-        .get::<Network>(network_id, HandleRight::READ)?;
-    let poll = handle_table
-        .lock()
-        .get::<Poll>(poll_id, HandleRight::WRITE)?;
+    let hspace = current.hspace();
+    let (network, poll) =
+        hspace.get2::<Network, Poll>(network_id, HandleRight::READ, poll_id, HandleRight::WRITE)?;
 
     network.subscribe(EventEmitter::new(poll, network_id))?;
     Ok(SyscallOutput::Done(0))
@@ -115,9 +109,7 @@ pub fn sys_net_bind(
     let rule = unsafe { rule_uslice.read_uninit(&mut rule_buf)? };
 
     let network = current
-        .isolate()
-        .handles()
-        .lock()
+        .hspace()
         .get::<Network>(network_id, HandleRight::WRITE)?;
 
     network.bind(*rule)?;
@@ -134,9 +126,7 @@ pub fn sys_net_unbind(
     let rule = unsafe { rule_uslice.read_uninit(&mut _buf)? };
 
     let network = current
-        .isolate()
-        .handles()
-        .lock()
+        .hspace()
         .get::<Network>(network_id, HandleRight::WRITE)?;
 
     network.unbind(rule)?;
@@ -151,9 +141,7 @@ pub fn sys_net_recv(
     let payload = USlice::new(UAddr::new(ctx.a1), ctx.a2)?;
 
     let network = current
-        .isolate()
-        .handles()
-        .lock()
+        .hspace()
         .get::<Network>(network_id, HandleRight::READ)?;
 
     let payload_len = network.recv(payload)?;
@@ -167,9 +155,7 @@ pub fn sys_net_peek(
     let network_id = HandleId::new(ctx.a0);
     let header = USlice::new(UAddr::new(ctx.a1), ctx.a2)?;
     let network = current
-        .isolate()
-        .handles()
-        .lock()
+        .hspace()
         .get::<Network>(network_id, HandleRight::READ)?;
 
     network.peek(header)?;
@@ -182,9 +168,7 @@ pub fn sys_net_drop(
 ) -> Result<SyscallOutput, ErrorCode> {
     let network_id = HandleId::new(ctx.a0);
     let network = current
-        .isolate()
-        .handles()
-        .lock()
+        .hspace()
         .get::<Network>(network_id, HandleRight::READ)?;
 
     network.drop_peeked()?;
@@ -210,9 +194,7 @@ pub fn sys_net_send(
     let header = USlice::new(UAddr::new(ctx.a2), header_len)?;
     let payload = USlice::new(UAddr::new(ctx.a4), payload_len)?;
     let network = current
-        .isolate()
-        .handles()
-        .lock()
+        .hspace()
         .get::<Network>(network_id, HandleRight::WRITE)?;
 
     network.send(header, payload)?;

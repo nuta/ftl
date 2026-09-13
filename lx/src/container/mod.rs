@@ -1,6 +1,6 @@
 use alloc::sync::Arc;
 
-use ftl::isolate::Isolate;
+use ftl::hspace::HandleSpace;
 use ftl::vmspace::VmSpace;
 use ftl_utils::spinlock::SpinLock;
 use pid_table::PIdTable;
@@ -14,7 +14,7 @@ use crate::vfs::FileLike;
 mod pid_table;
 
 pub struct Container {
-    pub isolate: Isolate,
+    pub hspace: HandleSpace,
     pub root_vmspace: VmSpace,
     pub processes: SpinLock<PIdTable>,
     network: Arc<TcpIp>,
@@ -22,14 +22,14 @@ pub struct Container {
 
 impl Container {
     pub fn new(
-        isolate: Isolate,
+        hspace: HandleSpace,
         root_vmspace: VmSpace,
         network: Arc<TcpIp>,
         elf_file: Arc<dyn FileLike>,
         argv: &[&[u8]],
     ) -> Result<Arc<Self>, Errno> {
         let this = Arc::new(Self {
-            isolate,
+            hspace,
             root_vmspace,
             processes: SpinLock::new(PIdTable::new()),
             network,
