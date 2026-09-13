@@ -4,6 +4,13 @@ use ftl_types::error::ErrorCode;
 
 use crate::address::UAddr;
 
+/// Copies data from user space to kernel space.
+///
+/// # `#[inline(never)]`
+///
+/// This function must not be inlined since the page fault handler uses RIP to
+/// determine faults from this function.
+#[inline(never)]
 pub unsafe fn usercopy_read(src: UAddr, dst: *mut u8, len: usize) -> Result<(), ErrorCode> {
     let retval: usize;
     unsafe {
@@ -30,6 +37,13 @@ pub unsafe fn usercopy_read(src: UAddr, dst: *mut u8, len: usize) -> Result<(), 
     Ok(())
 }
 
+/// Copies data from kernel space to user space.
+///
+/// # `#[inline(never)]`
+///
+/// This function must not be inlined since the page fault handler uses RIP to
+/// determine faults from this function.
+#[inline(never)]
 pub unsafe fn usercopy_write(src: *const u8, dst: UAddr, len: usize) -> Result<(), ErrorCode> {
     let retval: usize;
     unsafe {
