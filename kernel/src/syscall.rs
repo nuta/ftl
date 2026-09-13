@@ -20,6 +20,7 @@ fn do_handle_syscall() {
         n if n == Syscall::Print as usize => crate::print::sys_print(&regs),
         n if n == Syscall::ThreadExit as usize => crate::thread::sys_thread_exit(&thread, &regs),
         n if n == Syscall::VmoCreate as usize => crate::vmobject::sys_vmo_create(&thread, &regs),
+        n if n == Syscall::VmoRead as usize => crate::vmobject::sys_vmo_read(&thread, &regs),
         n if n == Syscall::VmoWrite as usize => crate::vmobject::sys_vmo_write(&thread, &regs),
         n if n == Syscall::VmSpaceClone as usize => {
             crate::vmspace::sys_vmspace_clone(&thread, &regs)

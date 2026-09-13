@@ -180,7 +180,7 @@ impl USlice {
 
     pub fn read_bytes(self, dst: &mut [u8]) -> Result<(), ErrorCode> {
         // SAFETY: &mut [u8] is a non-null pointer and carries the length.
-        unsafe { self.read(dst.as_mut_ptr(), dst.len()) }
+        unsafe { self.do_read(dst.as_mut_ptr(), dst.len()) }
     }
 
     pub fn write_bytes(self, src: &[u8]) -> Result<(), ErrorCode> {
@@ -208,7 +208,7 @@ impl USlice {
     ///       user-copyable?
     pub unsafe fn read_uninit<T>(self, dst: &mut MaybeUninit<T>) -> Result<&mut T, ErrorCode> {
         // SAFETY: The caller must ensure that it is safe to copy.
-        unsafe { self.read(dst.as_mut_ptr().cast(), size_of::<T>())? };
+        unsafe { self.do_read(dst.as_mut_ptr().cast(), size_of::<T>())? };
         Ok(unsafe { dst.assume_init_mut() })
     }
 
@@ -218,11 +218,25 @@ impl USlice {
     ///
     /// - `ptr` must be a non-null pointer.
     /// - The buffer must be at least `len` bytes long.
-    pub unsafe fn read(self, ptr: *mut u8, len: usize) -> Result<(), ErrorCode> {
+    pub unsafe fn do_read(self, ptr: *mut u8, len: usize) -> Result<(), ErrorCode> {
         if len != self.len() {
             return Err(ErrorCode::InvalidArg);
         }
 
         unsafe { usercopy_read(self.addr, ptr, len) }
+    }
+
+    /// Writes the kernel buffer into the user address.
+    ///
+    /// # Safety
+    ///
+    /// - `ptr` must be a non-null pointer.
+    /// - The buffer must be at least `len` bytes long.
+    pub unsafe fn do_write(self, ptr: *const u8, len: usize) -> Result<(), ErrorCode> {
+        if len != self.len() {
+            return Err(ErrorCode::InvalidArg);
+        }
+
+        unsafe { usercopy_write(ptr, self.addr, len) }
     }
 }

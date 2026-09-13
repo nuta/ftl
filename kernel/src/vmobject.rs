@@ -109,20 +109,14 @@ impl VmObject {
         Ok(page.paddr)
     }
 
-    /// Returns the physical address of the page if it is already filled.
-    ///
-    /// Returns `None` if the page is not filled.
-    pub fn page_paddr(&self, index: usize) -> Option<PAddr> {
-        let mutable = self.mutable.lock();
-        let Some(page) = mutable.pages.get(index) else {
-            return None;
-        };
-
-        let Some(page) = page.as_ref() else {
-            return None;
-        };
-
-        Some(page.paddr)
+    pub fn read_user(&self, offset: usize, uslice: USlice) -> Result<(), ErrorCode> {
+        let mut off = 0;
+        self.read_write(offset, uslice.len(), |page_slice| {
+            let dst = uslice.subslice(off, page_slice.len())?;
+            page_slice.write_user(dst)?;
+            off += page_slice.len();
+            Ok(())
+        })
     }
 
     pub fn write(&self, offset: usize, buf: &[u8]) -> Result<(), ErrorCode> {
@@ -139,18 +133,6 @@ impl VmObject {
         self.read_write(offset, uslice.len(), |page_slice| {
             let src = uslice.subslice(off, page_slice.len())?;
             page_slice.read_user(src)?;
-            off += page_slice.len();
-            Ok(())
-        })
-    }
-
-    /// Reads bytes into the buffer.
-    ///
-    /// The lazily-allocated pages are filled on demand.
-    pub fn read(&self, offset: usize, buf: &mut [u8]) -> Result<(), ErrorCode> {
-        let mut off = 0;
-        self.read_write(offset, buf.len(), |page_slice| {
-            page_slice.read(&mut buf[off..off + page_slice.len()])?;
             off += page_slice.len();
             Ok(())
         })
@@ -236,20 +218,6 @@ impl PageSlice {
         self.len
     }
 
-    fn read(&self, buf: &mut [u8]) -> Result<(), ErrorCode> {
-        if buf.len() != self.len {
-            return Err(ErrorCode::InvalidArg);
-        }
-
-        unsafe {
-            let src = self.vaddr.as_ptr();
-            let dst = buf.as_mut_ptr();
-            core::ptr::copy(src, dst, self.len);
-        }
-
-        Ok(())
-    }
-
     fn write(&self, buf: &[u8]) -> Result<(), ErrorCode> {
         if buf.len() != self.len {
             return Err(ErrorCode::InvalidArg);
@@ -266,7 +234,12 @@ impl PageSlice {
 
     fn read_user(&self, uslice: USlice) -> Result<(), ErrorCode> {
         // SAFETY: We keep `self._page` alive while copying.
-        unsafe { uslice.read(self.vaddr.as_mut_ptr(), self.len) }
+        unsafe { uslice.do_read(self.vaddr.as_mut_ptr(), self.len) }
+    }
+
+    fn write_user(&self, uslice: USlice) -> Result<(), ErrorCode> {
+        // SAFETY: We keep `self._page` alive while copying.
+        unsafe { uslice.do_write(self.vaddr.as_ptr(), self.len) }
     }
 }
 
@@ -281,6 +254,26 @@ pub fn sys_vmo_create(
     let handle = Handle::new(vmo, rights);
     let id = current.isolate().handles().lock().insert(handle)?;
     Ok(SyscallOutput::Done(id.as_usize()))
+}
+
+pub fn sys_vmo_read(
+    current: &SharedRef<Thread>,
+    ctx: &SyscallRegs,
+) -> Result<SyscallOutput, ErrorCode> {
+    let id = HandleId::new(ctx.a0);
+    let offset = ctx.a1;
+    let uaddr = UAddr::new(ctx.a2);
+    let len = ctx.a3;
+
+    let uslice = USlice::new(uaddr, len)?;
+    let vmo = current
+        .isolate()
+        .handles()
+        .lock()
+        .get::<VmObject>(id, HandleRight::READ)?;
+
+    vmo.read_user(offset, uslice)?;
+    Ok(SyscallOutput::Done(0))
 }
 
 pub fn sys_vmo_write(

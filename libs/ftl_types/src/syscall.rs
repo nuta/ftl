@@ -26,4 +26,5 @@ pub enum Syscall {
     HandleClose = SYSCALL_BASE + 22,
     MonoTimeRead = SYSCALL_BASE + 23,
     PollWaitUntil = SYSCALL_BASE + 24,
+    VmoRead = SYSCALL_BASE + 25,
 }
