@@ -53,7 +53,7 @@ fn do_handle_syscall() {
         n if n == Syscall::NetDrop as usize => crate::net::sys_net_drop(&thread, &regs),
         n if n == Syscall::NetSend as usize => crate::net::sys_net_send(&thread, &regs),
         n if n == Syscall::HandleClose as usize => crate::handle::sys_handle_close(&thread, &regs),
-        n if n == Syscall::MonoTimeRead as usize => crate::time::sys_monotime_read(&thread, &regs),
+        n if n == Syscall::MonoTimeRead as usize => crate::timer::sys_monotime_read(&thread, &regs),
         _ => Err(ErrorCode::Unsupported),
     };
 

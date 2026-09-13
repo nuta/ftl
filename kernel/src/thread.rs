@@ -19,18 +19,20 @@ use crate::arch::USER_ADDR_END;
 use crate::handle::Handle;
 use crate::handle::Handleable;
 use crate::isolate::Isolate;
-use crate::poll::EventEmitter;
 use crate::poll::Poll;
 use crate::scheduler::SCHEDULER;
 use crate::shared_ref::SharedRef;
 use crate::syscall::SyscallOutput;
-use crate::time::GLOBAL_TIMER;
 use crate::vmspace::VmSpace;
 
 enum State {
     NotStarted,
     Runnable,
-    Blocked(SharedRef<Poll>),
+    Blocked {
+        poll: SharedRef<Poll>,
+        poll_id: HandleId,
+        deadline: Option<MonoTime>,
+    },
     Exited,
 }
 
@@ -109,25 +111,22 @@ impl Thread {
         self: &SharedRef<Self>,
         current_thread: &CurrentThread,
         poll: SharedRef<Poll>,
-        deadline: Option<(MonoTime, HandleId)>,
+        poll_id: HandleId,
+        deadline: Option<MonoTime>,
     ) -> Result<SyscallOutput, ErrorCode> {
         let mut mutable = self.mutable.lock();
         if !matches!(mutable.state, State::Runnable) {
             return Err(ErrorCode::InvalidState);
         }
 
-        match poll.try_wait(self)? {
+        match poll.try_wait(self, poll_id, deadline)? {
             Some(output) => Ok(SyscallOutput::Done(output.as_raw())),
             None => {
-                if let Some((deadline, handle_id)) = deadline {
-                    let emitter = EventEmitter::new(poll.clone(), handle_id);
-                    // FIXME: GLOBAL_TIMER.add may fail on OOM, and thread may
-                    //        be in the poll's waiters list forever. Can we
-                    //        reserve GLOBAL_TIMER space in advance?
-                    GLOBAL_TIMER.add(deadline, emitter)?;
-                }
-
-                mutable.state = State::Blocked(poll);
+                mutable.state = State::Blocked {
+                    poll,
+                    poll_id,
+                    deadline,
+                };
 
                 // Avoid enqueuing this thread twice: in Poll::enqueue (by
                 // another CPU), and in return_to_user (by us).
@@ -141,11 +140,17 @@ impl Thread {
     /// Checks if the blocked thread can be woken up, and resume if so.
     pub fn try_wake(self: &SharedRef<Self>) {
         let mut mutable = self.mutable.lock();
-        let State::Blocked(ref poll) = mutable.state else {
+        let State::Blocked {
+            ref poll,
+            poll_id,
+            deadline,
+            ..
+        } = mutable.state
+        else {
             return;
         };
 
-        let retval = match poll.try_wait(self) {
+        let retval = match poll.try_wait(self, poll_id, deadline) {
             Ok(Some(event)) => event.as_raw(),
             Ok(None) => return,
             Err(err) => err.as_usize(),

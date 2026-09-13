@@ -7,7 +7,7 @@ use core::sync::atomic::Ordering;
 use ftl_types::time::MonoTime;
 
 use super::ioport::out8;
-use crate::time::GLOBAL_TIMER;
+use crate::timer::GLOBAL_TIMER;
 
 pub(super) const TIMER_IRQ: u8 = 0;
 
@@ -32,7 +32,7 @@ pub(super) fn handle_interrupt() {
     TICKS.fetch_add(1, Ordering::Relaxed);
 
     // Do timekeeping job.
-    GLOBAL_TIMER.tick(monotime_read());
+    GLOBAL_TIMER.lock().tick(monotime_read());
 
     // Acknowledge the interrupt.
     super::get_cpuvar().arch.local_apic.acknowledge_irq();

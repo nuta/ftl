@@ -13,6 +13,7 @@ use ftl_utils::spinlock::SpinLock;
 
 use crate::address::UAddr;
 use crate::address::USlice;
+use crate::arch;
 use crate::handle::Handle;
 use crate::handle::Handleable;
 use crate::scheduler::SCHEDULER;
@@ -20,6 +21,7 @@ use crate::shared_ref::SharedRef;
 use crate::syscall::SyscallOutput;
 use crate::thread::CurrentThread;
 use crate::thread::Thread;
+use crate::timer::GLOBAL_TIMER;
 
 struct Mutable {
     queue: VecDeque<Event>,
@@ -27,6 +29,7 @@ struct Mutable {
 }
 
 pub struct Poll {
+    /// Lock order: Lock [`GLOBAL_TIMER`] first, then this.
     mutable: SpinLock<Mutable>,
 }
 
@@ -41,6 +44,7 @@ impl Poll {
     }
 
     fn enqueue(&self, event: Event) -> Result<(), ErrorCode> {
+        let mut timer = GLOBAL_TIMER.lock();
         let mut mutable = self.mutable.lock();
         mutable
             .queue
@@ -53,27 +57,57 @@ impl Poll {
             return Ok(());
         };
 
+        timer.cancel(&thread);
         SCHEDULER.push_back(thread);
         Ok(())
+    }
+
+    pub fn cancel(&self, thread: &SharedRef<Thread>) {
+        let mut mutable = self.mutable.lock();
+        mutable
+            .waiters
+            .retain(|waiter| !SharedRef::eq(waiter, thread));
     }
 
     pub fn notify(&self, self_id: HandleId) -> Result<(), ErrorCode> {
         self.enqueue(Event::new(EventKind::PollNotified, self_id))
     }
 
-    pub fn try_wait(&self, thread: &SharedRef<Thread>) -> Result<Option<Event>, ErrorCode> {
+    pub fn try_wait(
+        self: &SharedRef<Self>,
+        thread: &SharedRef<Thread>,
+        poll_id: HandleId,
+        deadline: Option<MonoTime>,
+    ) -> Result<Option<Event>, ErrorCode> {
+        let mut timer = GLOBAL_TIMER.lock();
         let mut mutable = self.mutable.lock();
 
-        let Some(event) = mutable.queue.pop_front() else {
-            mutable
-                .waiters
-                .try_reserve(1)
-                .map_err(|_| ErrorCode::OutOfMemory)?;
-            mutable.waiters.push_back(thread.clone());
-            return Ok(None);
-        };
+        if let Some(event) = mutable.queue.pop_front() {
+            return Ok(Some(event));
+        }
 
-        Ok(Some(event))
+        if let Some(deadline) = deadline {
+            // Check if the deadline has been reached.
+            let now = arch::monotime_read();
+            if now.duration_since(deadline).is_some() {
+                let event = Event::new(EventKind::PollTimeout, poll_id);
+                return Ok(Some(event));
+            }
+        }
+
+        // Reserve a space for the new waiter.
+        mutable
+            .waiters
+            .try_reserve(1)
+            .map_err(|_| ErrorCode::OutOfMemory)?;
+
+        if let Some(deadline) = deadline {
+            timer.add_poll_timeout(thread.clone(), deadline, self.clone())?;
+        }
+
+        // No events to return, enqueue the thread.
+        mutable.waiters.push_back(thread.clone());
+        Ok(None)
     }
 }
 
@@ -117,7 +151,7 @@ pub fn sys_poll_wait(
         .lock()
         .get::<Poll>(handle_id, HandleRight::READ)?;
 
-    current.start_polling(current_thread, poll, None)
+    current.start_polling(current_thread, poll, handle_id, None)
 }
 
 pub fn sys_poll_wait_until(
@@ -137,7 +171,7 @@ pub fn sys_poll_wait_until(
     let mut deadline_buf = MaybeUninit::uninit();
     let deadline = unsafe { deadline_uslice.read_uninit(&mut deadline_buf)? };
 
-    current.start_polling(current_thread, poll, Some((*deadline, handle_id)))
+    current.start_polling(current_thread, poll, handle_id, Some(*deadline))
 }
 
 pub fn sys_poll_notify(
