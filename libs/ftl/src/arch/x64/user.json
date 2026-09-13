@@ -20,7 +20,7 @@
   "plt-by-default": false,
   "position-independent-executables": false,
   "relro-level": "off",
-  "rustc-abi": "x86-softfloat",
+  "rustc-abi": "softfloat",
   "stack-probes": {
     "kind": "inline"
   },
