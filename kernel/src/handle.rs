@@ -9,7 +9,10 @@ use crate::shared_ref::SharedRef;
 use crate::syscall::SyscallOutput;
 use crate::thread::Thread;
 
-pub trait Handleable: Any + Send + Sync {}
+pub trait Handleable: Any + Send + Sync {
+    /// Called when a handle is explicitly closed.
+    fn close(self: SharedRef<Self>) {}
+}
 
 /// A reference to a kernel object and allowed operations on it.
 pub struct Handle<T: Handleable + ?Sized> {
@@ -45,6 +48,10 @@ impl<T: Handleable + ?Sized> Clone for Handle<T> {
 pub struct AnyHandle(Handle<dyn Handleable>);
 
 impl AnyHandle {
+    pub fn close(self) {
+        self.0.object.close();
+    }
+
     pub fn downcast<T: Handleable>(self) -> Option<Handle<T>> {
         let object = self.0.object.downcast().ok()?;
         let rights = self.0.rights;
@@ -67,6 +74,6 @@ pub fn sys_handle_close(
 ) -> Result<SyscallOutput, ErrorCode> {
     let handle_id = HandleId::new(ctx.a0);
     let handle = current.isolate().handles().lock().remove(handle_id)?;
-    drop(handle);
+    handle.close();
     Ok(SyscallOutput::Done(0))
 }

@@ -23,6 +23,7 @@ use crate::poll::Poll;
 use crate::scheduler::SCHEDULER;
 use crate::shared_ref::SharedRef;
 use crate::syscall::SyscallOutput;
+use crate::timer::GLOBAL_TIMER;
 use crate::vmspace::VmSpace;
 
 enum State {
@@ -229,7 +230,18 @@ impl Thread {
     }
 }
 
-impl Handleable for Thread {}
+impl Handleable for Thread {
+    fn close(self: SharedRef<Self>) {
+        let mut mutable = self.mutable.lock();
+        if let State::Blocked { ref poll, .. } = mutable.state {
+            let mut timer = GLOBAL_TIMER.lock();
+            timer.cancel(&self);
+            poll.cancel(&self);
+        }
+
+        mutable.state = State::Exited;
+    }
+}
 
 impl Drop for Thread {
     fn drop(&mut self) {

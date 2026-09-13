@@ -4,6 +4,7 @@
 #![feature(unsize)]
 #![feature(unsafe_cell_access)]
 #![feature(arbitrary_self_types)]
+#![feature(dispatch_from_dyn)]
 
 extern crate alloc;
 
