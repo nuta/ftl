@@ -13,7 +13,7 @@ fi
 
 set +e
 qemu-system-x86_64 \
-  -machine pc,acpi=off -m 128 \
+  -machine pc,acpi=off -m "${MEMORY:-128}" \
   -cpu qemu64,+fsgsbase,+xsave,+xsaveopt \
   -kernel ftl.elf -initrd lx.elf -append "$cmdline" \
   -nographic -serial mon:stdio --no-reboot -gdb tcp::7778 \
