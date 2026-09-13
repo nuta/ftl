@@ -17,7 +17,12 @@ export async function getAvailablePort(): Promise<number> {
     return address.port;
 }
 
-function buildQemuArgs({ hostPort }: { hostPort: number }) {
+interface QemuArgs {
+    hostPort: number;
+    init: string;
+}
+
+function buildQemuArgs({ hostPort, init }: QemuArgs) {
     return [
         "qemu-system-x86_64",
         "-machine", "pc,acpi=off",
@@ -25,6 +30,7 @@ function buildQemuArgs({ hostPort }: { hostPort: number }) {
         "-cpu", "qemu64,+fsgsbase,+xsave,+xsaveopt",
         "-kernel", "ftl.elf",
         "-initrd", "lx.elf",
+        "-append", `ftl.lx.init=${init}`,
         "-nographic",
         "-serial", "mon:stdio",
         "--no-reboot",
@@ -34,8 +40,13 @@ function buildQemuArgs({ hostPort }: { hostPort: number }) {
     ]
 }
 
-export async function boot(hostPort: number) {
-    const qemu = Bun.spawn(buildQemuArgs({ hostPort }), {
+export interface BootParams {
+    hostPort: number;
+    init: string;
+}
+
+export async function boot({ hostPort, init }: BootParams) {
+    const qemu = Bun.spawn(buildQemuArgs({ hostPort, init }), {
         cwd: path.join(__dirname, "..", ".."),
         stdin: "ignore",
         stdout: "pipe",

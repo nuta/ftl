@@ -1,69 +1,74 @@
 #!/bin/bash
-set -eu
+set -eu -o pipefail
 
 RELEASE=${RELEASE:-}
 ARCH=${ARCH:-x64}
 
-export CARGO_TERM_HYPERLINKS=false
+build_default_initfs() {
+  mkdir -p initfs
+  mkdir -p initfs/bin
+  zig cc -std=c23 -Os -target x86_64-linux-musl -static -no-pie \
+      -ffunction-sections -fdata-sections -Wl,--gc-sections \
+      apps/hello/main.c -o initfs/bin/echo
+  zig cc -std=c23 -Os -target x86_64-linux-musl -static -no-pie \
+      -ffunction-sections -fdata-sections -Wl,--gc-sections \
+      -DINDEX_HTML_LENGTH="$(wc -c < apps/httpd/index.html | xargs)" \
+      -DNOT_FOUND_HTML_LENGTH="$(wc -c < apps/httpd/404.html | xargs)" \
+      -DHILL_WEBP_LENGTH="$(wc -c < apps/httpd/hill.webp | xargs)" \
+      apps/httpd/main.c -o initfs/bin/httpd
+}
 
-CARGOFLAGS=(
-    -Z build-std=core,alloc
-    -Z build-std-features=compiler-builtins-mem
-    -Z json-target-spec
-)
+build_initfs() {
+  local initfs_dir="$1"
+  local initfs_cpio="$2"
 
-if [[ -n "${RELEASE:-}" ]]; then
-    CARGOFLAGS+=(--release)
-    target="release"
-else
-    target="debug"
-fi
+  pushd "${initfs_dir}"
+  find * -print0 | cpio -o -0 -H newc > "${initfs_cpio}"
+  popd
+}
 
-echo -n > initfs.list
-mkdir -p initfs
+build_os() {
+  export CARGO_TERM_HYPERLINKS=false
+  CARGOFLAGS=(
+      -Z build-std=core,alloc
+      -Z build-std-features=compiler-builtins-mem
+      -Z json-target-spec
+  )
 
-# Build apps.
-mkdir -p initfs/bin
-zig cc -std=c23 -Os -target x86_64-linux-musl -static -no-pie \
-    -ffunction-sections -fdata-sections -Wl,--gc-sections \
-    -DINDEX_HTML_LENGTH="$(wc -c < apps/httpd/index.html | xargs)" \
-    -DNOT_FOUND_HTML_LENGTH="$(wc -c < apps/httpd/404.html | xargs)" \
-    -DHILL_WEBP_LENGTH="$(wc -c < apps/httpd/hill.webp | xargs)" \
-    apps/httpd/main.c -o initfs/bin/httpd
-printf 'bin/httpd\0' >> initfs.list
+  if [[ -n "${RELEASE:-}" ]]; then
+      CARGOFLAGS+=(--release)
+      target="release"
+  else
+      target="debug"
+  fi
 
-# Build initfs.
-pushd initfs
-cpio -o -H newc -0 < ../initfs.list > ../initfs.cpio
-popd
+  cargo_command=build
+  if [[ -n "${CHECK:-}" ]]; then
+    cargo_command=check
+  fi
 
-cargo_command=build
-if [[ -n "${CHECK:-}" ]]; then
-  cargo_command=check
-fi
+  # Build userspace OS.
+  FTL_LOG_PREFIX="[$(printf '%-10s' "lx")] " \
+      cargo "${cargo_command}" "${CARGOFLAGS[@]}" --target libs/ftl/src/arch/$ARCH/user.json \
+         --manifest-path lx/Cargo.toml
 
-# Build userspace OS.
-FTL_LOG_PREFIX="[$(printf '%-10s' "lx")] " \
-    cargo "${cargo_command}" "${CARGOFLAGS[@]}" --target libs/ftl/src/arch/$ARCH/user.json \
-       --manifest-path lx/Cargo.toml
+  # Build kernel.
+  FTL_LOG_PREFIX="[$(printf '%-10s' "kernel")] " \
+    cargo "${cargo_command}" "${CARGOFLAGS[@]}" --target kernel/src/arch/$ARCH/kernel.json \
+      --manifest-path kernel/Cargo.toml
 
-# Build kernel.
-FTL_LOG_PREFIX="[$(printf '%-10s' "kernel")] " \
-  cargo "${cargo_command}" "${CARGOFLAGS[@]}" --target kernel/src/arch/$ARCH/kernel.json \
-    --manifest-path kernel/Cargo.toml
+  if [[ "$cargo_command" != "check" ]]; then
+    cp target/user/$target/lx lx.elf
+    cp target/kernel/$target/kernel ftl.elf
+  fi
+}
 
-if [[ "$cargo_command" != "check" ]]; then
-  cp target/user/$target/lx lx.elf
-  cp target/kernel/$target/kernel ftl.elf
-fi
-
-# Build ISO if $ISO is set.
-if [[ -n "${ISO:-}" ]]; then
+build_iso() {
   if [[ "$ARCH" != "x64" ]]; then
     echo "ISO is only supported for x64"
     exit 1
   fi
-  
+
   echo "Building ISO..."
   mkdir -p isofiles/boot/grub
   cp kernel/src/arch/x64/grub.cfg isofiles/boot/grub/
@@ -71,4 +76,20 @@ if [[ -n "${ISO:-}" ]]; then
 
   export PATH="$PATH:/opt/homebrew/opt/i686-elf-grub/bin"
   i686-elf-grub-mkrescue -o ftl.iso isofiles
-fi
+}
+
+main() {
+  if [[ ! -n "${INITFS:-}" ]]; then
+    build_default_initfs
+  fi
+
+  build_initfs "${INITFS:-initfs}" "$(pwd)/initfs.cpio"
+  build_os
+
+  # Build ISO if $ISO is set.
+  if [[ -n "${ISO:-}" ]]; then
+    build_iso
+  fi
+}
+
+main

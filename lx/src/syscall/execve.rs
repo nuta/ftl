@@ -4,7 +4,7 @@ use core::ffi::CStr;
 
 use ftl_types::thread::ExitReason;
 
-use crate::httpd_elf;
+use crate::initfs::InitFsLoader;
 use crate::thread::LxThread;
 use crate::types::c_long;
 use crate::types::errno::Errno;
@@ -29,8 +29,16 @@ pub fn sys_execve(
         }
     }
 
-    // TODO: load from the path
-    let elf_file = Arc::new(EmbeddedFile::new(httpd_elf()));
+    if argv_vec.is_empty() {
+        return Err(Errno::EINVAL);
+    }
+
+    // TODO: VFS support
+    let mut initfs = InitFsLoader::new(&crate::INITFS.0);
+    let initfs_file = initfs
+        .find(|file| file.name == argv_vec[0].trim_prefix(b"/"))
+        .expect("init not found in initfs");
+    let elf_file = Arc::new(EmbeddedFile::new(initfs_file.data));
 
     // TODO: envp support
     current.process().exec(current, elf_file, &argv_vec)?;

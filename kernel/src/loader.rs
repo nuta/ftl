@@ -6,6 +6,7 @@ use ftl_elf::PhdrType;
 use ftl_types::handle::HandleId;
 use ftl_types::handle::HandleRight;
 use ftl_types::vmspace::PageAttrs;
+use ftl_utils::alignment::align_down;
 use ftl_utils::alignment::align_up;
 
 use crate::address::UAddr;
@@ -54,16 +55,43 @@ fn load_elf(vmspace: &SharedRef<VmSpace>, elf_file: &[u8]) -> usize {
     elf.ehdr.e_entry as usize
 }
 
-fn prepare_stack(vmspace: &SharedRef<VmSpace>) -> usize {
+fn write_stack(
+    vmo: &SharedRef<VmObject>,
+    stack_bottom: UAddr,
+    stack_size: usize,
+    cmdline: &[u8],
+) -> usize {
+    assert!(cmdline.len() <= stack_size / 2, "too long cmdline");
+
+    // Calculate the layout of the stack.
+    //
+    // The stack pointer is aligned to 16 bytes, x86-64 ABI requirement.
+    let cmdline_offset = stack_size - cmdline.len();
+    let sp_offset = align_down(cmdline_offset - 2 * size_of::<usize>(), 16);
+    let cmdline_ptr = stack_bottom.as_usize() + cmdline_offset;
+
+    // Write cmdline to the stack.
+    vmo.write(cmdline_offset, cmdline).unwrap();
+
+    // Push cmdline pointer and its length to the stack.
+    vmo.write(sp_offset, &cmdline_ptr.to_ne_bytes()).unwrap();
+    vmo.write(sp_offset + 8, &cmdline.len().to_ne_bytes())
+        .unwrap();
+
+    sp_offset
+}
+
+fn prepare_stack(vmspace: &SharedRef<VmSpace>, cmdline: &[u8]) -> usize {
     let stack_size = 256 * 1024;
     let vmo = VmObject::new_anonymous(stack_size).unwrap();
 
-    let start = UAddr::new(0x40000000 - stack_size); // TODO: find an empty region in vmspace
+    let stack_bottom = UAddr::new(0x40000000 - stack_size); // TODO: find an empty region in vmspace
+    let sp_offset = write_stack(&vmo, stack_bottom, stack_size, cmdline);
 
     vmspace
-        .map(vmo, start, PageAttrs::READ | PageAttrs::WRITE)
+        .map(vmo, stack_bottom, PageAttrs::READ | PageAttrs::WRITE)
         .unwrap();
-    start.as_usize() + stack_size
+    stack_bottom.as_usize() + sp_offset
 }
 
 pub fn load(bootinfo: &BootInfo) {
@@ -71,7 +99,7 @@ pub fn load(bootinfo: &BootInfo) {
     let elf_file = initrd.as_bytes();
     let vmspace = VmSpace::new().and_then(SharedRef::new).unwrap();
     let entry = load_elf(&vmspace, elf_file);
-    let sp = prepare_stack(&vmspace);
+    let sp = prepare_stack(&vmspace, bootinfo.cmdline);
 
     let isolate = SharedRef::new(Isolate::new()).unwrap();
     {

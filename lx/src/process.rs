@@ -174,9 +174,10 @@ impl Process {
     pub fn new_init(
         container: Arc<Container>,
         elf_file: Arc<dyn FileLike>,
+        argv: &[&[u8]],
     ) -> Result<Arc<Process>, Errno> {
         let (vmspace, mappings, entry, sp) =
-            create_address_space(&container.root_vmspace, elf_file, &[])?;
+            create_address_space(&container.root_vmspace, elf_file, argv)?;
 
         let mut fd_table = FdTable::new(1024); // TODO: make this configurable
         let console: Arc<dyn FileLike> = Arc::new(Console::new());
@@ -415,13 +416,15 @@ fn prepare_stack(
     words.push(argv.len());
 
     // argv
-    let strings_len: usize = argv.iter().map(|arg| arg.len()).sum();
-    let args_offset = stack_size - strings_len;
+    let strings_len: usize = argv.iter().map(|arg| arg.len() + 1).sum();
+    let args_offset = stack_size.checked_sub(strings_len).ok_or(Errno::ENOMEM)?;
     let mut offset = args_offset;
     for arg in argv {
         stack.write(offset, arg)?;
         words.push(sp_bottom + offset);
         offset += arg.len();
+        stack.write(offset, &[0])?;
+        offset += 1;
     }
     words.push(0); // NULL (terminator)
 
@@ -433,7 +436,7 @@ fn prepare_stack(
 
     // Align to 16 bytes (x64 ABI requirement).
     let len = words.len() * size_of::<usize>();
-    let sp_offset = align_down(args_offset - len, 16);
+    let sp_offset = align_down(args_offset.checked_sub(len).ok_or(Errno::ENOMEM)?, 16);
 
     // Copy argc, argv/envp pointers, and auxv.
     let bytes = unsafe { slice::from_raw_parts(words.as_ptr().cast(), len) };
@@ -515,7 +518,7 @@ fn load_elf(
     let mut header_region = vec![0u8; phdrs_end]; // TODO: Use MaybeUninit
     read_exact(elf_file, 0, &mut header_region)?;
 
-    let elf = Elf::parse(&header_region, ftl_elf::ET_EXEC).expect("failed to parse httpd ELF");
+    let elf = Elf::parse(&header_region, ftl_elf::ET_EXEC).expect("failed to parse ELF");
     for phdr in elf.phdrs {
         if phdr.p_type != PhdrType::Load as u32 {
             continue;

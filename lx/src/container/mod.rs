@@ -26,6 +26,7 @@ impl Container {
         root_vmspace: VmSpace,
         network: Arc<TcpIp>,
         elf_file: Arc<dyn FileLike>,
+        argv: &[&[u8]],
     ) -> Result<Arc<Self>, Errno> {
         let this = Arc::new(Self {
             isolate,
@@ -34,7 +35,7 @@ impl Container {
             network,
         });
 
-        let init_process = Process::new_init(this.clone(), elf_file)?;
+        let init_process = Process::new_init(this.clone(), elf_file, argv)?;
         this.processes.lock().insert(PId::new(1), init_process);
         Ok(this)
     }

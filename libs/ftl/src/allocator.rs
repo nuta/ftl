@@ -15,6 +15,7 @@ use crate::vmspace::VmSpace;
 const CHUNK_SIZE: usize = 128 * 1024;
 const HEAP_BASE_ADDR: usize = 0x6000_0000;
 
+#[cfg(target_os = "none")]
 #[global_allocator]
 static GLOBAL_ALLOCATOR: GlobalAllocator = GlobalAllocator::new();
 

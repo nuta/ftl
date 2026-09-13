@@ -1,9 +1,11 @@
 #![no_std]
-#![no_main]
+#![cfg_attr(not(test), no_main)]
+#![feature(trim_prefix_suffix)]
 
 extern crate alloc;
 
 mod arch;
+mod cmdline;
 mod container;
 mod initfs;
 mod net;
@@ -16,6 +18,7 @@ mod vfs;
 mod wait_queue;
 
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 
 use ftl::isolate::Isolate;
 use ftl::net::Net;
@@ -33,22 +36,30 @@ struct Aligned<const N: usize>([u8; N]);
 static INITFS: Aligned<{ include_bytes!("../../initfs.cpio").len() }> =
     Aligned(*include_bytes!("../../initfs.cpio"));
 
-fn httpd_elf() -> &'static [u8] {
-    InitFsLoader::new(&INITFS.0)
-        .find(|file| file.name == b"bin/httpd")
-        .expect("httpd not found in initfs")
-        .data
-}
-
+#[cfg(not(test))]
 #[unsafe(no_mangle)]
-fn main() {
+fn main(cmdline: &[u8]) {
     let root_isolate = unsafe { Isolate::from_handle(HandleId::new(1)) };
     let root_vmspace = unsafe { VmSpace::from_handle(HandleId::new(2)) };
-    let httpd_elf = Arc::new(EmbeddedFile::new(httpd_elf()));
+
+    let init =
+        cmdline::parse(cmdline, b"ftl.lx.init").expect("failed to parse ftl.lx.init in cmdline");
+    let argv: Vec<&[u8]> = init
+        .split(|b| b.is_ascii_whitespace())
+        .filter(|arg| !arg.is_empty())
+        .collect();
+    assert!(!argv.is_empty(), "ftl.lx.init must not be empty");
+
+    // Open the init ELF file.
+    let mut initfs = InitFsLoader::new(&INITFS.0);
+    let initfs_file = initfs
+        .find(|file| file.name == argv[0].trim_prefix(b"/"))
+        .expect("init not found in initfs");
+    let elf_file = Arc::new(EmbeddedFile::new(initfs_file.data));
 
     let net = Net::create().expect("failed to create network");
     let network = net::TcpIp::new(net);
-    let _container = Container::new(root_isolate, root_vmspace, network.clone(), httpd_elf)
+    let _container = Container::new(root_isolate, root_vmspace, network.clone(), elf_file, &argv)
         .expect("failed to start LX");
 
     let poll = Poll::create().expect("failed to create poll");
