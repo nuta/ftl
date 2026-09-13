@@ -44,12 +44,6 @@ impl Drop for Page {
     }
 }
 
-/// A page initializer.
-enum Pager {
-    /// Pages are filled with zeros.
-    Anonymous,
-}
-
 struct Mutable {
     pages: Vec<Option<SharedRef<Page>>>,
 }
@@ -70,7 +64,6 @@ impl Mutable {
 /// A virtually-contiguous memory region.
 pub struct VmObject {
     mutable: SpinLock<Mutable>,
-    pager: Pager,
     len: usize,
 }
 
@@ -89,7 +82,6 @@ impl VmObject {
         pages.resize_with(n, Default::default);
 
         SharedRef::new(Self {
-            pager: Pager::Anonymous,
             len,
             mutable: SpinLock::new(Mutable { pages }),
         })

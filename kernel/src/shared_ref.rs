@@ -6,7 +6,6 @@ use core::any::Any;
 use core::fmt;
 use core::marker::Unsize;
 use core::mem;
-use core::mem::ManuallyDrop;
 use core::mem::offset_of;
 use core::ops::CoerceUnsized;
 use core::ops::Deref;
@@ -31,14 +30,6 @@ impl<T> RefCounted<T> {
     const fn new(value: T) -> Self {
         Self {
             counter: AtomicUsize::new(1),
-            value,
-        }
-    }
-
-    pub const fn new_static(value: T) -> Self {
-        Self {
-            // TODO: Better way to guarantee the static reference won't be dropped.
-            counter: AtomicUsize::new(usize::MAX / 2),
             value,
         }
     }
@@ -87,14 +78,6 @@ impl<T> SharedRef<T> {
         })
     }
 
-    /// Creates a new reference-counted object from a static reference.
-    pub const fn new_static(inner: &'static RefCounted<T>) -> Self {
-        let ptr = inner as *const RefCounted<T> as *mut RefCounted<T>;
-        Self {
-            ptr: unsafe { NonNull::new_unchecked(ptr) },
-        }
-    }
-
     /// Provides a raw pointer to the data.
     ///
     /// The counts are not affected in any way and the SharedRef is not consumed.
@@ -134,24 +117,6 @@ impl<T> SharedRef<T> {
                 ptr: NonNull::new_unchecked(ref_counted),
             }
         }
-    }
-
-    /// Clones a reference-counted object from a raw pointer, created by
-    /// `SharedRef::into_raw`.
-    ///
-    /// # Safety
-    ///
-    /// The raw pointer must have been previously returned by a call to
-    /// `SharedRef::into_raw`.
-    pub unsafe fn clone_from_raw(ptr: *const T) -> Self {
-        // SAFETY: The caller must ensure SharedRef::from_raw's safety
-        //         conditions.
-        let borrowed = ManuallyDrop::new(unsafe { Self::from_raw(ptr) });
-
-        // Self::from_raw does not increment the reference count. Do it manually,
-        // and avoid triggering the destructor (decrement the count) by using
-        // ManuallyDrop.
-        SharedRef::clone(&borrowed)
     }
 }
 

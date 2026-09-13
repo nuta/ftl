@@ -35,12 +35,6 @@ impl GlobalAllocator {
             inner: SpinLock::new(LinkedListAllocator::new()),
         }
     }
-
-    pub fn add_region(&self, ptr: *mut u8, size: usize) {
-        unsafe {
-            self.inner.lock().add_chunk(ptr, size);
-        }
-    }
 }
 
 unsafe impl GlobalAlloc for GlobalAllocator {

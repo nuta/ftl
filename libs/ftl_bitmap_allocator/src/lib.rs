@@ -73,7 +73,7 @@ impl Region {
             }
         }
 
-        return Ok(self.paddr_start + range.start * page_size);
+        Ok(self.paddr_start + range.start * page_size)
     }
 
     fn contains_paddr(&self, paddr: usize) -> bool {

@@ -50,14 +50,6 @@ impl AnyHandle {
         let rights = self.0.rights;
         Some(Handle { object, rights })
     }
-
-    pub fn authorize(self, required: HandleRight) -> Result<SharedRef<dyn Handleable>, ErrorCode> {
-        self.0.authorize(required)
-    }
-
-    pub fn bypass_check(&self) -> &SharedRef<dyn Handleable> {
-        &self.0.object
-    }
 }
 
 impl<T: Handleable> From<Handle<T>> for AnyHandle {
