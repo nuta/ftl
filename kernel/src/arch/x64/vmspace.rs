@@ -273,7 +273,7 @@ unsafe extern "C" {
     static __kernel_memory_end: u8;
 }
 
-pub fn get_kernel_reserved_range() -> Range<PAddr> {
+pub(super) fn get_kernel_reserved_range() -> Range<PAddr> {
     let start = VAddr::new(&raw const __kernel_memory as usize);
     let end = VAddr::new(&raw const __kernel_memory_end as usize);
     let start_paddr = vaddr2paddr(start);

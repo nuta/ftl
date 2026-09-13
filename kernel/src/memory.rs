@@ -4,7 +4,6 @@ use core::cmp::min;
 use core::ops::Range;
 use core::ptr::null_mut;
 
-use ftl_arrayvec::ArrayVec;
 use ftl_bitmap_allocator::BitmapAllocator;
 use ftl_malloc::LinkedListAllocator;
 use ftl_utils::alignment::align_down;
@@ -18,7 +17,6 @@ use crate::arch;
 use crate::arch::MIN_PAGE_SIZE;
 use crate::boot::BootInfo;
 use crate::boot::FreeRam;
-use crate::boot::NUM_MODULES_MAX;
 
 const MALLOC_CHUNK_SIZE: usize = 512 * 1024; // 512 KB
 
@@ -243,19 +241,10 @@ where
     }
 }
 
-pub fn init(bootinfo: &BootInfo) {
-    // Collect the reserved regions that we can't allocate from.
-    let mut reserved_regions = ArrayVec::<Range<PAddr>, { NUM_MODULES_MAX + 1 }>::new();
-    reserved_regions
-        .try_push(arch::get_kernel_reserved_range())
-        .unwrap();
-    for module in &bootinfo.modules {
-        reserved_regions
-            .try_push(module.start..module.end)
-            .expect("too many reserved regions");
-    }
-
-    bubble_sort(reserved_regions.as_slice_mut(), |a, b| a.start > b.start);
+pub fn init(bootinfo: &mut BootInfo) {
+    bubble_sort(bootinfo.reserved_regions.as_slice_mut(), |a, b| {
+        a.start > b.start
+    });
 
     // Visit the free RAM regions and add them to the page allocator.
     for FreeRam { addr, size } in &bootinfo.free_rams {
@@ -266,10 +255,15 @@ pub fn init(bootinfo: &BootInfo) {
 
         // QEMU does not exclude module regions from the free RAM regions. Exclude
         // them manually so that the kernel won't try to allocate from them.
-        visit_unused_regions(*addr, end, reserved_regions.as_slice(), |addr, end| {
-            let size = end.as_usize() - addr.as_usize();
-            trace!("RAM: {addr} - {end} ({})", ByteSize(size));
-            PAGE_ALLOCATOR.add_region(addr, end);
-        });
+        visit_unused_regions(
+            *addr,
+            end,
+            bootinfo.reserved_regions.as_slice(),
+            |addr, end| {
+                let size = end.as_usize() - addr.as_usize();
+                trace!("RAM: {addr} - {end} ({})", ByteSize(size));
+                PAGE_ALLOCATOR.add_region(addr, end);
+            },
+        );
     }
 }

@@ -1,3 +1,4 @@
+use core::ops::Range;
 use core::slice;
 
 use ftl_arrayvec::ArrayVec;
@@ -32,10 +33,11 @@ pub struct BootInfo {
     #[allow(unused)]
     pub modules: ArrayVec<Module, NUM_MODULES_MAX>,
     pub free_rams: ArrayVec<FreeRam, 8>,
+    pub reserved_regions: ArrayVec<Range<PAddr>, { NUM_MODULES_MAX + 2 }>,
 }
 
-pub fn boot(bootinfo: BootInfo) -> ! {
-    crate::memory::init(&bootinfo);
+pub fn boot(mut bootinfo: BootInfo) -> ! {
+    crate::memory::init(&mut bootinfo);
     crate::cpuvar::init(0);
     crate::driver::init();
     crate::net::init();

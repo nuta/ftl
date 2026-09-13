@@ -164,9 +164,29 @@ pub(super) fn parse_multiboot2_info(info_addr: PAddr) -> BootInfo {
         offset += (tag_header.size as usize + 7) & !7;
     }
 
+    let mut reserved_regions = ArrayVec::new();
+    let info_end = info_addr
+        .checked_add(total_size)
+        .expect("multiboot info overflows");
+    // Reserve the multiboot info (cmdline) itself.
+    reserved_regions
+        .try_push(PAddr::new(info_addr)..PAddr::new(info_end))
+        .unwrap();
+    // Reserve the kernel memory range.
+    reserved_regions
+        .try_push(super::vmspace::get_kernel_reserved_range())
+        .unwrap();
+    // Reserve the modules (e.g. lx.elf).
+    for module in &modules {
+        reserved_regions
+            .try_push(module.start..module.end)
+            .expect("too many reserved regions");
+    }
+
     BootInfo {
         cmdline,
         free_rams,
         modules,
+        reserved_regions,
     }
 }

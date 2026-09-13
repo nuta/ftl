@@ -115,15 +115,12 @@ pub fn semihosting_exit() -> ! {
     todo!()
 }
 
-pub fn get_kernel_reserved_range() -> Range<PAddr> {
-    todo!()
-}
-
 #[unsafe(no_mangle)]
 pub fn main() -> ! {
     crate::boot::boot(BootInfo {
         cmdline: b"",
         free_rams: ArrayVec::new(),
         modules: ArrayVec::new(),
+        reserved_regions: ArrayVec::new(),
     });
 }

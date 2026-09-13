@@ -109,9 +109,30 @@ pub fn parse_start_info(start_info: PAddr) -> BootInfo {
         }
     }
 
+    let mut reserved_regions = ArrayVec::new();
+    // Reserve the kernel memory range.
+    reserved_regions
+        .try_push(super::vmspace::get_kernel_reserved_range())
+        .unwrap();
+    // Reserve the modules (e.g. lx.elf).
+    for module in &modules {
+        reserved_regions
+            .try_push(module.start..module.end)
+            .expect("too many reserved regions");
+    }
+    // Reserve the cmdline.
+    let cmdline_start = start_info.cmdline_paddr as usize;
+    let cmdline_end = cmdline_start
+        .checked_add(cmdline.len())
+        .expect("cmdline overflows");
+    reserved_regions
+        .try_push(PAddr::new(cmdline_start)..PAddr::new(cmdline_end))
+        .unwrap();
+
     BootInfo {
         cmdline,
         free_rams,
         modules,
+        reserved_regions,
     }
 }
