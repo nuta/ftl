@@ -45,6 +45,12 @@ Build and run:
 ./run.sh
 ```
 
+You can start a specific Linux command:
+
+```
+./run.sh "/bin/echo Hello World"
+```
+
 To get an ISO image to run FTL on cloud:
 
 ```
@@ -53,7 +59,7 @@ ISO=1 ./build.sh
 
 > [!TIP]
 >
-> Fun fact: [ftl-os.org](https://ftl-os.org) is served by FTL running on Google Compute Engine.
+> **Fun fact:** [ftl-os.org](https://ftl-os.org) is served by FTL running on Google Compute Engine.
 
 ## Design
 
