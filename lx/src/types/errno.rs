@@ -31,12 +31,24 @@ impl From<ErrorCode> for Errno {
         match error {
             ErrorCode::OutOfMemory => Self::ENOMEM,
             ErrorCode::NotAllowed => Self::EPERM,
-            ErrorCode::AlreadyExists => Self::EEXIST,
-            ErrorCode::InvalidState => Self::EBUSY,
+            ErrorCode::AlreadyExists | ErrorCode::AlreadyMapped => Self::EEXIST,
+            ErrorCode::InvalidState
+            | ErrorCode::ThreadNotRunnable
+            | ErrorCode::ThreadAlreadyStarted => Self::EBUSY,
             ErrorCode::PageFault => Self::EFAULT,
             ErrorCode::Unsupported => Self::ENOTSUP,
+            ErrorCode::UnknownSyscall => Self::ENOSYS,
             ErrorCode::TooManyHandles => Self::EMFILE,
-            ErrorCode::InvalidArg | ErrorCode::InvalidType | ErrorCode::OutOfBounds => Self::EINVAL,
+            ErrorCode::HandleNotFound => Self::EBADF,
+            ErrorCode::InvalidHandleId
+            | ErrorCode::InvalidHandleType
+            | ErrorCode::InvalidArg
+            | ErrorCode::InvalidType
+            | ErrorCode::InvalidUserAddr
+            | ErrorCode::InvalidPageAttrs
+            | ErrorCode::NotAligned
+            | ErrorCode::PacketTooLong
+            | ErrorCode::OutOfBounds => Self::EINVAL,
             // TODO: better errno
             _ => {
                 warn!("unmapped error code: {:?}", error);

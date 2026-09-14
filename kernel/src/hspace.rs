@@ -58,7 +58,7 @@ impl HandleSpace {
     ) -> Result<(), ErrorCode> {
         let raw_id = id.as_usize();
         if raw_id == 0 || raw_id > NUM_HANDLES_MAX {
-            return Err(ErrorCode::InvalidArg);
+            return Err(ErrorCode::InvalidHandleId);
         }
 
         if mutable.handles.contains_key(&raw_id) {
@@ -83,9 +83,9 @@ impl HandleSpace {
             .handles
             .get(&id.as_usize())
             .cloned()
-            .ok_or(ErrorCode::InvalidArg)?
+            .ok_or(ErrorCode::HandleNotFound)?
             .downcast::<T>()
-            .ok_or(ErrorCode::InvalidType)?
+            .ok_or(ErrorCode::InvalidHandleType)?
             .authorize(required)
     }
 
@@ -98,22 +98,22 @@ impl HandleSpace {
     ) -> Result<(SharedRef<T1>, SharedRef<T2>), ErrorCode> {
         let mutable = self.mutable.lock();
         let Some(handle1) = mutable.handles.get(&id1.as_usize()) else {
-            return Err(ErrorCode::InvalidArg);
+            return Err(ErrorCode::HandleNotFound);
         };
 
         let Some(handle2) = mutable.handles.get(&id2.as_usize()) else {
-            return Err(ErrorCode::InvalidArg);
+            return Err(ErrorCode::HandleNotFound);
         };
 
         let handle1 = handle1
             .clone()
             .downcast::<T1>()
-            .ok_or(ErrorCode::InvalidType)?
+            .ok_or(ErrorCode::InvalidHandleType)?
             .authorize(required1)?;
         let handle2 = handle2
             .clone()
             .downcast::<T2>()
-            .ok_or(ErrorCode::InvalidType)?
+            .ok_or(ErrorCode::InvalidHandleType)?
             .authorize(required2)?;
         Ok((handle1, handle2))
     }
@@ -123,7 +123,7 @@ impl HandleSpace {
         mutable
             .handles
             .remove(&id.as_usize())
-            .ok_or(ErrorCode::InvalidArg)
+            .ok_or(ErrorCode::HandleNotFound)
     }
 }
 

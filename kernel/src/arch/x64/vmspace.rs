@@ -227,14 +227,14 @@ impl VmSpace {
         // Validate the page attributes.
         let allowed_attrs = PageAttrs::READ | PageAttrs::WRITE | PageAttrs::EXEC;
         if !allowed_attrs.contains(attrs) {
-            return Err(ErrorCode::InvalidArg);
+            return Err(ErrorCode::InvalidPageAttrs);
         }
 
         if !is_aligned(uaddr, MIN_PAGE_SIZE)
             || !paddr.is_aligned(MIN_PAGE_SIZE)
             || !is_aligned(len, MIN_PAGE_SIZE)
         {
-            return Err(ErrorCode::InvalidArg);
+            return Err(ErrorCode::NotAligned);
         }
 
         let mutable = self.mutable.lock();
@@ -245,7 +245,7 @@ impl VmSpace {
         let entry = &mut pt.0[pt_index(uaddr)];
 
         if entry.is_present() {
-            return Err(ErrorCode::AlreadyExists);
+            return Err(ErrorCode::AlreadyMapped);
         }
 
         // Translate the page attributes into page table entry flags.

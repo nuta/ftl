@@ -119,7 +119,7 @@ impl Thread {
             RegsKind::FsBase => {
                 let fs_base = unsafe { regs.fs_base };
                 if fs_base >= USER_ADDR_END {
-                    return Err(ErrorCode::InvalidArg);
+                    return Err(ErrorCode::InvalidUserAddr);
                 }
 
                 self.fsbase = fs_base as u64;

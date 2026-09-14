@@ -186,9 +186,9 @@ pub fn sys_net_send(
     // Reject too long packets.
     let packet_len = header_len
         .checked_add(payload_len)
-        .ok_or(ErrorCode::InvalidArg)?;
+        .ok_or(ErrorCode::PacketTooLong)?;
     if packet_len > MAX_TX_PACKET_LEN {
-        return Err(ErrorCode::InvalidArg);
+        return Err(ErrorCode::PacketTooLong);
     }
 
     let header = USlice::new(UAddr::new(ctx.a2), header_len)?;

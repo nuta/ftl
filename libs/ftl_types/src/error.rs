@@ -18,8 +18,19 @@ pub enum ErrorCode {
     NoRoute = -11,
     Empty = -12,
     NotFound = -13,
+    InvalidHandleId = -14,
+    HandleNotFound = -15,
+    InvalidHandleType = -16,
+    ThreadNotRunnable = -17,
+    ThreadAlreadyStarted = -18,
+    UnknownSyscall = -19,
+    InvalidUserAddr = -20,
+    InvalidPageAttrs = -21,
+    NotAligned = -22,
+    AlreadyMapped = -23,
+    PacketTooLong = -24,
     // This must be the last variant.
-    BadErrorCode = -14,
+    BadErrorCode = -25,
 }
 
 impl ErrorCode {

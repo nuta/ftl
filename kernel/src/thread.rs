@@ -74,7 +74,7 @@ impl Thread {
         // SYSRET-ing to the kernel pages should trigger a page fault, but it
         // is obviously invalid. Reject it early.
         if fault_pc >= USER_ADDR_END {
-            return Err(ErrorCode::InvalidArg);
+            return Err(ErrorCode::InvalidUserAddr);
         }
 
         let mutable = Mutable {
@@ -118,7 +118,7 @@ impl Thread {
     ) -> Result<SyscallOutput, ErrorCode> {
         let mut mutable = self.mutable.lock();
         if !matches!(mutable.state, State::Runnable) {
-            return Err(ErrorCode::InvalidState);
+            return Err(ErrorCode::ThreadNotRunnable);
         }
 
         match poll.try_wait(self, poll_id, deadline)? {
@@ -172,7 +172,7 @@ impl Thread {
     pub fn start(self: &SharedRef<Self>) -> Result<(), ErrorCode> {
         let mut mutable = self.mutable.lock();
         if !matches!(mutable.state, State::NotStarted) {
-            return Err(ErrorCode::InvalidState);
+            return Err(ErrorCode::ThreadAlreadyStarted);
         }
 
         self.resume_locked(&mut mutable);
@@ -182,7 +182,7 @@ impl Thread {
     pub fn exit(&self) -> Result<(), ErrorCode> {
         let mut mutable = self.mutable.lock();
         if !matches!(mutable.state, State::Runnable) {
-            return Err(ErrorCode::InvalidState);
+            return Err(ErrorCode::ThreadNotRunnable);
         }
 
         mutable.state = State::Exited;
@@ -192,7 +192,7 @@ impl Thread {
     pub fn write_regs(&self, kind: RegsKind, regs: USlice) -> Result<(), ErrorCode> {
         let mutable = self.mutable.lock();
         if !matches!(mutable.state, State::NotStarted) {
-            return Err(ErrorCode::InvalidState);
+            return Err(ErrorCode::ThreadAlreadyStarted);
         }
 
         // SAFETY: The thread is blocked and we hold the mutable lock to prevent
@@ -222,7 +222,7 @@ impl Thread {
     ) -> Result<(), ErrorCode> {
         let mutable = self.mutable.lock();
         if !matches!(mutable.state, State::NotStarted) {
-            return Err(ErrorCode::InvalidState);
+            return Err(ErrorCode::ThreadAlreadyStarted);
         }
 
         // SAFETY: The thread is blocked and we hold the mutable lock to prevent

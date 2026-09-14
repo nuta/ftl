@@ -150,7 +150,7 @@ impl USlice {
         };
 
         if end.as_usize() > USER_ADDR_END {
-            return Err(ErrorCode::NotAllowed);
+            return Err(ErrorCode::InvalidUserAddr);
         }
 
         Ok(Self { addr, end })

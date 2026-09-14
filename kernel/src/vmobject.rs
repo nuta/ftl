@@ -70,7 +70,7 @@ pub struct VmObject {
 impl VmObject {
     pub fn new_anonymous(len: usize) -> Result<SharedRef<Self>, ErrorCode> {
         if len == 0 || !is_aligned(len, MIN_PAGE_SIZE) {
-            return Err(ErrorCode::InvalidArg);
+            return Err(ErrorCode::NotAligned);
         }
 
         //　Mark all pages as empty.
