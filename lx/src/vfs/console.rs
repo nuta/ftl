@@ -1,4 +1,4 @@
-use ftl::println;
+use ftl::info;
 
 use crate::types::errno::Errno;
 use crate::vfs::FileLike;
@@ -20,9 +20,9 @@ impl FileLike for Console {
 
     fn write(&self, buf: &[u8], _offset: usize, _nonblocking: bool) -> Result<usize, Errno> {
         if let Ok(s) = core::str::from_utf8(buf) {
-            println!("[console] {}", s);
+            info!("[console] {}", s.trim_ascii_end());
         } else {
-            println!("[console] invalid UTF-8");
+            info!("[console] invalid UTF-8");
         }
 
         Ok(buf.len())

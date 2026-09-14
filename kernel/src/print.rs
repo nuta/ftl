@@ -20,7 +20,7 @@ impl fmt::Write for Printer {
 #[macro_export]
 macro_rules! info {
     ($($arg:tt)+) => {{
-        $crate::println!("[kernel    ] INFO  {}", format_args!($($arg)+));
+        $crate::println!("[kernel    ] {}", format_args!($($arg)+));
     }};
 }
 
@@ -28,7 +28,7 @@ macro_rules! info {
 macro_rules! warn {
     ($($arg:tt)+) => {{
         $crate::println!(
-            "[kernel    ] \x1b[33mWARN\x1b[0m  {}",
+            "[kernel    ] \x1b[33mWARN\x1b[0m: {}",
             format_args!($($arg)+)
         );
     }};
@@ -37,7 +37,7 @@ macro_rules! warn {
 #[macro_export]
 macro_rules! error {
     ($($arg:tt)+) => {{
-        $crate::println!("[kernel    ] \x1b[31mERROR\x1b[0m  {}", format_args!($($arg)+));
+        $crate::println!("[kernel    ] \x1b[31mERROR\x1b[0m: {}", format_args!($($arg)+));
     }};
 }
 

@@ -1,7 +1,7 @@
 #[macro_export]
 macro_rules! info {
     ($io:expr, $($arg:tt)+) => {{
-        $crate::println!($io, "[driver   ] \x1b[32mINFO\x1b[0m   {}", format_args!($($arg)+));
+        $crate::println!($io, "[{:<10}] {}", env!("CARGO_PKG_NAME"), format_args!($($arg)+));
     }};
 }
 
@@ -10,7 +10,8 @@ macro_rules! warn {
     ($io:expr, $($arg:tt)+) => {{
         $crate::println!(
             $io,
-            "[driver   ] \x1b[33mWARN\x1b[0m  {}",
+            "[{:<10}] \x1b[33mWARN\x1b[0m: {}",
+            env!("CARGO_PKG_NAME"),
             format_args!($($arg)+)
         );
     }};
@@ -19,14 +20,14 @@ macro_rules! warn {
 #[macro_export]
 macro_rules! error {
     ($io:expr, $($arg:tt)+) => {{
-        $crate::println!($io, "[driver   ] \x1b[31mERROR\x1b[0m  {}", format_args!($($arg)+));
+        $crate::println!($io, "[{:<10}] \x1b[31mERROR\x1b[0m: {}", env!("CARGO_PKG_NAME"), format_args!($($arg)+));
     }};
 }
 
 #[macro_export]
 macro_rules! trace {
     ($io:expr, $($arg:tt)+) => {{
-        $crate::println!($io, "[driver   ] {}", format_args!($($arg)+));
+        $crate::println!($io, "[{:<10}] {}", env!("CARGO_PKG_NAME"), format_args!($($arg)+));
     }};
 }
 

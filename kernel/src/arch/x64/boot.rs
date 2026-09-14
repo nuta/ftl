@@ -16,7 +16,7 @@ extern "C" fn rust_boot(multiboot_magic: u32, start_info: u32) -> ! {
     // your terminal. Revert it.
     println!("\x1b[?7h");
 
-    trace!("Booting FTL...");
+    info!("Booting FTL...");
     enable_fsgsbase();
     enable_sse();
 

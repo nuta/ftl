@@ -63,13 +63,13 @@ pub struct VirtioNet<N: Notifier> {
 impl<N: Notifier> VirtioNet<N> {
     pub fn init(env: &dyn Env) -> Result<Self, InitError> {
         let Some(dev) = pci::find_virtio_device(env, DeviceType::Network as u16) else {
-            warn!(env, "virtio-net: device not found");
+            warn!(env, "device not found");
             return Err(InitError::DeviceNotFound);
         };
 
         trace!(
             env,
-            "virtio-net: found at {:02x}:{:02x} (device_id={:#x}, subsystem={})",
+            "found at {:02x}:{:02x} (device_id={:#x}, subsystem={})",
             dev.bus,
             dev.slot,
             dev.device,
@@ -80,18 +80,18 @@ impl<N: Notifier> VirtioNet<N> {
 
         let bar0 = pci::get_bar(env, &dev, 0);
         if bar0 & 1 == 0 {
-            warn!(env, "virtio-net: BAR0 is not I/O space (modern-only?)");
+            warn!(env, "BAR0 is not I/O space (modern-only?)");
             return Err(InitError::Bar0NotIoSpace);
         }
         let iobase = (bar0 & 0xffff_fffc) as u16;
-        trace!(env, "virtio-net: iobase={iobase:#x}");
+        trace!(env, "PCI BAR0: iobase={iobase:#x}");
 
         let virtio = VirtioPci::new(iobase);
         virtio.acknowledge(env);
 
         let device_features = virtio.read_device_features(env);
         if device_features & VIRTIO_NET_F_MAC == 0 {
-            warn!(env, "virtio-net: MAC feature not advertised");
+            warn!(env, "MAC feature not advertised");
             return Err(InitError::MacNotAvailable);
         }
         let guest_features = device_features & VIRTIO_NET_F_MAC;
@@ -105,7 +105,15 @@ impl<N: Notifier> VirtioNet<N> {
             virtio.read_device_config8(env, 4),
             virtio.read_device_config8(env, 5),
         ];
-        trace!(env, "virtio-net: mac={mac:02x?}");
+
+        trace!(env, "MAC address is {:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
+            mac[0],
+            mac[1],
+            mac[2],
+            mac[3],
+            mac[4],
+            mac[5],
+        );
 
         let txq = virtio
             .setup_virtqueue(env, 1)

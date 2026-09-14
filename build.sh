@@ -48,14 +48,12 @@ build_os() {
   fi
 
   # Build userspace OS.
-  FTL_LOG_PREFIX="[$(printf '%-10s' "lx")] " \
-      cargo "${cargo_command}" "${CARGOFLAGS[@]}" --target libs/ftl/src/arch/$ARCH/user.json \
-         --manifest-path lx/Cargo.toml
+  cargo "${cargo_command}" "${CARGOFLAGS[@]}" --target libs/ftl/src/arch/$ARCH/user.json \
+    --manifest-path lx/Cargo.toml
 
   # Build kernel.
-  FTL_LOG_PREFIX="[$(printf '%-10s' "kernel")] " \
-    cargo "${cargo_command}" "${CARGOFLAGS[@]}" --target kernel/src/arch/$ARCH/kernel.json \
-      --manifest-path kernel/Cargo.toml
+  cargo "${cargo_command}" "${CARGOFLAGS[@]}" --target kernel/src/arch/$ARCH/kernel.json \
+    --manifest-path kernel/Cargo.toml
 
   if [[ "$cargo_command" != "check" ]]; then
     cp target/user/$target/lx lx.elf

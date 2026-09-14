@@ -37,7 +37,7 @@ macro_rules! info {
 macro_rules! warn {
     ($($arg:tt)+) => {{
         $crate::println!(
-            "\x1b[33mWARN\x1b[0m {}",
+            "\x1b[33mWARN\x1b[0m: {}",
             format_args!($($arg)+)
         );
     }};
@@ -46,7 +46,7 @@ macro_rules! warn {
 #[macro_export]
 macro_rules! error {
     ($($arg:tt)+) => {{
-        $crate::println!("\x1b[31mERROR\x1b[0m {}", format_args!($($arg)+));
+        $crate::println!("\x1b[31mERROR\x1b[0m: {}", format_args!($($arg)+));
     }};
 }
 
@@ -65,11 +65,11 @@ macro_rules! println {
     ($message:expr) => {{
         #[allow(unused_imports)]
         use core::fmt::Write;
-        writeln!($crate::print::Printer, concat!(env!("FTL_LOG_PREFIX"), $message)).ok();
+        writeln!($crate::print::Printer, "[{:<10}] {}", env!("CARGO_PKG_NAME"), $message).ok();
     }};
     ($format:expr, $($arg:tt)*) => {{
         #[allow(unused_imports)]
         use core::fmt::Write;
-        writeln!($crate::print::Printer, concat!(env!("FTL_LOG_PREFIX"), $format), $($arg)*).ok();
+        writeln!($crate::print::Printer, concat!("[{:<10}] ", $format), env!("CARGO_PKG_NAME"), $($arg)*).ok();
     }};
 }

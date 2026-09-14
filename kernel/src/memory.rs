@@ -107,12 +107,12 @@ impl PageAllocator {
         }
     }
 
-    pub fn add_region(&self, start: PAddr, end: PAddr) {
-        let start = align_up(start.as_usize(), MIN_PAGE_SIZE);
-        let end = align_down(end.as_usize(), MIN_PAGE_SIZE);
+    pub fn add_region(&self, unaligned_start: PAddr, unaligned_end: PAddr) {
+        let start = align_up(unaligned_start.as_usize(), MIN_PAGE_SIZE);
+        let end = align_down(unaligned_end.as_usize(), MIN_PAGE_SIZE);
         let len = end.saturating_sub(start);
         if len == 0 {
-            warn!("free RAM region is empty: {start:x}");
+            trace!("ignored too small free RAM region: {unaligned_start} - {unaligned_end}");
             return;
         }
 

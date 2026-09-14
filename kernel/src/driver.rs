@@ -94,7 +94,7 @@ impl ftl_driver::env::Env for DriverEnv {
 
     fn print(&self, args: fmt::Arguments<'_>) {
         // TODO: better logging
-        info!("{}", args)
+        println!("{}", args)
     }
 }
 
