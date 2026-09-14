@@ -11,14 +11,22 @@ fi
 
 ./build.sh
 
+qemuflags=()
+qemuflags+=(-machine pc,acpi=off -m "${MEMORY:-128}")
+qemuflags+=(-cpu qemu64,+fsgsbase,+xsave,+xsaveopt)
+qemuflags+=(-kernel ftl.elf -initrd lx.elf -append "$cmdline")
+qemuflags+=(--no-reboot -gdb tcp::7778)
+qemuflags+=(-d cpu_reset,unimp,guest_errors,int -D qemu.log)
+qemuflags+=(-device isa-debug-exit,iobase=0x501,iosize=0x04)
+qemuflags+=(-netdev user,id=net0,hostfwd=tcp:127.0.0.1:30080-:80)
+qemuflags+=(-device virtio-net-pci,netdev=net0,romfile=)
+qemuflags+=(-object filter-dump,id=filter0,netdev=net0,file=network.pcap)
+
+if [[ -n "${GUI:-}" ]]; then
+  qemuflags+=()
+else
+  qemuflags+=(-nographic -serial mon:stdio)
+fi
+
 set +e
-qemu-system-x86_64 \
-  -machine pc,acpi=off -m "${MEMORY:-128}" \
-  -cpu qemu64,+fsgsbase,+xsave,+xsaveopt \
-  -kernel ftl.elf -initrd lx.elf -append "$cmdline" \
-  -nographic -serial mon:stdio --no-reboot -gdb tcp::7778 \
-  -d cpu_reset,unimp,guest_errors,int -D qemu.log \
-  -device isa-debug-exit,iobase=0x501,iosize=0x04 \
-  -netdev user,id=net0,hostfwd=tcp:127.0.0.1:30080-:80 \
-  -device virtio-net-pci,netdev=net0,romfile= \
-  -object filter-dump,id=filter0,netdev=net0,file=network.pcap
+qemu-system-x86_64 "${qemuflags[@]}"
