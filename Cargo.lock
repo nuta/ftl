@@ -22,7 +22,7 @@ checksum = "77ce24cb58228fbb8aa041425bb1050850ac19177686ea6e0f41a70416f56fdb"
 
 [[package]]
 name = "ftl"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "ftl_malloc",
  "ftl_types",
@@ -31,11 +31,11 @@ dependencies = [
 
 [[package]]
 name = "ftl_arrayvec"
-version = "0.0.0"
+version = "0.0.1"
 
 [[package]]
 name = "ftl_bitmap_allocator"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "ftl_arrayvec",
  "ftl_utils",
@@ -43,22 +43,22 @@ dependencies = [
 
 [[package]]
 name = "ftl_driver"
-version = "0.0.0"
+version = "0.0.1"
 
 [[package]]
 name = "ftl_elf"
-version = "0.0.0"
+version = "0.0.1"
 
 [[package]]
 name = "ftl_malloc"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "ftl_utils",
 ]
 
 [[package]]
 name = "ftl_netmux"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "ftl_driver",
  "ftl_types",
@@ -67,11 +67,11 @@ dependencies = [
 
 [[package]]
 name = "ftl_types"
-version = "0.0.0"
+version = "0.0.1"
 
 [[package]]
 name = "ftl_utils"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "hashbrown",
  "rustc-hash",
@@ -79,7 +79,7 @@ dependencies = [
 
 [[package]]
 name = "ftl_virtio"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "ftl_driver",
  "ftl_utils",
@@ -98,7 +98,7 @@ dependencies = [
 
 [[package]]
 name = "kernel"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "ftl_arrayvec",
  "ftl_bitmap_allocator",
@@ -114,7 +114,7 @@ dependencies = [
 
 [[package]]
 name = "lx"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "ftl",
  "ftl_elf",
@@ -131,7 +131,7 @@ checksum = "6b1e7f9a428571be2dc5bc0505c13fb6bf936822b894ec87abf8a08a4e51742d"
 
 [[package]]
 name = "virtio_net"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "ftl_driver",
  "ftl_utils",
