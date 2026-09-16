@@ -106,7 +106,9 @@ impl<N: Notifier> VirtioNet<N> {
             virtio.read_device_config8(env, 5),
         ];
 
-        trace!(env, "MAC address is {:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
+        trace!(
+            env,
+            "MAC address is {:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
             mac[0],
             mac[1],
             mac[2],

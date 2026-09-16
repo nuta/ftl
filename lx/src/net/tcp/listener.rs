@@ -196,12 +196,7 @@ impl TcpListener {
     }
 
     // Receives an ACK, which is typically ACKing our SYN-ACK packet.
-    fn finish_handshake(
-        &self,
-        pkt: &TcpPacketInfo,
-        payload: &[u8],
-        listener_io: &ListenerIo<'_>,
-    ) {
+    fn finish_handshake(&self, pkt: &TcpPacketInfo, payload: &[u8], listener_io: &ListenerIo<'_>) {
         let remote = Endpoint {
             ip: pkt.remote_ip,
             port: pkt.remote_port,
