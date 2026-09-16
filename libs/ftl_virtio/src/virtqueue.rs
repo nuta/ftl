@@ -71,15 +71,29 @@ pub struct VirtQueue<C> {
 }
 
 impl<C> VirtQueue<C> {
-    pub(crate) fn new(queue_index: u16, queue_size: u16, mut dmabuf: DmaBuf) -> Self {
+    pub(crate) fn new(
+        queue_index: u16,
+        queue_size: u16,
+        mut dmabuf: DmaBuf,
+    ) -> Result<Self, DmaBuf> {
         let avail_offset = size_of::<Desc>() * queue_size as usize;
         let used_offset = align_up(
             avail_offset + size_of::<u16>() * (2 + queue_size as usize),
             4096,
         );
 
-        let mut free_indices = Vec::with_capacity(queue_size as usize);
-        let mut contexts = Vec::with_capacity(queue_size as usize);
+        let n = queue_size as usize;
+        let mut free_indices = Vec::new();
+        let mut contexts = Vec::new();
+
+        if free_indices.try_reserve_exact(n).is_err() {
+            return Err(dmabuf);
+        }
+
+        if contexts.try_reserve_exact(n).is_err() {
+            return Err(dmabuf);
+        }
+
         for index in 0..queue_size {
             free_indices.push(index);
             contexts.push(None);
@@ -90,7 +104,7 @@ impl<C> VirtQueue<C> {
         avail.flags = 0;
         avail.idx = 0;
 
-        Self {
+        Ok(Self {
             queue_index,
             queue_size,
             dmabuf,
@@ -99,7 +113,7 @@ impl<C> VirtQueue<C> {
             free_indices,
             last_used_idx: 0,
             contexts,
-        }
+        })
     }
 
     pub fn queue_size(&self) -> usize {

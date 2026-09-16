@@ -131,11 +131,19 @@ impl VirtioPci {
         let pfn: u32 = (dmabuf.paddr() / 4096)
             .try_into()
             .map_err(|_| Error::TooHighPAddr)?;
+
+        let queue = match VirtQueue::new(queue_index, queue_size, dmabuf) {
+            Ok(queue) => queue,
+            Err(dmabuf) => {
+                env.free_dma(dmabuf);
+                return Err(Error::AllocFailed);
+            }
+        };
+
         unsafe {
             env.out32(self.iobase + PCI_IOPORT_QUEUE_PFN, pfn);
         }
 
-        let queue = VirtQueue::new(queue_index, queue_size, dmabuf);
         Ok(queue)
     }
 
