@@ -152,6 +152,7 @@ extern "C" fn interrupt_entry() -> ! {
     naked_asm!(
         // RFLAGS are already saved in the IRET frame. It's safe to change it.
         "cld",
+        "clac", // Disable user page access.
 
         // Happened in user mode?
         "test byte ptr [rsp + 24], 3",
@@ -341,6 +342,7 @@ fn read_cr2() -> u64 {
 }
 
 const PF_PRESENT: u64 = 1 << 0;
+const RFLAGS_AC: u64 = 1 << 18;
 
 fn handle_user_page_fault(cr2: u64, error_code: u64) -> Result<(), ErrorCode> {
     if error_code & PF_PRESENT != 0 {
@@ -364,6 +366,14 @@ extern "C" fn handle_kernel_interrupt(frame: &mut InterruptFrame) {
     match frame.vector as u8 {
         EXCEPTION_PAGE_FAULT => {
             if let Some(recover_rip) = recover_from_kernel_page_fault(frame.rip) {
+                if frame.rflags & RFLAGS_AC == 0 {
+                    let cr2 = read_cr2();
+                    panic!(
+                        "SMAP violation (RIP={:#x}, CR2={cr2:#x}, error_code={:#x})",
+                        frame.rip, frame.error_code
+                    );
+                }
+
                 if frame.error_code & PF_PRESENT == 0 {
                     // The page is not present. Handle it as a user page fault,
                     // and retry the usercopy if it succeeds.

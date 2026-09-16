@@ -41,6 +41,8 @@ extern "C" fn do_syscall_copy_recover() -> ! {
 #[unsafe(naked)]
 pub(super) extern "C" fn syscall_copy_recover() -> ! {
     naked_asm!(
+        "clac", // Disable user page access.
+
         // Align the kernel stack to 16 bytes.
         //
         // We might not need this since we don't use SSE in kernel.
@@ -132,6 +134,8 @@ extern "C" fn syscall_handler() -> ! {
         "sub r11, {syscall_frame_size}",
         "jc {syscall_copy_recover}", // user RSP is too low
 
+        "stac", // Enable user page access.
+
         // Write user RFLAGS
         "mov rcx, [rsp]",
         ".global syscall_copy0; syscall_copy0:",
@@ -147,6 +151,8 @@ extern "C" fn syscall_handler() -> ! {
         "mov rcx, [rcx + {cookie_offset}]",
         ".global syscall_copy2; syscall_copy2:",
         "mov [r11 + {frame_cookie_offset}], rcx",
+
+        "clac", // Disable user page access.
 
         // Load fault_pc from the current thread.
         "mov rcx, gs:[{current_thread_offset}]",
@@ -210,7 +216,7 @@ pub(super) fn init() {
     const EFER_SCE: u64 = 1 << 0;
 
     // RFLAGS bits to clear on SYSCALL entry.
-    const SYSCALL_FMASK: u64 = (1 << 8) | (1 << 9) | (1 << 10) | (1 << 14); // TF | IF | DF | NT
+    const SYSCALL_FMASK: u64 = (1 << 8) | (1 << 9) | (1 << 10) | (1 << 14) | (1 << 18); // TF | IF | DF | NT | AC
 
     unsafe {
         let syscall_handler = syscall_handler as *const () as u64;

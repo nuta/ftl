@@ -19,9 +19,11 @@ pub unsafe fn usercopy_read(src: UAddr, dst: *mut u8, len: usize) -> Result<(), 
             // fault, the interrupt handler jumps back to usercopy0_recover,
             // with RAX == 1.
             "xor eax, eax",
+            "stac", // Enable user page access.
             ".global usercopy0; .set usercopy0, 2f; 2:",
             "rep movsb",
             ".global usercopy0_recover; .set usercopy0_recover, 3f; 3:",
+            "clac", // Disable user page access.
             inout("rsi") src.as_usize() => _,
             inout("rdi") dst => _,
             inout("rcx") len => _,
@@ -49,9 +51,11 @@ pub unsafe fn usercopy_write(src: *const u8, dst: UAddr, len: usize) -> Result<(
     unsafe {
         asm!(
             "xor eax, eax",
+            "stac", // Enable user page access.
             ".global usercopy1; .set usercopy1, 2f; 2:",
             "rep movsb",
             ".global usercopy1_recover; .set usercopy1_recover, 3f; 3:",
+            "clac", // Disable user page access.
             inout("rsi") src => _,
             inout("rdi") dst.as_usize() => _,
             inout("rcx") len => _,

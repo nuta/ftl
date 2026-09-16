@@ -18,6 +18,7 @@ extern "C" fn rust_boot(multiboot_magic: u32, start_info: u32) -> ! {
 
     info!("Booting FTL...");
     enable_smep();
+    enable_smap();
     enable_fsgsbase();
     enable_sse();
 
@@ -45,6 +46,19 @@ fn enable_smep() {
         asm!(
             "mov rax, cr4",
             "or rax, 1 << 20",
+            "mov cr4, rax",
+            out("rax") _,
+        );
+    }
+}
+
+fn enable_smap() {
+    // TODO: CPUID check
+    // TODO: Merge with enable_fsgsbase?
+    unsafe {
+        asm!(
+            "mov rax, cr4",
+            "or rax, 1 << 21",
             "mov cr4, rax",
             out("rax") _,
         );

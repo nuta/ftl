@@ -13,7 +13,7 @@ fi
 
 qemuflags=()
 qemuflags+=(-machine pc,acpi=off -m "${MEMORY:-128}")
-qemuflags+=(-cpu qemu64,+fsgsbase,+xsave,+xsaveopt,+smep)
+qemuflags+=(-cpu qemu64,+fsgsbase,+xsave,+xsaveopt,+smep,+smap)
 qemuflags+=(-kernel ftl.elf -initrd lx.elf -append "$cmdline")
 qemuflags+=(--no-reboot -gdb tcp::7778)
 qemuflags+=(-d cpu_reset,unimp,guest_errors,int -D qemu.log)
