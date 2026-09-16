@@ -17,6 +17,7 @@ extern "C" fn rust_boot(multiboot_magic: u32, start_info: u32) -> ! {
     println!("\x1b[?7h");
 
     info!("Booting FTL...");
+    enable_smep();
     enable_fsgsbase();
     enable_sse();
 
@@ -35,6 +36,19 @@ extern "C" fn rust_boot(multiboot_magic: u32, start_info: u32) -> ! {
     };
 
     crate::boot::boot(bootinfo);
+}
+
+fn enable_smep() {
+    // TODO: CPUID check
+    // TODO: Merge with enable_fsgsbase?
+    unsafe {
+        asm!(
+            "mov rax, cr4",
+            "or rax, 1 << 20",
+            "mov cr4, rax",
+            out("rax") _,
+        );
+    }
 }
 
 fn enable_fsgsbase() {
