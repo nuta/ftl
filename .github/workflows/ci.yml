@@ -14,6 +14,7 @@ on:
 
 permissions:
   contents: read
+  actions: write
 
 env:
   CARGO_TERM_COLOR: always
@@ -38,6 +39,30 @@ jobs:
     - run: sudo apt-get update && sudo apt-get install -y zig
     - name: Build World
       run: ./build.sh
+    - uses: actions/upload-artifact@v7
+      with:
+        name: dist
+        path: |
+          ftl.elf
+          lx.elf
+        if-no-files-found: error
+
+  e2e:
+    name: "E2E tests"
+    needs: ubuntu_build
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+    steps:
+    - uses: actions/checkout@v7
+      with:
+        persist-credentials: false
+    - uses: actions/download-artifact@v8
+      with:
+        name: dist
+    - uses: oven-sh/setup-bun@v2
+    - run: sudo apt-get update && sudo apt-get install -y qemu-system-x86
+    - name: E2E tests
+      run: SKIP_BUILD=1 ./test.sh
 
   macos_build:
     name: "Build (macOS)"
