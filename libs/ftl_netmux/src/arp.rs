@@ -2,6 +2,8 @@ use alloc::collections::VecDeque;
 
 use ftl_utils::fxhash::FxHashMap;
 use ftl_utils::fxhash::hash_map::Entry;
+use ftl_utils::reserve_slot::ReserveSlot;
+use ftl_utils::reserve_slot::Slot;
 
 use crate::device::Tx;
 use crate::packet::ipv4::Ipv4Addr;
@@ -21,7 +23,7 @@ enum ArpEntry<'a> {
 
 /// A guard struct to enqueue TX packets safely.
 pub struct Inserter<'q, 'a> {
-    txs: &'q mut VecDeque<Tx<'a>>,
+    slot: Slot<'q, VecDeque<Tx<'a>>>,
 }
 
 impl<'q, 'a> Inserter<'q, 'a> {
@@ -30,15 +32,12 @@ impl<'q, 'a> Inserter<'q, 'a> {
             return None;
         }
 
-        if txs.try_reserve(1).is_err() {
-            return None;
-        }
-
-        Some(Self { txs })
+        let slot = txs.reserve_slot().ok()?;
+        Some(Self { slot })
     }
 
     pub fn enqueue(self, tx: Tx<'a>) {
-        self.txs.push_back(tx);
+        self.slot.push_back(tx);
     }
 }
 

@@ -6,6 +6,7 @@ use ftl_types::handle::HandleRight;
 use ftl_types::thread::SyscallRegs;
 use ftl_types::vmspace::PageAttrs;
 use ftl_utils::alignment::align_down;
+use ftl_utils::reserve_slot::ReserveSlot;
 use ftl_utils::spinlock::SpinLock;
 
 use crate::address::UAddr;
@@ -99,25 +100,24 @@ impl VmSpace {
             return Err(ErrorCode::AlreadyMapped);
         }
 
-        mutable
-            .mappings
-            .try_reserve(1)
-            .map_err(|_| ErrorCode::OutOfMemory)?;
-
         // Insert the mapping at the correct position to keep mappings sorted.
         let insert_at = mutable
             .mappings
             .partition_point(|mapping| mapping.start < uaddr);
 
-        mutable.mappings.insert(
-            insert_at,
-            Mapping {
-                start: uaddr,
-                end,
-                vmo,
-                attrs,
-            },
-        );
+        mutable
+            .mappings
+            .reserve_slot()
+            .map_err(|_| ErrorCode::OutOfMemory)?
+            .insert(
+                insert_at,
+                Mapping {
+                    start: uaddr,
+                    end,
+                    vmo,
+                    attrs,
+                },
+            );
         Ok(())
     }
 

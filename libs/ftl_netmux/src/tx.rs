@@ -4,6 +4,7 @@ use ftl_types::error::ErrorCode;
 use ftl_types::net::ETHTYPE_IPV4;
 use ftl_types::net::FiveTuple;
 use ftl_types::net::IPPROTO_TCP;
+use ftl_utils::reserve_slot::ReserveSlot;
 
 use crate::BufReader;
 use crate::NetMux;
@@ -56,9 +57,9 @@ impl TxRouteTable {
 
     pub fn add_route(&mut self, route: Route) -> Result<(), ErrorCode> {
         self.routes
-            .try_reserve(1)
-            .map_err(|_| ErrorCode::OutOfMemory)?;
-        self.routes.push(route);
+            .reserve_slot()
+            .map_err(|_| ErrorCode::OutOfMemory)?
+            .push(route);
         Ok(())
     }
 

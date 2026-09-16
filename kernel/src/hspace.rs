@@ -3,6 +3,7 @@ use ftl_types::handle::HANDLE_ID_MAX;
 use ftl_types::handle::HandleId;
 use ftl_types::handle::HandleRight;
 use ftl_utils::fxhash::FxHashMap;
+use ftl_utils::reserve_slot::ReserveSlot;
 use ftl_utils::spinlock::SpinLock;
 use ftl_utils::static_assert;
 
@@ -67,9 +68,9 @@ impl HandleSpace {
 
         mutable
             .handles
-            .try_reserve(1)
-            .map_err(|_| ErrorCode::OutOfMemory)?;
-        mutable.handles.insert(raw_id, handle.into());
+            .reserve_slot()
+            .map_err(|_| ErrorCode::OutOfMemory)?
+            .insert(raw_id, handle.into());
         Ok(())
     }
 

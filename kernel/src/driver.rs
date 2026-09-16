@@ -8,6 +8,7 @@ use ftl_driver::net::Driver;
 use ftl_netmux::DeviceId;
 use ftl_netmux::PollNotifier;
 use ftl_utils::alignment::align_up;
+use ftl_utils::reserve_slot::ReserveSlot;
 use ftl_utils::spinlock::SpinLock;
 use virtio_net::VirtioNet;
 
@@ -82,14 +83,14 @@ impl ftl_driver::env::Env for DriverEnv {
 
         // Try to reserve a space in the free list. If it fails, free it
         // immediately.
-        if free_list.try_reserve(1).is_err() {
-            // SAFETY: The buffer is allocated by global PAGE_ALLOCATOR, and
-            //         capacity is unchanged.
-            unsafe { PAGE_ALLOCATOR.free(PAddr::new(buf.paddr()), buf.capacity()) };
-            return;
+        match free_list.reserve_slot() {
+            Ok(slot) => slot.push_back(buf),
+            Err(_) => {
+                // SAFETY: The buffer is allocated by global PAGE_ALLOCATOR, and
+                //         capacity is unchanged.
+                unsafe { PAGE_ALLOCATOR.free(PAddr::new(buf.paddr()), buf.capacity()) };
+            }
         }
-
-        free_list.push_back(buf);
     }
 
     fn print(&self, args: fmt::Arguments<'_>) {

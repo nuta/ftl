@@ -4,6 +4,7 @@ use ftl_driver::dma::DmaBuf;
 use ftl_driver::dma::DmaBufWithDrop;
 use ftl_driver::env::Env;
 use ftl_types::error::ErrorCode;
+use ftl_utils::reserve_slot::ReserveSlot;
 use ftl_utils::spinlock::SpinLock;
 
 use crate::mux::RxNotify;
@@ -78,9 +79,9 @@ impl<'a, N: RxNotify> Nic<'a, N> {
 
         mutable
             .emitters
-            .try_reserve(1)
-            .map_err(|_| ErrorCode::OutOfMemory)?;
-        mutable.emitters.push_back(notifier);
+            .reserve_slot()
+            .map_err(|_| ErrorCode::OutOfMemory)?
+            .push_back(notifier);
         Ok(())
     }
 
@@ -93,12 +94,10 @@ impl<'a, N: RxNotify> Nic<'a, N> {
             return;
         }
 
-        if mutable.rx_queue.try_reserve(1).is_err() {
-            drop(mutable);
+        let Ok(slot) = mutable.rx_queue.reserve_slot() else {
             return;
-        }
-
-        mutable.rx_queue.push_back(rx);
+        };
+        slot.push_back(rx);
 
         // Notify a poll.
         let notifier = mutable.emitters.pop_front();

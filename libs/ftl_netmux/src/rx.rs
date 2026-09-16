@@ -12,6 +12,7 @@ use ftl_types::net::IPPROTO_UDP;
 use ftl_types::net::Rule;
 use ftl_utils::fxhash::FxHashMap;
 use ftl_utils::fxhash::FxHashSet;
+use ftl_utils::reserve_slot::ReserveSlot;
 
 use crate::NetMux;
 use crate::PollNotifier;
@@ -104,21 +105,22 @@ impl<'a, N: RxNotify> RxRouteTable<'a, N> {
             // Add the rule to the binding.
             binding
                 .rules
-                .try_reserve(1)
-                .map_err(|_| ErrorCode::OutOfMemory)?;
-            binding.rules.insert(rule);
+                .reserve_slot()
+                .map_err(|_| ErrorCode::OutOfMemory)?
+                .insert(rule);
             return Ok(());
         }
 
         // Create a new binding for the port.
         let mut rules = FxHashSet::new();
-        rules.try_reserve(1).map_err(|_| ErrorCode::OutOfMemory)?;
-        rules.insert(rule);
+        rules
+            .reserve_slot()
+            .map_err(|_| ErrorCode::OutOfMemory)?
+            .insert(rule);
 
         self.bindings
-            .try_reserve(1)
-            .map_err(|_| ErrorCode::OutOfMemory)?;
-        self.bindings
+            .reserve_slot()
+            .map_err(|_| ErrorCode::OutOfMemory)?
             .insert(local_port, PortBinding { nic_id, rules });
         Ok(())
     }

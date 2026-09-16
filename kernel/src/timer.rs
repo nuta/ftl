@@ -3,6 +3,7 @@ use alloc::vec::Vec;
 use ftl_types::error::ErrorCode;
 use ftl_types::thread::SyscallRegs;
 use ftl_types::time::MonoTime;
+use ftl_utils::reserve_slot::ReserveSlot;
 use ftl_utils::spinlock::SpinLock;
 
 use crate::address::UAddr;
@@ -39,13 +40,13 @@ impl Timer {
         poll: SharedRef<Poll>,
     ) -> Result<(), ErrorCode> {
         self.entries
-            .try_reserve(1)
-            .map_err(|_| ErrorCode::OutOfMemory)?;
-        self.entries.push(Entry {
-            deadline,
-            thread,
-            poll,
-        });
+            .reserve_slot()
+            .map_err(|_| ErrorCode::OutOfMemory)?
+            .push(Entry {
+                deadline,
+                thread,
+                poll,
+            });
         Ok(())
     }
 

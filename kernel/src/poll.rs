@@ -9,6 +9,7 @@ use ftl_types::poll::Event;
 use ftl_types::poll::EventKind;
 use ftl_types::thread::SyscallRegs;
 use ftl_types::time::MonoTime;
+use ftl_utils::reserve_slot::ReserveSlot;
 use ftl_utils::spinlock::SpinLock;
 
 use crate::address::UAddr;
@@ -46,12 +47,12 @@ impl Poll {
     fn enqueue(&self, event: Event) -> Result<(), ErrorCode> {
         let mut timer = GLOBAL_TIMER.lock();
         let mut mutable = self.mutable.lock();
-        mutable
+        let slot = mutable
             .queue
-            .try_reserve(1)
+            .reserve_slot()
             .map_err(|_| ErrorCode::OutOfMemory)?;
 
-        mutable.queue.push_back(event);
+        slot.push_back(event);
 
         let Some(thread) = mutable.waiters.pop_front() else {
             return Ok(());
@@ -96,9 +97,9 @@ impl Poll {
         }
 
         // Reserve a space for the new waiter.
-        mutable
+        let slot = mutable
             .waiters
-            .try_reserve(1)
+            .reserve_slot()
             .map_err(|_| ErrorCode::OutOfMemory)?;
 
         if let Some(deadline) = deadline {
@@ -106,7 +107,7 @@ impl Poll {
         }
 
         // No events to return, enqueue the thread.
-        mutable.waiters.push_back(thread.clone());
+        slot.push_back(thread.clone());
         Ok(None)
     }
 }
