@@ -50,7 +50,6 @@ impl<'a> RxPacket<'a> {
 
 struct Mutable<'a, N> {
     rx_queue: VecDeque<RxPacket<'a>>,
-    peeked: Option<RxPacket<'a>>,
     emitters: VecDeque<N>,
 }
 
@@ -63,7 +62,6 @@ impl<'a, N: RxNotify> Nic<'a, N> {
         Self {
             mutable: SpinLock::new(Mutable {
                 rx_queue: VecDeque::new(),
-                peeked: None,
                 emitters: VecDeque::new(),
             }),
         }
@@ -110,60 +108,36 @@ impl<'a, N: RxNotify> Nic<'a, N> {
         }
     }
 
-    pub fn peek(&self, writer: &mut dyn BufWriter) -> Result<(), ErrorCode> {
+    pub fn recv(
+        &self,
+        header: &mut dyn BufWriter,
+        payload: &mut dyn BufWriter,
+    ) -> Result<usize, ErrorCode> {
         let mut mutable = self.mutable.lock();
-        if mutable.peeked.is_none() {
-            // No peeked packet. Pop the first one from the queue.
-            mutable.peeked = mutable.rx_queue.pop_front();
-        }
+        let rx = mutable.rx_queue.front().ok_or(ErrorCode::Empty)?;
 
-        let rx = mutable.peeked.as_ref().ok_or(ErrorCode::Empty)?;
-        let start = rx.packet_offset;
-        let end = start + rx.header_len;
-        let bytes = &rx.buf.as_slice()[start..end];
-        if writer.len() < bytes.len() {
+        let header_start = rx.packet_offset;
+        let header_end = header_start + rx.header_len;
+        let header_bytes = &rx.buf.as_slice()[header_start..header_end];
+        if header.len() < header_bytes.len() {
             return Err(ErrorCode::OutOfBounds);
         }
-        writer.write(bytes)?;
-
-        Ok(())
-    }
-
-    // TODO: How should we handle `peek` and `recv` from multiple threads?
-    pub fn recv(&self, writer: &mut dyn BufWriter) -> Result<usize, ErrorCode> {
-        let mut mutable = self.mutable.lock();
-        let Some(rx) = mutable.peeked.as_ref() else {
-            // You must peek first.
-            return Err(ErrorCode::Empty);
-        };
 
         let payload_len = rx.packet_len - rx.header_len;
-        if writer.len() != payload_len {
+        if payload.len() < payload_len {
             return Err(ErrorCode::OutOfBounds);
         }
 
-        let start = rx.packet_offset + rx.header_len;
-        let end = start + payload_len;
-        writer.write(&rx.buf.as_slice()[start..end])?;
+        header.write(header_bytes)?;
+        let payload_start = header_end;
+        let payload_end = payload_start + payload_len;
+        payload.write(&rx.buf.as_slice()[payload_start..payload_end])?;
 
-        // Pop the RX packet from the queue.
-        // TODO: Can we simplify this since we've already checked `self.peeked` above?
-        let rx = mutable.peeked.take().unwrap();
+        let rx = mutable.rx_queue.pop_front().unwrap();
         drop(mutable);
         drop(rx);
 
         Ok(payload_len)
-    }
-
-    pub fn drop_peeked(&self) -> Result<(), ErrorCode> {
-        let mut mutable = self.mutable.lock();
-        let Some(rx) = mutable.peeked.take() else {
-            return Err(ErrorCode::Empty);
-        };
-
-        drop(mutable);
-        drop(rx);
-        Ok(())
     }
 }
 

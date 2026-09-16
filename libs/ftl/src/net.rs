@@ -4,9 +4,7 @@ use ftl_types::net::Rule;
 use ftl_types::syscall::Syscall;
 
 use crate::arch::syscall0;
-use crate::arch::syscall1;
 use crate::arch::syscall2;
-use crate::arch::syscall3;
 use crate::arch::syscall6;
 use crate::handle::OwnedHandle;
 use crate::poll::Poll;
@@ -59,29 +57,16 @@ impl Net {
         Ok(())
     }
 
-    pub fn peek(&self, header: &mut [u8]) -> Result<(), ErrorCode> {
-        syscall3(
-            Syscall::NetPeek,
-            self.handle.id().as_usize(),
-            header.as_mut_ptr() as usize,
-            header.len(),
-        )?;
-        Ok(())
-    }
-
-    pub fn recv(&self, payload: &mut [u8]) -> Result<(), ErrorCode> {
-        syscall3(
+    pub fn recv(&self, header: &mut [u8], payload: &mut [u8]) -> Result<usize, ErrorCode> {
+        syscall6(
             Syscall::NetRecv,
             self.handle.id().as_usize(),
+            0,
+            header.as_mut_ptr() as usize,
+            header.len(),
             payload.as_mut_ptr() as usize,
             payload.len(),
-        )?;
-        Ok(())
-    }
-
-    pub fn drop(&self) -> Result<(), ErrorCode> {
-        syscall1(Syscall::NetDrop, self.handle.id().as_usize())?;
-        Ok(())
+        )
     }
 
     pub fn send(&self, header: &[u8], payload: &[u8]) -> Result<(), ErrorCode> {

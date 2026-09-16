@@ -14,7 +14,6 @@ use super::packet::TcpFlags;
 use super::packet::TcpPacketInfo;
 use crate::net::tcpip::Io;
 use crate::net::tcpip::ListenerIo;
-use crate::net::tcpip::RecvGuard;
 use crate::types::c_int;
 use crate::types::c_short;
 use crate::types::errno::Errno;
@@ -200,7 +199,7 @@ impl TcpListener {
     fn finish_handshake(
         &self,
         pkt: &TcpPacketInfo,
-        recv_guard: RecvGuard<'_>,
+        payload: &[u8],
         listener_io: &ListenerIo<'_>,
     ) {
         let remote = Endpoint {
@@ -260,7 +259,7 @@ impl TcpListener {
         }
 
         // Handle this packet in the new conn object.
-        conn.handle_rx(pkt, recv_guard);
+        conn.handle_rx(pkt, payload);
         if conn.is_closed() {
             return;
         }
@@ -273,12 +272,7 @@ impl TcpListener {
         }
     }
 
-    pub fn handle_rx(
-        &self,
-        pkt: &TcpPacketInfo,
-        recv_guard: RecvGuard<'_>,
-        listener_io: ListenerIo<'_>,
-    ) {
+    pub fn handle_rx(&self, pkt: &TcpPacketInfo, payload: &[u8], listener_io: ListenerIo<'_>) {
         let flags = TcpFlags::from_u8(pkt.flags);
         if flags.contains(TcpFlags::RST) {
             self.reset_handshake(pkt);
@@ -291,7 +285,7 @@ impl TcpListener {
         }
 
         if flags.contains(TcpFlags::ACK) {
-            self.finish_handshake(pkt, recv_guard, &listener_io);
+            self.finish_handshake(pkt, payload, &listener_io);
         }
     }
 }

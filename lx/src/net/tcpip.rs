@@ -23,6 +23,17 @@ use super::tcp::TcpConn;
 use super::tcp::TcpListener;
 use super::tcp::TcpPacketInfo;
 
+const RX_HEADER_LEN: usize = 128;
+const RX_PAYLOAD_LEN: usize = 2048;
+
+fn alloc_buf(len: usize) -> Result<Vec<u8>, ErrorCode> {
+    let mut buf = Vec::new();
+    buf.try_reserve_exact(len)
+        .map_err(|_| ErrorCode::OutOfMemory)?;
+    buf.resize(len, 0);
+    Ok(buf)
+}
+
 pub struct Io {
     net: Net,
 }
@@ -30,14 +41,6 @@ pub struct Io {
 impl Io {
     fn new(net: Net) -> Self {
         Self { net }
-    }
-
-    fn recv_payload(&self, payload: &mut [u8]) -> Result<(), ErrorCode> {
-        self.net.recv(payload)
-    }
-
-    fn drop_packet(&self) {
-        self.net.drop().expect("failed to drop a network packet");
     }
 
     pub fn send_segment(
@@ -107,34 +110,6 @@ impl<'a> ListenerIo<'a> {
         let mut flows = self.flows.lock();
         flows.flows.insert(pkt.five_tuple(), Flow { conn, rule });
         Ok(())
-    }
-}
-
-pub struct RecvGuard<'a> {
-    io: &'a Io,
-    consumed: bool,
-}
-
-impl<'a> RecvGuard<'a> {
-    pub fn new(io: &'a Io) -> Self {
-        Self {
-            io,
-            consumed: false,
-        }
-    }
-
-    pub fn recv(mut self, buf: &mut [u8]) -> Result<(), ErrorCode> {
-        self.io.recv_payload(buf)?;
-        self.consumed = true;
-        Ok(())
-    }
-}
-
-impl<'a> Drop for RecvGuard<'a> {
-    fn drop(&mut self) {
-        if !self.consumed {
-            self.io.drop_packet();
-        }
     }
 }
 
@@ -240,25 +215,31 @@ impl TcpIp {
     }
 
     pub fn handle_rx(&self) {
-        let mut header = [0u8; 128];
-        loop {
-            // Read the packet header.
-            match self.io.net.peek(&mut header) {
-                Ok(_) => {}
-                Err(error) if error == ErrorCode::Empty => return,
-                Err(_) => panic!("failed to peek at a network packet"),
-            }
+        let Ok(mut header) = alloc_buf(RX_HEADER_LEN) else {
+            trace!("failed to allocate RX header buffer");
+            return;
+        };
+        let Ok(mut payload) = alloc_buf(RX_PAYLOAD_LEN) else {
+            trace!("failed to allocate RX payload buffer");
+            return;
+        };
 
-            // Parse the header.
-            let recv_guard = RecvGuard::new(&self.io);
+        loop {
+            let payload_len = match self.io.net.recv(&mut header, &mut payload) {
+                Ok(len) => len,
+                Err(error) if error == ErrorCode::Empty => return,
+                Err(_) => panic!("failed to receive a network packet"),
+            };
+
             let pkt = TcpPacketInfo::parse(&header);
+            let payload = &payload[..payload_len];
 
             // Lookup the flow or listener.
             if let Some(conn) = self.flows.lock().lookup(&pkt) {
-                conn.handle_rx(&pkt, recv_guard);
+                conn.handle_rx(&pkt, payload);
             } else if let Some(listener) = self.listeners.lock().lookup(&pkt) {
                 let listener_io = ListenerIo::new(&self.io, &self.flows);
-                listener.handle_rx(&pkt, recv_guard, listener_io);
+                listener.handle_rx(&pkt, payload, listener_io);
             }
 
             // Garbage-collect closed flows.

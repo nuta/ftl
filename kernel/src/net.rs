@@ -52,16 +52,8 @@ impl Network {
             .send(self.nic_id, &mut header, Some(&mut payload))
     }
 
-    pub fn peek(&self, mut header: USlice) -> Result<(), ErrorCode> {
-        NET_MUX.lock().peek(self.nic_id, &mut header)
-    }
-
-    pub fn recv(&self, mut payload: USlice) -> Result<usize, ErrorCode> {
-        NET_MUX.lock().recv(self.nic_id, &mut payload)
-    }
-
-    pub fn drop_peeked(&self) -> Result<(), ErrorCode> {
-        NET_MUX.lock().drop_peeked(self.nic_id)
+    pub fn recv(&self, mut header: USlice, mut payload: USlice) -> Result<usize, ErrorCode> {
+        NET_MUX.lock().recv(self.nic_id, &mut header, &mut payload)
     }
 }
 
@@ -138,41 +130,15 @@ pub fn sys_net_recv(
     ctx: &SyscallRegs,
 ) -> Result<SyscallOutput, ErrorCode> {
     let network_id = HandleId::new(ctx.a0);
-    let payload = USlice::new(UAddr::new(ctx.a1), ctx.a2)?;
+    let header = USlice::new(UAddr::new(ctx.a2), ctx.a3)?;
+    let payload = USlice::new(UAddr::new(ctx.a4), ctx.a5)?;
 
     let network = current
         .hspace()
         .get::<Network>(network_id, HandleRight::READ)?;
 
-    let payload_len = network.recv(payload)?;
+    let payload_len = network.recv(header, payload)?;
     Ok(SyscallOutput::Done(payload_len))
-}
-
-pub fn sys_net_peek(
-    current: &SharedRef<Thread>,
-    ctx: &SyscallRegs,
-) -> Result<SyscallOutput, ErrorCode> {
-    let network_id = HandleId::new(ctx.a0);
-    let header = USlice::new(UAddr::new(ctx.a1), ctx.a2)?;
-    let network = current
-        .hspace()
-        .get::<Network>(network_id, HandleRight::READ)?;
-
-    network.peek(header)?;
-    Ok(SyscallOutput::Done(0))
-}
-
-pub fn sys_net_drop(
-    current: &SharedRef<Thread>,
-    ctx: &SyscallRegs,
-) -> Result<SyscallOutput, ErrorCode> {
-    let network_id = HandleId::new(ctx.a0);
-    let network = current
-        .hspace()
-        .get::<Network>(network_id, HandleRight::READ)?;
-
-    network.drop_peeked()?;
-    Ok(SyscallOutput::Done(0))
 }
 
 pub fn sys_net_send(

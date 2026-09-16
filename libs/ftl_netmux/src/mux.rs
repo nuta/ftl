@@ -109,19 +109,14 @@ impl<'a, N: RxNotify> NetMux<'a, N> {
         device.send_ipv4(our_ip, next_hop_ip, tx)
     }
 
-    pub fn peek(&mut self, nic: NicId, writer: &mut dyn BufWriter) -> Result<(), ErrorCode> {
+    pub fn recv(
+        &mut self,
+        nic: NicId,
+        header: &mut dyn BufWriter,
+        payload: &mut dyn BufWriter,
+    ) -> Result<usize, ErrorCode> {
         let nic = self.rx.get_nic(nic).ok_or(ErrorCode::NotFound)?;
-        nic.peek(writer)
-    }
-
-    pub fn recv(&mut self, nic: NicId, writer: &mut dyn BufWriter) -> Result<usize, ErrorCode> {
-        let nic = self.rx.get_nic(nic).ok_or(ErrorCode::NotFound)?;
-        nic.recv(writer)
-    }
-
-    pub fn drop_peeked(&mut self, nic: NicId) -> Result<(), ErrorCode> {
-        let nic = self.rx.get_nic(nic).ok_or(ErrorCode::NotFound)?;
-        nic.drop_peeked()
+        nic.recv(header, payload)
     }
 
     fn alloc_device_id(&mut self) -> Result<DeviceId, ErrorCode> {

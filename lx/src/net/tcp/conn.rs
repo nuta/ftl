@@ -11,7 +11,6 @@ use super::packet::Segment;
 use super::packet::TcpFlags;
 use super::packet::TcpPacketInfo;
 use crate::net::tcpip::Io;
-use crate::net::tcpip::RecvGuard;
 use crate::types::c_short;
 use crate::types::errno::Errno;
 use crate::types::sys::poll::POLLIN;
@@ -230,7 +229,7 @@ impl TcpConn {
         };
     }
 
-    pub fn handle_rx(&self, pkt: &TcpPacketInfo, recv_guard: RecvGuard<'_>) {
+    pub fn handle_rx(&self, pkt: &TcpPacketInfo, payload: &[u8]) {
         let flags = TcpFlags::from_u8(pkt.flags);
         let mut mutable = self.mutable.lock();
 
@@ -263,15 +262,13 @@ impl TcpConn {
         };
 
         // Receive the TCP payload into the RX buffer.
-        let received_len = pkt.payload_len as usize;
-        let written_len = mutable.rx_buffer.write_with(received_len, |payload| {
-            match recv_guard.recv(payload) {
-                Ok(_) => payload.len(),
-                Err(e) => {
-                    trace!("failed to receive network payload: {:?}", e);
-                    0
-                }
+        let received_len = payload.len();
+        let written_len = mutable.rx_buffer.write_with(received_len, |buf| {
+            if buf.len() != received_len {
+                return 0;
             }
+            buf.copy_from_slice(payload);
+            received_len
         });
 
         // Writes to the RX buffer may fail on OOM.
