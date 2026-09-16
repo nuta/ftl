@@ -8,9 +8,11 @@ use ftl_types::handle::HandleRight;
 use ftl_types::vmspace::PageAttrs;
 use ftl_utils::alignment::align_down;
 use ftl_utils::alignment::align_up;
+use ftl_utils::alignment::is_aligned;
 
 use crate::address::UAddr;
 use crate::arch::MIN_PAGE_SIZE;
+use crate::arch::USER_ADDR_END;
 use crate::boot::BootInfo;
 use crate::handle::Handle;
 use crate::hspace::HandleSpace;
@@ -24,9 +26,19 @@ fn load_elf(vmspace: &SharedRef<VmSpace>, elf_file: &[u8]) -> usize {
 
     // Load the segments into the allocated memory.
     for phdr in elf.phdrs {
-        if phdr.p_type != PhdrType::Load as u32 {
+        if phdr.p_type != PhdrType::Load as u32 || phdr.p_memsz == 0 {
             continue;
         }
+
+        if phdr.p_vaddr.saturating_add(phdr.p_memsz) as usize >= USER_ADDR_END {
+            panic!(
+                "ELF segment exceeds user address space: vaddr={}, memsz={}",
+                phdr.p_vaddr, phdr.p_memsz
+            );
+        }
+
+        assert!(phdr.p_filesz <= phdr.p_memsz);
+        assert!(is_aligned(phdr.p_vaddr as usize, MIN_PAGE_SIZE));
 
         // Copy the file contents to the allocated memory.
         let src_off = phdr.p_offset as usize;
@@ -45,8 +57,11 @@ fn load_elf(vmspace: &SharedRef<VmSpace>, elf_file: &[u8]) -> usize {
             attrs |= PageAttrs::READ;
         }
 
+        // Copy the file contents to the allocated memory.
         let vmo = VmObject::new_anonymous(region_len).unwrap();
         vmo.write(0, bytes).unwrap();
+
+        // Map the region to the address space.
         vmspace
             .map(vmo, UAddr::new(phdr.p_vaddr as usize), attrs)
             .unwrap();
