@@ -1,5 +1,8 @@
 #!/bin/bash
 set -eu
 
-./build.sh
+if [[ ! -n "${SKIP_BUILD:-}" ]]; then
+  ./build.sh
+fi
+
 bun test tests

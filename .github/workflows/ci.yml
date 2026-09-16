@@ -62,7 +62,7 @@ jobs:
     - uses: oven-sh/setup-bun@v2
     - run: sudo apt-get update && sudo apt-get install -y qemu-system-x86
     - name: E2E tests
-      run: KERNEL_ELF=ftl.elf INIT_ELF=lx.elf ./test.sh
+      run: SKIP_BUILD=1 ./test.sh
 
   macos_build:
     name: "Build (macOS)"
