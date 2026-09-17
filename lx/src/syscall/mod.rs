@@ -6,6 +6,7 @@ mod execve;
 mod exit_group;
 mod fcntl;
 mod fork;
+mod getpid;
 mod listen;
 mod poll;
 mod read;
@@ -25,6 +26,7 @@ use self::execve::sys_execve;
 use self::exit_group::sys_exit_group;
 use self::fcntl::sys_fcntl;
 use self::fork::sys_fork;
+use self::getpid::sys_getpid;
 use self::listen::sys_listen;
 use self::poll::sys_poll;
 use self::read::sys_read;
@@ -49,6 +51,7 @@ use crate::types::sys::syscall::SYS_EXECVE;
 use crate::types::sys::syscall::SYS_EXIT_GROUP;
 use crate::types::sys::syscall::SYS_FCNTL;
 use crate::types::sys::syscall::SYS_FORK;
+use crate::types::sys::syscall::SYS_GETPID;
 use crate::types::sys::syscall::SYS_LISTEN;
 use crate::types::sys::syscall::SYS_POLL;
 use crate::types::sys::syscall::SYS_READ;
@@ -85,6 +88,7 @@ pub extern "C" fn handle_syscall(frame: *const SyscallFrame) -> c_long {
         SYS_POLL => sys_poll(&current, arg0 as *mut PollFd, arg1 as nfds_t, arg2 as c_int),
         SYS_WRITEV => sys_writev(&current, arg0 as c_int, arg1 as *const iovec, arg2 as c_int),
         SYS_FORK => sys_fork(&current, frame as *const SyscallFrame as usize),
+        SYS_GETPID => sys_getpid(&current),
         SYS_SOCKET => sys_socket(&current, arg0 as c_int, arg1 as c_int, arg2 as c_int),
         SYS_BIND => sys_bind(&current, arg0 as c_int, arg1 as *const u8, arg2),
         SYS_LISTEN => sys_listen(&current, arg0 as c_int, arg1 as c_int),

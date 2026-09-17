@@ -398,6 +398,10 @@ impl Process {
         &self.fd_table
     }
 
+    pub fn id(&self) -> PId {
+        self.tgid
+    }
+
     pub fn container(&self) -> &Arc<Container> {
         &self.container
     }
