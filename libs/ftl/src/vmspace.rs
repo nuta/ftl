@@ -4,6 +4,7 @@ use ftl_types::syscall::Syscall;
 use ftl_types::vmspace::PageAttrs;
 
 use crate::arch::syscall1;
+use crate::arch::syscall3;
 use crate::arch::syscall4;
 use crate::handle::OwnedHandle;
 use crate::vmo::Vmo;
@@ -32,6 +33,16 @@ impl VmSpace {
             vmo.handle().id().as_usize(),
             uaddr,
             attrs.as_raw(),
+        )?;
+        Ok(())
+    }
+
+    pub fn unmap(&self, uaddr: usize, len: usize) -> Result<(), ErrorCode> {
+        syscall3(
+            Syscall::VmSpaceUnmap,
+            self.handle.id().as_usize(),
+            uaddr,
+            len,
         )?;
         Ok(())
     }

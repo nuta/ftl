@@ -60,6 +60,10 @@ impl VmSpace {
     ) -> Result<(), ErrorCode> {
         todo!()
     }
+
+    pub fn unmap(&self, _uaddr: UAddr, _len: usize) -> Result<(), ErrorCode> {
+        todo!()
+    }
 }
 
 pub struct Thread {}

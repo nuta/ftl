@@ -119,6 +119,41 @@ fn ensure_next_table(table: &mut Table, index: usize) -> Result<&mut Table, Erro
     Ok(paddr_to_table_mut(next_table_paddr))
 }
 
+fn get_next_table(table: &mut Table, index: usize) -> Result<&mut Table, ErrorCode> {
+    let entry = table.0[index];
+    if !entry.is_present() {
+        return Err(ErrorCode::NotFound);
+    }
+    if entry.is_huge() {
+        return Err(ErrorCode::Unsupported);
+    }
+
+    Ok(paddr_to_table_mut(entry.paddr()))
+}
+
+fn unmap_page(pml4: &mut Table, uaddr: usize) -> Result<(), ErrorCode> {
+    let pdpt = get_next_table(pml4, pml4_index(uaddr))?;
+    let pdt = get_next_table(pdpt, pdpt_index(uaddr))?;
+    let pt = get_next_table(pdt, pdt_index(uaddr))?;
+
+    let entry = &mut pt.0[pt_index(uaddr)];
+    if !entry.is_present() {
+        return Err(ErrorCode::NotFound);
+    }
+
+    if entry.is_huge() {
+        return Err(ErrorCode::Unsupported);
+    }
+
+    *entry = Pte(0);
+
+    unsafe {
+        asm!("invlpg [{}]", in(reg) uaddr, options(nostack, preserves_flags));
+    }
+
+    Ok(())
+}
+
 const fn pml4_index(vaddr: usize) -> usize {
     (vaddr >> 39) & 0x1ff
 }
@@ -262,6 +297,30 @@ impl VmSpace {
         // Invalidate the page in the TLB to let CPU reread the new entry.
         unsafe {
             asm!("invlpg [{}]", in(reg) uaddr, options(nostack, preserves_flags));
+        }
+
+        Ok(())
+    }
+
+    pub fn unmap(&self, uaddr: UAddr, len: usize) -> Result<(), ErrorCode> {
+        let start = uaddr.as_usize();
+        if !is_aligned(start, MIN_PAGE_SIZE) || !is_aligned(len, MIN_PAGE_SIZE) {
+            return Err(ErrorCode::NotAligned);
+        }
+
+        let end = start.checked_add(len).ok_or(ErrorCode::OutOfBounds)?;
+        let mutable = self.mutable.lock();
+        let pml4 = unsafe { &mut *(mutable.pml4.as_usize() as *mut Table) };
+
+        let mut addr = start;
+        while addr < end {
+            match unmap_page(pml4, addr) {
+                // Ignore missing pages. It happens only if the VMO exist due
+                // to lazy mapping.
+                Ok(()) | Err(ErrorCode::NotFound) => {}
+                Err(e) => return Err(e),
+            }
+            addr += MIN_PAGE_SIZE;
         }
 
         Ok(())

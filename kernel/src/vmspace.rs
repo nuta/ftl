@@ -6,6 +6,7 @@ use ftl_types::handle::HandleRight;
 use ftl_types::thread::SyscallRegs;
 use ftl_types::vmspace::PageAttrs;
 use ftl_utils::alignment::align_down;
+use ftl_utils::alignment::is_aligned;
 use ftl_utils::reserve_slot::ReserveSlot;
 use ftl_utils::spinlock::SpinLock;
 
@@ -121,6 +122,32 @@ impl VmSpace {
         Ok(())
     }
 
+    pub fn unmap(&self, uaddr: UAddr, len: usize) -> Result<(), ErrorCode> {
+        if len == 0 {
+            return Err(ErrorCode::InvalidArg);
+        }
+        if !uaddr.is_aligned_to(MIN_PAGE_SIZE) || !is_aligned(len, MIN_PAGE_SIZE) {
+            return Err(ErrorCode::NotAligned);
+        }
+
+        let end = uaddr.add(len).ok_or(ErrorCode::OutOfBounds)?;
+        if end.as_usize() > arch::USER_ADDR_END {
+            return Err(ErrorCode::NotAllowed);
+        }
+
+        let mut mutable = self.mutable.lock();
+        let index = mutable
+            .mappings
+            .iter()
+            .position(|mapping| mapping.start == uaddr && mapping.end == end)
+            .ok_or(ErrorCode::NotFound)?;
+
+        let mapping = mutable.mappings.remove(index);
+        self.arch.unmap(uaddr, len)?;
+        drop(mapping);
+        Ok(())
+    }
+
     /// Handles a user page fault in this address space.
     pub fn handle_page_fault(&self, fault_addr: UAddr) -> Result<(), ErrorCode> {
         let aligned_uaddr = UAddr::new(align_down(fault_addr.as_usize(), MIN_PAGE_SIZE));
@@ -176,5 +203,20 @@ pub fn sys_vmspace_map(
         hspace.get2::<VmSpace, VmObject>(vmspace_id, HandleRight::MAP, vmo_id, HandleRight::MAP)?;
 
     vmspace.map(vmo, uaddr, attrs)?;
+    Ok(SyscallOutput::Done(0))
+}
+
+pub fn sys_vmspace_unmap(
+    current: &SharedRef<Thread>,
+    ctx: &SyscallRegs,
+) -> Result<SyscallOutput, ErrorCode> {
+    let vmspace_id = HandleId::new(ctx.a0);
+    let uaddr = UAddr::new(ctx.a1);
+    let len = ctx.a2;
+    let vmspace = current
+        .hspace()
+        .get::<VmSpace>(vmspace_id, HandleRight::MAP)?;
+
+    vmspace.unmap(uaddr, len)?;
     Ok(SyscallOutput::Done(0))
 }
