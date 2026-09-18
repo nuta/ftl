@@ -4,6 +4,7 @@ pub const SYS_RT_SIGACTION: usize = 13;
 pub const SYS_RT_SIGRETURN: usize = 15;
 pub const SYS_CLOSE: usize = 3;
 pub const SYS_POLL: usize = 7;
+pub const SYS_BRK: usize = 12;
 pub const SYS_WRITEV: usize = 20;
 pub const SYS_GETPID: usize = 39;
 pub const SYS_FORK: usize = 57;

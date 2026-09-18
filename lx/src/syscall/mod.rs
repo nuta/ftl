@@ -1,6 +1,7 @@
 mod accept;
 mod arch_prctl;
 mod bind;
+mod brk;
 mod close;
 mod execve;
 mod exit_group;
@@ -24,6 +25,7 @@ use ftl::trace;
 use self::accept::sys_accept;
 use self::arch_prctl::sys_arch_prctl;
 use self::bind::sys_bind;
+use self::brk::sys_brk;
 use self::close::sys_close;
 use self::execve::sys_execve;
 use self::exit_group::sys_exit_group;
@@ -53,6 +55,7 @@ use crate::types::sys::poll::nfds_t;
 use crate::types::sys::syscall::SYS_ACCEPT;
 use crate::types::sys::syscall::SYS_ARCH_PRCTL;
 use crate::types::sys::syscall::SYS_BIND;
+use crate::types::sys::syscall::SYS_BRK;
 use crate::types::sys::syscall::SYS_CLOSE;
 use crate::types::sys::syscall::SYS_EXECVE;
 use crate::types::sys::syscall::SYS_EXIT_GROUP;
@@ -95,6 +98,7 @@ pub extern "C" fn handle_syscall(frame: *mut SyscallFrame) -> *mut SyscallFrame 
         SYS_WRITE => sys_write(&current, arg0 as c_int, arg1 as *const c_void, arg2),
         SYS_READ => sys_read(&current, arg0 as c_int, arg1 as *mut c_void, arg2),
         SYS_CLOSE => sys_close(&current, arg0 as c_int),
+        SYS_BRK => sys_brk(&current, arg0),
         SYS_POLL => sys_poll(&current, arg0 as *mut PollFd, arg1 as nfds_t, arg2 as c_int),
         SYS_WRITEV => sys_writev(&current, arg0 as c_int, arg1 as *const iovec, arg2 as c_int),
         SYS_FORK => sys_fork(&current, frame),

@@ -42,6 +42,7 @@ use crate::wait_queue::WaitSet;
 const PAGE_SIZE: usize = 4096; // TODO: system call?
 const STACK_BOTTOM: usize = 0x0200_0000;
 const STACK_SIZE: usize = 256 * 1024;
+const BRK_END: usize = STACK_BOTTOM;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct PId(c_int);
@@ -69,6 +70,26 @@ struct Mapping {
     start: usize,
     len: usize,
     attrs: PageAttrs,
+}
+
+#[derive(Clone, Copy)]
+struct Brk {
+    /// The start of the heap.
+    start: usize,
+    /// The current break address.
+    current: usize,
+    /// The current break address, aligned to the page boundary.
+    current_aligned: usize,
+}
+
+impl Brk {
+    fn new(start: usize) -> Self {
+        Self {
+            start,
+            current: start,
+            current_aligned: start,
+        }
+    }
 }
 
 pub use crate::open_file::OpenFile;
@@ -166,7 +187,9 @@ impl FdTable {
 struct Mutable {
     parent: Option<Weak<Process>>,
     threads: Vec<Arc<LxThread>>,
+    vmspace: VmSpace,
     mappings: Vec<Mapping>,
+    brk: Brk,
     children: Vec<Arc<Process>>,
     exit_status: Option<c_int>,
     signal_actions: SignalMap<SigAction>,
@@ -188,7 +211,7 @@ impl Process {
         elf_file: Arc<dyn FileLike>,
         argv: &[&[u8]],
     ) -> Result<Arc<Process>, Errno> {
-        let (vmspace, mappings, entry, sp) =
+        let (vmspace, mappings, brk, entry, sp) =
             create_address_space(&container.root_vmspace, elf_file, argv)?;
 
         let mut fd_table = FdTable::new(1024); // TODO: make this configurable
@@ -204,6 +227,7 @@ impl Process {
             PId(1),
             None,
             mappings,
+            brk,
             entry,
             sp,
             SignalMap::new(SigAction::default()),
@@ -219,7 +243,7 @@ impl Process {
         elf_file: Arc<dyn FileLike>,
         argv: &[&[u8]],
     ) -> Result<(), Errno> {
-        let (vmspace, mappings, entry, sp) =
+        let (vmspace, mappings, brk, entry, sp) =
             create_address_space(&self.container.root_vmspace, elf_file, argv)?;
         let thread = LxThread::new(
             &self.container.hspace,
@@ -232,7 +256,9 @@ impl Process {
         thread.start()?;
 
         let mut mutable = self.mutable.lock();
+        mutable.vmspace = vmspace;
         mutable.mappings = mappings;
+        mutable.brk = brk;
         mutable
             .threads
             .retain(|thread| !core::ptr::eq(thread.as_ref(), current));
@@ -247,6 +273,7 @@ impl Process {
         tgid: PId,
         parent: Option<Weak<Process>>,
         mappings: Vec<Mapping>,
+        brk: Brk,
         entry: usize,
         sp: usize,
         signal_actions: SignalMap<SigAction>,
@@ -264,7 +291,9 @@ impl Process {
             mutable: SpinLock::new(Mutable {
                 parent,
                 threads: Vec::with_capacity(1),
+                vmspace,
                 mappings,
+                brk,
                 children: Vec::new(),
                 exit_status: None,
                 signal_actions,
@@ -276,14 +305,17 @@ impl Process {
 
         // TODO: LX assumes that the cookie won't be dereferenced until the
         // thread is started. Should we document and guarantee this?
-        let thread = LxThread::new(
-            &container.hspace,
-            &vmspace,
-            entry,
-            sp,
-            Arc::downgrade(&process),
-            tgid,
-        )?;
+        let thread = {
+            let mutable = process.mutable.lock();
+            LxThread::new(
+                &container.hspace,
+                &mutable.vmspace,
+                entry,
+                sp,
+                Arc::downgrade(&process),
+                tgid,
+            )?
+        };
         thread_prestart(&thread)?;
 
         // Start the thread.
@@ -309,6 +341,7 @@ impl Process {
         // TODO: copy on write
         let mutable = self.mutable.lock();
         let mappings = mutable.mappings.clone();
+        let brk = mutable.brk;
         let signal_actions = mutable.signal_actions.fork();
         drop(mutable);
         for mapping in &mappings {
@@ -332,6 +365,7 @@ impl Process {
             tgid,
             Some(Arc::downgrade(self)),
             mappings,
+            brk,
             entry,
             syscall_sp,
             signal_actions,
@@ -428,6 +462,63 @@ impl Process {
             drop(mutable);
             wq.wait()?;
         }
+    }
+
+    /// `brk(2)` system call.
+    ///
+    /// Returns the new break address, even if it fails. This is a documented
+    /// behavior of Linux:
+    ///
+    /// > On failure, the system call returns the current break.
+    /// >
+    /// > https://man7.org/linux/man-pages/man2/brk.2.html
+    pub fn brk(&self, addr: usize) -> usize {
+        let mut mutable = self.mutable.lock();
+        let brk = mutable.brk;
+        if addr < brk.start || addr > BRK_END {
+            return brk.current;
+        }
+
+        // Align the address to the page boundary.
+        let current_aligned = align_up(addr, PAGE_SIZE);
+        if current_aligned <= brk.current_aligned {
+            // The page is already allocated. Advance the break address and
+            // return immediately.
+            mutable.brk.current = addr;
+            return addr;
+        }
+
+        // We'll do system calls might schedule to another thread in the same
+        // process. Release the lock.
+        drop(mutable);
+
+        // Allocate pages for the new area.
+        let len = current_aligned - brk.current_aligned;
+        let attrs = PageAttrs::READ | PageAttrs::WRITE;
+        let Ok(vmo) = Vmo::create(len) else {
+            return brk.current;
+        };
+
+        // Map the pages. This would reject concurrent brk calls with the same
+        // address.
+        let mut mutable = self.mutable.lock();
+        if mutable
+            .vmspace
+            .map(&vmo, brk.current_aligned, attrs)
+            .is_err()
+        {
+            return brk.current;
+        }
+
+        // Record the mapping.
+        mutable.mappings.push(Mapping {
+            start: brk.current_aligned,
+            len,
+            attrs,
+        });
+
+        mutable.brk.current_aligned = current_aligned;
+        addr
     }
 
     pub fn fd_table(&self) -> &SpinLock<FdTable> {
@@ -536,10 +627,18 @@ fn create_address_space(
     root_vmspace: &VmSpace,
     elf_file: Arc<dyn FileLike>,
     argv: &[&[u8]],
-) -> Result<(VmSpace, Vec<Mapping>, usize, usize), Errno> {
+) -> Result<(VmSpace, Vec<Mapping>, Brk, usize, usize), Errno> {
     let vmspace = root_vmspace.try_clone()?;
     let mut mappings = Vec::new();
     let entry = load_elf(&vmspace, elf_file.as_ref(), &mut mappings)?;
+
+    // Find the end of the program segments.
+    // TODO: Can we guarantee that mappings is not empty?
+    let brk_start = mappings
+        .iter()
+        .map(|mapping| mapping.start + mapping.len)
+        .max()
+        .unwrap_or(0);
 
     let stack = Vmo::create(STACK_SIZE)?;
     let sp = prepare_stack(&stack, STACK_BOTTOM, STACK_SIZE, argv)?;
@@ -551,7 +650,7 @@ fn create_address_space(
         attrs: PageAttrs::READ | PageAttrs::WRITE,
     });
 
-    Ok((vmspace, mappings, entry, sp))
+    Ok((vmspace, mappings, Brk::new(brk_start), entry, sp))
 }
 
 fn attrs_from_phdr(phdr: &ftl_elf::Phdr) -> PageAttrs {
