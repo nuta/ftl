@@ -53,6 +53,7 @@ pub fn sys_poll(
 
     // Subscribe to the files' wait queues.
     let mut wait_set = WaitSet::new()?;
+    wait_set.subscribe(process.signal_wait_queue());
     for file in &files {
         if let Some(wait_queue) = file.wait_queue() {
             wait_set.subscribe(wait_queue);
@@ -60,6 +61,10 @@ pub fn sys_poll(
     }
 
     loop {
+        if process.has_pending_signal() {
+            return Err(Errno::EINTR);
+        }
+
         let n = scan_pollfds(fds, &files)?;
         if n > 0 {
             return Ok(n);

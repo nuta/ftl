@@ -6,6 +6,7 @@ use core::fmt;
 use core::mem::MaybeUninit;
 use core::slice;
 
+use ftl::trace;
 use ftl::vmo::Vmo;
 use ftl::vmspace::VmSpace;
 use ftl_elf::Elf;
@@ -19,8 +20,14 @@ use ftl_utils::alignment::align_down;
 use ftl_utils::alignment::align_up;
 use ftl_utils::spinlock::SpinLock;
 
-use crate::arch::fork_child_entry;
+use crate::arch::SyscallFrame;
+use crate::arch::restore_regs;
 use crate::container::Container;
+use crate::signal::SigAction;
+use crate::signal::SigDisposition;
+use crate::signal::Signal;
+use crate::signal::SignalMap;
+use crate::signal::SignalSet;
 use crate::thread::LxThread;
 use crate::types::c_int;
 use crate::types::errno::Errno;
@@ -29,6 +36,7 @@ use crate::types::sys::fcntl::O_WRONLY;
 use crate::vfs::Console;
 use crate::vfs::FileLike;
 use crate::wait_queue::WaitQueue;
+use crate::wait_queue::WaitSet;
 
 const PAGE_SIZE: usize = 4096; // TODO: system call?
 const STACK_BOTTOM: usize = 0x0200_0000;
@@ -160,6 +168,8 @@ struct Mutable {
     mappings: Vec<Mapping>,
     children: Vec<Arc<Process>>,
     exit_status: Option<c_int>,
+    signal_actions: SignalMap<SigAction>,
+    pending_signals: SignalSet,
 }
 
 pub struct Process {
@@ -168,6 +178,7 @@ pub struct Process {
     container: Arc<Container>,
     mutable: SpinLock<Mutable>,
     fd_table: SpinLock<FdTable>,
+    signal_wait: WaitQueue,
 }
 
 impl Process {
@@ -194,6 +205,7 @@ impl Process {
             mappings,
             entry,
             sp,
+            SignalMap::new(SigAction::default()),
             |_thread| Ok(()),
         )?;
 
@@ -236,12 +248,14 @@ impl Process {
         mappings: Vec<Mapping>,
         entry: usize,
         sp: usize,
+        signal_actions: SignalMap<SigAction>,
         thread_prestart: F,
     ) -> Result<Arc<Self>, Errno>
     where
         F: FnOnce(&Arc<LxThread>) -> Result<(), Errno>,
     {
         let child_exit = WaitQueue::new()?;
+        let signal_wait = WaitQueue::new()?;
         let process = Arc::new(Self {
             tgid,
             child_exit,
@@ -252,8 +266,11 @@ impl Process {
                 mappings,
                 children: Vec::new(),
                 exit_status: None,
+                signal_actions,
+                pending_signals: SignalSet::empty(),
             }),
             fd_table: SpinLock::new(fd_table),
+            signal_wait,
         });
 
         // TODO: LX assumes that the cookie won't be dereferenced until the
@@ -275,13 +292,24 @@ impl Process {
         Ok(process)
     }
 
-    pub fn fork(self: &Arc<Self>, current: &LxThread, syscall_sp: usize) -> Result<PId, Errno> {
+    pub fn fork(
+        self: &Arc<Self>,
+        current: &LxThread,
+        frame: &mut SyscallFrame,
+    ) -> Result<PId, Errno> {
         let vmspace = self.container.root_vmspace.try_clone()?;
         let fd_table = self.fd_table.lock().clone();
 
+        // Set the return value for the child process.
+        frame.set_retval(0);
+        let syscall_sp = frame as *const SyscallFrame as usize;
+
         // Copy memory into the child's VM space.
         // TODO: copy on write
-        let mappings = self.mutable.lock().mappings.clone();
+        let mutable = self.mutable.lock();
+        let mappings = mutable.mappings.clone();
+        let signal_actions = mutable.signal_actions.fork();
+        drop(mutable);
         for mapping in &mappings {
             let vmo = Vmo::create(mapping.len)?;
             let bytes =
@@ -295,7 +323,7 @@ impl Process {
         let tgid = pid_table.allocate()?;
 
         // Create a new process and the first thread.
-        let entry = fork_child_entry as *const () as usize;
+        let entry = restore_regs as *const () as usize;
         let child = Self::new(
             self.container.clone(),
             vmspace,
@@ -305,6 +333,7 @@ impl Process {
             mappings,
             entry,
             syscall_sp,
+            signal_actions,
             |thread| {
                 current.copy_regs_to(&thread, RegsKind::FsBase)?;
                 current.copy_regs_to(&thread, RegsKind::FpAndVector)?;
@@ -364,7 +393,9 @@ impl Process {
             return Err(Errno::EINVAL);
         }
 
-        let wq = self.child_exit.subscribe();
+        let mut wq = WaitSet::new()?;
+        wq.subscribe(&self.child_exit);
+        wq.subscribe(&self.signal_wait);
         loop {
             let mut mutable = self.mutable.lock();
             let mut matched_any = false;
@@ -389,6 +420,10 @@ impl Process {
                 return Err(Errno::ECHILD);
             }
 
+            if !mutable.pending_signals.is_empty() {
+                return Err(Errno::EINTR);
+            }
+
             drop(mutable);
             wq.wait()?;
         }
@@ -400,6 +435,54 @@ impl Process {
 
     pub fn id(&self) -> PId {
         self.tgid
+    }
+
+    pub fn sigaction(
+        &self,
+        signal: Signal,
+        new_action: Option<SigAction>,
+    ) -> Result<SigAction, Errno> {
+        let mut mutable = self.mutable.lock();
+
+        let old = *mutable.signal_actions.get(signal);
+        if let Some(action) = new_action {
+            mutable.signal_actions.set(signal, action);
+        }
+
+        Ok(old)
+    }
+
+    pub fn queue_signal(&self, signal: Signal) -> Result<(), Errno> {
+        let mut mutable = self.mutable.lock();
+        let action = *mutable.signal_actions.get(signal);
+        match action.disposition() {
+            SigDisposition::Ignore => return Ok(()),
+            SigDisposition::Default => {
+                trace!("unsupproted default handling for signal {:?}", signal);
+                return Err(Errno::ENOTSUP);
+            }
+            SigDisposition::Handler(_) => {}
+        }
+
+        mutable.pending_signals.insert(signal);
+        drop(mutable);
+        self.signal_wait.notify_all()?;
+        Ok(())
+    }
+
+    pub fn has_pending_signal(&self) -> bool {
+        !self.mutable.lock().pending_signals.is_empty()
+    }
+
+    pub fn take_pending_signal(&self) -> Option<(Signal, SigAction)> {
+        let mut mutable = self.mutable.lock();
+        let signal = mutable.pending_signals.take_first()?;
+        let action = *mutable.signal_actions.get(signal);
+        Some((signal, action))
+    }
+
+    pub fn signal_wait_queue(&self) -> &WaitQueue {
+        &self.signal_wait
     }
 
     pub fn container(&self) -> &Arc<Container> {

@@ -4,18 +4,29 @@ use alloc::sync::Weak;
 
 use ftl::hspace::HandleSpace;
 use ftl::thread::Thread;
+use ftl::trace;
 use ftl::vmspace::VmSpace;
 use ftl_types::error::ErrorCode;
 use ftl_types::thread::Regs;
 use ftl_types::thread::RegsKind;
+use ftl_utils::spinlock::SpinLock;
 
+use crate::arch::SyscallFrame;
 use crate::process::PId;
 use crate::process::Process;
+use crate::signal::SigDisposition;
+use crate::types::c_long;
+use crate::types::errno::Errno;
+
+struct Mutable {
+    signal_frame: Option<SyscallFrame>,
+}
 
 pub struct LxThread {
     process: Weak<Process>,
     tid: PId,
     inner: Thread,
+    mutable: SpinLock<Mutable>,
 }
 
 struct Cookie {
@@ -54,6 +65,7 @@ impl LxThread {
             process,
             tid,
             inner,
+            mutable: SpinLock::new(Mutable { signal_frame: None }),
         });
 
         // Initialize and leak the thread context. We'll free manually later.
@@ -86,6 +98,56 @@ impl LxThread {
 
     pub fn copy_regs_to(&self, dest: &LxThread, kind: RegsKind) -> Result<(), ErrorCode> {
         self.inner.copy_regs_to(&dest.inner, kind)
+    }
+
+    /// Modifies the thread's state to return to the signal handler.
+    pub fn handle_pending_signal(&self, frame: &mut SyscallFrame) {
+        let mut mutable = self.mutable.lock();
+        if mutable.signal_frame.is_some() {
+            // A signal is already being delivered.
+            return;
+        }
+
+        let process = self.process();
+        let (signal, action, handler) = loop {
+            let Some((signal, action)) = process.take_pending_signal() else {
+                // No pending signal to deliver.
+                return;
+            };
+
+            match action.disposition() {
+                SigDisposition::Handler(handler) => break (signal, action, handler),
+                SigDisposition::Ignore => {
+                    // Handle the next pending signal.
+                    continue;
+                }
+                SigDisposition::Default => {
+                    trace!(
+                        "default signal handling for {:?} is not implemented",
+                        signal
+                    );
+
+                    // Handle the next pending signal.
+                    continue;
+                }
+            }
+        };
+
+        // Save the original system call frame. We'll restore it when returning
+        // from the signal handler.
+        mutable.signal_frame = Some(*frame);
+
+        unsafe {
+            frame.enter_signal(signal.number() as usize, handler, action.restorer());
+        }
+    }
+
+    /// Restores the thread's state to resume from signal handling.
+    pub fn return_from_signal(&self, frame: &mut SyscallFrame) -> Result<c_long, Errno> {
+        let mut mutable = self.mutable.lock();
+        let saved = mutable.signal_frame.take().ok_or(Errno::EINVAL)?;
+        *frame = saved;
+        Ok(saved.retval())
     }
 
     /// # Safety

@@ -28,6 +28,10 @@ impl PIdTable {
         }
     }
 
+    pub fn get(&self, pid: PId) -> Option<Arc<Process>> {
+        self.pids.get(&pid.as_int()).cloned()
+    }
+
     pub fn allocate(&mut self) -> Result<PId, Errno> {
         let mut pid = self.next;
         for _ in 0..self.max {

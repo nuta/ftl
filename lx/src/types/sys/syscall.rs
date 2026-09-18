@@ -1,10 +1,13 @@
 pub const SYS_WRITE: usize = 1;
 pub const SYS_READ: usize = 0;
+pub const SYS_RT_SIGACTION: usize = 13;
+pub const SYS_RT_SIGRETURN: usize = 15;
 pub const SYS_CLOSE: usize = 3;
 pub const SYS_POLL: usize = 7;
 pub const SYS_WRITEV: usize = 20;
 pub const SYS_GETPID: usize = 39;
 pub const SYS_FORK: usize = 57;
+pub const SYS_KILL: usize = 62;
 pub const SYS_SOCKET: usize = 41;
 pub const SYS_ACCEPT: usize = 43;
 pub const SYS_BIND: usize = 49;

@@ -1,5 +1,6 @@
 use core::arch::naked_asm;
 
+#[derive(Clone, Copy)]
 #[repr(C)]
 pub struct SyscallFrame {
     pub r15: usize,
@@ -14,14 +15,18 @@ pub struct SyscallFrame {
     pub rdx: usize,
     pub rsi: usize,
     pub rdi: usize,
-    /// The system call number.
-    pub nr: usize,
+    pub rax: usize,
     pub cookie: usize,
     pub rflags: usize,
+    pub rsp: usize,
     pub rip: usize,
 }
 
 impl SyscallFrame {
+    pub fn nr(&self) -> usize {
+        self.rax
+    }
+
     pub fn arg0(&self) -> usize {
         self.rdi
     }
@@ -32,6 +37,38 @@ impl SyscallFrame {
 
     pub fn arg2(&self) -> usize {
         self.rdx
+    }
+
+    pub fn arg3(&self) -> usize {
+        self.r10
+    }
+
+    pub fn retval(&self) -> isize {
+        self.rax as isize
+    }
+
+    pub fn set_retval(&mut self, retval: isize) {
+        self.rax = retval as usize;
+    }
+
+    pub unsafe fn enter_signal(&mut self, signal: usize, handler: usize, restorer: usize) {
+        // Use the beginning of the frame as the restorer, the return address
+        // for RET instruction in signal handler.
+        //
+        // This means when entering the signal handler, R15 (unnecessarily)
+        // points to the restorer, but it shouldn't matter anyway.
+        let sp = (self as *mut Self).addr();
+
+        // Make sure sp will be 16-bytes aligned, after PUSH RBP in the signal
+        // handler. LX pushes odd number of registers, so this always holds,
+        // ... I hope.
+        debug_assert_eq!(sp % 16, 8);
+
+        self.rsp = sp;
+        self.r15 = restorer;
+
+        self.rdi = signal; // the argument for the signal handler
+        self.rip = handler;
     }
 }
 
@@ -55,13 +92,12 @@ pub extern "C" fn syscall_handler() -> ! {
         "push r15",
 
         // Align the stack to 16 bytes.
-        "mov rbx, rsp",
         "mov rdi, rsp", // handle_syscall argument
         "and rsp, -16",
         "call {handle_syscall}",
 
-        // Restore the stack pointer, and others.
-        "mov rsp, rbx",
+        // Restore the user registers from the frame.
+        "mov rsp, rax",
         "jmp {restore_regs}",
         handle_syscall = sym crate::syscall::handle_syscall,
         restore_regs = sym restore_regs,
@@ -69,7 +105,7 @@ pub extern "C" fn syscall_handler() -> ! {
 }
 
 #[unsafe(naked)]
-extern "C" fn restore_regs() -> ! {
+pub extern "C" fn restore_regs() -> ! {
     naked_asm!(
         "pop r15",
         "pop r14",
@@ -83,25 +119,14 @@ extern "C" fn restore_regs() -> ! {
         "pop rdx",
         "pop rsi",
         "pop rdi",
-        "add rsp, 16", // Skip system call number and cookie
-        "pop r11",     // user RFLAGS
-        "pop rcx",     // user RIP
+        "pop rax",    // return value
+        "add rsp, 8", // Skip cookie
+        "pop r11",    // user RFLAGS
         "push r11",
         "popfq",
-        "add rsp, 128", // red zone
-        "jmp rcx",
-    )
-}
-
-/// The entry point for the child process.
-///
-/// RSP points to the user stack when entering `handle_syscall`, and it
-/// contains copied `SyscallFrame`.
-#[unsafe(naked)]
-pub extern "C" fn fork_child_entry() -> ! {
-    naked_asm!(
-        "xor eax, eax", // the return value of fork(2)
-        "jmp {restore_regs}",
-        restore_regs = sym restore_regs,
+        "pop rcx", // user RSP
+        "pop r11", // user RIP
+        "mov rsp, rcx",
+        "jmp r11",
     )
 }

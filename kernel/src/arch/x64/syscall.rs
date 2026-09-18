@@ -131,25 +131,33 @@ extern "C" fn syscall_handler() -> ! {
         "jae {syscall_copy_recover}",
 
         // Allocate the trap frame (below the red zone) from user RSP.
+        "mov rcx, r11", // original user RSP
         "sub r11, {syscall_frame_size}",
         "jc {syscall_copy_recover}", // user RSP is too low
 
+        // Align RSP to 16 bytes.
+        "and r11, -16",
+
         "stac", // Enable user page access.
+
+        // Write user RSP
+        ".global syscall_copy0; syscall_copy0:",
+        "mov [r11 + {frame_rsp_offset}], rcx",
 
         // Write user RFLAGS
         "mov rcx, [rsp]",
-        ".global syscall_copy0; syscall_copy0:",
+        ".global syscall_copy1; syscall_copy1:",
         "mov [r11 + {frame_rflags_offset}], rcx",
 
         // Write user RIP
         "mov rcx, [rsp + 8]",
-        ".global syscall_copy1; syscall_copy1:",
+        ".global syscall_copy2; syscall_copy2:",
         "mov [r11 + {frame_rip_offset}], rcx",
 
         // Write cookie
         "mov rcx, gs:[{current_thread_offset}]",
         "mov rcx, [rcx + {cookie_offset}]",
-        ".global syscall_copy2; syscall_copy2:",
+        ".global syscall_copy3; syscall_copy3:",
         "mov [r11 + {frame_cookie_offset}], rcx",
 
         "clac", // Disable user page access.
@@ -175,6 +183,7 @@ extern "C" fn syscall_handler() -> ! {
         xsave_ptr_offset = const offset_of!(Thread, xsave_ptr),
         fault_pc_offset = const offset_of!(Thread, fault_pc),
         cookie_offset = const offset_of!(Thread, cookie),
+        frame_rsp_offset = const offset_of!(SyscallFrame, rsp),
         frame_rflags_offset = const offset_of!(SyscallFrame, rflags),
         frame_rip_offset = const offset_of!(SyscallFrame, rip),
         frame_cookie_offset = const offset_of!(SyscallFrame, cookie),

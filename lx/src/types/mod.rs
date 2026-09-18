@@ -2,6 +2,7 @@
 
 pub mod asm;
 pub mod errno;
+pub mod signal;
 pub mod sys;
 
 pub type c_int = i32;

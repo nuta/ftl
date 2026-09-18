@@ -42,5 +42,6 @@ pub struct SyscallRegs {
 pub struct SyscallFrame {
     pub cookie: usize,
     pub rflags: usize,
+    pub rsp: usize,
     pub rip: usize,
 }

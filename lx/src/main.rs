@@ -11,6 +11,7 @@ mod initfs;
 mod net;
 mod open_file;
 mod process;
+mod signal;
 mod syscall;
 mod thread;
 mod types;
