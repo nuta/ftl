@@ -187,7 +187,6 @@ impl FdTable {
 struct Mutable {
     parent: Option<Weak<Process>>,
     threads: Vec<Arc<LxThread>>,
-    vmspace: VmSpace,
     mappings: Vec<Mapping>,
     brk: Brk,
     children: Vec<Arc<Process>>,
@@ -200,6 +199,7 @@ pub struct Process {
     tgid: PId,
     child_exit: WaitQueue,
     container: Arc<Container>,
+    vmspace: VmSpace,
     mutable: SpinLock<Mutable>,
     fd_table: SpinLock<FdTable>,
     signal_wait: WaitQueue,
@@ -211,8 +211,8 @@ impl Process {
         elf_file: Arc<dyn FileLike>,
         argv: &[&[u8]],
     ) -> Result<Arc<Process>, Errno> {
-        let (vmspace, mappings, brk, entry, sp) =
-            create_address_space(&container.root_vmspace, elf_file, argv)?;
+        let vmspace = container.root_vmspace.try_clone()?;
+        let (mappings, brk, entry, sp) = create_address_space(&vmspace, elf_file, argv)?;
 
         let mut fd_table = FdTable::new(1024); // TODO: make this configurable
         let console: Arc<dyn FileLike> = Arc::new(Console::new());
@@ -243,11 +243,17 @@ impl Process {
         elf_file: Arc<dyn FileLike>,
         argv: &[&[u8]],
     ) -> Result<(), Errno> {
-        let (vmspace, mappings, brk, entry, sp) =
-            create_address_space(&self.container.root_vmspace, elf_file, argv)?;
+        // Unmap the old mappings.
+        // TODO: Can we build a new VM space from scratch?
+        let old_mappings = core::mem::take(&mut self.mutable.lock().mappings);
+        for mapping in &old_mappings {
+            self.vmspace.unmap(mapping.start, mapping.len)?;
+        }
+
+        let (mappings, brk, entry, sp) = create_address_space(&self.vmspace, elf_file, argv)?;
         let thread = LxThread::new(
             &self.container.hspace,
-            &vmspace,
+            &self.vmspace,
             entry,
             sp,
             Arc::downgrade(self),
@@ -256,7 +262,6 @@ impl Process {
         thread.start()?;
 
         let mut mutable = self.mutable.lock();
-        mutable.vmspace = vmspace;
         mutable.mappings = mappings;
         mutable.brk = brk;
         mutable
@@ -288,10 +293,10 @@ impl Process {
             tgid,
             child_exit,
             container: container.clone(),
+            vmspace,
             mutable: SpinLock::new(Mutable {
                 parent,
                 threads: Vec::with_capacity(1),
-                vmspace,
                 mappings,
                 brk,
                 children: Vec::new(),
@@ -305,17 +310,14 @@ impl Process {
 
         // TODO: LX assumes that the cookie won't be dereferenced until the
         // thread is started. Should we document and guarantee this?
-        let thread = {
-            let mutable = process.mutable.lock();
-            LxThread::new(
-                &container.hspace,
-                &mutable.vmspace,
-                entry,
-                sp,
-                Arc::downgrade(&process),
-                tgid,
-            )?
-        };
+        let thread = LxThread::new(
+            &container.hspace,
+            &process.vmspace,
+            entry,
+            sp,
+            Arc::downgrade(&process),
+            tgid,
+        )?;
         thread_prestart(&thread)?;
 
         // Start the thread.
@@ -499,18 +501,16 @@ impl Process {
             return brk.current;
         };
 
-        // Map the pages. This would reject concurrent brk calls with the same
-        // address.
-        let mut mutable = self.mutable.lock();
-        if mutable
-            .vmspace
-            .map(&vmo, brk.current_aligned, attrs)
-            .is_err()
-        {
-            return brk.current;
+        // Map the pages.
+        if self.vmspace.map(&vmo, brk.current_aligned, attrs).is_err() {
+            // This may fail if there are concurrent brk calls, and we've lost
+            // the race. Return the latest break address.
+            let mutable = self.mutable.lock();
+            return mutable.brk.current;
         }
 
         // Record the mapping.
+        let mut mutable = self.mutable.lock();
         mutable.mappings.push(Mapping {
             start: brk.current_aligned,
             len,
@@ -624,13 +624,12 @@ fn prepare_stack(
 }
 
 fn create_address_space(
-    root_vmspace: &VmSpace,
+    vmspace: &VmSpace,
     elf_file: Arc<dyn FileLike>,
     argv: &[&[u8]],
-) -> Result<(VmSpace, Vec<Mapping>, Brk, usize, usize), Errno> {
-    let vmspace = root_vmspace.try_clone()?;
+) -> Result<(Vec<Mapping>, Brk, usize, usize), Errno> {
     let mut mappings = Vec::new();
-    let entry = load_elf(&vmspace, elf_file.as_ref(), &mut mappings)?;
+    let entry = load_elf(vmspace, elf_file.as_ref(), &mut mappings)?;
 
     // Find the end of the program segments.
     // TODO: Can we guarantee that mappings is not empty?
@@ -650,7 +649,7 @@ fn create_address_space(
         attrs: PageAttrs::READ | PageAttrs::WRITE,
     });
 
-    Ok((vmspace, mappings, Brk::new(brk_start), entry, sp))
+    Ok((mappings, Brk::new(brk_start), entry, sp))
 }
 
 fn attrs_from_phdr(phdr: &ftl_elf::Phdr) -> PageAttrs {
