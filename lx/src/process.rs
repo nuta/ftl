@@ -2,6 +2,7 @@ use alloc::sync::Arc;
 use alloc::sync::Weak;
 use alloc::vec;
 use alloc::vec::Vec;
+use core::cmp::min;
 use core::fmt;
 use core::mem::MaybeUninit;
 use core::slice;
@@ -618,10 +619,15 @@ fn load_elf(
         let vmo = Vmo::create(region_len).unwrap();
 
         let filesz = phdr.p_filesz as usize;
-        if filesz > 0 {
-            let mut buf = vec![0u8; filesz]; // FIXME: do not copy twice
-            read_exact(elf_file, phdr.p_offset as usize, &mut buf)?;
-            vmo.write(page_offset, &buf)?;
+        let mut buf = [0u8; PAGE_SIZE];
+        let mut offset = 0;
+        while offset < filesz {
+            let len = min(buf.len(), filesz - offset);
+            let chunk = &mut buf[..len];
+            // FIXME: do not copy twice
+            read_exact(elf_file, phdr.p_offset as usize + offset, chunk)?;
+            vmo.write(page_offset + offset, chunk)?;
+            offset += len;
         }
 
         let attrs = attrs_from_phdr(phdr);
