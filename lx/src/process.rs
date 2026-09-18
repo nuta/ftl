@@ -34,6 +34,10 @@ use crate::types::c_int;
 use crate::types::errno::Errno;
 use crate::types::sys::fcntl::O_RDONLY;
 use crate::types::sys::fcntl::O_WRONLY;
+use crate::types::sys::mman::MAP_ANONYMOUS;
+use crate::types::sys::mman::PROT_EXEC;
+use crate::types::sys::mman::PROT_READ;
+use crate::types::sys::mman::PROT_WRITE;
 use crate::vfs::Console;
 use crate::vfs::FileLike;
 use crate::wait_queue::WaitQueue;
@@ -521,6 +525,49 @@ impl Process {
         addr
     }
 
+    pub fn mmap(
+        &self,
+        _addr: usize,
+        len: usize,
+        prot: c_int,
+        flags: c_int,
+        _fd: c_int,
+        _offset: i64,
+    ) -> Result<usize, Errno> {
+        if flags & MAP_ANONYMOUS == 0 {
+            // TODO: MAP_FIXED is not supported yet.
+            return Err(Errno::ENOSYS);
+        }
+
+        let len = align_up(len, PAGE_SIZE);
+        let attrs = attrs_from_prot(prot);
+
+        // Find a space to map the new region.
+        let uaddr = {
+            let mutable = self.mutable.lock();
+            // TODO: Better way to find a hole in mappings.
+            mutable
+                .mappings
+                .iter()
+                .map(|mapping| mapping.start + mapping.len)
+                .max()
+                .unwrap_or(0)
+        };
+
+        // Allocate a VMO and map it.
+        let vmo = Vmo::create(len)?;
+        self.vmspace.map(&vmo, uaddr, attrs)?;
+
+        // Record the mapping.
+        self.mutable.lock().mappings.push(Mapping {
+            start: uaddr,
+            len,
+            attrs,
+        });
+
+        Ok(uaddr)
+    }
+
     pub fn fd_table(&self) -> &SpinLock<FdTable> {
         &self.fd_table
     }
@@ -650,6 +697,20 @@ fn create_address_space(
     });
 
     Ok((mappings, Brk::new(brk_start), entry, sp))
+}
+
+fn attrs_from_prot(prot: c_int) -> PageAttrs {
+    let mut attrs = PageAttrs::EMPTY;
+    if prot & PROT_EXEC != 0 {
+        attrs |= PageAttrs::EXEC;
+    }
+    if prot & PROT_WRITE != 0 {
+        attrs |= PageAttrs::WRITE;
+    }
+    if prot & PROT_READ != 0 {
+        attrs |= PageAttrs::READ;
+    }
+    attrs
 }
 
 fn attrs_from_phdr(phdr: &ftl_elf::Phdr) -> PageAttrs {

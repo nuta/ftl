@@ -25,6 +25,14 @@ impl SyscallFrame {
         todo!()
     }
 
+    pub fn arg4(&self) -> usize {
+        todo!()
+    }
+
+    pub fn arg5(&self) -> usize {
+        todo!()
+    }
+
     pub fn retval(&self) -> isize {
         todo!()
     }

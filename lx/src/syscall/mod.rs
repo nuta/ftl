@@ -10,6 +10,7 @@ mod fork;
 mod getpid;
 mod kill;
 mod listen;
+mod mmap;
 mod poll;
 mod read;
 mod rt_sigaction;
@@ -34,6 +35,7 @@ use self::fork::sys_fork;
 use self::getpid::sys_getpid;
 use self::kill::sys_kill;
 use self::listen::sys_listen;
+use self::mmap::sys_mmap;
 use self::poll::sys_poll;
 use self::read::sys_read;
 use self::rt_sigaction::sys_rt_sigaction;
@@ -64,6 +66,7 @@ use crate::types::sys::syscall::SYS_FORK;
 use crate::types::sys::syscall::SYS_GETPID;
 use crate::types::sys::syscall::SYS_KILL;
 use crate::types::sys::syscall::SYS_LISTEN;
+use crate::types::sys::syscall::SYS_MMAP;
 use crate::types::sys::syscall::SYS_POLL;
 use crate::types::sys::syscall::SYS_READ;
 use crate::types::sys::syscall::SYS_RT_SIGACTION;
@@ -99,6 +102,17 @@ pub extern "C" fn handle_syscall(frame: *mut SyscallFrame) -> *mut SyscallFrame 
         SYS_READ => sys_read(&current, arg0 as c_int, arg1 as *mut c_void, arg2),
         SYS_CLOSE => sys_close(&current, arg0 as c_int),
         SYS_BRK => sys_brk(&current, arg0),
+        SYS_MMAP => {
+            sys_mmap(
+                &current,
+                arg0,
+                arg1,
+                arg2 as c_int,
+                frame.arg3() as c_int,
+                frame.arg4() as c_int,
+                frame.arg5() as i64,
+            )
+        }
         SYS_POLL => sys_poll(&current, arg0 as *mut PollFd, arg1 as nfds_t, arg2 as c_int),
         SYS_WRITEV => sys_writev(&current, arg0 as c_int, arg1 as *const iovec, arg2 as c_int),
         SYS_FORK => sys_fork(&current, frame),

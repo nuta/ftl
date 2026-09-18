@@ -43,6 +43,14 @@ impl SyscallFrame {
         self.r10
     }
 
+    pub fn arg4(&self) -> usize {
+        self.r8
+    }
+
+    pub fn arg5(&self) -> usize {
+        self.r9
+    }
+
     pub fn retval(&self) -> isize {
         self.rax as isize
     }
