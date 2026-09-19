@@ -2,6 +2,7 @@ mod accept;
 mod arch_prctl;
 mod bind;
 mod brk;
+mod clock_gettime;
 mod close;
 mod execve;
 mod exit_group;
@@ -28,6 +29,7 @@ use self::accept::sys_accept;
 use self::arch_prctl::sys_arch_prctl;
 use self::bind::sys_bind;
 use self::brk::sys_brk;
+use self::clock_gettime::sys_clock_gettime;
 use self::close::sys_close;
 use self::execve::sys_execve;
 use self::exit_group::sys_exit_group;
@@ -61,6 +63,7 @@ use crate::types::sys::syscall::SYS_ACCEPT;
 use crate::types::sys::syscall::SYS_ARCH_PRCTL;
 use crate::types::sys::syscall::SYS_BIND;
 use crate::types::sys::syscall::SYS_BRK;
+use crate::types::sys::syscall::SYS_CLOCK_GETTIME;
 use crate::types::sys::syscall::SYS_CLOSE;
 use crate::types::sys::syscall::SYS_EXECVE;
 use crate::types::sys::syscall::SYS_EXIT_GROUP;
@@ -80,6 +83,7 @@ use crate::types::sys::syscall::SYS_SOCKET;
 use crate::types::sys::syscall::SYS_WAIT4;
 use crate::types::sys::syscall::SYS_WRITE;
 use crate::types::sys::syscall::SYS_WRITEV;
+use crate::types::sys::time::timespec;
 use crate::types::sys::uio::iovec;
 
 pub extern "C" fn handle_syscall(frame: *mut SyscallFrame) -> *mut SyscallFrame {
@@ -122,6 +126,7 @@ pub extern "C" fn handle_syscall(frame: *mut SyscallFrame) -> *mut SyscallFrame 
         SYS_FORK => sys_fork(&current, frame),
         SYS_GETPID => sys_getpid(&current),
         SYS_GETRANDOM => sys_getrandom(&current, arg0 as *mut c_void, arg1, arg2 as c_unsigned),
+        SYS_CLOCK_GETTIME => sys_clock_gettime(&current, arg0 as c_int, arg1 as *mut timespec),
         SYS_KILL => sys_kill(&current, arg0 as c_int, arg1 as c_int),
         SYS_RT_SIGACTION => {
             sys_rt_sigaction(

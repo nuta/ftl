@@ -19,5 +19,6 @@ pub const SYS_WAIT4: usize = 61;
 pub const SYS_FCNTL: usize = 72;
 pub const SYS_ARCH_PRCTL: usize = 158;
 pub const SYS_SET_TID_ADDRESS: usize = 218;
+pub const SYS_CLOCK_GETTIME: usize = 228;
 pub const SYS_EXIT_GROUP: usize = 231;
 pub const SYS_GETRANDOM: usize = 318;
