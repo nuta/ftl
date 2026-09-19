@@ -1,0 +1,13 @@
+[package]
+name = "echo"
+version = "0.0.1"
+edition = "2024"
+
+[workspace]
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

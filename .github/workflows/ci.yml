@@ -35,8 +35,6 @@ jobs:
         persist-credentials: false
     - name: Use build cache
       uses: ./.github/actions/build-cache
-    # TODO: Remove Zig once we don't need hello.c program for testing
-    - run: sudo apt-get update && sudo apt-get install -y zig
     - name: Build World
       run: ./build.sh
     - uses: actions/upload-artifact@v7
@@ -74,7 +72,5 @@ jobs:
         persist-credentials: false
     - name: Use build cache
       uses: ./.github/actions/build-cache
-    # TODO: Remove Zig once we don't need hello.c program for testing
-    - run: brew install zig
     - name: Build World
       run: ./build.sh

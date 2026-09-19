@@ -4,18 +4,18 @@ set -eu -o pipefail
 RELEASE=${RELEASE:-}
 ARCH=${ARCH:-x64}
 
+build_rust_app() {
+  local name="$1"
+  pushd "apps/${name}"
+  cargo build --release --target x86_64-unknown-linux-musl
+  popd
+  cp "apps/${name}/target/x86_64-unknown-linux-musl/release/${name}" "initfs/bin/${name}"
+}
+
 build_default_initfs() {
-  mkdir -p initfs
   mkdir -p initfs/bin
-  zig cc -std=c23 -Os -target x86_64-linux-musl -static -no-pie \
-      -ffunction-sections -fdata-sections -Wl,--gc-sections \
-      apps/hello/main.c -o initfs/bin/echo
-  zig cc -std=c23 -Os -target x86_64-linux-musl -static -no-pie \
-      -ffunction-sections -fdata-sections -Wl,--gc-sections \
-      -DINDEX_HTML_LENGTH="$(wc -c < apps/httpd/index.html | xargs)" \
-      -DNOT_FOUND_HTML_LENGTH="$(wc -c < apps/httpd/404.html | xargs)" \
-      -DHILL_WEBP_LENGTH="$(wc -c < apps/httpd/hill.webp | xargs)" \
-      apps/httpd/main.c -o initfs/bin/httpd
+  build_rust_app echo
+  build_rust_app httpd
 }
 
 build_initfs() {

@@ -1,0 +1,19 @@
+[package]
+name = "httpd"
+version = "0.0.1"
+edition = "2024"
+
+[workspace]
+
+[dependencies]
+http-body-util = { version = "0.1", default-features = false }
+hyper = { version = "1", default-features = false, features = ["http1", "server"] }
+hyper-util = { version = "0.1", default-features = false, features = ["tokio"] }
+tokio = { version = "1", default-features = false, features = ["rt", "macros", "net", "io-util"] }
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
