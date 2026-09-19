@@ -7,6 +7,7 @@ mod clock_gettime;
 mod close;
 mod epoll_create1;
 mod epoll_ctl;
+mod epoll_pwait;
 mod epoll_wait;
 mod eventfd;
 mod eventfd2;
@@ -41,6 +42,7 @@ use self::clock_gettime::sys_clock_gettime;
 use self::close::sys_close;
 use self::epoll_create1::sys_epoll_create1;
 use self::epoll_ctl::sys_epoll_ctl;
+use self::epoll_pwait::sys_epoll_pwait;
 use self::epoll_wait::sys_epoll_wait;
 use self::eventfd::sys_eventfd;
 use self::eventfd2::sys_eventfd2;
@@ -83,6 +85,7 @@ use crate::types::sys::syscall::SYS_CLOCK_GETTIME;
 use crate::types::sys::syscall::SYS_CLOSE;
 use crate::types::sys::syscall::SYS_EPOLL_CREATE1;
 use crate::types::sys::syscall::SYS_EPOLL_CTL;
+use crate::types::sys::syscall::SYS_EPOLL_PWAIT;
 use crate::types::sys::syscall::SYS_EPOLL_WAIT;
 use crate::types::sys::syscall::SYS_EVENTFD;
 use crate::types::sys::syscall::SYS_EVENTFD2;
@@ -148,6 +151,16 @@ pub extern "C" fn handle_syscall(frame: *mut SyscallFrame) -> *mut SyscallFrame 
                 arg1 as *mut EpollEvent,
                 arg2 as c_int,
                 frame.arg3() as c_int,
+            )
+        }
+        SYS_EPOLL_PWAIT => {
+            sys_epoll_pwait(
+                &current,
+                arg0 as c_int,
+                arg1 as *mut EpollEvent,
+                arg2 as c_int,
+                frame.arg3() as c_int,
+                frame.arg4() as *const c_void,
             )
         }
         SYS_EVENTFD => sys_eventfd(&current, arg0 as c_unsigned),
