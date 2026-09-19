@@ -11,6 +11,7 @@ pub mod hspace;
 pub mod net;
 mod panic;
 pub mod poll;
+pub mod random;
 mod start;
 pub mod thread;
 pub mod time;

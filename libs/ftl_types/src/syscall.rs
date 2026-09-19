@@ -26,4 +26,5 @@ pub enum Syscall {
     PollWaitUntil = SYSCALL_BASE + 24,
     VmoRead = SYSCALL_BASE + 25,
     VmSpaceUnmap = SYSCALL_BASE + 26,
+    RandomRead = SYSCALL_BASE + 27,
 }

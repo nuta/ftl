@@ -26,6 +26,10 @@ pub fn interrupt_acquire(_irq: u8) -> Result<(), ErrorCode> {
 
 pub fn console_write(_bytes: &[u8]) {}
 
+pub fn random_read(buf: &mut [u8]) {
+    todo!()
+}
+
 pub unsafe fn usercopy_read(src: UAddr, dst: *mut u8, len: usize) -> Result<(), ErrorCode> {
     unsafe { core::ptr::copy_nonoverlapping(src.as_usize() as *const u8, dst, len) }
     Ok(())

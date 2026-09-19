@@ -23,6 +23,7 @@ mod memory;
 mod net;
 mod panic;
 mod poll;
+mod random;
 mod scheduler;
 mod shared_ref;
 mod syscall;
