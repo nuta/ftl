@@ -8,6 +8,7 @@ mod exit_group;
 mod fcntl;
 mod fork;
 mod getpid;
+mod getrandom;
 mod kill;
 mod listen;
 mod mmap;
@@ -33,6 +34,7 @@ use self::exit_group::sys_exit_group;
 use self::fcntl::sys_fcntl;
 use self::fork::sys_fork;
 use self::getpid::sys_getpid;
+use self::getrandom::sys_getrandom;
 use self::kill::sys_kill;
 use self::listen::sys_listen;
 use self::mmap::sys_mmap;
@@ -50,6 +52,7 @@ use crate::thread::LxThread;
 use crate::types;
 use crate::types::c_int;
 use crate::types::c_long;
+use crate::types::c_unsigned;
 use crate::types::c_void;
 use crate::types::errno::Errno;
 use crate::types::sys::poll::PollFd;
@@ -64,6 +67,7 @@ use crate::types::sys::syscall::SYS_EXIT_GROUP;
 use crate::types::sys::syscall::SYS_FCNTL;
 use crate::types::sys::syscall::SYS_FORK;
 use crate::types::sys::syscall::SYS_GETPID;
+use crate::types::sys::syscall::SYS_GETRANDOM;
 use crate::types::sys::syscall::SYS_KILL;
 use crate::types::sys::syscall::SYS_LISTEN;
 use crate::types::sys::syscall::SYS_MMAP;
@@ -117,6 +121,7 @@ pub extern "C" fn handle_syscall(frame: *mut SyscallFrame) -> *mut SyscallFrame 
         SYS_WRITEV => sys_writev(&current, arg0 as c_int, arg1 as *const iovec, arg2 as c_int),
         SYS_FORK => sys_fork(&current, frame),
         SYS_GETPID => sys_getpid(&current),
+        SYS_GETRANDOM => sys_getrandom(&current, arg0 as *mut c_void, arg1, arg2 as c_unsigned),
         SYS_KILL => sys_kill(&current, arg0 as c_int, arg1 as c_int),
         SYS_RT_SIGACTION => {
             sys_rt_sigaction(
