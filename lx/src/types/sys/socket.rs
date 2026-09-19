@@ -1,6 +1,12 @@
 use core::mem::size_of;
 
+use crate::types::c_int;
 use crate::types::errno::Errno;
+use crate::types::sys::fcntl::O_CLOEXEC;
+use crate::types::sys::fcntl::O_NONBLOCK;
+
+pub const SOCK_NONBLOCK: c_int = O_NONBLOCK;
+pub const SOCK_CLOEXEC: c_int = O_CLOEXEC;
 
 const AF_INET: u16 = 2;
 

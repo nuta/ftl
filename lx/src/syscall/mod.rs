@@ -1,4 +1,5 @@
 mod accept;
+mod accept4;
 mod arch_prctl;
 mod bind;
 mod brk;
@@ -31,6 +32,7 @@ mod writev;
 use ftl::trace;
 
 use self::accept::sys_accept;
+use self::accept4::sys_accept4;
 use self::arch_prctl::sys_arch_prctl;
 use self::bind::sys_bind;
 use self::brk::sys_brk;
@@ -71,6 +73,7 @@ use crate::types::sys::epoll::EpollEvent;
 use crate::types::sys::poll::PollFd;
 use crate::types::sys::poll::nfds_t;
 use crate::types::sys::syscall::SYS_ACCEPT;
+use crate::types::sys::syscall::SYS_ACCEPT4;
 use crate::types::sys::syscall::SYS_ARCH_PRCTL;
 use crate::types::sys::syscall::SYS_BIND;
 use crate::types::sys::syscall::SYS_BRK;
@@ -179,6 +182,15 @@ pub extern "C" fn handle_syscall(frame: *mut SyscallFrame) -> *mut SyscallFrame 
         SYS_BIND => sys_bind(&current, arg0 as c_int, arg1 as *const u8, arg2),
         SYS_LISTEN => sys_listen(&current, arg0 as c_int, arg1 as c_int),
         SYS_ACCEPT => sys_accept(&current, arg0 as c_int, arg1 as *mut u8, arg2 as *mut u32),
+        SYS_ACCEPT4 => {
+            sys_accept4(
+                &current,
+                arg0 as c_int,
+                arg1 as *mut u8,
+                arg2 as *mut u32,
+                frame.arg3() as c_int,
+            )
+        }
         SYS_EXECVE => {
             sys_execve(
                 &current,

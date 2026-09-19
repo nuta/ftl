@@ -12,6 +12,7 @@ pub const SYS_FORK: usize = 57;
 pub const SYS_KILL: usize = 62;
 pub const SYS_SOCKET: usize = 41;
 pub const SYS_ACCEPT: usize = 43;
+pub const SYS_ACCEPT4: usize = 288;
 pub const SYS_BIND: usize = 49;
 pub const SYS_LISTEN: usize = 50;
 pub const SYS_EXECVE: usize = 59;
