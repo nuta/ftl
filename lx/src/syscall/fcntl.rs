@@ -2,6 +2,8 @@ use crate::thread::LxThread;
 use crate::types::c_int;
 use crate::types::c_long;
 use crate::types::errno::Errno;
+use crate::types::sys::fcntl::F_DUPFD;
+use crate::types::sys::fcntl::F_DUPFD_CLOEXEC;
 use crate::types::sys::fcntl::F_GETFD;
 use crate::types::sys::fcntl::F_GETFL;
 use crate::types::sys::fcntl::F_SETFD;
@@ -13,10 +15,10 @@ pub fn sys_fcntl(current: &LxThread, fd: c_int, cmd: c_int, arg: c_long) -> Resu
     let mut fd_table = process.fd_table().lock();
 
     match cmd {
+        F_DUPFD => Ok(fd_table.dup(fd, arg as c_int, false)? as c_long),
+        F_DUPFD_CLOEXEC => Ok(fd_table.dup(fd, arg as c_int, true)? as c_long),
         F_GETFD => {
             let mut retval = 0;
-
-            let fd_table = process.fd_table().lock();
             if fd_table.get_cloexec(fd)? {
                 retval |= FD_CLOEXEC;
             }

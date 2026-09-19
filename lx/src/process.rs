@@ -206,6 +206,41 @@ impl FdTable {
         }
     }
 
+    fn find_free_fd(&self, minfd: c_int) -> Result<usize, Errno> {
+        if minfd < 0 {
+            return Err(Errno::EINVAL);
+        }
+
+        for fd in (minfd as usize)..self.capacity {
+            if fd >= self.open_files.len() || self.open_files[fd].is_none() {
+                return Ok(fd);
+            }
+        }
+
+        Err(Errno::EMFILE)
+    }
+
+    /// Duplicates `oldfd` to a new fd (>= minfd).
+    pub fn dup(&mut self, oldfd: c_int, minfd: c_int, cloexec: bool) -> Result<c_int, Errno> {
+        if minfd < 0 {
+            return Err(Errno::EINVAL);
+        }
+
+        let file = self.get(oldfd)?.clone();
+        if self.active_fds >= self.capacity {
+            return Err(Errno::EMFILE);
+        }
+
+        let new_fd = self.find_free_fd(minfd)?;
+        if new_fd >= self.open_files.len() {
+            self.open_files.resize(new_fd + 1, None);
+        }
+
+        self.open_files[new_fd] = Some(Entry { file, cloexec });
+        self.active_fds += 1;
+        return Ok(new_fd as c_int);
+    }
+
     pub fn remove(&mut self, fd: c_int) -> Result<Arc<OpenFile>, Errno> {
         if fd < 0 {
             return Err(Errno::EBADF);
