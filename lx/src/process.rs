@@ -33,6 +33,8 @@ use crate::thread::LxThread;
 use crate::types::c_int;
 use crate::types::errno::Errno;
 use crate::types::sys::auxv::AT_PAGESZ;
+use crate::types::sys::auxv::AT_RANDOM;
+use crate::types::sys::auxv::AT_RANDOM_LEN;
 use crate::types::sys::fcntl::O_RDONLY;
 use crate::types::sys::fcntl::O_WRONLY;
 use crate::types::sys::mman::MAP_ANONYMOUS;
@@ -644,7 +646,9 @@ fn prepare_stack(
 
     // argv
     let strings_len: usize = argv.iter().map(|arg| arg.len() + 1).sum();
-    let args_offset = stack_size.checked_sub(strings_len).ok_or(Errno::ENOMEM)?;
+    let args_offset = stack_size
+        .checked_sub(strings_len + AT_RANDOM_LEN)
+        .ok_or(Errno::ENOMEM)?;
     let mut offset = args_offset;
     for arg in argv {
         stack.write(offset, arg)?;
@@ -658,8 +662,15 @@ fn prepare_stack(
     // TODO: envp
     words.push(0); // NULL (terminator)
 
+    // Read random bytes for AT_RANDOM.
+    let mut random = [0u8; AT_RANDOM_LEN];
+    ftl::random::read(&mut random)?;
+    stack.write(offset, &random)?;
+    let random_addr = sp_bottom + offset;
+
     // auxv
     words.extend([AT_PAGESZ, PAGE_SIZE]);
+    words.extend([AT_RANDOM, random_addr]);
     words.extend([0, 0]); // AT_NULL
 
     // Align to 16 bytes (x64 ABI requirement).
