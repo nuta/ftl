@@ -1,7 +1,3 @@
-use core::cmp::min;
-use core::mem::size_of;
-use core::slice;
-
 use crate::thread::LxThread;
 use crate::types::c_int;
 use crate::types::c_long;
@@ -11,7 +7,7 @@ use crate::types::sys::fcntl::O_NONBLOCK;
 use crate::types::sys::fcntl::O_RDWR;
 use crate::types::sys::socket::SOCK_CLOEXEC;
 use crate::types::sys::socket::SOCK_NONBLOCK;
-use crate::types::sys::socket::SockAddrIn;
+use crate::types::sys::socket::write_sockaddr;
 
 const SUPPORTED_FLAGS: c_int = SOCK_CLOEXEC | SOCK_NONBLOCK;
 
@@ -70,29 +66,4 @@ pub fn sys_accept4(
     };
 
     Ok(conn_fd as c_long)
-}
-
-fn write_sockaddr(
-    addr: *mut u8,
-    addr_len: *mut u32,
-    sockaddr_in: &SockAddrIn,
-) -> Result<(), Errno> {
-    if addr_len.is_null() {
-        return Err(Errno::EINVAL);
-    }
-
-    // Truncate the copy length to the user-provided buffer size.
-    let sockaddr_len = size_of::<SockAddrIn>();
-    let buf_len = unsafe { addr_len.read_unaligned() } as usize;
-    let copy_len = min(buf_len, sockaddr_len);
-
-    // Copy the socket address to the buffer.
-    unsafe {
-        let src =
-            slice::from_raw_parts(sockaddr_in as *const SockAddrIn as *const u8, sockaddr_len);
-        addr.copy_from_nonoverlapping(src.as_ptr(), copy_len);
-        addr_len.write_unaligned(sockaddr_len as u32);
-    }
-
-    Ok(())
 }

@@ -364,4 +364,13 @@ impl FileLike for TcpListener {
     fn wait_queue(&self) -> Option<&WaitQueue> {
         Some(&self.wait_queue)
     }
+
+    fn recvfrom(
+        &self,
+        _buf: &mut [u8],
+        _flags: c_int,
+        _nonblocking: bool,
+    ) -> Result<(usize, SockAddr), Errno> {
+        Err(Errno::ENOTCONN)
+    }
 }

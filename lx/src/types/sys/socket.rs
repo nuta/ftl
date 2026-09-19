@@ -1,4 +1,6 @@
+use core::cmp::min;
 use core::mem::size_of;
+use core::slice;
 
 use crate::types::c_int;
 use crate::types::errno::Errno;
@@ -10,6 +12,9 @@ pub const SOCK_CLOEXEC: c_int = O_CLOEXEC;
 
 pub const SOL_SOCKET: c_int = 1;
 pub const SO_REUSEADDR: c_int = 2;
+
+pub const MSG_DONTWAIT: c_int = 0x40;
+pub const MSG_NOSIGNAL: c_int = 0x4000;
 
 const AF_INET: u16 = 2;
 
@@ -58,4 +63,29 @@ impl SockAddr {
             sin_zero: [0; 8],
         }
     }
+}
+
+pub fn write_sockaddr(
+    addr: *mut u8,
+    addr_len: *mut u32,
+    sockaddr_in: &SockAddrIn,
+) -> Result<(), Errno> {
+    if addr_len.is_null() {
+        return Err(Errno::EINVAL);
+    }
+
+    // Truncate the copy length to the user-provided buffer size.
+    let sockaddr_len = size_of::<SockAddrIn>();
+    let buf_len = unsafe { addr_len.read_unaligned() } as usize;
+    let copy_len = min(buf_len, sockaddr_len);
+
+    // Copy the socket address to the buffer.
+    unsafe {
+        let src =
+            slice::from_raw_parts(sockaddr_in as *const SockAddrIn as *const u8, sockaddr_len);
+        addr.copy_from_nonoverlapping(src.as_ptr(), copy_len);
+        addr_len.write_unaligned(sockaddr_len as u32);
+    }
+
+    Ok(())
 }

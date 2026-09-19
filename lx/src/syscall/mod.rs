@@ -22,6 +22,7 @@ mod listen;
 mod mmap;
 mod poll;
 mod read;
+mod recvfrom;
 mod rt_sigaction;
 mod rt_sigreturn;
 mod set_tid_address;
@@ -57,6 +58,7 @@ use self::listen::sys_listen;
 use self::mmap::sys_mmap;
 use self::poll::sys_poll;
 use self::read::sys_read;
+use self::recvfrom::sys_recvfrom;
 use self::rt_sigaction::sys_rt_sigaction;
 use self::rt_sigreturn::sys_rt_sigreturn;
 use self::set_tid_address::sys_set_tid_address;
@@ -100,6 +102,7 @@ use crate::types::sys::syscall::SYS_LISTEN;
 use crate::types::sys::syscall::SYS_MMAP;
 use crate::types::sys::syscall::SYS_POLL;
 use crate::types::sys::syscall::SYS_READ;
+use crate::types::sys::syscall::SYS_RECVFROM;
 use crate::types::sys::syscall::SYS_RT_SIGACTION;
 use crate::types::sys::syscall::SYS_RT_SIGRETURN;
 use crate::types::sys::syscall::SYS_SET_TID_ADDRESS;
@@ -133,6 +136,17 @@ pub extern "C" fn handle_syscall(frame: *mut SyscallFrame) -> *mut SyscallFrame 
     let result = match nr {
         SYS_WRITE => sys_write(&current, arg0 as c_int, arg1 as *const c_void, arg2),
         SYS_READ => sys_read(&current, arg0 as c_int, arg1 as *mut c_void, arg2),
+        SYS_RECVFROM => {
+            sys_recvfrom(
+                &current,
+                arg0 as c_int,
+                arg1 as *mut c_void,
+                arg2,
+                frame.arg3() as c_int,
+                frame.arg4() as *mut u8,
+                frame.arg5() as *mut u32,
+            )
+        }
         SYS_CLOSE => sys_close(&current, arg0 as c_int),
         SYS_EPOLL_CREATE1 => sys_epoll_create1(&current, arg0 as c_int),
         SYS_EPOLL_CTL => {

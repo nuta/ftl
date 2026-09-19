@@ -11,6 +11,7 @@ use super::packet::Segment;
 use super::packet::TcpFlags;
 use super::packet::TcpPacketInfo;
 use crate::net::tcpip::Io;
+use crate::types::c_int;
 use crate::types::c_short;
 use crate::types::errno::Errno;
 use crate::types::sys::poll::POLLIN;
@@ -310,10 +311,8 @@ impl TcpConn {
         mutable.closing = true;
         self.flush(&mut mutable);
     }
-}
 
-impl FileLike for TcpConn {
-    fn read(&self, buf: &mut [u8], _offset: usize, nonblocking: bool) -> Result<usize, Errno> {
+    fn recv(&self, buf: &mut [u8], nonblocking: bool) -> Result<usize, Errno> {
         if buf.is_empty() {
             return Ok(0);
         }
@@ -342,6 +341,24 @@ impl FileLike for TcpConn {
             drop(mutable);
             wq.wait()?;
         }
+    }
+}
+
+impl FileLike for TcpConn {
+    fn recvfrom(
+        &self,
+        buf: &mut [u8],
+        _flags: c_int,
+        nonblocking: bool,
+    ) -> Result<(usize, SockAddr), Errno> {
+        // TODO: Implement flags
+        let n = self.recv(buf, nonblocking)?;
+        let addr = self.peer_addr()?;
+        Ok((n, addr))
+    }
+
+    fn read(&self, buf: &mut [u8], _offset: usize, nonblocking: bool) -> Result<usize, Errno> {
+        self.recv(buf, nonblocking)
     }
 
     fn write(&self, buf: &[u8], _offset: usize, nonblocking: bool) -> Result<usize, Errno> {

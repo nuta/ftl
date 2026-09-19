@@ -36,6 +36,16 @@ pub trait FileLike: Send + Sync {
         Err(Errno::ENOTSUP)
     }
 
+    fn recvfrom(
+        &self,
+        buf: &mut [u8],
+        flags: c_int,
+        nonblocking: bool,
+    ) -> Result<(usize, SockAddr), Errno> {
+        let _ = (buf, flags, nonblocking);
+        Err(Errno::ENOTSOCK)
+    }
+
     fn setsockopt(
         &self,
         level: c_int,

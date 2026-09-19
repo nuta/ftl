@@ -8,6 +8,8 @@ use ftl_utils::spinlock::SpinLock;
 use crate::types::c_int;
 use crate::types::errno::Errno;
 use crate::types::sys::fcntl::O_NONBLOCK;
+use crate::types::sys::socket::MSG_DONTWAIT;
+use crate::types::sys::socket::SockAddr;
 use crate::vfs::FileLike;
 
 pub trait CloseListener: Send + Sync {
@@ -75,6 +77,11 @@ impl OpenFile {
 
     pub fn write(&self, buf: &[u8], offset: usize) -> Result<usize, Errno> {
         self.file.write(buf, offset, self.nonblocking())
+    }
+
+    pub fn recvfrom(&self, buf: &mut [u8], flags: c_int) -> Result<(usize, SockAddr), Errno> {
+        let nonblocking = self.nonblocking() || flags & MSG_DONTWAIT != 0;
+        self.file.recvfrom(buf, flags, nonblocking)
     }
 
     pub fn accept(&self) -> Result<Arc<dyn FileLike>, Errno> {

@@ -22,7 +22,9 @@ impl Errno {
     pub const EMFILE: Self = Self(24);
     pub const EINVAL: Self = Self(22);
     pub const ENOSYS: Self = Self(38);
+    pub const ENOTSOCK: Self = Self(88);
     pub const ENOTSUP: Self = Self(95);
+    pub const ENOTCONN: Self = Self(107);
 
     pub const fn as_int(self) -> c_int {
         self.0
