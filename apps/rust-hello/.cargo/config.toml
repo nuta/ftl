@@ -1,0 +1,8 @@
+[target.x86_64-unknown-linux-musl]
+linker = "rust-lld"
+rustflags = [
+    "-Z", "unstable-options",
+    "-C", "linker-flavor=gnu-lld",
+    "-C", "target-feature=+crt-static",
+    "-C", "relocation-model=static",
+]
