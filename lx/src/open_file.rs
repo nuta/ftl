@@ -84,6 +84,16 @@ impl OpenFile {
         self.file.recvfrom(buf, flags, nonblocking)
     }
 
+    pub fn sendto(
+        &self,
+        buf: &[u8],
+        dest: Option<SockAddr>,
+        flags: c_int,
+    ) -> Result<usize, Errno> {
+        let nonblocking = self.nonblocking() || flags & MSG_DONTWAIT != 0;
+        self.file.sendto(buf, dest, flags, nonblocking)
+    }
+
     pub fn accept(&self) -> Result<Arc<dyn FileLike>, Errno> {
         self.file.accept(self.nonblocking())
     }

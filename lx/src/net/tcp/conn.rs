@@ -361,7 +361,14 @@ impl FileLike for TcpConn {
         self.recv(buf, nonblocking)
     }
 
-    fn write(&self, buf: &[u8], _offset: usize, nonblocking: bool) -> Result<usize, Errno> {
+    fn sendto(
+        &self,
+        buf: &[u8],
+        _dest: Option<SockAddr>,
+        _flags: c_int,
+        nonblocking: bool,
+    ) -> Result<usize, Errno> {
+        // TODO: Handle dest and flags
         if buf.is_empty() {
             return Ok(0);
         }
@@ -388,6 +395,10 @@ impl FileLike for TcpConn {
             drop(mutable);
             wq.wait()?;
         }
+    }
+
+    fn write(&self, buf: &[u8], _offset: usize, nonblocking: bool) -> Result<usize, Errno> {
+        self.sendto(buf, None, 0, nonblocking)
     }
 
     fn peer_addr(&self) -> Result<SockAddr, Errno> {

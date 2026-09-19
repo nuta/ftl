@@ -373,4 +373,14 @@ impl FileLike for TcpListener {
     ) -> Result<(usize, SockAddr), Errno> {
         Err(Errno::ENOTCONN)
     }
+
+    fn sendto(
+        &self,
+        _buf: &[u8],
+        _dest: Option<SockAddr>,
+        _flags: c_int,
+        _nonblocking: bool,
+    ) -> Result<usize, Errno> {
+        Err(Errno::ENOTCONN)
+    }
 }
