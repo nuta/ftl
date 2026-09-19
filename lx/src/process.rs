@@ -24,6 +24,7 @@ use ftl_utils::spinlock::SpinLock;
 use crate::arch::SyscallFrame;
 use crate::arch::restore_regs;
 use crate::container::Container;
+use crate::open_file::OpenFile;
 use crate::signal::SigAction;
 use crate::signal::SigDisposition;
 use crate::signal::Signal;
@@ -38,6 +39,7 @@ use crate::types::sys::auxv::AT_PHENT;
 use crate::types::sys::auxv::AT_PHNUM;
 use crate::types::sys::auxv::AT_RANDOM;
 use crate::types::sys::auxv::AT_RANDOM_LEN;
+use crate::types::sys::fcntl::O_CLOEXEC;
 use crate::types::sys::fcntl::O_RDONLY;
 use crate::types::sys::fcntl::O_WRONLY;
 use crate::types::sys::mman::MAP_ANONYMOUS;
@@ -102,11 +104,15 @@ impl Brk {
     }
 }
 
-pub use crate::open_file::OpenFile;
+#[derive(Clone)]
+struct Entry {
+    file: Arc<OpenFile>,
+    cloexec: bool,
+}
 
 #[derive(Clone)]
 pub struct FdTable {
-    open_files: Vec<Option<Arc<OpenFile>>>,
+    open_files: Vec<Option<Entry>>,
     active_fds: usize,
     capacity: usize,
 }
@@ -140,7 +146,7 @@ impl FdTable {
         fd: c_int,
         file: Arc<dyn FileLike>,
         flags: c_int,
-    ) -> Result<Option<Arc<OpenFile>>, Errno> {
+    ) -> Result<(), Errno> {
         if fd < 0 {
             return Err(Errno::EBADF);
         }
@@ -154,11 +160,17 @@ impl FdTable {
             self.open_files.resize(fd + 1, None);
         }
 
-        let old = self.open_files[fd].replace(Arc::new(OpenFile::new(file, flags)));
+        let new = Entry {
+            file: Arc::new(OpenFile::new(file, flags)),
+            cloexec: flags & O_CLOEXEC != 0,
+        };
+
+        let old = self.open_files[fd].replace(new);
         if old.is_none() {
             self.active_fds += 1;
         }
-        Ok(old)
+
+        Ok(())
     }
 
     pub fn get(&self, fd: c_int) -> Result<&Arc<OpenFile>, Errno> {
@@ -168,7 +180,28 @@ impl FdTable {
 
         let slot = self.open_files.get(fd as usize);
         match slot {
-            Some(Some(file)) => Ok(file),
+            Some(Some(entry)) => Ok(&entry.file),
+            _ => Err(Errno::EBADF),
+        }
+    }
+
+    /// Returns if the fd is marked as close-on-exec.
+    pub fn get_cloexec(&self, fd: c_int) -> Result<bool, Errno> {
+        let slot = self.open_files.get(fd as usize);
+        match slot {
+            Some(Some(entry)) => Ok(entry.cloexec),
+            _ => Err(Errno::EBADF),
+        }
+    }
+
+    /// Updates the close-on-exec flag for the fd.
+    pub fn set_cloexec(&mut self, fd: c_int, cloexec: bool) -> Result<(), Errno> {
+        let slot = self.open_files.get_mut(fd as usize);
+        match slot {
+            Some(Some(entry)) => {
+                entry.cloexec = cloexec;
+                Ok(())
+            }
             _ => Err(Errno::EBADF),
         }
     }
@@ -179,13 +212,25 @@ impl FdTable {
         }
 
         let slot = self.open_files.get_mut(fd as usize);
-        let file = match slot {
-            Some(file) => file.take().ok_or(Errno::EBADF)?,
+        let entry = match slot {
+            Some(entry) => entry.take().ok_or(Errno::EBADF)?,
             _ => return Err(Errno::EBADF),
         };
 
         self.active_fds -= 1;
-        Ok(file)
+        Ok(entry.file)
+    }
+
+    /// Closes file descriptors that are marked close-on-exec.
+    pub fn close_on_exec(&mut self) {
+        for slot in &mut self.open_files {
+            if let Some(entry) = slot.as_ref() {
+                if entry.cloexec {
+                    *slot = None;
+                    self.active_fds -= 1;
+                }
+            }
+        }
     }
 
     fn clear(&mut self) {
@@ -261,6 +306,9 @@ impl Process {
         }
 
         let (mappings, brk, entry, sp) = create_address_space(&self.vmspace, elf_file, argv)?;
+
+        self.fd_table.lock().close_on_exec();
+
         let thread = LxThread::new(
             &self.container.hspace,
             &self.vmspace,

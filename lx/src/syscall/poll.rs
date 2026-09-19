@@ -1,7 +1,7 @@
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 
-use crate::process::OpenFile;
+use crate::open_file::OpenFile;
 use crate::thread::LxThread;
 use crate::types::c_int;
 use crate::types::c_long;
