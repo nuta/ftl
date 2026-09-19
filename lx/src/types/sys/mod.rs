@@ -1,5 +1,6 @@
 pub mod auxv;
 pub mod epoll;
+pub mod eventfd;
 pub mod fcntl;
 pub mod mman;
 pub mod poll;

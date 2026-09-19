@@ -7,6 +7,8 @@ mod close;
 mod epoll_create1;
 mod epoll_ctl;
 mod epoll_wait;
+mod eventfd;
+mod eventfd2;
 mod execve;
 mod exit_group;
 mod fcntl;
@@ -37,6 +39,8 @@ use self::close::sys_close;
 use self::epoll_create1::sys_epoll_create1;
 use self::epoll_ctl::sys_epoll_ctl;
 use self::epoll_wait::sys_epoll_wait;
+use self::eventfd::sys_eventfd;
+use self::eventfd2::sys_eventfd2;
 use self::execve::sys_execve;
 use self::exit_group::sys_exit_group;
 use self::fcntl::sys_fcntl;
@@ -75,6 +79,8 @@ use crate::types::sys::syscall::SYS_CLOSE;
 use crate::types::sys::syscall::SYS_EPOLL_CREATE1;
 use crate::types::sys::syscall::SYS_EPOLL_CTL;
 use crate::types::sys::syscall::SYS_EPOLL_WAIT;
+use crate::types::sys::syscall::SYS_EVENTFD;
+use crate::types::sys::syscall::SYS_EVENTFD2;
 use crate::types::sys::syscall::SYS_EXECVE;
 use crate::types::sys::syscall::SYS_EXIT_GROUP;
 use crate::types::sys::syscall::SYS_FCNTL;
@@ -138,6 +144,8 @@ pub extern "C" fn handle_syscall(frame: *mut SyscallFrame) -> *mut SyscallFrame 
                 frame.arg3() as c_int,
             )
         }
+        SYS_EVENTFD => sys_eventfd(&current, arg0 as c_unsigned),
+        SYS_EVENTFD2 => sys_eventfd2(&current, arg0 as c_unsigned, arg1 as c_int),
         SYS_BRK => sys_brk(&current, arg0),
         SYS_MMAP => {
             sys_mmap(

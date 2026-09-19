@@ -23,5 +23,7 @@ pub const SYS_CLOCK_GETTIME: usize = 228;
 pub const SYS_EXIT_GROUP: usize = 231;
 pub const SYS_EPOLL_WAIT: usize = 232;
 pub const SYS_EPOLL_CTL: usize = 233;
+pub const SYS_EVENTFD: usize = 284;
+pub const SYS_EVENTFD2: usize = 290;
 pub const SYS_EPOLL_CREATE1: usize = 291;
 pub const SYS_GETRANDOM: usize = 318;
