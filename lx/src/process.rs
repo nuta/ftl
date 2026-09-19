@@ -33,6 +33,9 @@ use crate::thread::LxThread;
 use crate::types::c_int;
 use crate::types::errno::Errno;
 use crate::types::sys::auxv::AT_PAGESZ;
+use crate::types::sys::auxv::AT_PHDR;
+use crate::types::sys::auxv::AT_PHENT;
+use crate::types::sys::auxv::AT_PHNUM;
 use crate::types::sys::auxv::AT_RANDOM;
 use crate::types::sys::auxv::AT_RANDOM_LEN;
 use crate::types::sys::fcntl::O_RDONLY;
@@ -637,6 +640,7 @@ fn prepare_stack(
     sp_bottom: usize,
     stack_size: usize,
     argv: &[&[u8]],
+    elf: &LoadedElf,
 ) -> Result<usize, Errno> {
     // FIXME: Reject too long argv / envp / auxv.
     let mut words = Vec::new();
@@ -669,6 +673,9 @@ fn prepare_stack(
     let random_addr = sp_bottom + offset;
 
     // auxv
+    words.extend([AT_PHDR, elf.phdr]);
+    words.extend([AT_PHENT, elf.phent]);
+    words.extend([AT_PHNUM, elf.phnum]);
     words.extend([AT_PAGESZ, PAGE_SIZE]);
     words.extend([AT_RANDOM, random_addr]);
     words.extend([0, 0]); // AT_NULL
@@ -689,7 +696,7 @@ fn create_address_space(
     argv: &[&[u8]],
 ) -> Result<(Vec<Mapping>, Brk, usize, usize), Errno> {
     let mut mappings = Vec::new();
-    let entry = load_elf(vmspace, elf_file.as_ref(), &mut mappings)?;
+    let elf = load_elf(vmspace, elf_file.as_ref(), &mut mappings)?;
 
     // Find the end of the program segments.
     // TODO: Can we guarantee that mappings is not empty?
@@ -700,7 +707,7 @@ fn create_address_space(
         .unwrap_or(0);
 
     let stack = Vmo::create(STACK_SIZE)?;
-    let sp = prepare_stack(&stack, STACK_BOTTOM, STACK_SIZE, argv)?;
+    let sp = prepare_stack(&stack, STACK_BOTTOM, STACK_SIZE, argv, &elf)?;
 
     vmspace.map(&stack, STACK_BOTTOM, PageAttrs::READ | PageAttrs::WRITE)?;
     mappings.push(Mapping {
@@ -709,7 +716,7 @@ fn create_address_space(
         attrs: PageAttrs::READ | PageAttrs::WRITE,
     });
 
-    Ok((mappings, Brk::new(brk_start), entry, sp))
+    Ok((mappings, Brk::new(brk_start), elf.entry, sp))
 }
 
 fn attrs_from_prot(prot: c_int) -> PageAttrs {
@@ -766,11 +773,18 @@ fn read_uninit<T: Copy>(
     Ok(unsafe { buf.assume_init() })
 }
 
+struct LoadedElf {
+    entry: usize,
+    phdr: usize,
+    phent: usize,
+    phnum: usize,
+}
+
 fn load_elf(
     vmspace: &VmSpace,
     elf_file: &dyn FileLike,
     mappings: &mut Vec<Mapping>,
-) -> Result<usize, Errno> {
+) -> Result<LoadedElf, Errno> {
     let mut ehdr = MaybeUninit::<ftl_elf::Ehdr>::uninit();
     let ehdr = read_uninit(elf_file, 0, &mut ehdr)?;
 
@@ -779,7 +793,12 @@ fn load_elf(
     read_exact(elf_file, 0, &mut header_region)?;
 
     let elf = Elf::parse(&header_region, ftl_elf::ET_EXEC).expect("failed to parse ELF");
+    let mut phdr_vaddr = 0;
     for phdr in elf.phdrs {
+        if phdr.p_type == PhdrType::Phdr as u32 {
+            phdr_vaddr = phdr.p_vaddr as usize;
+        }
+
         if phdr.p_type != PhdrType::Load as u32 {
             continue;
         }
@@ -811,5 +830,10 @@ fn load_elf(
         });
     }
 
-    Ok(elf.ehdr.e_entry as usize)
+    Ok(LoadedElf {
+        entry: elf.ehdr.e_entry as usize,
+        phdr: phdr_vaddr,
+        phent: elf.ehdr.e_phentsize as usize,
+        phnum: elf.ehdr.e_phnum as usize,
+    })
 }
