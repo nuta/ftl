@@ -1,3 +1,4 @@
+pub mod auxv;
 pub mod fcntl;
 pub mod mman;
 pub mod poll;

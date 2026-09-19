@@ -32,6 +32,7 @@ use crate::signal::SignalSet;
 use crate::thread::LxThread;
 use crate::types::c_int;
 use crate::types::errno::Errno;
+use crate::types::sys::auxv::AT_PAGESZ;
 use crate::types::sys::fcntl::O_RDONLY;
 use crate::types::sys::fcntl::O_WRONLY;
 use crate::types::sys::mman::MAP_ANONYMOUS;
@@ -658,6 +659,7 @@ fn prepare_stack(
     words.push(0); // NULL (terminator)
 
     // auxv
+    words.extend([AT_PAGESZ, PAGE_SIZE]);
     words.extend([0, 0]); // AT_NULL
 
     // Align to 16 bytes (x64 ABI requirement).
