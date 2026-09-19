@@ -8,9 +8,11 @@ use crate::wait_queue::WaitQueue;
 
 mod console;
 mod embedded_file;
+mod epoll;
 
 pub use console::Console;
 pub use embedded_file::EmbeddedFile;
+pub use epoll::Epoll;
 
 pub trait FileLike: Send + Sync {
     fn bind(&self, addr: SockAddr) -> Result<(), Errno> {
@@ -53,6 +55,10 @@ pub trait FileLike: Send + Sync {
     }
 
     fn wait_queue(&self) -> Option<&WaitQueue> {
+        None
+    }
+
+    fn as_epoll(&self) -> Option<&Epoll> {
         None
     }
 }

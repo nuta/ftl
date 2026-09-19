@@ -4,6 +4,9 @@ mod bind;
 mod brk;
 mod clock_gettime;
 mod close;
+mod epoll_create1;
+mod epoll_ctl;
+mod epoll_wait;
 mod execve;
 mod exit_group;
 mod fcntl;
@@ -31,6 +34,9 @@ use self::bind::sys_bind;
 use self::brk::sys_brk;
 use self::clock_gettime::sys_clock_gettime;
 use self::close::sys_close;
+use self::epoll_create1::sys_epoll_create1;
+use self::epoll_ctl::sys_epoll_ctl;
+use self::epoll_wait::sys_epoll_wait;
 use self::execve::sys_execve;
 use self::exit_group::sys_exit_group;
 use self::fcntl::sys_fcntl;
@@ -57,6 +63,7 @@ use crate::types::c_long;
 use crate::types::c_unsigned;
 use crate::types::c_void;
 use crate::types::errno::Errno;
+use crate::types::sys::epoll::EpollEvent;
 use crate::types::sys::poll::PollFd;
 use crate::types::sys::poll::nfds_t;
 use crate::types::sys::syscall::SYS_ACCEPT;
@@ -65,6 +72,9 @@ use crate::types::sys::syscall::SYS_BIND;
 use crate::types::sys::syscall::SYS_BRK;
 use crate::types::sys::syscall::SYS_CLOCK_GETTIME;
 use crate::types::sys::syscall::SYS_CLOSE;
+use crate::types::sys::syscall::SYS_EPOLL_CREATE1;
+use crate::types::sys::syscall::SYS_EPOLL_CTL;
+use crate::types::sys::syscall::SYS_EPOLL_WAIT;
 use crate::types::sys::syscall::SYS_EXECVE;
 use crate::types::sys::syscall::SYS_EXIT_GROUP;
 use crate::types::sys::syscall::SYS_FCNTL;
@@ -109,6 +119,25 @@ pub extern "C" fn handle_syscall(frame: *mut SyscallFrame) -> *mut SyscallFrame 
         SYS_WRITE => sys_write(&current, arg0 as c_int, arg1 as *const c_void, arg2),
         SYS_READ => sys_read(&current, arg0 as c_int, arg1 as *mut c_void, arg2),
         SYS_CLOSE => sys_close(&current, arg0 as c_int),
+        SYS_EPOLL_CREATE1 => sys_epoll_create1(&current, arg0 as c_int),
+        SYS_EPOLL_CTL => {
+            sys_epoll_ctl(
+                &current,
+                arg0 as c_int,
+                arg1 as c_int,
+                arg2 as c_int,
+                frame.arg3() as *const EpollEvent,
+            )
+        }
+        SYS_EPOLL_WAIT => {
+            sys_epoll_wait(
+                &current,
+                arg0 as c_int,
+                arg1 as *mut EpollEvent,
+                arg2 as c_int,
+                frame.arg3() as c_int,
+            )
+        }
         SYS_BRK => sys_brk(&current, arg0),
         SYS_MMAP => {
             sys_mmap(

@@ -21,4 +21,7 @@ pub const SYS_ARCH_PRCTL: usize = 158;
 pub const SYS_SET_TID_ADDRESS: usize = 218;
 pub const SYS_CLOCK_GETTIME: usize = 228;
 pub const SYS_EXIT_GROUP: usize = 231;
+pub const SYS_EPOLL_WAIT: usize = 232;
+pub const SYS_EPOLL_CTL: usize = 233;
+pub const SYS_EPOLL_CREATE1: usize = 291;
 pub const SYS_GETRANDOM: usize = 318;

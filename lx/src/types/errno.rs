@@ -9,6 +9,7 @@ pub struct Errno(c_int);
 
 impl Errno {
     pub const EPERM: Self = Self(1);
+    pub const ENOENT: Self = Self(2);
     pub const ESRCH: Self = Self(3);
     pub const EINTR: Self = Self(4);
     pub const EBADF: Self = Self(9);
