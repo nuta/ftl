@@ -15,6 +15,7 @@ pub const SYS_ACCEPT: usize = 43;
 pub const SYS_ACCEPT4: usize = 288;
 pub const SYS_BIND: usize = 49;
 pub const SYS_LISTEN: usize = 50;
+pub const SYS_SETSOCKOPT: usize = 54;
 pub const SYS_EXECVE: usize = 59;
 pub const SYS_WAIT4: usize = 61;
 pub const SYS_FCNTL: usize = 72;

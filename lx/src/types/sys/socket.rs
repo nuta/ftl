@@ -8,6 +8,9 @@ use crate::types::sys::fcntl::O_NONBLOCK;
 pub const SOCK_NONBLOCK: c_int = O_NONBLOCK;
 pub const SOCK_CLOEXEC: c_int = O_CLOEXEC;
 
+pub const SOL_SOCKET: c_int = 1;
+pub const SO_REUSEADDR: c_int = 2;
+
 const AF_INET: u16 = 2;
 
 #[derive(Clone, Copy)]

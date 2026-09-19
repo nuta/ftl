@@ -36,6 +36,17 @@ pub trait FileLike: Send + Sync {
         Err(Errno::ENOTSUP)
     }
 
+    fn setsockopt(
+        &self,
+        level: c_int,
+        optname: c_int,
+        optval: *const u8,
+        optlen: usize,
+    ) -> Result<(), Errno> {
+        let _ = (level, optname, optval, optlen);
+        Err(Errno::ENOTSUP)
+    }
+
     fn close(&self) {}
 
     fn read(&self, buf: &mut [u8], offset: usize, nonblocking: bool) -> Result<usize, Errno> {

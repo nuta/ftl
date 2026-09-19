@@ -24,6 +24,7 @@ mod read;
 mod rt_sigaction;
 mod rt_sigreturn;
 mod set_tid_address;
+mod setsockopt;
 mod socket;
 mod wait4;
 mod write;
@@ -57,6 +58,7 @@ use self::read::sys_read;
 use self::rt_sigaction::sys_rt_sigaction;
 use self::rt_sigreturn::sys_rt_sigreturn;
 use self::set_tid_address::sys_set_tid_address;
+use self::setsockopt::sys_setsockopt;
 use self::socket::sys_socket;
 use self::wait4::sys_wait4;
 use self::write::sys_write;
@@ -98,6 +100,7 @@ use crate::types::sys::syscall::SYS_READ;
 use crate::types::sys::syscall::SYS_RT_SIGACTION;
 use crate::types::sys::syscall::SYS_RT_SIGRETURN;
 use crate::types::sys::syscall::SYS_SET_TID_ADDRESS;
+use crate::types::sys::syscall::SYS_SETSOCKOPT;
 use crate::types::sys::syscall::SYS_SOCKET;
 use crate::types::sys::syscall::SYS_WAIT4;
 use crate::types::sys::syscall::SYS_WRITE;
@@ -181,6 +184,16 @@ pub extern "C" fn handle_syscall(frame: *mut SyscallFrame) -> *mut SyscallFrame 
         SYS_SOCKET => sys_socket(&current, arg0 as c_int, arg1 as c_int, arg2 as c_int),
         SYS_BIND => sys_bind(&current, arg0 as c_int, arg1 as *const u8, arg2),
         SYS_LISTEN => sys_listen(&current, arg0 as c_int, arg1 as c_int),
+        SYS_SETSOCKOPT => {
+            sys_setsockopt(
+                &current,
+                arg0 as c_int,
+                arg1 as c_int,
+                arg2 as c_int,
+                frame.arg3() as *const u8,
+                frame.arg4(),
+            )
+        }
         SYS_ACCEPT => sys_accept(&current, arg0 as c_int, arg1 as *mut u8, arg2 as *mut u32),
         SYS_ACCEPT4 => {
             sys_accept4(

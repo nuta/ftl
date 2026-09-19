@@ -18,6 +18,8 @@ use crate::types::c_int;
 use crate::types::c_short;
 use crate::types::errno::Errno;
 use crate::types::sys::poll::POLLIN;
+use crate::types::sys::socket::SO_REUSEADDR;
+use crate::types::sys::socket::SOL_SOCKET;
 use crate::types::sys::socket::SockAddr;
 use crate::vfs::FileLike;
 use crate::wait_queue::WaitQueue;
@@ -315,6 +317,22 @@ impl FileLike for TcpListener {
 
     fn listen(&self, backlog: c_int) -> Result<(), Errno> {
         self.do_listen(backlog)
+    }
+
+    fn setsockopt(
+        &self,
+        level: c_int,
+        optname: c_int,
+        _optval: *const u8,
+        _optlen: usize,
+    ) -> Result<(), Errno> {
+        match (level, optname) {
+            (SOL_SOCKET, SO_REUSEADDR) => {
+                // TODO: Implement SO_REUSEADDR
+                Ok(())
+            }
+            _ => Err(Errno::ENOTSUP),
+        }
     }
 
     fn accept(&self, nonblocking: bool) -> Result<Arc<dyn FileLike>, Errno> {
