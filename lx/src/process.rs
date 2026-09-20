@@ -553,14 +553,19 @@ impl Process {
         Ok(())
     }
 
-    pub fn wait(&self, pid: c_int) -> Result<(PId, c_int), Errno> {
+    pub fn wait(&self, pid: c_int, wnohang: bool) -> Result<Option<(PId, c_int)>, Errno> {
         if pid != -1 && pid <= 0 {
             return Err(Errno::EINVAL);
         }
 
-        let mut wq = WaitSet::new()?;
-        wq.subscribe(&self.child_exit);
-        wq.subscribe(&self.signal_wait);
+        let mut wq = None;
+        if !wnohang {
+            let mut set = WaitSet::new()?;
+            set.subscribe(&self.child_exit);
+            set.subscribe(&self.signal_wait);
+            wq = Some(set);
+        }
+
         loop {
             let mut mutable = self.mutable.lock();
             let mut matched_any = false;
@@ -575,7 +580,7 @@ impl Process {
                     let tgid = child.tgid;
                     mutable.children.remove(index);
                     self.container.processes.lock().remove(tgid);
-                    return Ok((tgid, status));
+                    return Ok(Some((tgid, status)));
                 }
 
                 matched_any = true;
@@ -584,6 +589,11 @@ impl Process {
             if !matched_any {
                 return Err(Errno::ECHILD);
             }
+
+            let Some(wq) = &wq else {
+                // WNOHANG is set. Return immediately.
+                return Ok(None);
+            };
 
             if !mutable.pending_signals.is_empty() {
                 return Err(Errno::EINTR);

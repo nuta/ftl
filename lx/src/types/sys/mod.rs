@@ -8,3 +8,4 @@ pub mod socket;
 pub mod syscall;
 pub mod time;
 pub mod uio;
+pub mod wait;
