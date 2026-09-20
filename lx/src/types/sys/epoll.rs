@@ -12,3 +12,4 @@ pub const EPOLL_CTL_ADD: c_int = 1;
 pub const EPOLL_CTL_DEL: c_int = 2;
 pub const EPOLL_CTL_MOD: c_int = 3;
 pub const EPOLL_CLOEXEC: c_int = O_CLOEXEC;
+pub const EPOLLET: u32 = 1 << 31;

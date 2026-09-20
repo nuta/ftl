@@ -3,7 +3,6 @@ use alloc::sync::Weak;
 use alloc::vec::Vec;
 
 use ftl::trace;
-use ftl_types::poll::EventKind;
 use ftl_types::time::Duration;
 use ftl_utils::fxhash::FxHashMap;
 use ftl_utils::fxhash::FxHashSet;
@@ -13,6 +12,7 @@ use crate::open_file::CloseListener;
 use crate::open_file::OpenFile;
 use crate::types::c_int;
 use crate::types::errno::Errno;
+use crate::types::sys::epoll::EPOLLET;
 use crate::types::sys::epoll::EpollEvent;
 use crate::types::sys::poll::POLLERR;
 use crate::types::sys::poll::POLLHUP;
@@ -133,7 +133,12 @@ impl Inner {
                 continue;
             };
 
-            still_ready_fds.push(fd);
+            // In edge-triggered mode (EPOLLET), skip checking the same fd
+            // again.
+            if watch.event.lock().events & EPOLLET == 0 {
+                still_ready_fds.push(fd);
+            }
+
             events[n] = event;
             n += 1;
         }
