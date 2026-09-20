@@ -21,6 +21,7 @@ impl Errno {
     pub const ENOMEM: Self = Self(12);
     pub const EMFILE: Self = Self(24);
     pub const EINVAL: Self = Self(22);
+    pub const ESPIPE: Self = Self(29);
     pub const ENOSYS: Self = Self(38);
     pub const ENOTSOCK: Self = Self(88);
     pub const ENOTSUP: Self = Self(95);

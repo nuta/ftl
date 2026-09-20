@@ -84,6 +84,10 @@ pub trait FileLike: Send + Sync {
         Err(Errno::ENOTSUP)
     }
 
+    fn size(&self) -> Result<usize, Errno> {
+        Err(Errno::ESPIPE)
+    }
+
     fn poll(&self) -> Result<c_short, Errno> {
         Ok(0)
     }

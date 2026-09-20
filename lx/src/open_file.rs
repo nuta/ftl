@@ -7,9 +7,13 @@ use ftl_utils::spinlock::SpinLock;
 
 use crate::types::c_int;
 use crate::types::errno::Errno;
+use crate::types::off_t;
 use crate::types::sys::fcntl::O_NONBLOCK;
 use crate::types::sys::socket::MSG_DONTWAIT;
 use crate::types::sys::socket::SockAddr;
+use crate::types::unistd::SEEK_CUR;
+use crate::types::unistd::SEEK_END;
+use crate::types::unistd::SEEK_SET;
 use crate::vfs::FileLike;
 
 pub trait CloseListener: Send + Sync {
@@ -18,6 +22,7 @@ pub trait CloseListener: Send + Sync {
 
 struct Mutable {
     flags: c_int,
+    offset: usize,
     close_listeners: Vec<Weak<dyn CloseListener>>,
 }
 
@@ -36,6 +41,7 @@ impl OpenFile {
             file,
             mutable: SpinLock::new(Mutable {
                 flags,
+                offset: 0,
                 close_listeners: Vec::new(),
             }),
         }
@@ -71,12 +77,34 @@ impl OpenFile {
         self.flags() & O_NONBLOCK != 0
     }
 
-    pub fn read(&self, buf: &mut [u8], offset: usize) -> Result<usize, Errno> {
-        self.file.read(buf, offset, self.nonblocking())
+    pub fn read(&self, buf: &mut [u8]) -> Result<usize, Errno> {
+        let offset = self.mutable.lock().offset;
+        let n = self.file.read(buf, offset, self.nonblocking())?;
+        self.mutable.lock().offset = offset + n;
+        Ok(n)
     }
 
-    pub fn write(&self, buf: &[u8], offset: usize) -> Result<usize, Errno> {
-        self.file.write(buf, offset, self.nonblocking())
+    pub fn write(&self, buf: &[u8]) -> Result<usize, Errno> {
+        let offset = self.mutable.lock().offset;
+        let n = self.file.write(buf, offset, self.nonblocking())?;
+        self.mutable.lock().offset = offset + n;
+        Ok(n)
+    }
+
+    pub fn seek(&self, offset: off_t, whence: c_int) -> Result<off_t, Errno> {
+        let offset_usize = offset.try_into().map_err(|_| Errno::EINVAL)?;
+        let base = match whence {
+            SEEK_SET => 0,
+            SEEK_CUR => self.mutable.lock().offset,
+            SEEK_END => self.file.size()?,
+            _ => return Err(Errno::EINVAL),
+        };
+
+        let new_offset = base.checked_add(offset_usize).ok_or(Errno::EINVAL)?;
+        self.mutable.lock().offset = new_offset;
+        // TODO: Is it possible to guarantee it is in [0, i64::MAX] in a type-safe way?
+        let new_offset_i64 = new_offset.try_into().map_err(|_| Errno::EINVAL)?;
+        Ok(new_offset_i64)
     }
 
     pub fn recvfrom(&self, buf: &mut [u8], flags: c_int) -> Result<(usize, SockAddr), Errno> {
@@ -84,12 +112,7 @@ impl OpenFile {
         self.file.recvfrom(buf, flags, nonblocking)
     }
 
-    pub fn sendto(
-        &self,
-        buf: &[u8],
-        dest: Option<SockAddr>,
-        flags: c_int,
-    ) -> Result<usize, Errno> {
+    pub fn sendto(&self, buf: &[u8], dest: Option<SockAddr>, flags: c_int) -> Result<usize, Errno> {
         let nonblocking = self.nonblocking() || flags & MSG_DONTWAIT != 0;
         self.file.sendto(buf, dest, flags, nonblocking)
     }

@@ -24,5 +24,5 @@ pub fn sys_read(
     }
 
     let bytes = unsafe { slice::from_raw_parts_mut(buf.cast::<u8>(), count) };
-    Ok(file.read(bytes, 0)? as c_long)
+    Ok(file.read(bytes)? as c_long)
 }

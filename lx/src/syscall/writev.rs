@@ -36,7 +36,7 @@ pub fn sys_writev(
         let ptr = iovec.iov_base.cast::<u8>();
         let bytes = unsafe { slice::from_raw_parts(ptr, iovec.iov_len) };
 
-        let n = file.write(bytes, 0)?;
+        let n = file.write(bytes)?;
         total += n;
         if n < iovec.iov_len {
             break;

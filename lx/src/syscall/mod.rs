@@ -21,6 +21,7 @@ mod getpid;
 mod getrandom;
 mod kill;
 mod listen;
+mod lseek;
 mod mmap;
 mod poll;
 mod read;
@@ -60,6 +61,7 @@ use self::getpid::sys_getpid;
 use self::getrandom::sys_getrandom;
 use self::kill::sys_kill;
 use self::listen::sys_listen;
+use self::lseek::sys_lseek;
 use self::mmap::sys_mmap;
 use self::poll::sys_poll;
 use self::read::sys_read;
@@ -81,6 +83,7 @@ use crate::types::c_long;
 use crate::types::c_unsigned;
 use crate::types::c_void;
 use crate::types::errno::Errno;
+use crate::types::off_t;
 use crate::types::sys::epoll::EpollEvent;
 use crate::types::sys::poll::PollFd;
 use crate::types::sys::poll::nfds_t;
@@ -107,6 +110,7 @@ use crate::types::sys::syscall::SYS_GETPID;
 use crate::types::sys::syscall::SYS_GETRANDOM;
 use crate::types::sys::syscall::SYS_KILL;
 use crate::types::sys::syscall::SYS_LISTEN;
+use crate::types::sys::syscall::SYS_LSEEK;
 use crate::types::sys::syscall::SYS_MMAP;
 use crate::types::sys::syscall::SYS_POLL;
 use crate::types::sys::syscall::SYS_READ;
@@ -145,6 +149,7 @@ pub extern "C" fn handle_syscall(frame: *mut SyscallFrame) -> *mut SyscallFrame 
     let result = match nr {
         SYS_WRITE => sys_write(&current, arg0 as c_int, arg1 as *const c_void, arg2),
         SYS_READ => sys_read(&current, arg0 as c_int, arg1 as *mut c_void, arg2),
+        SYS_LSEEK => sys_lseek(&current, arg0 as c_int, arg1 as off_t, arg2 as c_int),
         SYS_RECVFROM => {
             sys_recvfrom(
                 &current,

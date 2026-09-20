@@ -1,15 +1,14 @@
 use crate::thread::LxThread;
 use crate::types::c_int;
 use crate::types::c_long;
-use crate::types::c_void;
 use crate::types::errno::Errno;
-use crate::types::size_t;
+use crate::types::off_t;
 
-pub fn sys_write(
+pub fn sys_lseek(
     current: &LxThread,
     fd: c_int,
-    buf: *const c_void,
-    count: size_t,
+    offset: off_t,
+    whence: c_int,
 ) -> Result<c_long, Errno> {
     let file = {
         let process = current.process();
@@ -17,11 +16,6 @@ pub fn sys_write(
         fd_table.get(fd)?.clone()
     };
 
-    if count == 0 {
-        return Ok(0);
-    }
-
-    let bytes = unsafe { core::slice::from_raw_parts(buf.cast::<u8>(), count) };
-    let n = file.write(bytes)?;
-    Ok(n.try_into().unwrap()) // FIXME: Handle overflow
+    let new_offset = file.seek(offset, whence)?;
+    Ok(new_offset as c_long)
 }

@@ -1,5 +1,6 @@
 pub const SYS_WRITE: usize = 1;
 pub const SYS_READ: usize = 0;
+pub const SYS_LSEEK: usize = 8;
 pub const SYS_RT_SIGACTION: usize = 13;
 pub const SYS_RT_SIGRETURN: usize = 15;
 pub const SYS_CLOSE: usize = 3;

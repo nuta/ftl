@@ -25,4 +25,8 @@ impl FileLike for EmbeddedFile {
         buf[..copy_len].copy_from_slice(&self.data[offset..offset + copy_len]);
         Ok(copy_len)
     }
+
+    fn size(&self) -> Result<usize, Errno> {
+        Ok(self.data.len())
+    }
 }
