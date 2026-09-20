@@ -677,6 +677,7 @@ impl Process {
             attrs,
         });
 
+        mutable.brk.current = addr;
         mutable.brk.current_aligned = current_aligned;
         addr
     }
