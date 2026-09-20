@@ -11,6 +11,7 @@ use crate::types::sys::poll::POLLERR;
 use crate::types::sys::poll::POLLHUP;
 use crate::types::sys::poll::POLLIN;
 use crate::types::sys::poll::POLLOUT;
+use crate::types::sys::uio::IoVec;
 use crate::vfs::FileLike;
 use crate::vfs::IoVecSlice;
 use crate::wait_queue::WaitQueue;
@@ -115,6 +116,16 @@ impl FileLike for Pipe {
             drop(mutable);
             wq.wait()?;
         }
+    }
+
+    // TODO: Use writev only.
+    fn write(&self, buf: &[u8], offset: usize, nonblocking: bool) -> Result<usize, Errno> {
+        let iovec = IoVec {
+            iov_base: buf.as_ptr().cast_mut().cast(), // FIXME:
+            iov_len: buf.len(),
+        };
+
+        self.writev(&IoVecSlice::new(&iovec, 1), offset, nonblocking)
     }
 
     fn writev(
