@@ -12,6 +12,8 @@ use ftl_utils::spinlock::SpinLock;
 
 use crate::address::UAddr;
 use crate::address::USlice;
+use crate::handle::Handle;
+use crate::handle::Handleable;
 use crate::poll::EventEmitter;
 use crate::poll::Poll;
 use crate::shared_ref::SharedRef;
@@ -20,14 +22,14 @@ use crate::thread::Thread;
 
 const MAX_WRITE_LEN: usize = 512;
 
-static CONSOLE: SpinLock<Console> = SpinLock::new(Console::new());
+static DEVICE: SpinLock<Device> = SpinLock::new(Device::new());
 
-struct Console {
+struct Device {
     buf: RingBuffer<u8, 256>,
     emitters: VecDeque<EventEmitter>,
 }
 
-impl Console {
+impl Device {
     const fn new() -> Self {
         Self {
             buf: RingBuffer::new(),
@@ -69,16 +71,38 @@ impl Console {
     }
 }
 
+pub struct Console {
+    _private: (),
+}
+
+impl Console {
+    const fn new() -> Self {
+        Self { _private: () }
+    }
+}
+
+impl Handleable for Console {}
+
 pub fn handle_interrupt() {
     let emitters = {
-        let mut console = CONSOLE.lock();
-        console.drain_from_device();
-        console.take_emitters()
+        let mut device = DEVICE.lock();
+        device.drain_from_device();
+        device.take_emitters()
     };
 
     for emitter in emitters {
         let _ = emitter.emit(EventKind::PollNotified);
     }
+}
+
+pub fn sys_console_open(
+    current: &SharedRef<Thread>,
+    _ctx: &SyscallRegs,
+) -> Result<SyscallOutput, ErrorCode> {
+    let console = SharedRef::new(Console::new())?;
+    let handle = Handle::new(console, HandleRight::READ | HandleRight::WRITE);
+    let handle_id = current.hspace().insert(handle)?;
+    Ok(SyscallOutput::Done(handle_id.as_usize()))
 }
 
 pub fn sys_console_write(
@@ -99,13 +123,16 @@ pub fn sys_console_write(
 }
 
 pub fn sys_console_read(
-    _current: &SharedRef<Thread>,
+    current: &SharedRef<Thread>,
     ctx: &SyscallRegs,
 ) -> Result<SyscallOutput, ErrorCode> {
-    let uslice = USlice::new(UAddr::new(ctx.a0), ctx.a1)?;
+    let id = HandleId::new(ctx.a0);
+    let uslice = USlice::new(UAddr::new(ctx.a1), ctx.a2)?;
 
-    let mut console = CONSOLE.lock();
-    let mut n = console.read(uslice)?;
+    let _console = current.hspace().get::<Console>(id, HandleRight::READ)?;
+
+    let mut device = DEVICE.lock();
+    let n = device.read(uslice)?;
     Ok(SyscallOutput::Done(n))
 }
 
@@ -113,15 +140,23 @@ pub fn sys_console_subscribe(
     current: &SharedRef<Thread>,
     ctx: &SyscallRegs,
 ) -> Result<SyscallOutput, ErrorCode> {
-    let poll_id = HandleId::new(ctx.a0);
-    let poll = current.hspace().get::<Poll>(poll_id, HandleRight::WRITE)?;
-    let emitter = EventEmitter::new(poll, poll_id);
+    let console_id = HandleId::new(ctx.a0);
+    let poll_id = HandleId::new(ctx.a1);
 
-    let mut console = CONSOLE.lock();
-    console
+    let (_console, poll) = current.hspace().get2::<Console, Poll>(
+        console_id,
+        HandleRight::READ,
+        poll_id,
+        HandleRight::WRITE,
+    )?;
+
+    let mut device = DEVICE.lock();
+    let emitter = EventEmitter::new(poll, console_id);
+    device
         .emitters
         .reserve_slot()
         .map_err(|_| ErrorCode::OutOfMemory)?
         .push_back(emitter);
+
     Ok(SyscallOutput::Done(0))
 }

@@ -29,4 +29,5 @@ pub enum Syscall {
     RandomRead = SYSCALL_BASE + 27,
     ConsoleRead = SYSCALL_BASE + 28,
     ConsoleSubscribe = SYSCALL_BASE + 29,
+    ConsoleOpen = SYSCALL_BASE + 30,
 }

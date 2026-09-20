@@ -87,7 +87,7 @@ fn main(cmdline: &[u8]) {
             network
                 .subscribe(&poll)
                 .expect("failed to subscribe to network events");
-        } else if event.handle_id() == poll.handle().id() {
+        } else if event.handle_id() == console.id() {
             console.handle_rx();
             console
                 .subscribe(&poll)

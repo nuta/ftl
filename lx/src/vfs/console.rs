@@ -4,6 +4,7 @@ use core::cmp::min;
 use ftl::poll::Poll;
 use ftl::trace;
 use ftl_types::error::ErrorCode;
+use ftl_types::handle::HandleId;
 use ftl_utils::spinlock::SpinLock;
 
 use crate::types::c_short;
@@ -14,6 +15,7 @@ use crate::vfs::FileLike;
 use crate::wait_queue::WaitQueue;
 
 pub struct Console {
+    device: ftl::console::Console,
     pending: SpinLock<Vec<u8>>,
     wait_queue: WaitQueue,
 }
@@ -21,20 +23,25 @@ pub struct Console {
 impl Console {
     pub fn new() -> Result<Self, Errno> {
         Ok(Self {
+            device: ftl::console::Console::open()?,
             pending: SpinLock::new(Vec::new()),
             wait_queue: WaitQueue::new()?,
         })
     }
 
+    pub fn id(&self) -> HandleId {
+        self.device.id()
+    }
+
     pub fn subscribe(&self, poll: &Poll) -> Result<(), ErrorCode> {
-        ftl::console::subscribe(poll)
+        self.device.subscribe(poll)
     }
 
     pub fn handle_rx(&self) {
         let mut tmp = [0; 64];
         loop {
             // TODO: Read into self.pending directly.
-            match ftl::console::read(&mut tmp) {
+            match self.device.read(&mut tmp) {
                 Ok(0) | Err(ErrorCode::Empty) => break,
                 Ok(n) => {
                     self.pending.lock().extend_from_slice(&tmp[..n]);
