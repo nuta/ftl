@@ -6,6 +6,7 @@ extern crate alloc;
 pub mod print;
 pub mod allocator;
 mod arch;
+pub mod console;
 pub mod handle;
 pub mod hspace;
 pub mod net;

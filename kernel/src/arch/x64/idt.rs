@@ -7,6 +7,7 @@ use ftl_types::error::ErrorCode;
 use ftl_utils::spinlock::SpinLock;
 
 use super::USER_ADDR_END;
+use super::console::COM1_IRQ;
 use super::gdt::GDT_KERNEL_CS;
 use super::get_cpuvar;
 use super::io_apic::IRQ_VECTOR_BASE;
@@ -401,6 +402,9 @@ extern "C" fn handle_kernel_interrupt(frame: &mut InterruptFrame) {
             if irq == TIMER_IRQ {
                 super::timer::handle_interrupt();
                 crate::driver::handle_interrupt();
+            } else if irq == COM1_IRQ {
+                crate::console::handle_interrupt();
+                super::io_apic::interrupt_acknowledge(irq);
             } else if crate::driver::is_irq(irq) {
                 crate::driver::handle_interrupt();
                 super::io_apic::interrupt_acknowledge(irq);
@@ -448,6 +452,9 @@ extern "C" fn handle_user_interrupt(vector: u8, error_code: u64) -> ! {
                 // trace!("timer interrupt");
                 super::timer::handle_interrupt();
                 crate::driver::handle_interrupt();
+            } else if irq == COM1_IRQ {
+                crate::console::handle_interrupt();
+                super::io_apic::interrupt_acknowledge(irq);
             } else if crate::driver::is_irq(irq) {
                 crate::driver::handle_interrupt();
                 super::io_apic::interrupt_acknowledge(irq);

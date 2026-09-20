@@ -56,6 +56,10 @@ fn do_handle_syscall() {
         n if n == Syscall::HandleClose as usize => crate::handle::sys_handle_close(&thread, &regs),
         n if n == Syscall::MonoTimeRead as usize => crate::timer::sys_monotime_read(&thread, &regs),
         n if n == Syscall::RandomRead as usize => crate::random::sys_random_read(&thread, &regs),
+        n if n == Syscall::ConsoleRead as usize => crate::console::sys_console_read(&thread, &regs),
+        n if n == Syscall::ConsoleSubscribe as usize => {
+            crate::console::sys_console_subscribe(&thread, &regs)
+        }
         _ => Err(ErrorCode::UnknownSyscall),
     };
 

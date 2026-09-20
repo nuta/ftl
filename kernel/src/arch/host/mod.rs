@@ -26,6 +26,10 @@ pub fn interrupt_acquire(_irq: u8) -> Result<(), ErrorCode> {
 
 pub fn console_write(_bytes: &[u8]) {}
 
+pub fn console_read(_bytes: &mut [u8]) -> usize {
+    todo!()
+}
+
 pub fn random_read(buf: &mut [u8]) {
     todo!()
 }

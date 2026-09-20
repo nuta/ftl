@@ -14,6 +14,7 @@ mod print;
 mod address;
 mod arch;
 mod boot;
+mod console;
 mod cpuvar;
 mod driver;
 mod handle;

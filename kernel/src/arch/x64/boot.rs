@@ -28,6 +28,7 @@ extern "C" fn rust_boot(multiboot_magic: u32, start_info: u32) -> ! {
     super::pic::init();
     super::syscall::init();
     super::mp_table::init();
+    super::console::enable_irq();
     super::timer::init();
 
     let bootinfo = if multiboot_magic == 0x36d76289 {

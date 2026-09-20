@@ -27,4 +27,6 @@ pub enum Syscall {
     VmoRead = SYSCALL_BASE + 25,
     VmSpaceUnmap = SYSCALL_BASE + 26,
     RandomRead = SYSCALL_BASE + 27,
+    ConsoleRead = SYSCALL_BASE + 28,
+    ConsoleSubscribe = SYSCALL_BASE + 29,
 }

@@ -3,25 +3,7 @@ use core::hint::spin_loop;
 use super::ioport::in8;
 use super::ioport::out8;
 
-fn putchar(c: u8) {
-    // Wait for the serial port to be ready to receive more data.
-    while unsafe { in8(COM1_LSR) } & 0x20 == 0 {
-        spin_loop();
-    }
-
-    // Send the character.
-    unsafe { out8(COM1_DATA, c) };
-}
-
-pub fn console_write(bytes: &[u8]) {
-    for byte in bytes {
-        if *byte == b'\n' {
-            putchar(b'\r');
-        }
-
-        putchar(*byte);
-    }
-}
+pub(super) const COM1_IRQ: u8 = 4;
 
 /// Data Register. If DLAB is set, the lower 8 bits of the divisor.
 const COM1_DATA: u16 = 0x3f8;
@@ -35,6 +17,48 @@ const COM1_LCR: u16 = COM1_DATA + 3;
 const COM1_MCR: u16 = COM1_DATA + 4;
 /// Line Status Register.
 const COM1_LSR: u16 = COM1_DATA + 5;
+
+fn putchar(c: u8) {
+    // Wait for the serial port to be ready to receive more data.
+    while unsafe { in8(COM1_LSR) } & 0x20 == 0 {
+        spin_loop();
+    }
+
+    // Send the character.
+    unsafe { out8(COM1_DATA, c) };
+}
+
+fn getchar() -> Option<u8> {
+    // Check if the serial port has data to read.
+    if unsafe { in8(COM1_LSR) } & 0x01 == 0 {
+        return None;
+    }
+
+    Some(unsafe { in8(COM1_DATA) })
+}
+
+pub fn console_write(bytes: &[u8]) {
+    for byte in bytes {
+        if *byte == b'\n' {
+            putchar(b'\r');
+        }
+
+        putchar(*byte);
+    }
+}
+pub fn console_read(bytes: &mut [u8]) -> usize {
+    let mut n = 0;
+    while n < bytes.len() {
+        let Some(byte) = getchar() else {
+            break;
+        };
+
+        bytes[n] = byte;
+        n += 1;
+    }
+
+    n
+}
 
 /// Initializes the serial port.
 pub(super) fn init() {
@@ -51,7 +75,13 @@ pub(super) fn init() {
         out8(COM1_LCR, 0x03);
         // Enable FIFO, clear both TX/RX FIFOs, buffer 14 bytes in RX.
         out8(COM1_FCR, 0xc7);
-        // Enable Data Terminal Ready (DTR) and Request to Send (RTS).
-        out8(COM1_MCR, 0x03);
+        // Enable Data Terminal Ready (DTR) and Request to Send (RTS), and OUT2.
+        out8(COM1_MCR, 0b1011);
+        // Enable interrupts on RX data available.
+        out8(COM1_IER, 0x01);
     }
+}
+
+pub(super) fn enable_irq() {
+    super::io_apic::interrupt_acquire(COM1_IRQ).expect("failed to enable COM1 IRQ");
 }

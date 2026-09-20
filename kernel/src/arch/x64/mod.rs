@@ -22,6 +22,7 @@ mod vmspace;
 
 pub const NUM_CPUS_MAX: usize = 8;
 
+pub use console::console_read;
 pub use console::console_write;
 pub use cpuvar::CpuVar;
 pub use cpuvar::get_cpuvar;
