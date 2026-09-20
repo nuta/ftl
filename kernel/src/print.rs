@@ -1,13 +1,7 @@
-use core::cmp::min;
 use core::fmt;
 
-use ftl_types::error::ErrorCode;
-use ftl_types::thread::SyscallRegs;
-
-use crate::address::UAddr;
-use crate::address::USlice;
 use crate::arch;
-use crate::syscall::SyscallOutput;
+
 pub struct Printer;
 
 impl fmt::Write for Printer {
@@ -60,20 +54,4 @@ macro_rules! println {
         use core::fmt::Write;
         writeln!($crate::print::Printer, $($arg)*).ok();
     }};
-}
-
-const MAX_PRINT_LEN: usize = 512;
-
-pub fn sys_print(ctx: &SyscallRegs) -> Result<SyscallOutput, ErrorCode> {
-    let len = min(ctx.a1, MAX_PRINT_LEN);
-    if len == 0 {
-        return Ok(SyscallOutput::Done(0));
-    }
-
-    let mut buf = [0; MAX_PRINT_LEN];
-    let slice = &mut buf[..len];
-    USlice::new(UAddr::new(ctx.a0), len)?.read_bytes(slice)?;
-    crate::arch::console_write(slice);
-
-    Ok(SyscallOutput::Done(len))
 }

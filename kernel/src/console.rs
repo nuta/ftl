@@ -18,6 +18,8 @@ use crate::shared_ref::SharedRef;
 use crate::syscall::SyscallOutput;
 use crate::thread::Thread;
 
+const MAX_WRITE_LEN: usize = 512;
+
 static CONSOLE: SpinLock<Console> = SpinLock::new(Console::new());
 
 struct Console {
@@ -77,6 +79,23 @@ pub fn handle_interrupt() {
     for emitter in emitters {
         let _ = emitter.emit(EventKind::PollNotified);
     }
+}
+
+pub fn sys_console_write(
+    _current: &SharedRef<Thread>,
+    ctx: &SyscallRegs,
+) -> Result<SyscallOutput, ErrorCode> {
+    let len = min(ctx.a1, MAX_WRITE_LEN);
+    if len == 0 {
+        return Ok(SyscallOutput::Done(0));
+    }
+
+    let mut buf = [0; MAX_WRITE_LEN];
+    let slice = &mut buf[..len];
+    USlice::new(UAddr::new(ctx.a0), len)?.read_bytes(slice)?;
+    crate::arch::console_write(slice);
+
+    Ok(SyscallOutput::Done(len))
 }
 
 pub fn sys_console_read(

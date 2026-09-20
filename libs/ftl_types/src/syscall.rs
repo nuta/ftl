@@ -2,7 +2,7 @@ pub const SYSCALL_BASE: usize = usize::MAX - 0x1000;
 
 #[repr(usize)]
 pub enum Syscall {
-    Print = SYSCALL_BASE + 1,
+    ConsoleWrite = SYSCALL_BASE + 1,
     ThreadExit = SYSCALL_BASE + 2,
     VmoCreate = SYSCALL_BASE + 3,
     VmoWrite = SYSCALL_BASE + 4,

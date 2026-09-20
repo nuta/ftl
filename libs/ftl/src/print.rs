@@ -1,27 +1,30 @@
 use core::fmt;
 
-use ftl_types::error::ErrorCode;
-use ftl_types::syscall::Syscall;
-
-use crate::arch::syscall2;
-
-fn sys_print(buf: *const u8, len: usize) -> Result<(), ErrorCode> {
-    let mut bytes = unsafe { core::slice::from_raw_parts(buf, len) };
-    while !bytes.is_empty() {
-        let written = syscall2(Syscall::Print, bytes.as_ptr() as usize, bytes.len())?;
-        if written == 0 {
-            break;
-        }
-        bytes = &bytes[written..];
-    }
-    Ok(())
-}
-
 pub struct Printer;
+
+impl Printer {
+    fn do_write(&mut self, mut bytes: &[u8]) {
+        while !bytes.is_empty() {
+            match crate::console::write(bytes) {
+                Ok(0) => {
+                    // The device is full.
+                    break;
+                }
+                Ok(written) => {
+                    bytes = &bytes[written..];
+                }
+                Err(_) => {
+                    // TODO: Handle error.
+                    break;
+                }
+            }
+        }
+    }
+}
 
 impl fmt::Write for Printer {
     fn write_str(&mut self, s: &str) -> fmt::Result {
-        let _ = sys_print(s.as_ptr(), s.len());
+        self.do_write(s.as_bytes());
         Ok(())
     }
 }
