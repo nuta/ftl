@@ -138,12 +138,6 @@ impl Inner {
 
         if !still_ready_fds.is_empty() {
             self.mutable.lock().ready_fds.extend(still_ready_fds);
-
-            // Concurrent readers may want to read the fds that we've
-            // temporarily popped. Notify them to re-check the readiness.
-            if let Err(e) = self.wait_queue.notify_all() {
-                trace!("Failed to notify wait queue: {:?}", e);
-            }
         }
 
         Ok(n)
@@ -219,12 +213,26 @@ impl Epoll {
 
     pub fn wait(&self, events: &mut [EpollEvent], timeout: c_int) -> Result<usize, Errno> {
         loop {
-            // TODO: proper timeout support
             let wait_guard = self.inner.wait_queue.subscribe();
             let n = self.inner.drain(events)?;
-            if n > 0 || timeout == 0 {
-                // Found some ready events, or non-blocking mode.
+            if n > 0 {
+                // Found some ready events.
+
+                // Unsubscribe first so that notify_all below won't notify ourself.
+                drop(wait_guard);
+
+                // Concurrent readers may want to read the fds that we've
+                // temporarily popped. Notify them to re-check the readiness.
+                if let Err(e) = self.inner.wait_queue.notify_all() {
+                    trace!("Failed to notify wait queue: {:?}", e);
+                }
+
                 return Ok(n);
+            }
+
+            // TODO: proper timeout support
+            if timeout == 0 {
+                return Ok(0);
             }
 
             wait_guard.wait()?;
