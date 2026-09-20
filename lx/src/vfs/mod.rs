@@ -1,5 +1,7 @@
 use alloc::sync::Arc;
+use core::slice;
 
+use crate::types;
 use crate::types::c_int;
 use crate::types::c_short;
 use crate::types::errno::Errno;
@@ -10,11 +12,48 @@ mod console;
 mod embedded_file;
 mod epoll;
 mod eventfd;
+mod pipe;
 
 pub use console::Console;
 pub use embedded_file::EmbeddedFile;
 pub use epoll::Epoll;
 pub use eventfd::EventFd;
+pub use pipe::Pipe;
+
+pub struct IoVec<'a> {
+    slice: &'a [u8],
+}
+
+pub struct IoVecSlice<'a> {
+    iovecs: &'a [types::sys::uio::IoVec],
+}
+
+impl<'a> IoVecSlice<'a> {
+    pub fn new(iov: *const types::sys::uio::IoVec, count: usize) -> Self {
+        let iovecs = unsafe { slice::from_raw_parts(iov, count) };
+        Self { iovecs }
+    }
+
+    pub fn total_len(&self) -> usize {
+        let mut total = 0;
+        for iovec in self.iovecs {
+            total += iovec.iov_len;
+        }
+        total
+    }
+
+    pub fn buffers(&self) -> impl Iterator<Item = &[u8]> {
+        self.iovecs.iter().map(|iovec| unsafe {
+            slice::from_raw_parts(iovec.iov_base as *const u8, iovec.iov_len)
+        })
+    }
+
+    pub fn buffers_mut(&mut self) -> impl Iterator<Item = &mut [u8]> {
+        self.iovecs.iter().map(|iovec| unsafe {
+            slice::from_raw_parts_mut(iovec.iov_base as *mut u8, iovec.iov_len)
+        })
+    }
+}
 
 pub trait FileLike: Send + Sync {
     fn bind(&self, addr: SockAddr) -> Result<(), Errno> {
@@ -82,6 +121,35 @@ pub trait FileLike: Send + Sync {
         let _ = offset;
         let _ = nonblocking;
         Err(Errno::ENOTSUP)
+    }
+
+    fn writev(
+        &self,
+        iovecs: &IoVecSlice,
+        offset: usize,
+        nonblocking: bool,
+    ) -> Result<usize, Errno> {
+        let mut total = 0;
+        for buf in iovecs.buffers() {
+            match self.write(buf, offset + total, nonblocking) {
+                Ok(n) if n < buf.len() => {
+                    // Partial write.
+                    total += n;
+                    break;
+                }
+                Ok(n) => {
+                    total += n;
+                }
+                Err(_) if total > 0 => {
+                    // Write failed this time, but some data were successfully
+                    // written.
+                    break;
+                }
+                Err(error) => return Err(error),
+            }
+        }
+
+        Ok(total)
     }
 
     fn size(&self) -> Result<usize, Errno> {

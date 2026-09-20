@@ -5,6 +5,8 @@ use core::ops::Deref;
 
 use ftl_utils::spinlock::SpinLock;
 
+use crate::process::Process;
+use crate::signal::Signal;
 use crate::types::c_int;
 use crate::types::errno::Errno;
 use crate::types::off_t;
@@ -15,6 +17,7 @@ use crate::types::unistd::SEEK_CUR;
 use crate::types::unistd::SEEK_END;
 use crate::types::unistd::SEEK_SET;
 use crate::vfs::FileLike;
+use crate::vfs::IoVecSlice;
 
 pub trait CloseListener: Send + Sync {
     fn on_close(&self);
@@ -84,11 +87,42 @@ impl OpenFile {
         Ok(n)
     }
 
-    pub fn write(&self, buf: &[u8]) -> Result<usize, Errno> {
+    pub fn do_write(&self, buf: &[u8]) -> Result<usize, Errno> {
         let offset = self.mutable.lock().offset;
         let n = self.file.write(buf, offset, self.nonblocking())?;
         self.mutable.lock().offset = offset + n;
         Ok(n)
+    }
+
+    pub fn do_writev(&self, iovecs: &IoVecSlice) -> Result<usize, Errno> {
+        let offset = self.mutable.lock().offset;
+        let n = self.file.writev(iovecs, offset, self.nonblocking())?;
+        self.mutable.lock().offset = offset + n;
+        Ok(n)
+    }
+
+    pub fn write(&self, process: &Process, buf: &[u8]) -> Result<usize, Errno> {
+        match self.do_write(buf) {
+            Ok(n) => Ok(n),
+            Err(Errno::EPIPE) => {
+                // On EPIPE, trigger PIPE signal before returning the error.
+                let _ = process.queue_signal(Signal::PIPE);
+                Err(Errno::EPIPE)
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    pub fn writev(&self, process: &Process, iovecs: &IoVecSlice) -> Result<usize, Errno> {
+        match self.do_writev(iovecs) {
+            Ok(n) => Ok(n),
+            Err(Errno::EPIPE) => {
+                // On EPIPE, trigger PIPE signal before returning the error.
+                let _ = process.queue_signal(Signal::PIPE);
+                Err(Errno::EPIPE)
+            }
+            Err(error) => Err(error),
+        }
     }
 
     pub fn seek(&self, offset: off_t, whence: c_int) -> Result<off_t, Errno> {

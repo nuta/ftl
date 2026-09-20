@@ -11,8 +11,8 @@ pub fn sys_write(
     buf: *const c_void,
     count: size_t,
 ) -> Result<c_long, Errno> {
+    let process = current.process();
     let file = {
-        let process = current.process();
         let fd_table = process.fd_table().lock();
         fd_table.get(fd)?.clone()
     };
@@ -22,6 +22,6 @@ pub fn sys_write(
     }
 
     let bytes = unsafe { core::slice::from_raw_parts(buf.cast::<u8>(), count) };
-    let n = file.write(bytes)?;
+    let n = file.write(&process, bytes)?;
     Ok(n.try_into().unwrap()) // FIXME: Handle overflow
 }

@@ -14,4 +14,6 @@ pub struct PollFd {
 
 pub const POLLIN: c_short = 0x0001;
 pub const POLLOUT: c_short = 0x0004;
+pub const POLLERR: c_short = 0x0008;
+pub const POLLHUP: c_short = 0x0010;
 pub const POLLNVAL: c_short = 0x0020;

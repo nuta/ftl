@@ -6,6 +6,8 @@ use crate::thread::LxThread;
 use crate::types::c_int;
 use crate::types::c_long;
 use crate::types::errno::Errno;
+use crate::types::sys::poll::POLLERR;
+use crate::types::sys::poll::POLLHUP;
 use crate::types::sys::poll::POLLNVAL;
 use crate::types::sys::poll::PollFd;
 use crate::types::sys::poll::nfds_t;
@@ -80,16 +82,12 @@ pub fn sys_poll(
 fn scan_pollfds(fds: &mut [PollFd], files: &[Arc<OpenFile>]) -> Result<c_long, Errno> {
     let mut n = 0;
     for (e, file) in fds.iter_mut().zip(files) {
-        let events = e.events;
-
         e.revents = 0;
-        if e.fd < 0 || events == 0 {
-            continue;
-        }
 
-        // Check the file's status.
-        let status = file.poll()?;
-        e.revents = events & status;
+        // Check the file's status. If POLLERR/POLLHUP is set, report regardless of
+        // the events mask.
+        let latest = file.poll()?;
+        e.revents = latest & (e.events | POLLERR | POLLHUP);
         if e.revents != 0 {
             n += 1;
         }

@@ -5,6 +5,7 @@ use crate::types::signal::NSIG;
 use crate::types::signal::SIG_DFL;
 use crate::types::signal::SIG_IGN;
 use crate::types::signal::SIGKILL;
+use crate::types::signal::SIGPIPE;
 use crate::types::signal::SIGSTOP;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -12,6 +13,7 @@ pub struct Signal(u8);
 
 impl Signal {
     pub const KILL: Self = Self(SIGKILL as u8);
+    pub const PIPE: Self = Self(SIGPIPE as u8);
     pub const STOP: Self = Self(SIGSTOP as u8);
 
     pub fn from_raw(raw: c_int) -> Result<Self, Errno> {

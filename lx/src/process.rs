@@ -141,6 +141,26 @@ impl FdTable {
         Err(Errno::EMFILE)
     }
 
+    /// Inserts two files.
+    pub fn insert2(
+        &mut self,
+        file1: Arc<dyn FileLike>,
+        flags1: c_int,
+        file2: Arc<dyn FileLike>,
+        flags2: c_int,
+    ) -> Result<(c_int, c_int), Errno> {
+        let fd1 = self.insert(file1, flags1)?;
+        let fd2 = match self.insert(file2, flags2) {
+            Ok(fd) => fd,
+            Err(error) => {
+                let _ = self.remove(fd1);
+                return Err(error);
+            }
+        };
+
+        Ok((fd1, fd2))
+    }
+
     pub fn insert_at(
         &mut self,
         fd: c_int,

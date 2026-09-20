@@ -23,12 +23,14 @@ mod kill;
 mod listen;
 mod lseek;
 mod mmap;
+mod pipe;
+mod pipe2;
 mod poll;
 mod read;
 mod recvfrom;
-mod sendto;
 mod rt_sigaction;
 mod rt_sigreturn;
+mod sendto;
 mod set_tid_address;
 mod setsockopt;
 mod socket;
@@ -63,12 +65,14 @@ use self::kill::sys_kill;
 use self::listen::sys_listen;
 use self::lseek::sys_lseek;
 use self::mmap::sys_mmap;
+use self::pipe::sys_pipe;
+use self::pipe2::sys_pipe2;
 use self::poll::sys_poll;
 use self::read::sys_read;
 use self::recvfrom::sys_recvfrom;
-use self::sendto::sys_sendto;
 use self::rt_sigaction::sys_rt_sigaction;
 use self::rt_sigreturn::sys_rt_sigreturn;
+use self::sendto::sys_sendto;
 use self::set_tid_address::sys_set_tid_address;
 use self::setsockopt::sys_setsockopt;
 use self::socket::sys_socket;
@@ -112,12 +116,14 @@ use crate::types::sys::syscall::SYS_KILL;
 use crate::types::sys::syscall::SYS_LISTEN;
 use crate::types::sys::syscall::SYS_LSEEK;
 use crate::types::sys::syscall::SYS_MMAP;
+use crate::types::sys::syscall::SYS_PIPE;
+use crate::types::sys::syscall::SYS_PIPE2;
 use crate::types::sys::syscall::SYS_POLL;
 use crate::types::sys::syscall::SYS_READ;
 use crate::types::sys::syscall::SYS_RECVFROM;
-use crate::types::sys::syscall::SYS_SENDTO;
 use crate::types::sys::syscall::SYS_RT_SIGACTION;
 use crate::types::sys::syscall::SYS_RT_SIGRETURN;
+use crate::types::sys::syscall::SYS_SENDTO;
 use crate::types::sys::syscall::SYS_SET_TID_ADDRESS;
 use crate::types::sys::syscall::SYS_SETSOCKOPT;
 use crate::types::sys::syscall::SYS_SOCKET;
@@ -125,7 +131,7 @@ use crate::types::sys::syscall::SYS_WAIT4;
 use crate::types::sys::syscall::SYS_WRITE;
 use crate::types::sys::syscall::SYS_WRITEV;
 use crate::types::sys::time::timespec;
-use crate::types::sys::uio::iovec;
+use crate::types::sys::uio::IoVec;
 
 pub extern "C" fn handle_syscall(frame: *mut SyscallFrame) -> *mut SyscallFrame {
     // SAFETY: `syscall_handler` passes its register frame.
@@ -218,8 +224,10 @@ pub extern "C" fn handle_syscall(frame: *mut SyscallFrame) -> *mut SyscallFrame 
                 frame.arg5() as i64,
             )
         }
+        SYS_PIPE => sys_pipe(&current, arg0 as *mut c_int),
+        SYS_PIPE2 => sys_pipe2(&current, arg0 as *mut c_int, arg1 as c_int),
         SYS_POLL => sys_poll(&current, arg0 as *mut PollFd, arg1 as nfds_t, arg2 as c_int),
-        SYS_WRITEV => sys_writev(&current, arg0 as c_int, arg1 as *const iovec, arg2 as c_int),
+        SYS_WRITEV => sys_writev(&current, arg0 as c_int, arg1 as *const IoVec, arg2 as c_int),
         SYS_FORK => sys_fork(&current, frame),
         SYS_GETPID => sys_getpid(&current),
         SYS_GETRANDOM => sys_getrandom(&current, arg0 as *mut c_void, arg1, arg2 as c_unsigned),

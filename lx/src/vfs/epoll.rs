@@ -12,6 +12,8 @@ use crate::open_file::OpenFile;
 use crate::types::c_int;
 use crate::types::errno::Errno;
 use crate::types::sys::epoll::EpollEvent;
+use crate::types::sys::poll::POLLERR;
+use crate::types::sys::poll::POLLHUP;
 use crate::vfs::FileLike;
 use crate::wait_queue::WaitListener;
 use crate::wait_queue::WaitQueue;
@@ -32,7 +34,9 @@ impl Watch {
         };
 
         let event = *self.event.lock();
-        let revents = (file.poll()? as u32) & event.events;
+        let latest = file.poll()?;
+        // If POLLERR/POLLHUP is set, report regardless of the events mask.
+        let revents = (latest as u32) & (event.events | POLLERR as u32 | POLLHUP as u32);
         if revents == 0 {
             return Ok(None);
         }
