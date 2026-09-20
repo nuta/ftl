@@ -48,6 +48,7 @@ use crate::types::sys::mman::PROT_READ;
 use crate::types::sys::mman::PROT_WRITE;
 use crate::vfs::Console;
 use crate::vfs::FileLike;
+use crate::vfs::Tty;
 use crate::wait_queue::WaitQueue;
 use crate::wait_queue::WaitSet;
 
@@ -353,6 +354,7 @@ pub struct Process {
 impl Process {
     pub fn new_init(
         container: Arc<Container>,
+        console: Arc<Console>,
         elf_file: Arc<dyn FileLike>,
         argv: &[&[u8]],
     ) -> Result<Arc<Process>, Errno> {
@@ -360,10 +362,10 @@ impl Process {
         let (mappings, brk, entry, sp) = create_address_space(&vmspace, elf_file, argv)?;
 
         let mut fd_table = FdTable::new(1024); // TODO: make this configurable
-        let console: Arc<dyn FileLike> = Arc::new(Console::new());
-        fd_table.insert_at(0, console.clone(), O_RDONLY)?;
-        fd_table.insert_at(1, console.clone(), O_WRONLY)?;
-        fd_table.insert_at(2, console, O_WRONLY)?;
+        let tty: Arc<dyn FileLike> = Arc::new(Tty::new(console));
+        fd_table.insert_at(0, tty.clone(), O_RDONLY)?;
+        fd_table.insert_at(1, tty.clone(), O_WRONLY)?;
+        fd_table.insert_at(2, tty, O_WRONLY)?;
 
         let process = Self::new(
             container,

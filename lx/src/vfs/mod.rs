@@ -13,6 +13,7 @@ mod embedded_file;
 mod epoll;
 mod eventfd;
 mod pipe;
+mod tty;
 
 pub use console::Console;
 pub use embedded_file::EmbeddedFile;
@@ -23,6 +24,7 @@ pub use pipe::Pipe;
 pub struct IoVec<'a> {
     slice: &'a [u8],
 }
+pub use tty::Tty;
 
 pub struct IoVecSlice<'a> {
     iovecs: &'a [types::sys::uio::IoVec],

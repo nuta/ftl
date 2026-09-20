@@ -29,6 +29,7 @@ use ftl_types::handle::HandleId;
 
 use crate::container::Container;
 use crate::initfs::InitFsLoader;
+use crate::vfs::Console;
 use crate::vfs::EmbeddedFile;
 
 #[repr(C, align(8))]
@@ -60,13 +61,24 @@ fn main(cmdline: &[u8]) {
 
     let net = Net::create().expect("failed to create network");
     let network = net::TcpIp::new(net);
-    let _container = Container::new(root_hspace, root_vmspace, network.clone(), elf_file, &argv)
-        .expect("failed to start LX");
+    let console = Arc::new(Console::new().expect("failed to create console"));
+    let _container = Container::new(
+        root_hspace,
+        root_vmspace,
+        network.clone(),
+        console.clone(),
+        elf_file,
+        &argv,
+    )
+    .expect("failed to start LX");
 
     let poll = Poll::create().expect("failed to create poll");
     network
         .subscribe(&poll)
         .expect("failed to subscribe to network events");
+    console
+        .subscribe(&poll)
+        .expect("failed to subscribe to console events");
 
     loop {
         let event = poll.wait().expect("poll wait failed");
@@ -75,6 +87,11 @@ fn main(cmdline: &[u8]) {
             network
                 .subscribe(&poll)
                 .expect("failed to subscribe to network events");
+        } else if event.handle_id() == poll.handle().id() {
+            console.handle_rx();
+            console
+                .subscribe(&poll)
+                .expect("failed to subscribe to console events");
         }
     }
 }

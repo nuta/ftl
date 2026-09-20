@@ -9,6 +9,7 @@ use crate::net::TcpIp;
 use crate::process::PId;
 use crate::process::Process;
 use crate::types::errno::Errno;
+use crate::vfs::Console;
 use crate::vfs::FileLike;
 
 mod pid_table;
@@ -25,6 +26,7 @@ impl Container {
         hspace: HandleSpace,
         root_vmspace: VmSpace,
         network: Arc<TcpIp>,
+        console: Arc<Console>,
         elf_file: Arc<dyn FileLike>,
         argv: &[&[u8]],
     ) -> Result<Arc<Self>, Errno> {
@@ -35,7 +37,7 @@ impl Container {
             network,
         });
 
-        let init_process = Process::new_init(this.clone(), elf_file, argv)?;
+        let init_process = Process::new_init(this.clone(), console, elf_file, argv)?;
         this.processes.lock().insert(PId::new(1), init_process);
         Ok(this)
     }

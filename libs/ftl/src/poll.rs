@@ -44,7 +44,7 @@ impl Poll {
         Ok(())
     }
 
-    pub(crate) const fn handle(&self) -> &OwnedHandle {
+    pub const fn handle(&self) -> &OwnedHandle {
         &self.handle
     }
 }
