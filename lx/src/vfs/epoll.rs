@@ -3,6 +3,8 @@ use alloc::sync::Weak;
 use alloc::vec::Vec;
 
 use ftl::trace;
+use ftl_types::poll::EventKind;
+use ftl_types::time::Duration;
 use ftl_utils::fxhash::FxHashMap;
 use ftl_utils::fxhash::FxHashSet;
 use ftl_utils::spinlock::SpinLock;
@@ -212,6 +214,13 @@ impl Epoll {
     }
 
     pub fn wait(&self, events: &mut [EpollEvent], timeout: c_int) -> Result<usize, Errno> {
+        let deadline = if let Ok(timeout) = timeout.try_into() {
+            let duration = Duration::from_millis(timeout);
+            Some(ftl::time::now() + duration)
+        } else {
+            None
+        };
+
         loop {
             let wait_guard = self.inner.wait_queue.subscribe();
             let n = self.inner.drain(events)?;
@@ -230,12 +239,18 @@ impl Epoll {
                 return Ok(n);
             }
 
-            // TODO: proper timeout support
             if timeout == 0 {
                 return Ok(0);
             }
 
-            wait_guard.wait()?;
+            if let Some(deadline) = deadline {
+                if wait_guard.wait_with_deadline(deadline)? {
+                    // The deadline was reached.
+                    return Ok(0);
+                }
+            } else {
+                wait_guard.wait()?;
+            }
         }
     }
 }

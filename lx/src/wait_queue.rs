@@ -6,6 +6,10 @@ use core::sync::atomic::Ordering;
 
 use ftl::poll::Poll;
 use ftl_types::error::ErrorCode;
+use ftl_types::poll::Event;
+use ftl_types::poll::EventKind;
+use ftl_types::time::Duration;
+use ftl_types::time::MonoTime;
 use ftl_utils::spinlock::SpinLock;
 
 pub trait WaitListener: Send + Sync {
@@ -74,6 +78,13 @@ impl<'a> WaitGuard<'a> {
     pub fn wait(&self) -> Result<(), ErrorCode> {
         self.0.poll.wait()?;
         Ok(())
+    }
+
+    /// Returns `Ok(true)` if the deadline was reached, `Ok(false)` if the
+    /// poll returned an event.
+    pub fn wait_with_deadline(&self, deadline: MonoTime) -> Result<bool, ErrorCode> {
+        let ev = self.0.poll.wait_until(deadline)?;
+        Ok(ev.kind() == EventKind::PollTimeout)
     }
 }
 

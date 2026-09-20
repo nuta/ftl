@@ -45,6 +45,10 @@ impl Duration {
         Self(nanos)
     }
 
+    pub const fn from_millis(millis: u64) -> Self {
+        Self(millis * 1_000_000)
+    }
+
     pub const fn from_secs(secs: u64) -> Self {
         Self(secs * 1_000_000_000)
     }
