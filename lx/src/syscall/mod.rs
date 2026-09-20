@@ -5,6 +5,8 @@ mod bind;
 mod brk;
 mod clock_gettime;
 mod close;
+mod dup2;
+mod dup3;
 mod epoll_create1;
 mod epoll_ctl;
 mod epoll_pwait;
@@ -42,6 +44,8 @@ use self::bind::sys_bind;
 use self::brk::sys_brk;
 use self::clock_gettime::sys_clock_gettime;
 use self::close::sys_close;
+use self::dup2::sys_dup2;
+use self::dup3::sys_dup3;
 use self::epoll_create1::sys_epoll_create1;
 use self::epoll_ctl::sys_epoll_ctl;
 use self::epoll_pwait::sys_epoll_pwait;
@@ -87,6 +91,8 @@ use crate::types::sys::syscall::SYS_BIND;
 use crate::types::sys::syscall::SYS_BRK;
 use crate::types::sys::syscall::SYS_CLOCK_GETTIME;
 use crate::types::sys::syscall::SYS_CLOSE;
+use crate::types::sys::syscall::SYS_DUP2;
+use crate::types::sys::syscall::SYS_DUP3;
 use crate::types::sys::syscall::SYS_EPOLL_CREATE1;
 use crate::types::sys::syscall::SYS_EPOLL_CTL;
 use crate::types::sys::syscall::SYS_EPOLL_PWAIT;
@@ -162,6 +168,8 @@ pub extern "C" fn handle_syscall(frame: *mut SyscallFrame) -> *mut SyscallFrame 
             )
         }
         SYS_CLOSE => sys_close(&current, arg0 as c_int),
+        SYS_DUP2 => sys_dup2(&current, arg0 as c_int, arg1 as c_int),
+        SYS_DUP3 => sys_dup3(&current, arg0 as c_int, arg1 as c_int, arg2 as c_int),
         SYS_EPOLL_CREATE1 => sys_epoll_create1(&current, arg0 as c_int),
         SYS_EPOLL_CTL => {
             sys_epoll_ctl(

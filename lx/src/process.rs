@@ -220,25 +220,60 @@ impl FdTable {
         Err(Errno::EMFILE)
     }
 
-    /// Duplicates `oldfd` to a new fd (>= minfd).
+    /// Duplicates `oldfd` to `newfd`.
+    fn do_dup(&mut self, oldfd: c_int, newfd: usize, cloexec: bool) -> Result<c_int, Errno> {
+        let file = self.get(oldfd)?.clone();
+        if newfd >= self.open_files.len() {
+            self.open_files.resize(newfd + 1, None);
+        }
+
+        let old = self.open_files[newfd].replace(Entry { file, cloexec });
+        if old.is_none() {
+            self.active_fds += 1;
+        }
+
+        Ok(newfd as c_int)
+    }
+
     pub fn dup(&mut self, oldfd: c_int, minfd: c_int, cloexec: bool) -> Result<c_int, Errno> {
-        if minfd < 0 {
+        let newfd = self.find_free_fd(minfd)?;
+        self.do_dup(oldfd, newfd, cloexec)
+    }
+
+    pub fn dup2(&mut self, oldfd: c_int, newfd: c_int) -> Result<c_int, Errno> {
+        // > If oldfd is a valid file descriptor, and newfd has the same
+        // > value as oldfd, then dup2() does nothing, and returns newfd.
+        // >
+        // > https://man7.org/linux/man-pages/man2/dup.2.html
+        if oldfd == newfd {
+            // Check the validity of oldfd.
+            self.get(oldfd)?;
+            return Ok(newfd);
+        }
+
+        self.dup3(oldfd, newfd, 0)
+    }
+
+    pub fn dup3(&mut self, oldfd: c_int, newfd: c_int, flags: c_int) -> Result<c_int, Errno> {
+        if flags & !O_CLOEXEC != 0 {
+            // Reject unsupported flags.
             return Err(Errno::EINVAL);
         }
 
-        let file = self.get(oldfd)?.clone();
-        if self.active_fds >= self.capacity {
-            return Err(Errno::EMFILE);
+        if oldfd == newfd {
+            // Unlike dup2:
+            //
+            // > If oldfd equals newfd, then dup3() fails with the error EINVAL.
+            // >
+            // > https://man7.org/linux/man-pages/man2/dup.2.html
+            return Err(Errno::EINVAL);
         }
 
-        let new_fd = self.find_free_fd(minfd)?;
-        if new_fd >= self.open_files.len() {
-            self.open_files.resize(new_fd + 1, None);
+        if newfd < 0 || (newfd as usize) >= self.capacity {
+            return Err(Errno::EBADF);
         }
 
-        self.open_files[new_fd] = Some(Entry { file, cloexec });
-        self.active_fds += 1;
-        return Ok(new_fd as c_int);
+        self.do_dup(oldfd, newfd as usize, flags & O_CLOEXEC != 0)
     }
 
     pub fn remove(&mut self, fd: c_int) -> Result<Arc<OpenFile>, Errno> {
