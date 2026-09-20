@@ -20,10 +20,6 @@ pub use embedded_file::EmbeddedFile;
 pub use epoll::Epoll;
 pub use eventfd::EventFd;
 pub use pipe::Pipe;
-
-pub struct IoVec<'a> {
-    slice: &'a [u8],
-}
 pub use tty::Tty;
 
 pub struct IoVecSlice<'a> {
@@ -47,12 +43,6 @@ impl<'a> IoVecSlice<'a> {
     pub fn buffers(&self) -> impl Iterator<Item = &[u8]> {
         self.iovecs.iter().map(|iovec| unsafe {
             slice::from_raw_parts(iovec.iov_base as *const u8, iovec.iov_len)
-        })
-    }
-
-    pub fn buffers_mut(&mut self) -> impl Iterator<Item = &mut [u8]> {
-        self.iovecs.iter().map(|iovec| unsafe {
-            slice::from_raw_parts_mut(iovec.iov_base as *mut u8, iovec.iov_len)
         })
     }
 }

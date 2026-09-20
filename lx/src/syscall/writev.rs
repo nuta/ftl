@@ -1,6 +1,3 @@
-use alloc::vec::Vec;
-use core::slice;
-
 use crate::thread::LxThread;
 use crate::types::c_int;
 use crate::types::c_long;
