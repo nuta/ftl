@@ -1,4 +1,3 @@
-use alloc::vec::Vec;
 use core::cmp::min;
 
 use ftl_types::error::ErrorCode;
@@ -6,6 +5,8 @@ use ftl_types::handle::HandleId;
 use ftl_types::handle::HandleRight;
 use ftl_types::thread::SyscallRegs;
 use ftl_utils::alignment::is_aligned;
+use ftl_utils::fxhash::FxHashMap;
+use ftl_utils::reserve_slot::ReserveSlot;
 use ftl_utils::spinlock::SpinLock;
 
 use crate::address::PAddr;
@@ -28,7 +29,7 @@ struct Page {
 }
 
 impl Page {
-    fn new() -> Result<SharedRef<Self>, ErrorCode> {
+    fn allocate() -> Result<SharedRef<Self>, ErrorCode> {
         let paddr = PAGE_ALLOCATOR
             .alloc(MIN_PAGE_SIZE, PageType::Zeroed)
             .ok_or(ErrorCode::OutOfMemory)?;
@@ -45,19 +46,25 @@ impl Drop for Page {
 }
 
 struct Mutable {
-    pages: Vec<Option<SharedRef<Page>>>,
+    pages: FxHashMap<usize, SharedRef<Page>>,
 }
 
 impl Mutable {
-    fn get_or_fill(&mut self, index: usize) -> Result<&SharedRef<Page>, ErrorCode> {
-        let page = &mut self.pages[index];
-        if page.is_none() {
-            *page = Some(Page::new()?);
+    fn get_or_fill(&mut self, index: usize) -> Result<SharedRef<Page>, ErrorCode> {
+        if let Some(page) = self.pages.get(&index) {
+            return Ok(page.clone());
         }
 
-        // SAFETY: We always fill the page if it is none.
-        // TODO: Use get_or_try_insert_with once it gets stabilized.
-        Ok(unsafe { page.as_ref().unwrap_unchecked() })
+        // Allocate the slot.
+        let slot = self
+            .pages
+            .reserve_slot()
+            .map_err(|_| ErrorCode::OutOfMemory)?;
+
+        // Allocate a page and insert it into the slot.
+        let page = Page::allocate()?;
+        slot.insert(index, page.clone());
+        Ok(page)
     }
 }
 
@@ -73,17 +80,11 @@ impl VmObject {
             return Err(ErrorCode::NotAligned);
         }
 
-        //　Mark all pages as empty.
-        let mut pages = Vec::new();
-        let n = len / MIN_PAGE_SIZE;
-        if pages.try_reserve_exact(n).is_err() {
-            return Err(ErrorCode::OutOfMemory);
-        }
-        pages.resize_with(n, Default::default);
-
         SharedRef::new(Self {
             len,
-            mutable: SpinLock::new(Mutable { pages }),
+            mutable: SpinLock::new(Mutable {
+                pages: FxHashMap::new(),
+            }),
         })
     }
 
@@ -92,11 +93,11 @@ impl VmObject {
     }
 
     pub fn ensure_page(&self, index: usize) -> Result<PAddr, ErrorCode> {
-        let mut mutable = self.mutable.lock();
-        if index >= mutable.pages.len() {
+        if index >= self.len / MIN_PAGE_SIZE {
             return Err(ErrorCode::OutOfBounds);
         }
 
+        let mut mutable = self.mutable.lock();
         let page = mutable.get_or_fill(index)?;
         Ok(page.paddr)
     }
@@ -161,7 +162,7 @@ impl VmObject {
                 // callback accesses an unmapped user page, it may cause a page
                 // fault on this VMO, causing a dead lock.
                 let mut mutable = self.mutable.lock();
-                mutable.get_or_fill(page_index)?.clone()
+                mutable.get_or_fill(page_index)?
             };
 
             let page_slice = PageSlice::new(page, page_offset, len)?;
