@@ -47,6 +47,8 @@ impl SyscallFrame {
 }
 
 pub extern "C" fn syscall_handler() -> ! {
+    let mut frame = SyscallFrame { nr: 0, cookie: 0 };
+    crate::syscall::handle_syscall(&mut frame as *mut SyscallFrame);
     todo!()
 }
 

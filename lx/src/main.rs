@@ -38,7 +38,6 @@ struct Aligned<const N: usize>([u8; N]);
 static INITFS: Aligned<{ include_bytes!("../../initfs.cpio").len() }> =
     Aligned(*include_bytes!("../../initfs.cpio"));
 
-#[cfg(not(test))]
 #[unsafe(no_mangle)]
 fn main(cmdline: &[u8]) {
     let root_hspace = unsafe { HandleSpace::from_handle(HandleId::new(1)) };
