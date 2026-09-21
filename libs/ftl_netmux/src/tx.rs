@@ -111,6 +111,12 @@ impl<'a, N: RxNotify> NetMux<'a, N> {
             }
         };
 
+        // Reject fragmented IPv4 packets since this packet may not contain the
+        // complete TCP header and we can't validate it.
+        if ipv4.fragment_offset() & 0x3fff != 0 {
+            return Err(ErrorCode::InvalidArg);
+        }
+
         // The IPv4 total length must match the header + payload we were given.
         // TODO: Should we overwrite instead?
         let payload_len = payload_buf.as_ref().map(|p| p.len()).unwrap_or(0);
