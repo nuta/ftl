@@ -4,6 +4,7 @@ mod arch_prctl;
 mod bind;
 mod brk;
 mod clock_gettime;
+mod clock_nanosleep;
 mod close;
 mod dup2;
 mod dup3;
@@ -44,6 +45,7 @@ use self::arch_prctl::sys_arch_prctl;
 use self::bind::sys_bind;
 use self::brk::sys_brk;
 use self::clock_gettime::sys_clock_gettime;
+use self::clock_nanosleep::sys_clock_nanosleep;
 use self::close::sys_close;
 use self::dup2::sys_dup2;
 use self::dup3::sys_dup3;
@@ -95,6 +97,7 @@ use crate::types::sys::syscall::SYS_ARCH_PRCTL;
 use crate::types::sys::syscall::SYS_BIND;
 use crate::types::sys::syscall::SYS_BRK;
 use crate::types::sys::syscall::SYS_CLOCK_GETTIME;
+use crate::types::sys::syscall::SYS_CLOCK_NANOSLEEP;
 use crate::types::sys::syscall::SYS_CLOSE;
 use crate::types::sys::syscall::SYS_DUP2;
 use crate::types::sys::syscall::SYS_DUP3;
@@ -128,7 +131,7 @@ use crate::types::sys::syscall::SYS_SOCKET;
 use crate::types::sys::syscall::SYS_WAIT4;
 use crate::types::sys::syscall::SYS_WRITE;
 use crate::types::sys::syscall::SYS_WRITEV;
-use crate::types::sys::time::timespec;
+use crate::types::sys::time::TimeSpec;
 use crate::types::sys::uio::IoVec;
 
 pub extern "C" fn handle_syscall(frame: *mut SyscallFrame) -> *mut SyscallFrame {
@@ -220,7 +223,16 @@ pub extern "C" fn handle_syscall(frame: *mut SyscallFrame) -> *mut SyscallFrame 
         SYS_FORK => sys_fork(&current, frame),
         SYS_GETPID => sys_getpid(&current),
         SYS_GETRANDOM => sys_getrandom(&current, arg0 as *mut c_void, arg1, arg2 as c_unsigned),
-        SYS_CLOCK_GETTIME => sys_clock_gettime(&current, arg0 as c_int, arg1 as *mut timespec),
+        SYS_CLOCK_GETTIME => sys_clock_gettime(&current, arg0 as c_int, arg1 as *mut TimeSpec),
+        SYS_CLOCK_NANOSLEEP => {
+            sys_clock_nanosleep(
+                &current,
+                arg0 as c_int,
+                arg1 as c_int,
+                arg2 as *const TimeSpec,
+                frame.arg3() as *mut TimeSpec,
+            )
+        }
         SYS_KILL => sys_kill(&current, arg0 as c_int, arg1 as c_int),
         SYS_RT_SIGACTION => {
             sys_rt_sigaction(

@@ -10,13 +10,12 @@ use crate::types::c_long;
 use crate::types::errno::Errno;
 use crate::types::sys::time::CLOCK_MONOTONIC;
 use crate::types::sys::time::CLOCK_REALTIME;
-use crate::types::sys::time::time_t;
-use crate::types::sys::time::timespec;
+use crate::types::sys::time::TimeSpec;
 
 pub fn sys_clock_gettime(
     _current: &LxThread,
     clockid: c_int,
-    tp: *mut timespec,
+    tp: *mut TimeSpec,
 ) -> Result<c_long, Errno> {
     if tp.is_null() {
         return Err(Errno::EFAULT);
@@ -32,10 +31,7 @@ pub fn sys_clock_gettime(
     };
 
     unsafe {
-        tp.write(timespec {
-            tv_sec: (nanos / 1_000_000_000) as time_t,
-            tv_nsec: (nanos % 1_000_000_000) as c_long,
-        });
+        tp.write(TimeSpec::from_nanos(nanos));
     }
     Ok(0)
 }

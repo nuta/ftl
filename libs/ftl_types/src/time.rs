@@ -160,6 +160,8 @@ const fn last_day_of_month(y: i32, m: u8) -> u8 {
 pub struct Duration(u64);
 
 impl Duration {
+    pub const ZERO: Self = Self(0);
+
     pub const fn from_nanos(nanos: u64) -> Self {
         Self(nanos)
     }
