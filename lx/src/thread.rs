@@ -5,7 +5,6 @@ use alloc::sync::Weak;
 use ftl::hspace::HandleSpace;
 use ftl::thread::Thread;
 use ftl::trace;
-use ftl::vmspace::VmSpace;
 use ftl_types::error::ErrorCode;
 use ftl_types::thread::Regs;
 use ftl_types::thread::RegsKind;
@@ -17,6 +16,7 @@ use crate::process::Process;
 use crate::signal::SigDisposition;
 use crate::types::c_long;
 use crate::types::errno::Errno;
+use crate::vm::Vm;
 
 struct Mutable {
     signal_frame: Option<SyscallFrame>,
@@ -24,6 +24,7 @@ struct Mutable {
 
 pub struct LxThread {
     process: Weak<Process>,
+    vm: Arc<Vm>,
     tid: PId,
     inner: Thread,
     mutable: SpinLock<Mutable>,
@@ -47,7 +48,7 @@ impl Cookie {
 impl LxThread {
     pub fn new(
         hspace: &HandleSpace,
-        vmspace: &VmSpace,
+        vm: Arc<Vm>,
         entry: usize,
         sp: usize,
         process: Weak<Process>,
@@ -59,10 +60,11 @@ impl LxThread {
 
         // TODO: LX assumes that the cookie won't be derefernced until the
         //       thread is started. Should we document and guarantee this?
-        let inner = Thread::create(hspace, vmspace, entry, sp, fault_pc, cookie)?;
+        let inner = Thread::create(hspace, vm.vmspace(), entry, sp, fault_pc, cookie)?;
 
         let thread = Arc::new(LxThread {
             process,
+            vm,
             tid,
             inner,
             mutable: SpinLock::new(Mutable { signal_frame: None }),
@@ -89,6 +91,10 @@ impl LxThread {
 
     pub fn process(&self) -> Arc<Process> {
         self.process.upgrade().unwrap()
+    }
+
+    pub fn vm(&self) -> &Arc<Vm> {
+        &self.vm
     }
 
     pub fn set_fsbase(&self, fsbase: usize) -> Result<(), ErrorCode> {

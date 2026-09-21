@@ -64,6 +64,7 @@ pub fn sys_clock_nanosleep(
     };
 
     let process = current.process();
+    let guard = process.signal_wait_queue().subscribe();
     loop {
         if process.has_pending_signal() {
             if !absolute_time && !remain.is_null() {
@@ -86,7 +87,6 @@ pub fn sys_clock_nanosleep(
             return Err(Errno::EINTR);
         }
 
-        let guard = process.signal_wait_queue().subscribe();
         if guard.wait_with_deadline(deadline)? {
             return Ok(0);
         }
