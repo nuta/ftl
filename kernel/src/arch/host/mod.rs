@@ -34,6 +34,10 @@ pub fn random_read(buf: &mut [u8]) {
     todo!()
 }
 
+pub fn walltime_read() -> ftl_types::time::WallTime {
+    todo!()
+}
+
 pub unsafe fn usercopy_read(src: UAddr, dst: *mut u8, len: usize) -> Result<(), ErrorCode> {
     unsafe { core::ptr::copy_nonoverlapping(src.as_usize() as *const u8, dst, len) }
     Ok(())

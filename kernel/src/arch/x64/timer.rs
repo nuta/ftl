@@ -7,9 +7,11 @@ use core::sync::atomic::Ordering;
 
 use ftl_types::time::Duration;
 use ftl_types::time::MonoTime;
+use ftl_types::time::WallTime;
 
 use super::ioport::in8;
 use super::ioport::out8;
+use super::rtc;
 use crate::timer::GLOBAL_TIMER;
 
 pub(super) const TIMER_IRQ: u8 = 0;
@@ -31,6 +33,7 @@ const DIVISOR: u16 = (PIT_HZ / TIMER_HZ) as u16;
 const TSC_CALIBRATION_DURATION: Duration = Duration::from_millis(10);
 
 static TSC_HZ: AtomicU64 = AtomicU64::new(0);
+static UNIX_TIME_BASE_NS: AtomicU64 = AtomicU64::new(0);
 
 fn read_tsc() -> u64 {
     let low: u32;
@@ -93,8 +96,21 @@ pub fn monotime_read() -> MonoTime {
     MonoTime::from_nanos(nanos)
 }
 
+pub fn walltime_read() -> WallTime {
+    let base = UNIX_TIME_BASE_NS.load(Ordering::Relaxed);
+    let uptime = monotime_read().as_nanos();
+    WallTime::from_nanos(uptime.wrapping_add(base))
+}
+
+fn read_wall_clock() {
+    let now = rtc::read().expect("invalid CMOS RTC date");
+    let offset = now.as_nanos().wrapping_sub(monotime_read().as_nanos());
+    UNIX_TIME_BASE_NS.store(offset, Ordering::Relaxed);
+}
+
 pub(super) fn init() {
     measure_tsc_frequency();
+    read_wall_clock();
 
     unsafe {
         let cmd = (0b11 << 4/* lobyte/hibyte */) | (0b010 << 1/* rate generator */);

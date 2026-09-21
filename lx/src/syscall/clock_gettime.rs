@@ -1,3 +1,7 @@
+use ftl::time::MonoTime;
+use ftl::time::MonoTimeExt;
+use ftl::time::WallTime;
+use ftl::time::WallTimeExt;
 use ftl::warn;
 
 use crate::thread::LxThread;
@@ -18,31 +22,20 @@ pub fn sys_clock_gettime(
         return Err(Errno::EFAULT);
     }
 
-    match clockid {
-        CLOCK_MONOTONIC => {
-            let nanos = ftl::time::now().as_nanos();
-            unsafe {
-                tp.write(timespec {
-                    tv_sec: (nanos / 1_000_000_000) as time_t,
-                    tv_nsec: (nanos % 1_000_000_000) as c_long,
-                });
-            }
-            Ok(0)
-        }
-        CLOCK_REALTIME => {
-            // TODO: Implement CLOCK_REALTIME properly. Currently the monotonic clock is used.
-            let nanos = ftl::time::now().as_nanos();
-            unsafe {
-                tp.write(timespec {
-                    tv_sec: (nanos / 1_000_000_000) as time_t,
-                    tv_nsec: (nanos % 1_000_000_000) as c_long,
-                });
-            }
-            Ok(0)
-        }
+    let nanos = match clockid {
+        CLOCK_MONOTONIC => MonoTime::now().as_nanos(),
+        CLOCK_REALTIME => WallTime::now().as_nanos(),
         _ => {
             warn!("clock_gettime: unsupported clockid: {}", clockid);
-            Err(Errno::EINVAL)
+            return Err(Errno::EINVAL);
         }
+    };
+
+    unsafe {
+        tp.write(timespec {
+            tv_sec: (nanos / 1_000_000_000) as time_t,
+            tv_nsec: (nanos % 1_000_000_000) as c_long,
+        });
     }
+    Ok(0)
 }

@@ -3,6 +3,7 @@ use alloc::vec::Vec;
 use ftl_types::error::ErrorCode;
 use ftl_types::thread::SyscallRegs;
 use ftl_types::time::MonoTime;
+use ftl_types::time::WallTime;
 use ftl_utils::reserve_slot::ReserveSlot;
 use ftl_utils::spinlock::SpinLock;
 
@@ -77,6 +78,16 @@ pub fn sys_monotime_read(
 ) -> Result<SyscallOutput, ErrorCode> {
     let now = crate::arch::monotime_read();
     let output = USlice::new(UAddr::new(ctx.a0), size_of::<MonoTime>())?;
+    output.write(now)?;
+    Ok(SyscallOutput::Done(0))
+}
+
+pub fn sys_walltime_read(
+    _current: &SharedRef<Thread>,
+    ctx: &SyscallRegs,
+) -> Result<SyscallOutput, ErrorCode> {
+    let now = crate::arch::walltime_read();
+    let output = USlice::new(UAddr::new(ctx.a0), size_of::<WallTime>())?;
     output.write(now)?;
     Ok(SyscallOutput::Done(0))
 }

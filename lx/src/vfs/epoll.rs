@@ -2,6 +2,8 @@ use alloc::sync::Arc;
 use alloc::sync::Weak;
 use alloc::vec::Vec;
 
+use ftl::time::MonoTime;
+use ftl::time::MonoTimeExt;
 use ftl::trace;
 use ftl_types::time::Duration;
 use ftl_utils::fxhash::FxHashMap;
@@ -221,7 +223,7 @@ impl Epoll {
     pub fn wait(&self, events: &mut [EpollEvent], timeout: c_int) -> Result<usize, Errno> {
         let deadline = if let Ok(timeout) = timeout.try_into() {
             let duration = Duration::from_millis(timeout);
-            Some(ftl::time::now() + duration)
+            Some(MonoTime::now() + duration)
         } else {
             None
         };
