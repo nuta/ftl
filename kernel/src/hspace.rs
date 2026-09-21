@@ -1,3 +1,6 @@
+use alloc::vec::Vec;
+use core::mem;
+
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HANDLE_ID_MAX;
 use ftl_types::handle::HandleId;
@@ -10,12 +13,15 @@ use ftl_utils::static_assert;
 use crate::handle::AnyHandle;
 use crate::handle::Handleable;
 use crate::shared_ref::SharedRef;
+use crate::thread::Thread;
 
 const NUM_HANDLES_MAX: usize = 1024;
 
 static_assert!(NUM_HANDLES_MAX <= HANDLE_ID_MAX);
 
 struct Mutable {
+    destroyed: bool,
+    threads: Vec<SharedRef<Thread>>,
     handles: FxHashMap<usize, AnyHandle>,
 }
 
@@ -28,9 +34,33 @@ impl HandleSpace {
     pub fn new() -> Self {
         Self {
             mutable: SpinLock::new(Mutable {
+                destroyed: false,
+                threads: Vec::new(),
                 handles: FxHashMap::new(),
             }),
         }
+    }
+
+    pub fn add_thread(&self, thread: SharedRef<Thread>) -> Result<(), ErrorCode> {
+        let mut mutable = self.mutable.lock();
+        if mutable.destroyed {
+            return Err(ErrorCode::Destroyed);
+        }
+
+        let slot = mutable
+            .threads
+            .reserve_slot()
+            .map_err(|_| ErrorCode::OutOfMemory)?;
+
+        slot.push(thread);
+        Ok(())
+    }
+
+    pub fn remove_thread(&self, thread: &Thread) {
+        self.mutable
+            .lock()
+            .threads
+            .retain(|t| !core::ptr::eq(t.as_ptr(), thread));
     }
 
     pub fn insert<H: Into<AnyHandle>>(&self, handle: H) -> Result<HandleId, ErrorCode> {
@@ -57,6 +87,10 @@ impl HandleSpace {
         id: HandleId,
         handle: H,
     ) -> Result<(), ErrorCode> {
+        if mutable.destroyed {
+            return Err(ErrorCode::Destroyed);
+        }
+
         let raw_id = id.as_usize();
         if raw_id == 0 || raw_id > NUM_HANDLES_MAX {
             return Err(ErrorCode::InvalidHandleId);
@@ -128,4 +162,24 @@ impl HandleSpace {
     }
 }
 
-impl Handleable for HandleSpace {}
+impl Handleable for HandleSpace {
+    fn close(self: SharedRef<Self>) {
+        let (threads, mut handles) = {
+            let mut mutable = self.mutable.lock();
+            mutable.destroyed = true;
+            (
+                mem::take(&mut mutable.threads),
+                mem::take(&mut mutable.handles),
+            )
+        };
+
+        // Terminate threads.
+        for thread in threads {
+            thread.close();
+        }
+
+        for (_, handle) in handles.drain() {
+            handle.close();
+        }
+    }
+}

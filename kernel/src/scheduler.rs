@@ -51,6 +51,13 @@ impl Scheduler {
         mutable.num_threads -= 1;
     }
 
+    pub fn cancel(&self, thread: &SharedRef<Thread>) {
+        self.mutable
+            .lock()
+            .run_queue
+            .retain(|queued| !SharedRef::eq(queued, thread));
+    }
+
     /// Picks the next thread to run.
     pub fn pop(&self) -> Option<SharedRef<Thread>> {
         self.mutable.lock().run_queue.pop_front()

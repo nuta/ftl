@@ -24,16 +24,21 @@ const MAX_WRITE_LEN: usize = 512;
 
 static DEVICE: SpinLock<Device> = SpinLock::new(Device::new());
 
+struct Subscription {
+    console: SharedRef<Console>,
+    emitter: EventEmitter,
+}
+
 struct Device {
     buf: RingBuffer<u8, 256>,
-    emitters: VecDeque<EventEmitter>,
+    subscriptions: VecDeque<Subscription>,
 }
 
 impl Device {
     const fn new() -> Self {
         Self {
             buf: RingBuffer::new(),
-            emitters: VecDeque::new(),
+            subscriptions: VecDeque::new(),
         }
     }
 
@@ -66,8 +71,8 @@ impl Device {
         Ok(n)
     }
 
-    fn take_emitters(&mut self) -> VecDeque<EventEmitter> {
-        core::mem::take(&mut self.emitters)
+    fn take_subscriptions(&mut self) -> VecDeque<Subscription> {
+        core::mem::take(&mut self.subscriptions)
     }
 }
 
@@ -81,17 +86,24 @@ impl Console {
     }
 }
 
-impl Handleable for Console {}
+impl Handleable for Console {
+    fn close(self: SharedRef<Self>) {
+        DEVICE
+            .lock()
+            .subscriptions
+            .retain(|subscription| !SharedRef::eq(&subscription.console, &self));
+    }
+}
 
 pub fn handle_interrupt() {
-    let emitters = {
+    let subscriptions = {
         let mut device = DEVICE.lock();
         device.drain_from_device();
-        device.take_emitters()
+        device.take_subscriptions()
     };
 
-    for emitter in emitters {
-        let _ = emitter.emit(EventKind::PollNotified);
+    for subscription in subscriptions {
+        let _ = subscription.emitter.emit(EventKind::PollNotified);
     }
 }
 
@@ -143,7 +155,7 @@ pub fn sys_console_subscribe(
     let console_id = HandleId::new(ctx.a0);
     let poll_id = HandleId::new(ctx.a1);
 
-    let (_console, poll) = current.hspace().get2::<Console, Poll>(
+    let (console, poll) = current.hspace().get2::<Console, Poll>(
         console_id,
         HandleRight::READ,
         poll_id,
@@ -152,11 +164,12 @@ pub fn sys_console_subscribe(
 
     let mut device = DEVICE.lock();
     let emitter = EventEmitter::new(poll, console_id);
-    device
-        .emitters
+    let slot = device
+        .subscriptions
         .reserve_slot()
-        .map_err(|_| ErrorCode::OutOfMemory)?
-        .push_back(emitter);
+        .map_err(|_| ErrorCode::OutOfMemory)?;
+
+    slot.push_back(Subscription { console, emitter });
 
     Ok(SyscallOutput::Done(0))
 }

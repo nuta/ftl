@@ -83,12 +83,15 @@ impl Thread {
 
         let arch_thread = arch::Thread::new(pc, sp, fault_pc, cookie)?;
         SCHEDULER.reserve_capacity()?;
-        SharedRef::new(Thread {
+        let thread = SharedRef::new(Thread {
             arch: UnsafeCell::new(arch_thread),
-            hspace,
+            hspace: hspace.clone(),
             vmspace,
             mutable: SpinLock::new(mutable),
-        })
+        })?;
+
+        hspace.add_thread(thread.clone())?;
+        Ok(thread)
     }
 
     pub fn arch(&self) -> &UnsafeCell<arch::Thread> {
@@ -186,6 +189,9 @@ impl Thread {
         }
 
         mutable.state = State::Exited;
+        drop(mutable);
+
+        self.hspace.remove_thread(self);
         Ok(())
     }
 
@@ -241,6 +247,11 @@ impl Handleable for Thread {
         }
 
         mutable.state = State::Exited;
+        drop(mutable);
+
+        // Remove references to this thread.
+        SCHEDULER.cancel(&self);
+        self.hspace.remove_thread(&self);
     }
 }
 

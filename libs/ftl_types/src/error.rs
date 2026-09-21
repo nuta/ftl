@@ -29,8 +29,9 @@ pub enum ErrorCode {
     NotAligned = -22,
     AlreadyMapped = -23,
     PacketTooLong = -24,
+    Destroyed = -25,
     // This must be the last variant.
-    BadErrorCode = -25,
+    BadErrorCode = -26,
 }
 
 impl ErrorCode {
