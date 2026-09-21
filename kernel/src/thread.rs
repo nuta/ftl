@@ -278,8 +278,14 @@ pub fn sys_thread_create(
 
     let thread = Thread::new(hspace, vmspace, pc, sp, fault_pc, cookie)?;
     let rights = HandleRight::READ | HandleRight::WRITE;
-    let handle = Handle::new(thread, rights);
-    let id = current_hspace.insert(handle)?;
+    let handle = Handle::new(thread.clone(), rights);
+    let id = match current_hspace.insert(handle) {
+        Ok(id) => id,
+        Err(err) => {
+            thread.close();
+            return Err(err);
+        }
+    };
     Ok(SyscallOutput::Done(id.as_usize()))
 }
 
