@@ -30,8 +30,9 @@ pub enum ErrorCode {
     AlreadyMapped = -23,
     PacketTooLong = -24,
     Destroyed = -25,
+    BadAccess = -26,
     // This must be the last variant.
-    BadErrorCode = -26,
+    BadErrorCode = -27,
 }
 
 impl ErrorCode {

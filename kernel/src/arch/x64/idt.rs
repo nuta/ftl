@@ -4,6 +4,7 @@ use core::arch::naked_asm;
 use core::mem::offset_of;
 
 use ftl_types::error::ErrorCode;
+use ftl_types::vmspace::PageAttrs;
 use ftl_utils::spinlock::SpinLock;
 
 use super::USER_ADDR_END;
@@ -345,6 +346,8 @@ fn read_cr2() -> u64 {
 }
 
 const PF_PRESENT: u64 = 1 << 0;
+const PF_WRITE: u64 = 1 << 1;
+const PF_EXEC: u64 = 1 << 4;
 const RFLAGS_AC: u64 = 1 << 18;
 
 fn handle_user_page_fault(cr2: u64, error_code: u64) -> Result<(), ErrorCode> {
@@ -356,13 +359,21 @@ fn handle_user_page_fault(cr2: u64, error_code: u64) -> Result<(), ErrorCode> {
         return Err(ErrorCode::OutOfBounds);
     }
 
+    // Determine where and why the page fault happened.
+    let fault_addr = UAddr::new(cr2 as usize);
+    let fault_attrs = if error_code & PF_EXEC != 0 {
+        PageAttrs::EXEC
+    } else if error_code & PF_WRITE != 0 {
+        PageAttrs::WRITE
+    } else {
+        PageAttrs::READ
+    };
+
     let Some(thread) = get_cpuvar().current_thread.thread() else {
         return Err(ErrorCode::InvalidState);
     };
 
-    let vmspace = thread.vmspace();
-    let uaddr = UAddr::new(cr2 as usize);
-    vmspace.handle_page_fault(uaddr)
+    thread.vmspace().handle_page_fault(fault_addr, fault_attrs)
 }
 
 extern "C" fn handle_kernel_interrupt(frame: &mut InterruptFrame) {

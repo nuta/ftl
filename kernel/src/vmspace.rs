@@ -149,11 +149,20 @@ impl VmSpace {
     }
 
     /// Handles a user page fault in this address space.
-    pub fn handle_page_fault(&self, fault_addr: UAddr) -> Result<(), ErrorCode> {
+    pub fn handle_page_fault(
+        &self,
+        fault_addr: UAddr,
+        fault_attrs: PageAttrs,
+    ) -> Result<(), ErrorCode> {
         let aligned_uaddr = UAddr::new(align_down(fault_addr.as_usize(), MIN_PAGE_SIZE));
         let mutable = self.mutable.lock();
         for mapping in &mutable.mappings {
             if mapping.contains(aligned_uaddr) {
+                if !mapping.attrs.contains(fault_attrs) {
+                    // The page fault was caused by an invalid access.
+                    return Err(ErrorCode::BadAccess);
+                }
+
                 // Found a mapping that contains the fault address.
                 let index = (aligned_uaddr.as_usize() - mapping.start.as_usize()) / MIN_PAGE_SIZE;
                 let paddr = mapping.vmo.ensure_page(index)?;
