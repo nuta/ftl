@@ -6,9 +6,7 @@ use core::sync::atomic::Ordering;
 
 use ftl::poll::Poll;
 use ftl_types::error::ErrorCode;
-use ftl_types::poll::Event;
 use ftl_types::poll::EventKind;
-use ftl_types::time::Duration;
 use ftl_types::time::MonoTime;
 use ftl_utils::spinlock::SpinLock;
 

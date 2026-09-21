@@ -9,7 +9,7 @@ pub struct RingBuffer<T, const CAP: usize> {
 impl<T: Copy, const CAP: usize> RingBuffer<T, CAP> {
     pub const fn new() -> Self {
         Self {
-            buf: [MaybeUninit::<T>::uninit(); CAP],
+            buf: [MaybeUninit::uninit(); CAP],
             start: 0,
             len: 0,
         }
@@ -47,6 +47,12 @@ impl<T: Copy, const CAP: usize> RingBuffer<T, CAP> {
     /// Returns the number of elements in the buffer.
     pub fn len(&self) -> usize {
         self.len
+    }
+}
+
+impl<T: Copy, const CAP: usize> Default for RingBuffer<T, CAP> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
