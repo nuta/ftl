@@ -14,6 +14,7 @@ use crate::types::sys::poll::POLLOUT;
 use crate::types::sys::uio::IoVec;
 use crate::vfs::FileLike;
 use crate::vfs::IoVecSlice;
+use crate::wait_queue::Sleep;
 use crate::wait_queue::WaitQueue;
 
 /// The maximum size of a write to the pipe which is guaranteed to be atomic,
@@ -80,12 +81,18 @@ impl Pipe {
 }
 
 impl FileLike for Pipe {
-    fn read(&self, buf: &mut [u8], _offset: usize, nonblocking: bool) -> Result<usize, Errno> {
+    fn read(
+        &self,
+        buf: &mut [u8],
+        _offset: usize,
+        nonblocking: bool,
+        sleep: Sleep<'_>,
+    ) -> Result<usize, Errno> {
         if self.end != End::Read {
             return Err(Errno::EBADF);
         }
 
-        let wq = self.inner.wait_queue.subscribe();
+        let sleep_guard = sleep.guard(&self.inner.wait_queue)?;
         loop {
             let mut mutable = self.inner.mutable.lock();
             if !mutable.buffer.is_empty() {
@@ -112,20 +119,30 @@ impl FileLike for Pipe {
                 return Err(Errno::EAGAIN);
             }
 
+            if sleep_guard.is_interrupted() {
+                return Err(Errno::EINTR);
+            }
+
             // Wait for the writer to write data to the pipe.
             drop(mutable);
-            wq.wait()?;
+            sleep_guard.wait()?;
         }
     }
 
     // TODO: Use writev only.
-    fn write(&self, buf: &[u8], offset: usize, nonblocking: bool) -> Result<usize, Errno> {
+    fn write(
+        &self,
+        buf: &[u8],
+        offset: usize,
+        nonblocking: bool,
+        sleep: Sleep<'_>,
+    ) -> Result<usize, Errno> {
         let iovec = IoVec {
             iov_base: buf.as_ptr().cast_mut().cast(), // FIXME:
             iov_len: buf.len(),
         };
 
-        self.writev(&IoVecSlice::new(&iovec, 1), offset, nonblocking)
+        self.writev(&IoVecSlice::new(&iovec, 1), offset, nonblocking, sleep)
     }
 
     fn writev(
@@ -133,6 +150,7 @@ impl FileLike for Pipe {
         iovecs: &IoVecSlice,
         _offset: usize,
         nonblocking: bool,
+        sleep: Sleep<'_>,
     ) -> Result<usize, Errno> {
         if self.end != End::Write {
             return Err(Errno::EBADF);
@@ -146,7 +164,7 @@ impl FileLike for Pipe {
         let atomic = total_len <= PIPE_BUF;
 
         // Wait until the pipe is writable.
-        let wq = self.inner.wait_queue.subscribe();
+        let sleep_guard = sleep.guard(&self.inner.wait_queue)?;
         let (mut mutable, writeable_len) = loop {
             let mutable = self.inner.mutable.lock();
             if !mutable.reader_open {
@@ -161,8 +179,12 @@ impl FileLike for Pipe {
                     return Err(Errno::EAGAIN);
                 }
 
+                if sleep_guard.is_interrupted() {
+                    return Err(Errno::EINTR);
+                }
+
                 drop(mutable);
-                wq.wait()?;
+                sleep_guard.wait()?;
                 continue;
             }
 

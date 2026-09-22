@@ -5,6 +5,7 @@ use crate::types::c_int;
 use crate::types::c_long;
 use crate::types::errno::Errno;
 use crate::types::sys::epoll::EpollEvent;
+use crate::wait_queue::Sleep;
 
 pub fn sys_epoll_wait(
     current: &LxThread,
@@ -21,14 +22,14 @@ pub fn sys_epoll_wait(
         return Err(Errno::EINVAL);
     }
 
+    let process = current.process();
     let epfile = {
-        let process = current.process();
         let fd_table = process.fd_table().lock();
         fd_table.get(epfd)?.clone()
     };
 
     let events = unsafe { slice::from_raw_parts_mut(events, max_events as usize) };
     let epoll = epfile.as_epoll().ok_or(Errno::EINVAL)?;
-    let n = epoll.wait(events, timeout)?;
+    let n = epoll.wait(events, timeout, Sleep::Interruptible(&process))?;
     Ok(n as c_long)
 }

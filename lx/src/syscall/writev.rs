@@ -4,6 +4,7 @@ use crate::types::c_long;
 use crate::types::errno::Errno;
 use crate::types::sys::uio::IoVec;
 use crate::vfs::IoVecSlice;
+use crate::wait_queue::Sleep;
 
 pub fn sys_writev(
     current: &LxThread,
@@ -26,6 +27,6 @@ pub fn sys_writev(
     }
 
     let iovecs = IoVecSlice::new(iov, iovcnt as usize);
-    let n = file.writev(&process, &iovecs)?;
+    let n = file.writev(&iovecs, Sleep::Interruptible(&process))?;
     Ok(n.try_into().unwrap()) // FIXME: Handle overflow
 }

@@ -9,6 +9,7 @@ use crate::types::size_t;
 use crate::types::sys::socket::MSG_DONTWAIT;
 use crate::types::sys::socket::MSG_NOSIGNAL;
 use crate::types::sys::socket::SockAddr;
+use crate::wait_queue::Sleep;
 
 const SUPPORTED_FLAGS: c_int = MSG_DONTWAIT | MSG_NOSIGNAL;
 
@@ -37,12 +38,12 @@ pub fn sys_sendto(
 
     let bytes = unsafe { slice::from_raw_parts(buf.cast(), len) };
 
+    let process = current.process();
     let file = {
-        let process = current.process();
         let fd_table = process.fd_table().lock();
         fd_table.get(fd)?.clone()
     };
 
-    let n = file.sendto(bytes, dest, flags)?;
+    let n = file.sendto(bytes, dest, flags, Sleep::Interruptible(&process))?;
     Ok(n.try_into().unwrap()) // TODO: Better type for sendto return value (usize, but won't exceed c_long)
 }

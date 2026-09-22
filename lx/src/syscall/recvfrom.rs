@@ -9,6 +9,7 @@ use crate::types::size_t;
 use crate::types::sys::socket::MSG_DONTWAIT;
 use crate::types::sys::socket::MSG_NOSIGNAL;
 use crate::types::sys::socket::write_sockaddr;
+use crate::wait_queue::Sleep;
 
 const SUPPORTED_FLAGS: c_int = MSG_DONTWAIT | MSG_NOSIGNAL;
 
@@ -31,13 +32,13 @@ pub fn sys_recvfrom(
 
     let bytes = unsafe { slice::from_raw_parts_mut(buf.cast(), len) };
 
+    let process = current.process();
     let file = {
-        let process = current.process();
         let fd_table = process.fd_table().lock();
         fd_table.get(fd)?.clone()
     };
 
-    let (n, addr) = file.recvfrom(bytes, flags)?;
+    let (n, addr) = file.recvfrom(bytes, flags, Sleep::Interruptible(&process))?;
     if !src_addr.is_null() {
         write_sockaddr(src_addr, addr_len, &addr.as_raw())?;
     }

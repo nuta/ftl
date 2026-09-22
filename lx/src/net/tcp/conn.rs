@@ -18,6 +18,7 @@ use crate::types::sys::poll::POLLIN;
 use crate::types::sys::poll::POLLOUT;
 use crate::types::sys::socket::SockAddr;
 use crate::vfs::FileLike;
+use crate::wait_queue::Sleep;
 use crate::wait_queue::WaitQueue;
 
 // TODO: Should we make this configurable?
@@ -312,12 +313,12 @@ impl TcpConn {
         self.flush(&mut mutable);
     }
 
-    fn recv(&self, buf: &mut [u8], nonblocking: bool) -> Result<usize, Errno> {
+    fn recv(&self, buf: &mut [u8], nonblocking: bool, sleep: Sleep<'_>) -> Result<usize, Errno> {
         if buf.is_empty() {
             return Ok(0);
         }
 
-        let wq = self.wait_queue.subscribe();
+        let sleep_guard = sleep.guard(&self.wait_queue)?;
         loop {
             let mut mutable = self.mutable.lock();
             if !mutable.rx_buffer.is_empty() {
@@ -338,8 +339,12 @@ impl TcpConn {
                 return Err(Errno::EAGAIN);
             }
 
+            if sleep_guard.is_interrupted() {
+                return Err(Errno::EINTR);
+            }
+
             drop(mutable);
-            wq.wait()?;
+            sleep_guard.wait()?;
         }
     }
 }
@@ -350,15 +355,22 @@ impl FileLike for TcpConn {
         buf: &mut [u8],
         _flags: c_int,
         nonblocking: bool,
+        sleep: Sleep<'_>,
     ) -> Result<(usize, SockAddr), Errno> {
         // TODO: Implement flags
-        let n = self.recv(buf, nonblocking)?;
+        let n = self.recv(buf, nonblocking, sleep)?;
         let addr = self.peer_addr()?;
         Ok((n, addr))
     }
 
-    fn read(&self, buf: &mut [u8], _offset: usize, nonblocking: bool) -> Result<usize, Errno> {
-        self.recv(buf, nonblocking)
+    fn read(
+        &self,
+        buf: &mut [u8],
+        _offset: usize,
+        nonblocking: bool,
+        sleep: Sleep<'_>,
+    ) -> Result<usize, Errno> {
+        self.recv(buf, nonblocking, sleep)
     }
 
     fn sendto(
@@ -367,13 +379,14 @@ impl FileLike for TcpConn {
         _dest: Option<SockAddr>,
         _flags: c_int,
         nonblocking: bool,
+        sleep: Sleep<'_>,
     ) -> Result<usize, Errno> {
         // TODO: Handle dest and flags
         if buf.is_empty() {
             return Ok(0);
         }
 
-        let wq = self.wait_queue.subscribe();
+        let sleep_guard = sleep.guard(&self.wait_queue)?;
         loop {
             let mut mutable = self.mutable.lock();
             if mutable.state != State::Established && mutable.state != State::CloseWait {
@@ -392,13 +405,23 @@ impl FileLike for TcpConn {
                 return Err(Errno::EAGAIN);
             }
 
+            if sleep_guard.is_interrupted() {
+                return Err(Errno::EINTR);
+            }
+
             drop(mutable);
-            wq.wait()?;
+            sleep_guard.wait()?;
         }
     }
 
-    fn write(&self, buf: &[u8], _offset: usize, nonblocking: bool) -> Result<usize, Errno> {
-        self.sendto(buf, None, 0, nonblocking)
+    fn write(
+        &self,
+        buf: &[u8],
+        _offset: usize,
+        nonblocking: bool,
+        sleep: Sleep<'_>,
+    ) -> Result<usize, Errno> {
+        self.sendto(buf, None, 0, nonblocking, sleep)
     }
 
     fn peer_addr(&self) -> Result<SockAddr, Errno> {

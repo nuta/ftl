@@ -8,6 +8,7 @@ use crate::types::sys::fcntl::O_RDWR;
 use crate::types::sys::socket::SOCK_CLOEXEC;
 use crate::types::sys::socket::SOCK_NONBLOCK;
 use crate::types::sys::socket::write_sockaddr;
+use crate::wait_queue::Sleep;
 
 const SUPPORTED_FLAGS: c_int = SOCK_CLOEXEC | SOCK_NONBLOCK;
 
@@ -29,7 +30,7 @@ pub fn sys_accept4(
     };
 
     // Wait for a new connection...
-    let conn = file.accept()?;
+    let conn = file.accept(Sleep::Interruptible(&process))?;
 
     // Write the socket address if a buffer is provided.
     if !addr.is_null() {

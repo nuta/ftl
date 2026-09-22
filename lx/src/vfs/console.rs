@@ -12,6 +12,7 @@ use crate::types::errno::Errno;
 use crate::types::sys::poll::POLLIN;
 use crate::types::sys::poll::POLLOUT;
 use crate::vfs::FileLike;
+use crate::wait_queue::Sleep;
 use crate::wait_queue::WaitQueue;
 
 pub struct Console {
@@ -56,12 +57,18 @@ impl Console {
 }
 
 impl FileLike for Console {
-    fn read(&self, buf: &mut [u8], _offset: usize, nonblocking: bool) -> Result<usize, Errno> {
+    fn read(
+        &self,
+        buf: &mut [u8],
+        _offset: usize,
+        nonblocking: bool,
+        sleep: Sleep<'_>,
+    ) -> Result<usize, Errno> {
         if buf.is_empty() {
             return Ok(0);
         }
 
-        let wq = self.wait_queue.subscribe();
+        let sleep_guard = sleep.guard(&self.wait_queue)?;
         let mut pending = loop {
             let pending = self.pending.lock();
             if !pending.is_empty() {
@@ -74,7 +81,11 @@ impl FileLike for Console {
                 return Err(Errno::EAGAIN);
             }
 
-            wq.wait()?;
+            if sleep_guard.is_interrupted() {
+                return Err(Errno::EINTR);
+            }
+
+            sleep_guard.wait()?;
         };
 
         let n = min(buf.len(), pending.len());
@@ -83,7 +94,13 @@ impl FileLike for Console {
         return Ok(n);
     }
 
-    fn write(&self, buf: &[u8], _offset: usize, _nonblocking: bool) -> Result<usize, Errno> {
+    fn write(
+        &self,
+        buf: &[u8],
+        _offset: usize,
+        _nonblocking: bool,
+        _sleep: Sleep<'_>,
+    ) -> Result<usize, Errno> {
         let mut n = 0;
         while n < buf.len() {
             match ftl::console::write(&buf[n..]) {

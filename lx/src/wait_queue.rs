@@ -10,6 +10,8 @@ use ftl_types::poll::EventKind;
 use ftl_types::time::MonoTime;
 use ftl_utils::spinlock::SpinLock;
 
+use crate::process::Process;
+
 pub trait WaitListener: Send + Sync {
     fn notify(&self);
 }
@@ -53,6 +55,11 @@ impl<'a> WaitSet<'a> {
     pub fn wait(&self) -> Result<(), ErrorCode> {
         self.poll.wait()?;
         Ok(())
+    }
+
+    pub fn wait_with_deadline(&self, deadline: MonoTime) -> Result<bool, ErrorCode> {
+        let ev = self.poll.wait_until(deadline)?;
+        Ok(ev.kind() == EventKind::PollTimeout)
     }
 }
 
@@ -138,5 +145,88 @@ impl WaitQueue {
         }
 
         Ok(())
+    }
+}
+
+/// How to implement a blocking operation in system calls.
+///
+/// # Example
+///
+/// ```no_run
+/// impl FileLike for MyFile {
+///     fn read(&self, buf: &mut [u8], sleep: Sleep) -> Result<usize, Errno> {
+///         let mut guard = sleep.guard(&self.wait_queue)?;
+///         loop {
+///              // Read the data if available.
+///             let mut data = self.data.lock();
+///             if !data.is_empty() {
+///                 let n = data.read(buf)?;
+///                 return Ok(n);
+///             }
+///
+///             // No data to read. Before waiting, check if the thread was
+///             // interrupted.
+///             if guard.interrupted() {
+///                 return Err(Errno::EINTR);
+///             }
+///
+///             // Wait for self.wait_queue, or a signal.
+///             guard.wait()?;
+///         }
+///     }
+/// }
+/// ```
+#[derive(Clone, Copy)]
+pub enum Sleep<'a> {
+    Uninterruptible,
+    Interruptible(&'a Process),
+}
+
+pub enum SleepGuard<'a> {
+    Uninterruptible(WaitGuard<'a>),
+    Interruptible {
+        set: WaitSet<'a>,
+        process: &'a Process,
+    },
+}
+
+impl<'a> Sleep<'a> {
+    pub fn guard<'b>(self, wq: &'b WaitQueue) -> Result<SleepGuard<'b>, ErrorCode>
+    where
+        'a: 'b,
+    {
+        match self {
+            Sleep::Uninterruptible => Ok(SleepGuard::Uninterruptible(wq.subscribe())),
+            Sleep::Interruptible(process) => {
+                // Wait for both the wait queue and the signal.
+                let mut set = WaitSet::new()?;
+                set.subscribe(wq);
+                set.subscribe(process.signal_wait_queue());
+                Ok(SleepGuard::Interruptible { set, process })
+            }
+        }
+    }
+}
+
+impl SleepGuard<'_> {
+    pub fn is_interrupted(&self) -> bool {
+        match self {
+            SleepGuard::Uninterruptible(_) => false,
+            SleepGuard::Interruptible { process, .. } => process.has_pending_signal(),
+        }
+    }
+
+    pub fn wait(&self) -> Result<(), ErrorCode> {
+        match self {
+            SleepGuard::Uninterruptible(guard) => guard.wait(),
+            SleepGuard::Interruptible { set, .. } => set.wait(),
+        }
+    }
+
+    pub fn wait_until(&self, deadline: MonoTime) -> Result<bool, ErrorCode> {
+        match self {
+            SleepGuard::Uninterruptible(guard) => guard.wait_with_deadline(deadline),
+            SleepGuard::Interruptible { set, .. } => set.wait_with_deadline(deadline),
+        }
     }
 }

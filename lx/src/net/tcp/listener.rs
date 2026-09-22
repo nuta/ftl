@@ -22,6 +22,7 @@ use crate::types::sys::socket::SO_REUSEADDR;
 use crate::types::sys::socket::SOL_SOCKET;
 use crate::types::sys::socket::SockAddr;
 use crate::vfs::FileLike;
+use crate::wait_queue::Sleep;
 use crate::wait_queue::WaitQueue;
 
 const INITIAL_SEND_SEQ: u32 = 1234;
@@ -335,8 +336,8 @@ impl FileLike for TcpListener {
         }
     }
 
-    fn accept(&self, nonblocking: bool) -> Result<Arc<dyn FileLike>, Errno> {
-        let wq = self.wait_queue.subscribe();
+    fn accept(&self, nonblocking: bool, sleep: Sleep<'_>) -> Result<Arc<dyn FileLike>, Errno> {
+        let sleep_guard = sleep.guard(&self.wait_queue)?;
         loop {
             if let Some(conn) = self.try_accept() {
                 return Ok(conn);
@@ -346,7 +347,11 @@ impl FileLike for TcpListener {
                 return Err(Errno::EAGAIN);
             }
 
-            wq.wait()?;
+            if sleep_guard.is_interrupted() {
+                return Err(Errno::EINTR);
+            }
+
+            sleep_guard.wait()?;
         }
     }
 
@@ -370,6 +375,7 @@ impl FileLike for TcpListener {
         _buf: &mut [u8],
         _flags: c_int,
         _nonblocking: bool,
+        _sleep: Sleep<'_>,
     ) -> Result<(usize, SockAddr), Errno> {
         Err(Errno::ENOTCONN)
     }
@@ -380,6 +386,7 @@ impl FileLike for TcpListener {
         _dest: Option<SockAddr>,
         _flags: c_int,
         _nonblocking: bool,
+        _sleep: Sleep<'_>,
     ) -> Result<usize, Errno> {
         Err(Errno::ENOTCONN)
     }

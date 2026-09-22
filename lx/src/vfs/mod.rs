@@ -6,6 +6,7 @@ use crate::types::c_int;
 use crate::types::c_short;
 use crate::types::errno::Errno;
 use crate::types::sys::socket::SockAddr;
+use crate::wait_queue::Sleep;
 use crate::wait_queue::WaitQueue;
 
 mod console;
@@ -58,8 +59,9 @@ pub trait FileLike: Send + Sync {
         Err(Errno::ENOTSUP)
     }
 
-    fn accept(&self, nonblocking: bool) -> Result<Arc<dyn FileLike>, Errno> {
+    fn accept(&self, nonblocking: bool, sleep: Sleep<'_>) -> Result<Arc<dyn FileLike>, Errno> {
         let _ = nonblocking;
+        let _ = sleep;
         Err(Errno::ENOTSUP)
     }
 
@@ -72,8 +74,9 @@ pub trait FileLike: Send + Sync {
         buf: &mut [u8],
         flags: c_int,
         nonblocking: bool,
+        sleep: Sleep<'_>,
     ) -> Result<(usize, SockAddr), Errno> {
-        let _ = (buf, flags, nonblocking);
+        let _ = (buf, flags, nonblocking, sleep);
         Err(Errno::ENOTSOCK)
     }
 
@@ -83,8 +86,9 @@ pub trait FileLike: Send + Sync {
         dest: Option<SockAddr>,
         flags: c_int,
         nonblocking: bool,
+        sleep: Sleep<'_>,
     ) -> Result<usize, Errno> {
-        let _ = (buf, dest, flags, nonblocking);
+        let _ = (buf, dest, flags, nonblocking, sleep);
         Err(Errno::ENOTSOCK)
     }
 
@@ -101,17 +105,31 @@ pub trait FileLike: Send + Sync {
 
     fn close(&self) {}
 
-    fn read(&self, buf: &mut [u8], offset: usize, nonblocking: bool) -> Result<usize, Errno> {
+    fn read(
+        &self,
+        buf: &mut [u8],
+        offset: usize,
+        nonblocking: bool,
+        sleep: Sleep<'_>,
+    ) -> Result<usize, Errno> {
         let _ = buf;
         let _ = offset;
         let _ = nonblocking;
+        let _ = sleep;
         Err(Errno::ENOTSUP)
     }
 
-    fn write(&self, buf: &[u8], offset: usize, nonblocking: bool) -> Result<usize, Errno> {
+    fn write(
+        &self,
+        buf: &[u8],
+        offset: usize,
+        nonblocking: bool,
+        sleep: Sleep<'_>,
+    ) -> Result<usize, Errno> {
         let _ = buf;
         let _ = offset;
         let _ = nonblocking;
+        let _ = sleep;
         Err(Errno::ENOTSUP)
     }
 
@@ -120,10 +138,11 @@ pub trait FileLike: Send + Sync {
         iovecs: &IoVecSlice,
         offset: usize,
         nonblocking: bool,
+        sleep: Sleep<'_>,
     ) -> Result<usize, Errno> {
         let mut total = 0;
         for buf in iovecs.buffers() {
-            match self.write(buf, offset + total, nonblocking) {
+            match self.write(buf, offset + total, nonblocking, sleep) {
                 Ok(n) if n < buf.len() => {
                     // Partial write.
                     total += n;

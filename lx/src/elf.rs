@@ -10,6 +10,7 @@ use ftl_types::vmspace::PageAttrs;
 
 use crate::types::errno::Errno;
 use crate::vfs::FileLike;
+use crate::wait_queue::Sleep;
 
 fn attrs_from_phdr(phdr: &ftl_elf::Phdr) -> PageAttrs {
     let mut attrs = PageAttrs::EMPTY;
@@ -31,7 +32,7 @@ fn attrs_from_phdr(phdr: &ftl_elf::Phdr) -> PageAttrs {
 fn read_exact(file: &dyn FileLike, mut offset: usize, buf: &mut [u8]) -> Result<(), Errno> {
     let mut total = 0;
     while total < buf.len() {
-        let n = file.read(&mut buf[total..], offset, false)?;
+        let n = file.read(&mut buf[total..], offset, false, Sleep::Uninterruptible)?;
         assert!(n > 0); // FIXME: proper errno
         total += n;
         offset += n;

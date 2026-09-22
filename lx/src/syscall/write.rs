@@ -4,6 +4,7 @@ use crate::types::c_long;
 use crate::types::c_void;
 use crate::types::errno::Errno;
 use crate::types::size_t;
+use crate::wait_queue::Sleep;
 
 pub fn sys_write(
     current: &LxThread,
@@ -22,6 +23,6 @@ pub fn sys_write(
     }
 
     let bytes = unsafe { core::slice::from_raw_parts(buf.cast::<u8>(), count) };
-    let n = file.write(&process, bytes)?;
+    let n = file.write(bytes, Sleep::Interruptible(&process))?;
     Ok(n.try_into().unwrap()) // FIXME: Handle overflow
 }

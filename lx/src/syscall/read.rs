@@ -6,6 +6,7 @@ use crate::types::c_long;
 use crate::types::c_void;
 use crate::types::errno::Errno;
 use crate::types::size_t;
+use crate::wait_queue::Sleep;
 
 pub fn sys_read(
     current: &LxThread,
@@ -13,8 +14,8 @@ pub fn sys_read(
     buf: *mut c_void,
     count: size_t,
 ) -> Result<c_long, Errno> {
+    let process = current.process();
     let file = {
-        let process = current.process();
         let fd_table = process.fd_table().lock();
         fd_table.get(fd)?.clone()
     };
@@ -24,5 +25,5 @@ pub fn sys_read(
     }
 
     let bytes = unsafe { slice::from_raw_parts_mut(buf.cast::<u8>(), count) };
-    Ok(file.read(bytes)? as c_long)
+    Ok(file.read(bytes, Sleep::Interruptible(&process))? as c_long)
 }

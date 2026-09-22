@@ -29,6 +29,7 @@ use crate::types::sys::mman::PROT_EXEC;
 use crate::types::sys::mman::PROT_READ;
 use crate::types::sys::mman::PROT_WRITE;
 use crate::vfs::FileLike;
+use crate::wait_queue::Sleep;
 
 pub(crate) const PAGE_SIZE: usize = 4096; // TODO: system call?
 const STACK_BOTTOM: usize = 0x0200_0000;
@@ -262,7 +263,7 @@ fn attrs_from_phdr(phdr: &ftl_elf::Phdr) -> PageAttrs {
 fn read_exact(file: &dyn FileLike, mut offset: usize, buf: &mut [u8]) -> Result<(), Errno> {
     let mut total = 0;
     while total < buf.len() {
-        let n = file.read(&mut buf[total..], offset, false)?;
+        let n = file.read(&mut buf[total..], offset, false, Sleep::Uninterruptible)?;
         assert!(n > 0); // FIXME: proper errno
         total += n;
         offset += n;

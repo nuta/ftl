@@ -5,7 +5,6 @@ use core::ops::Deref;
 
 use ftl_utils::spinlock::SpinLock;
 
-use crate::process::Process;
 use crate::signal::Signal;
 use crate::types::c_int;
 use crate::types::errno::Errno;
@@ -18,6 +17,7 @@ use crate::types::unistd::SEEK_END;
 use crate::types::unistd::SEEK_SET;
 use crate::vfs::FileLike;
 use crate::vfs::IoVecSlice;
+use crate::wait_queue::Sleep;
 
 pub trait CloseListener: Send + Sync {
     fn on_close(&self);
@@ -80,45 +80,49 @@ impl OpenFile {
         self.flags() & O_NONBLOCK != 0
     }
 
-    pub fn read(&self, buf: &mut [u8]) -> Result<usize, Errno> {
+    pub fn read(&self, buf: &mut [u8], sleep: Sleep<'_>) -> Result<usize, Errno> {
         let offset = self.mutable.lock().offset;
-        let n = self.file.read(buf, offset, self.nonblocking())?;
+        let n = self.file.read(buf, offset, self.nonblocking(), sleep)?;
         self.mutable.lock().offset = offset + n;
         Ok(n)
     }
 
-    pub fn do_write(&self, buf: &[u8]) -> Result<usize, Errno> {
+    pub fn do_write(&self, buf: &[u8], sleep: Sleep<'_>) -> Result<usize, Errno> {
         let offset = self.mutable.lock().offset;
-        let n = self.file.write(buf, offset, self.nonblocking())?;
+        let n = self.file.write(buf, offset, self.nonblocking(), sleep)?;
         self.mutable.lock().offset = offset + n;
         Ok(n)
     }
 
-    pub fn do_writev(&self, iovecs: &IoVecSlice) -> Result<usize, Errno> {
+    pub fn do_writev(&self, iovecs: &IoVecSlice, sleep: Sleep<'_>) -> Result<usize, Errno> {
         let offset = self.mutable.lock().offset;
-        let n = self.file.writev(iovecs, offset, self.nonblocking())?;
+        let n = self.file.writev(iovecs, offset, self.nonblocking(), sleep)?;
         self.mutable.lock().offset = offset + n;
         Ok(n)
     }
 
-    pub fn write(&self, process: &Process, buf: &[u8]) -> Result<usize, Errno> {
-        match self.do_write(buf) {
+    pub fn write(&self, buf: &[u8], sleep: Sleep<'_>) -> Result<usize, Errno> {
+        match self.do_write(buf, sleep) {
             Ok(n) => Ok(n),
             Err(Errno::EPIPE) => {
                 // On EPIPE, trigger PIPE signal before returning the error.
-                let _ = process.queue_signal(Signal::PIPE);
+                if let Sleep::Interruptible(process) = sleep {
+                    let _ = process.queue_signal(Signal::PIPE);
+                }
                 Err(Errno::EPIPE)
             }
             Err(error) => Err(error),
         }
     }
 
-    pub fn writev(&self, process: &Process, iovecs: &IoVecSlice) -> Result<usize, Errno> {
-        match self.do_writev(iovecs) {
+    pub fn writev(&self, iovecs: &IoVecSlice, sleep: Sleep<'_>) -> Result<usize, Errno> {
+        match self.do_writev(iovecs, sleep) {
             Ok(n) => Ok(n),
             Err(Errno::EPIPE) => {
                 // On EPIPE, trigger PIPE signal before returning the error.
-                let _ = process.queue_signal(Signal::PIPE);
+                if let Sleep::Interruptible(process) = sleep {
+                    let _ = process.queue_signal(Signal::PIPE);
+                }
                 Err(Errno::EPIPE)
             }
             Err(error) => Err(error),
@@ -141,18 +145,29 @@ impl OpenFile {
         Ok(new_offset_i64)
     }
 
-    pub fn recvfrom(&self, buf: &mut [u8], flags: c_int) -> Result<(usize, SockAddr), Errno> {
+    pub fn recvfrom(
+        &self,
+        buf: &mut [u8],
+        flags: c_int,
+        sleep: Sleep<'_>,
+    ) -> Result<(usize, SockAddr), Errno> {
         let nonblocking = self.nonblocking() || flags & MSG_DONTWAIT != 0;
-        self.file.recvfrom(buf, flags, nonblocking)
+        self.file.recvfrom(buf, flags, nonblocking, sleep)
     }
 
-    pub fn sendto(&self, buf: &[u8], dest: Option<SockAddr>, flags: c_int) -> Result<usize, Errno> {
+    pub fn sendto(
+        &self,
+        buf: &[u8],
+        dest: Option<SockAddr>,
+        flags: c_int,
+        sleep: Sleep<'_>,
+    ) -> Result<usize, Errno> {
         let nonblocking = self.nonblocking() || flags & MSG_DONTWAIT != 0;
-        self.file.sendto(buf, dest, flags, nonblocking)
+        self.file.sendto(buf, dest, flags, nonblocking, sleep)
     }
 
-    pub fn accept(&self) -> Result<Arc<dyn FileLike>, Errno> {
-        self.file.accept(self.nonblocking())
+    pub fn accept(&self, sleep: Sleep<'_>) -> Result<Arc<dyn FileLike>, Errno> {
+        self.file.accept(self.nonblocking(), sleep)
     }
 }
 

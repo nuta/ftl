@@ -2,6 +2,7 @@ use core::cmp::min;
 
 use crate::types::errno::Errno;
 use crate::vfs::FileLike;
+use crate::wait_queue::Sleep;
 
 /// A file that is embedded into LX's binary.
 pub struct EmbeddedFile {
@@ -15,7 +16,13 @@ impl EmbeddedFile {
 }
 
 impl FileLike for EmbeddedFile {
-    fn read(&self, buf: &mut [u8], offset: usize, _nonblocking: bool) -> Result<usize, Errno> {
+    fn read(
+        &self,
+        buf: &mut [u8],
+        offset: usize,
+        _nonblocking: bool,
+        _sleep: Sleep<'_>,
+    ) -> Result<usize, Errno> {
         let len = self.data.len();
         if offset >= len {
             return Ok(0);

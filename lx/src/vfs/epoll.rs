@@ -19,6 +19,7 @@ use crate::types::sys::epoll::EpollEvent;
 use crate::types::sys::poll::POLLERR;
 use crate::types::sys::poll::POLLHUP;
 use crate::vfs::FileLike;
+use crate::wait_queue::Sleep;
 use crate::wait_queue::WaitListener;
 use crate::wait_queue::WaitQueue;
 
@@ -220,7 +221,12 @@ impl Epoll {
         Ok(())
     }
 
-    pub fn wait(&self, events: &mut [EpollEvent], timeout: c_int) -> Result<usize, Errno> {
+    pub fn wait(
+        &self,
+        events: &mut [EpollEvent],
+        timeout: c_int,
+        sleep: Sleep<'_>,
+    ) -> Result<usize, Errno> {
         let deadline = if let Ok(timeout) = timeout.try_into() {
             let duration = Duration::from_millis(timeout);
             Some(MonoTime::now() + duration)
@@ -228,14 +234,14 @@ impl Epoll {
             None
         };
 
+        let sleep_guard = sleep.guard(&self.inner.wait_queue)?;
         loop {
-            let wait_guard = self.inner.wait_queue.subscribe();
             let n = self.inner.drain(events)?;
             if n > 0 {
                 // Found some ready events.
 
                 // Unsubscribe first so that notify_all below won't notify ourself.
-                drop(wait_guard);
+                drop(sleep_guard);
 
                 // Concurrent readers may want to read the fds that we've
                 // temporarily popped. Notify them to re-check the readiness.
@@ -250,13 +256,17 @@ impl Epoll {
                 return Ok(0);
             }
 
+            if sleep_guard.is_interrupted() {
+                return Err(Errno::EINTR);
+            }
+
             if let Some(deadline) = deadline {
-                if wait_guard.wait_with_deadline(deadline)? {
+                if sleep_guard.wait_until(deadline)? {
                     // The deadline was reached.
                     return Ok(0);
                 }
             } else {
-                wait_guard.wait()?;
+                sleep_guard.wait()?;
             }
         }
     }

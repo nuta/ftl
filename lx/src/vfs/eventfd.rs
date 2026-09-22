@@ -9,6 +9,7 @@ use crate::types::errno::Errno;
 use crate::types::sys::poll::POLLIN;
 use crate::types::sys::poll::POLLOUT;
 use crate::vfs::FileLike;
+use crate::wait_queue::Sleep;
 use crate::wait_queue::WaitQueue;
 
 const COUNTER_SIZE: usize = size_of::<u64>();
@@ -41,13 +42,19 @@ impl EventFd {
 }
 
 impl FileLike for EventFd {
-    fn read(&self, buf: &mut [u8], _offset: usize, nonblocking: bool) -> Result<usize, Errno> {
+    fn read(
+        &self,
+        buf: &mut [u8],
+        _offset: usize,
+        nonblocking: bool,
+        sleep: Sleep<'_>,
+    ) -> Result<usize, Errno> {
         if buf.len() < COUNTER_SIZE {
             return Err(Errno::EINVAL);
         }
 
         // Wait for the eventfd to be signalled.
-        let wq = self.wait_queue.subscribe();
+        let sleep_guard = sleep.guard(&self.wait_queue)?;
         let mut counter = loop {
             let counter = self.counter.lock();
             if *counter > 0 {
@@ -58,8 +65,12 @@ impl FileLike for EventFd {
                 return Err(Errno::EAGAIN);
             }
 
+            if sleep_guard.is_interrupted() {
+                return Err(Errno::EINTR);
+            }
+
             drop(counter);
-            wq.wait()?;
+            sleep_guard.wait()?;
         };
 
         let value = if self.semaphore {
@@ -82,7 +93,13 @@ impl FileLike for EventFd {
         return Ok(size_of::<u64>());
     }
 
-    fn write(&self, buf: &[u8], _offset: usize, nonblocking: bool) -> Result<usize, Errno> {
+    fn write(
+        &self,
+        buf: &[u8],
+        _offset: usize,
+        nonblocking: bool,
+        sleep: Sleep<'_>,
+    ) -> Result<usize, Errno> {
         if buf.len() < COUNTER_SIZE {
             return Err(Errno::EINVAL);
         }
@@ -96,7 +113,7 @@ impl FileLike for EventFd {
         }
 
         // Wait for the eventfd to be writable.
-        let wq = self.wait_queue.subscribe();
+        let sleep_guard = sleep.guard(&self.wait_queue)?;
         let mut counter = loop {
             let counter = self.counter.lock();
 
@@ -109,8 +126,12 @@ impl FileLike for EventFd {
                 return Err(Errno::EAGAIN);
             }
 
+            if sleep_guard.is_interrupted() {
+                return Err(Errno::EINTR);
+            }
+
             drop(counter);
-            wq.wait()?;
+            sleep_guard.wait()?;
         };
 
         // Update the counter.
