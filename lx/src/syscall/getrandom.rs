@@ -17,6 +17,10 @@ pub fn sys_getrandom(
         return Ok(0);
     }
 
+    if buf.is_null() {
+        return Err(Errno::EFAULT);
+    }
+
     // TODO: support flags.
     let bytes = unsafe { slice::from_raw_parts_mut(buf.cast::<u8>(), size) };
     ftl::random::read(bytes)?;

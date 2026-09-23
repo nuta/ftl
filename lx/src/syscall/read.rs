@@ -24,6 +24,10 @@ pub fn sys_read(
         return Ok(0);
     }
 
+    if buf.is_null() {
+        return Err(Errno::EFAULT);
+    }
+
     let bytes = unsafe { slice::from_raw_parts_mut(buf.cast::<u8>(), count) };
     Ok(file.read(bytes, Sleep::Interruptible(&process))? as c_long)
 }

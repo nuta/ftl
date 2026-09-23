@@ -22,6 +22,10 @@ pub fn sys_write(
         return Ok(0);
     }
 
+    if buf.is_null() {
+        return Err(Errno::EFAULT);
+    }
+
     let bytes = unsafe { core::slice::from_raw_parts(buf.cast::<u8>(), count) };
     let n = file.write(bytes, Sleep::Interruptible(&process))?;
     Ok(n.try_into().unwrap()) // FIXME: Handle overflow
