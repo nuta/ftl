@@ -10,7 +10,6 @@ build_rust_app() {
   cargo build --release --target x86_64-unknown-linux-musl
   popd
   cp "apps/${name}/target/x86_64-unknown-linux-musl/release/${name}" "initfs/bin/${name}"
-  llvm-strip "initfs/bin/${name}"
 }
 
 build_default_initfs() {
