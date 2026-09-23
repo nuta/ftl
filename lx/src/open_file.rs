@@ -96,7 +96,9 @@ impl OpenFile {
 
     pub fn do_writev(&self, iovecs: &IoVecSlice, sleep: Sleep<'_>) -> Result<usize, Errno> {
         let offset = self.mutable.lock().offset;
-        let n = self.file.writev(iovecs, offset, self.nonblocking(), sleep)?;
+        let n = self
+            .file
+            .writev(iovecs, offset, self.nonblocking(), sleep)?;
         self.mutable.lock().offset = offset + n;
         Ok(n)
     }
