@@ -108,6 +108,7 @@ dependencies = [
  "ftl_netmux",
  "ftl_types",
  "ftl_utils",
+ "ftl_virtio",
  "hashbrown",
  "virtio_net",
 ]

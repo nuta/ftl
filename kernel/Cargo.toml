@@ -12,6 +12,7 @@ ftl_bitmap_allocator = { workspace = true }
 ftl_elf = { workspace = true }
 ftl_types = { workspace = true }
 ftl_driver = { workspace = true }
+ftl_virtio = { workspace = true }
 ftl_netmux = { workspace = true }
 virtio_net = { workspace = true }
 hashbrown = { workspace = true }

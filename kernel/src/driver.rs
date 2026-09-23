@@ -10,6 +10,7 @@ use ftl_netmux::PollNotifier;
 use ftl_utils::alignment::align_up;
 use ftl_utils::reserve_slot::ReserveSlot;
 use ftl_utils::spinlock::SpinLock;
+use ftl_virtio::VirtioPci;
 use virtio_net::VirtioNet;
 
 use crate::address::PAddr;
@@ -99,7 +100,8 @@ impl ftl_driver::env::Env for DriverEnv {
     }
 }
 
-static VIRTIO_NET_DRIVER: SpinLock<Option<VirtioNet<PollNotifier>>> = SpinLock::new(None);
+static VIRTIO_NET_DRIVER: SpinLock<Option<VirtioNet<VirtioPci, PollNotifier>>> =
+    SpinLock::new(None);
 static VIRTIO_NET_DEVICE_ID: SpinLock<Option<DeviceId>> = SpinLock::new(None);
 static NET_IRQ: AtomicU8 = AtomicU8::new(0);
 
@@ -119,23 +121,42 @@ pub fn handle_interrupt() {
     net.handle_interrupt(device_id);
 }
 
-// FIXME: Move this into virtio_net?
 fn virtio_net_init() -> (&'static dyn Driver<Notifier = PollNotifier>, u8) {
     use ftl_driver::pci::find_virtio_device;
+    use ftl_driver::pci::get_bar;
     use ftl_driver::pci::get_interrupt_line;
+    use ftl_driver::pci::set_bus_master;
+    use ftl_virtio::virtio_pci::DeviceType;
 
-    let driver = virtio_net::VirtioNet::<PollNotifier>::init(&DRIVER_ENV)
+    let pci_device = find_virtio_device(&DRIVER_ENV, DeviceType::Network as u16)
+        .expect("virtio-net device not found");
+
+    trace!(
+        "found at {:02x}:{:02x} (device_id={:#x}, subsystem={})",
+        pci_device.bus, pci_device.slot, pci_device.device, pci_device.subsystem_id
+    );
+
+    set_bus_master(&DRIVER_ENV, &pci_device, true);
+
+    let bar0 = get_bar(&DRIVER_ENV, &pci_device, 0);
+    if bar0 & 1 == 0 {
+        panic!("virtio-net BAR0 is not I/O space");
+    }
+    let iobase = (bar0 & 0xffff_fffc) as u16;
+    trace!("PCI BAR0: iobase={iobase:#x}");
+
+    let transport = VirtioPci::new(iobase);
+    let driver = VirtioNet::<VirtioPci, PollNotifier>::init(&DRIVER_ENV, transport)
         .expect("failed to initialize virtio-net");
     *VIRTIO_NET_DRIVER.lock() = Some(driver);
 
     let driver: &'static dyn Driver<Notifier = PollNotifier> = {
         let guard = VIRTIO_NET_DRIVER.lock();
-        let ptr: *const VirtioNet<PollNotifier> = guard.as_ref().unwrap();
+        let ptr: *const VirtioNet<VirtioPci, PollNotifier> = guard.as_ref().unwrap();
         // SAFETY: The driver is never removed from VIRTIO_NET_DRIVER.
         unsafe { &*ptr }
     };
 
-    let pci_device = find_virtio_device(&DRIVER_ENV, 1).expect("virtio-net disappeared");
     let irq = get_interrupt_line(&DRIVER_ENV, &pci_device);
     arch::interrupt_acquire(irq).expect("failed to enable virtio-net IRQ");
 

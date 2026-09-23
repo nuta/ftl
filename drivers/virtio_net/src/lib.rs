@@ -8,24 +8,20 @@ use ftl_driver::net::Driver;
 use ftl_driver::net::Error;
 use ftl_driver::net::Event;
 use ftl_driver::net::Notifier;
-use ftl_driver::pci;
 use ftl_driver::trace;
 use ftl_driver::warn;
 use ftl_utils::spinlock::SpinLock;
 use ftl_virtio::ChainEntry;
 use ftl_virtio::VirtQueue;
-use ftl_virtio::VirtioPci;
-use ftl_virtio::virtio_pci::DeviceType;
+use ftl_virtio::VirtioTransport;
 
 const VIRTIO_NET_F_MAC: u32 = 1 << 5;
 
 #[derive(Debug)]
 pub enum InitError {
-    DeviceNotFound,
-    Bar0NotIoSpace,
     MacNotAvailable,
-    TxVqSetup(ftl_virtio::virtio_pci::Error),
-    RxVqSetup(ftl_virtio::virtio_pci::Error),
+    TxVqSetup(ftl_virtio::Error),
+    RxVqSetup(ftl_virtio::Error),
 }
 
 #[repr(C, packed)]
@@ -54,56 +50,31 @@ struct Mutable<N: Notifier> {
     rx_notifier: Option<N>,
 }
 
-pub struct VirtioNet<N: Notifier> {
+pub struct VirtioNet<T: VirtioTransport, N: Notifier> {
     mac: [u8; 6],
-    virtio: VirtioPci,
+    transport: T,
     mutable: SpinLock<Mutable<N>>,
 }
 
-impl<N: Notifier> VirtioNet<N> {
-    pub fn init(env: &dyn Env) -> Result<Self, InitError> {
-        let Some(dev) = pci::find_virtio_device(env, DeviceType::Network as u16) else {
-            warn!(env, "device not found");
-            return Err(InitError::DeviceNotFound);
-        };
+impl<T: VirtioTransport, N: Notifier> VirtioNet<T, N> {
+    pub fn init(env: &dyn Env, transport: T) -> Result<Self, InitError> {
+        transport.acknowledge(env);
 
-        trace!(
-            env,
-            "found at {:02x}:{:02x} (device_id={:#x}, subsystem={})",
-            dev.bus,
-            dev.slot,
-            dev.device,
-            dev.subsystem_id
-        );
-
-        pci::set_bus_master(env, &dev, true);
-
-        let bar0 = pci::get_bar(env, &dev, 0);
-        if bar0 & 1 == 0 {
-            warn!(env, "BAR0 is not I/O space (modern-only?)");
-            return Err(InitError::Bar0NotIoSpace);
-        }
-        let iobase = (bar0 & 0xffff_fffc) as u16;
-        trace!(env, "PCI BAR0: iobase={iobase:#x}");
-
-        let virtio = VirtioPci::new(iobase);
-        virtio.acknowledge(env);
-
-        let device_features = virtio.read_device_features(env);
+        let device_features = transport.read_device_features(env);
         if device_features & VIRTIO_NET_F_MAC == 0 {
             warn!(env, "MAC feature not advertised");
             return Err(InitError::MacNotAvailable);
         }
         let guest_features = device_features & VIRTIO_NET_F_MAC;
-        virtio.write_guest_features(env, guest_features);
+        transport.write_guest_features(env, guest_features);
 
         let mac = [
-            virtio.read_device_config8(env, 0),
-            virtio.read_device_config8(env, 1),
-            virtio.read_device_config8(env, 2),
-            virtio.read_device_config8(env, 3),
-            virtio.read_device_config8(env, 4),
-            virtio.read_device_config8(env, 5),
+            transport.read_device_config8(env, 0),
+            transport.read_device_config8(env, 1),
+            transport.read_device_config8(env, 2),
+            transport.read_device_config8(env, 3),
+            transport.read_device_config8(env, 4),
+            transport.read_device_config8(env, 5),
         ];
 
         trace!(
@@ -117,19 +88,19 @@ impl<N: Notifier> VirtioNet<N> {
             mac[5],
         );
 
-        let txq = virtio
+        let txq = transport
             .setup_virtqueue(env, 1)
             .map_err(InitError::TxVqSetup)?;
 
-        let rxq = virtio
+        let rxq = transport
             .setup_virtqueue(env, 0)
             .map_err(InitError::RxVqSetup)?;
 
-        virtio.driver_ok(env);
+        transport.driver_ok(env);
 
         Ok(Self {
             mac,
-            virtio,
+            transport,
             mutable: SpinLock::new(Mutable {
                 txq,
                 rxq,
@@ -140,7 +111,7 @@ impl<N: Notifier> VirtioNet<N> {
     }
 }
 
-impl<N: Notifier> Driver for VirtioNet<N> {
+impl<T: VirtioTransport, N: Notifier> Driver for VirtioNet<T, N> {
     type Notifier = N;
 
     fn mac_address(&self) -> &[u8; 6] {
@@ -197,7 +168,7 @@ impl<N: Notifier> Driver for VirtioNet<N> {
             return Err((data.header_buf, data.payload_buf, Error::TxFull));
         }
 
-        self.virtio.notify(env, &mutable.txq);
+        self.transport.notify(env, &mutable.txq);
         Ok(())
     }
 
@@ -213,7 +184,7 @@ impl<N: Notifier> Driver for VirtioNet<N> {
             return Err((Error::RxFull, buf));
         }
 
-        self.virtio.notify(env, &mutable.rxq);
+        self.transport.notify(env, &mutable.rxq);
         Ok(())
     }
 
@@ -269,7 +240,7 @@ impl<N: Notifier> Driver for VirtioNet<N> {
 
     fn handle_interrupt(&self, env: &dyn Env) {
         let mut mutable = self.mutable.lock();
-        let status = self.virtio.read_isr(env);
+        let status = self.transport.read_isr(env);
         if status.virtqueue_updated() {
             loop {
                 match mutable.txq.pop() {

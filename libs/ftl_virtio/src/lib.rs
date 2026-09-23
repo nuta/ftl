@@ -12,11 +12,15 @@
 
 extern crate alloc;
 
+pub mod transport;
 pub mod virtqueue;
 
 #[cfg(target_arch = "x86_64")]
 pub mod virtio_pci;
 
+pub use transport::Error;
+pub use transport::IsrStatus;
+pub use transport::VirtioTransport;
 #[cfg(target_arch = "x86_64")]
 pub use virtio_pci::VirtioPci;
 pub use virtqueue::ChainEntry;
