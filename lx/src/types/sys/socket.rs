@@ -71,7 +71,7 @@ pub fn write_sockaddr(
     sockaddr_in: &SockAddrIn,
 ) -> Result<(), Errno> {
     if addr_len.is_null() {
-        return Err(Errno::EINVAL);
+        return Err(Errno::EFAULT);
     }
 
     // Truncate the copy length to the user-provided buffer size.
