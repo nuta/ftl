@@ -26,6 +26,10 @@ pub fn sys_writev(
         return Err(Errno::EINVAL);
     }
 
+    if iov.is_null() {
+        return Err(Errno::EFAULT);
+    }
+
     let iovecs = IoVecSlice::new(iov, iovcnt as usize);
     let n = file.writev(&iovecs, Sleep::Interruptible(&process))?;
     Ok(n.try_into().unwrap()) // FIXME: Handle overflow
