@@ -34,6 +34,10 @@ pub fn random_read(buf: &mut [u8]) {
     todo!()
 }
 
+pub fn monotime_read() -> ftl_types::time::MonoTime {
+    todo!()
+}
+
 pub fn walltime_read() -> ftl_types::time::WallTime {
     todo!()
 }

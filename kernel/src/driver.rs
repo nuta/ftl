@@ -13,7 +13,9 @@ use ftl_utils::alignment::align_up;
 use ftl_utils::cmdline::Parser;
 use ftl_utils::reserve_slot::ReserveSlot;
 use ftl_utils::spinlock::SpinLock;
+#[cfg(target_arch = "x86_64")]
 use ftl_virtio::VirtioPci;
+#[cfg(target_arch = "x86_64")]
 use virtio_net::VirtioNet;
 
 use crate::address::PAddr;
@@ -103,6 +105,7 @@ impl ftl_driver::env::Env for DriverEnv {
     }
 }
 
+#[cfg(target_arch = "x86_64")]
 static VIRTIO_NET_DRIVER: SpinLock<Option<VirtioNet<VirtioPci, PollNotifier>>> =
     SpinLock::new(None);
 static VIRTIO_NET_DEVICE_ID: SpinLock<Option<DeviceId>> = SpinLock::new(None);
@@ -124,6 +127,7 @@ pub fn handle_interrupt() {
     net.handle_interrupt(device_id);
 }
 
+#[cfg(target_arch = "x86_64")]
 fn init_virtio_net_over_pci(
     pci_device: &ftl_driver::pci::PciDevice,
 ) -> (&'static dyn Driver<Notifier = PollNotifier>, u8) {
@@ -159,10 +163,16 @@ fn init_virtio_net_over_pci(
 }
 
 enum FoundDevice {
+    #[cfg(target_arch = "x86_64")]
     VirtioNetOverPci(ftl_driver::pci::PciDevice),
-    VirtioMmio { base: usize, size: usize, irq: u8 },
+    VirtioMmio {
+        base: usize,
+        size: usize,
+        irq: u8,
+    },
 }
 
+#[cfg(target_arch = "x86_64")]
 fn probe_pci(devices: &mut ArrayVec<FoundDevice, 8>) {
     use ftl_driver::pci::find_virtio_device;
     use ftl_virtio::virtio_pci::DeviceType;
@@ -226,6 +236,7 @@ fn probe_cmdline(devices: &mut ArrayVec<FoundDevice, 8>, cmdline: &[u8]) {
 
 fn discover_devices(cmdline: &[u8]) -> ArrayVec<FoundDevice, 8> {
     let mut devices = ArrayVec::new();
+    #[cfg(target_arch = "x86_64")]
     probe_pci(&mut devices);
     probe_cmdline(&mut devices, cmdline);
     devices
@@ -234,11 +245,13 @@ fn discover_devices(cmdline: &[u8]) -> ArrayVec<FoundDevice, 8> {
 fn init_net_driver(devices: &[FoundDevice]) -> (&'static dyn Driver<Notifier = PollNotifier>, u8) {
     for device in devices {
         match device {
+            #[cfg(target_arch = "x86_64")]
             FoundDevice::VirtioNetOverPci(pci_device) => {
-                return init_virtio_net_over_pci(&pci_device);
+                return init_virtio_net_over_pci(pci_device);
             }
             FoundDevice::VirtioMmio { base, size, irq } => {
                 // return init_virtio_net_over_mmio(base);
+                let _ = (base, size, irq);
             }
         }
     }
@@ -251,6 +264,7 @@ pub fn init(cmdline: &[u8]) {
     trace!("discovered {} devices:", devices.len());
     for device in &devices {
         match device {
+            #[cfg(target_arch = "x86_64")]
             FoundDevice::VirtioNetOverPci(pci_device) => {
                 trace!(
                     "  virtio-net over PCI: bus={}, slot={}",

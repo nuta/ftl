@@ -4,6 +4,10 @@ version.workspace = true
 authors.workspace = true
 edition.workspace = true
 
+[[bin]]
+name = "lx"
+test = false
+
 [dependencies]
 ftl = { workspace = true }
 ftl_elf = { workspace = true }

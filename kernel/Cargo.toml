@@ -4,6 +4,10 @@ version.workspace = true
 authors.workspace = true
 edition.workspace = true
 
+[[bin]]
+name = "kernel"
+test = false
+
 [dependencies]
 ftl_utils = { workspace = true }
 ftl_arrayvec = { workspace = true }
