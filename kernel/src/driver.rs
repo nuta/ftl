@@ -266,8 +266,11 @@ pub fn init(cmdline: &[u8]) {
     let device_id = net
         .add_device(driver, irq)
         .expect("failed to add network device");
+
+    // Enable the virtio-net IRQ. This must done before starting DHCP.
+    // Otherwise, DHCP replies may arrive too early, before unmasking IRQ.
+    arch::interrupt_acquire(irq).expect("failed to enable virtio-net IRQ");
+
     net.start_dhcp(device_id);
     drop(net);
-
-    arch::interrupt_acquire(irq).expect("failed to enable virtio-net IRQ");
 }
