@@ -4,7 +4,8 @@ use crate::virtqueue::VirtQueue;
 
 #[derive(Debug)]
 pub enum Error {
-    QueueSizeZero,
+    BadQueueSize(u32),
+    QueueInUse,
     TooHighPAddr,
     AllocFailed,
 }

@@ -1,15 +1,11 @@
 #![cfg(target_arch = "x86_64")]
-use core::mem::size_of;
-
 use ftl_driver::env::Env;
-use ftl_utils::alignment::align_up;
 
 use crate::transport::Error;
 use crate::transport::IsrStatus;
 use crate::transport::VirtioTransport;
-use crate::virtqueue::Desc;
-use crate::virtqueue::UsedElem;
 use crate::virtqueue::VirtQueue;
+use crate::virtqueue::vring_size;
 
 const PCI_IOPORT_DEVICE_FEATURES: u16 = 0;
 const PCI_IOPORT_GUEST_FEATURES: u16 = 4;
@@ -32,12 +28,6 @@ const STATUS_DRIVER_OK: u8 = 4;
 #[repr(u16)]
 pub enum DeviceType {
     Network = 1,
-}
-
-pub fn vring_size(queue_size: u16) -> usize {
-    let n = queue_size as usize;
-    align_up(size_of::<Desc>() * n + size_of::<u16>() * (3 + n), 4096)
-        + align_up(size_of::<u16>() * 3 + size_of::<UsedElem>() * n, 4096)
 }
 
 pub struct VirtioPci {
@@ -103,7 +93,7 @@ impl VirtioTransport for VirtioPci {
         let queue_size = unsafe { env.in16(self.iobase + PCI_IOPORT_QUEUE_SIZE) };
         if queue_size == 0 {
             // If this field is 0, the virtqueue does not exist.
-            return Err(Error::QueueSizeZero);
+            return Err(Error::BadQueueSize(queue_size as u32));
         }
 
         let size = vring_size(queue_size);

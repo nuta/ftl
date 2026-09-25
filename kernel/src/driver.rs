@@ -11,9 +11,9 @@ use ftl_utils::alignment::align_up;
 use ftl_utils::cmdline::Parser;
 use ftl_utils::reserve_slot::ReserveSlot;
 use ftl_utils::spinlock::SpinLock;
+use ftl_virtio::VirtioMmio;
 #[cfg(target_arch = "x86_64")]
 use ftl_virtio::VirtioPci;
-#[cfg(target_arch = "x86_64")]
 use virtio_net::VirtioNet;
 
 use crate::address::PAddr;
@@ -133,11 +133,26 @@ fn init_virtio_net_over_pci(
     (Box::new(driver), irq)
 }
 
+fn init_virtio_net_over_mmio(
+    base: PAddr,
+    size: usize,
+    irq: u8,
+) -> (Box<dyn Driver<Notifier = PollNotifier>>, u8) {
+    assert!(size >= 0x200, "virtio-mmio region too small: {size:#x}");
+
+    let mmio_base = paddr2vaddr(base).as_usize();
+    let transport = unsafe { VirtioMmio::new(mmio_base) }.expect("failed to probe virtio-mmio");
+    let driver = VirtioNet::<VirtioMmio, PollNotifier>::init(&DRIVER_ENV, transport)
+        .expect("failed to initialize virtio-net");
+
+    (Box::new(driver), irq)
+}
+
 enum FoundDevice {
     #[cfg(target_arch = "x86_64")]
     VirtioNetOverPci(ftl_driver::pci::PciDevice),
     VirtioMmio {
-        base: usize,
+        base: PAddr,
         size: usize,
         irq: u8,
     },
@@ -166,7 +181,7 @@ fn probe_pci(devices: &mut ArrayVec<FoundDevice, 8>) {
 }
 
 /// Parses `512@0xfeb00e00:12` into (base, size, irq).
-fn parse_mmio_cmdline(value: &[u8]) -> (usize, usize, u8) {
+fn parse_mmio_cmdline(value: &[u8]) -> (PAddr, usize, u8) {
     // TODO: Avoid parsing as a UTF-8 string once slice::split_once gets stabilized.
     let value = str::from_utf8(value).unwrap();
 
@@ -177,6 +192,7 @@ fn parse_mmio_cmdline(value: &[u8]) -> (usize, usize, u8) {
     // Parse them as integers.
     let size = size_str.parse::<usize>().unwrap();
     let base = usize::from_str_radix(base_str.strip_prefix("0x").unwrap(), 16).unwrap();
+    let base = PAddr::new(base);
     let irq = irq_str.parse::<u8>().unwrap();
 
     (base, size, irq)
@@ -193,9 +209,7 @@ fn probe_cmdline(devices: &mut ArrayVec<FoundDevice, 8>, cmdline: &[u8]) {
                 let (base, size, irq) = parse_mmio_cmdline(param.value);
                 let device = FoundDevice::VirtioMmio { base, size, irq };
                 if devices.try_push(device).is_err() {
-                    warn!(
-                        "too many devices found, ignoring this virtio-mmio device: base={base:#x}"
-                    );
+                    warn!("too many devices found, ignoring this virtio-mmio device: base={base}");
                 }
             }
             _ => {
@@ -221,8 +235,7 @@ fn init_net_driver(devices: &[FoundDevice]) -> (Box<dyn Driver<Notifier = PollNo
                 return init_virtio_net_over_pci(pci_device);
             }
             FoundDevice::VirtioMmio { base, size, irq } => {
-                // return init_virtio_net_over_mmio(base);
-                let _ = (base, size, irq);
+                return init_virtio_net_over_mmio(*base, *size, *irq);
             }
         }
     }
@@ -243,7 +256,7 @@ pub fn init(cmdline: &[u8]) {
                 );
             }
             FoundDevice::VirtioMmio { base, .. } => {
-                trace!("  virtio-net over MMIO: base={base:#x}");
+                trace!("  virtio-net over MMIO: base={base:}");
             }
         }
     }

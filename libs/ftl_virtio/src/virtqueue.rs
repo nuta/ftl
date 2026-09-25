@@ -11,6 +11,12 @@ use ftl_utils::alignment::align_up;
 const DESC_F_NEXT: u16 = 1;
 const DESC_F_WRITE: u16 = 2;
 
+pub(crate) fn vring_size(queue_size: u16) -> usize {
+    let n = queue_size as usize;
+    align_up(size_of::<Desc>() * n + size_of::<u16>() * (3 + n), 4096)
+        + align_up(size_of::<u16>() * 3 + size_of::<UsedElem>() * n, 4096)
+}
+
 #[repr(C, packed)]
 pub(crate) struct Desc {
     addr: u64,
