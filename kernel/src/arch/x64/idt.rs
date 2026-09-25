@@ -377,6 +377,25 @@ fn handle_user_page_fault(cr2: u64, error_code: u64) -> Result<(), ErrorCode> {
     thread.vmspace().handle_page_fault(fault_addr, fault_attrs)
 }
 
+fn handle_external_interrupt(vector: u8) {
+    if vector == SPURIOUS_INTERRUPT_VECTOR {
+        // Ignore spurious interrupts.
+        return;
+    }
+
+    let irq = vector - IRQ_VECTOR_BASE;
+    if irq == TIMER_IRQ {
+        super::timer::handle_interrupt();
+        crate::driver::poll(None);
+    } else if irq == COM1_IRQ {
+        crate::console::handle_interrupt();
+        super::io_apic::interrupt_acknowledge(irq);
+    } else {
+        crate::driver::poll(Some(irq));
+        super::io_apic::interrupt_acknowledge(irq);
+    }
+}
+
 extern "C" fn handle_kernel_interrupt(frame: &mut InterruptFrame) {
     match frame.vector as u8 {
         EXCEPTION_PAGE_FAULT => {
@@ -409,22 +428,7 @@ extern "C" fn handle_kernel_interrupt(frame: &mut InterruptFrame) {
                 frame.rip, frame.error_code
             );
         }
-        SPURIOUS_INTERRUPT_VECTOR => {
-            // Ignore spurious interrupts.
-        }
-        vector if vector >= IRQ_VECTOR_BASE => {
-            let irq = vector - IRQ_VECTOR_BASE;
-            if irq == TIMER_IRQ {
-                super::timer::handle_interrupt();
-                crate::driver::poll(None);
-            } else if irq == COM1_IRQ {
-                crate::console::handle_interrupt();
-                super::io_apic::interrupt_acknowledge(irq);
-            } else {
-                crate::driver::poll(Some(irq));
-                super::io_apic::interrupt_acknowledge(irq);
-            }
-        }
+        vector if vector >= IRQ_VECTOR_BASE => handle_external_interrupt(vector),
         vector => {
             panic!(
                 "unhandled kernel exception ({vector}), RIP={:#x}, error_code={:#x}",
@@ -459,22 +463,7 @@ extern "C" fn handle_user_interrupt(vector: u8, error_code: u64) -> ! {
             );
             super::syscall::try_exit_current();
         }
-        SPURIOUS_INTERRUPT_VECTOR => {
-            // Ignore spurious interrupts.
-        }
-        vector if vector >= IRQ_VECTOR_BASE => {
-            let irq = vector - IRQ_VECTOR_BASE;
-            if irq == TIMER_IRQ {
-                super::timer::handle_interrupt();
-                crate::driver::poll(None);
-            } else if irq == COM1_IRQ {
-                crate::console::handle_interrupt();
-                super::io_apic::interrupt_acknowledge(irq);
-            } else {
-                crate::driver::poll(Some(irq));
-                super::io_apic::interrupt_acknowledge(irq);
-            }
-        }
+        vector if vector >= IRQ_VECTOR_BASE => handle_external_interrupt(vector),
         _ => {
             panic!("unhandled user exception: exception={vector}, error_code={error_code:#x}");
         }
