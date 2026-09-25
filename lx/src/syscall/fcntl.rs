@@ -9,6 +9,7 @@ use crate::types::sys::fcntl::F_GETFL;
 use crate::types::sys::fcntl::F_SETFD;
 use crate::types::sys::fcntl::F_SETFL;
 use crate::types::sys::fcntl::FD_CLOEXEC;
+use crate::types::sys::fcntl::O_CLOEXEC;
 
 pub fn sys_fcntl(current: &LxThread, fd: c_int, cmd: c_int, arg: c_long) -> Result<c_long, Errno> {
     let process = current.process();
@@ -31,7 +32,7 @@ pub fn sys_fcntl(current: &LxThread, fd: c_int, cmd: c_int, arg: c_long) -> Resu
         }
         F_GETFL => {
             let file = fd_table.get(fd)?;
-            Ok(file.flags() as c_long)
+            Ok((file.flags() & !O_CLOEXEC) as c_long)
         }
         F_SETFL => {
             let file = fd_table.get(fd)?;
