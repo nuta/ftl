@@ -412,12 +412,12 @@ extern "C" fn handle_kernel_interrupt(frame: &mut InterruptFrame) {
             let irq = vector - IRQ_VECTOR_BASE;
             if irq == TIMER_IRQ {
                 super::timer::handle_interrupt();
-                crate::driver::poll(irq);
+                crate::driver::poll(None);
             } else if irq == COM1_IRQ {
                 crate::console::handle_interrupt();
                 super::io_apic::interrupt_acknowledge(irq);
             } else {
-                crate::driver::poll(irq);
+                crate::driver::poll(Some(irq));
                 super::io_apic::interrupt_acknowledge(irq);
             }
         }
@@ -458,13 +458,13 @@ extern "C" fn handle_user_interrupt(vector: u8, error_code: u64) -> ! {
         vector if vector >= IRQ_VECTOR_BASE => {
             let irq = vector - IRQ_VECTOR_BASE;
             if irq == TIMER_IRQ {
-                // trace!("timer interrupt");
                 super::timer::handle_interrupt();
+                crate::driver::poll(None);
             } else if irq == COM1_IRQ {
                 crate::console::handle_interrupt();
                 super::io_apic::interrupt_acknowledge(irq);
             } else {
-                crate::driver::poll(irq);
+                crate::driver::poll(Some(irq));
                 super::io_apic::interrupt_acknowledge(irq);
             }
         }

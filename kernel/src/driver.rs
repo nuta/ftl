@@ -103,7 +103,7 @@ impl ftl_driver::env::Env for DriverEnv {
     }
 }
 
-pub fn poll(irq: u8) {
+pub fn poll(irq: Option<u8>) {
     let mut net = NET_MUX.lock();
     net.poll(irq);
 }

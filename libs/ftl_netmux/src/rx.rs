@@ -389,9 +389,9 @@ impl<'a, N: RxNotify> NetMux<'a, N> {
         Ok(())
     }
 
-    pub fn poll(&mut self, irq: u8) {
+    pub fn poll(&mut self, irq: Option<u8>) {
         for device in self.devices.values() {
-            if device.irq() == irq {
+            if irq.is_none() || irq == Some(device.irq()) {
                 device.driver().handle_interrupt(self.env);
             }
         }
@@ -401,9 +401,9 @@ impl<'a, N: RxNotify> NetMux<'a, N> {
         }
     }
 
-    fn receive(&self, irq: u8) -> Option<(DeviceId, DmaBuf, usize, usize)> {
+    fn receive(&self, irq: Option<u8>) -> Option<(DeviceId, DmaBuf, usize, usize)> {
         for (id, device) in self.devices.iter() {
-            if device.irq() == irq {
+            if irq.is_none() || irq == Some(device.irq()) {
                 let driver = device.driver();
                 match driver.try_receive(self.env) {
                     Ok((buf, headroom, frame_len)) => {
