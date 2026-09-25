@@ -3,11 +3,13 @@ use core::fmt;
 use core::sync::atomic::AtomicU8;
 use core::sync::atomic::Ordering;
 
+use ftl_arrayvec::ArrayVec;
 use ftl_driver::dma::DmaBuf;
 use ftl_driver::net::Driver;
 use ftl_netmux::DeviceId;
 use ftl_netmux::PollNotifier;
 use ftl_utils::alignment::align_up;
+use ftl_utils::cmdline::Parser;
 use ftl_utils::reserve_slot::ReserveSlot;
 use ftl_utils::spinlock::SpinLock;
 use ftl_virtio::VirtioPci;
@@ -121,20 +123,12 @@ pub fn handle_interrupt() {
     net.handle_interrupt(device_id);
 }
 
-fn virtio_net_init() -> (&'static dyn Driver<Notifier = PollNotifier>, u8) {
-    use ftl_driver::pci::find_virtio_device;
+fn init_virtio_net_over_pci(
+    pci_device: &ftl_driver::pci::PciDevice,
+) -> (&'static dyn Driver<Notifier = PollNotifier>, u8) {
     use ftl_driver::pci::get_bar;
     use ftl_driver::pci::get_interrupt_line;
     use ftl_driver::pci::set_bus_master;
-    use ftl_virtio::virtio_pci::DeviceType;
-
-    let pci_device = find_virtio_device(&DRIVER_ENV, DeviceType::Network as u16)
-        .expect("virtio-net device not found");
-
-    trace!(
-        "found at {:02x}:{:02x} (device_id={:#x}, subsystem={})",
-        pci_device.bus, pci_device.slot, pci_device.device, pci_device.subsystem_id
-    );
 
     set_bus_master(&DRIVER_ENV, &pci_device, true);
 
@@ -163,8 +157,66 @@ fn virtio_net_init() -> (&'static dyn Driver<Notifier = PollNotifier>, u8) {
     (driver, irq)
 }
 
-pub fn init() {
-    let (driver, irq) = virtio_net_init();
+enum FoundDevice {
+    VirtioNetOverPci(ftl_driver::pci::PciDevice),
+}
+
+fn probe_pci(devices: &mut ArrayVec<FoundDevice, 8>) {
+    use ftl_driver::pci::find_virtio_device;
+    use ftl_virtio::virtio_pci::DeviceType;
+
+    let Some(pci_device) = find_virtio_device(&DRIVER_ENV, DeviceType::Network as u16) else {
+        return;
+    };
+
+    trace!(
+        "found at {:02x}:{:02x} (device_id={:#x}, subsystem={})",
+        pci_device.bus, pci_device.slot, pci_device.device, pci_device.subsystem_id
+    );
+
+    let vendor_id = pci_device.vendor;
+    let device_id = pci_device.device;
+    let device = FoundDevice::VirtioNetOverPci(pci_device);
+    if devices.try_push(device).is_err() {
+        warn!("too many devices found, ignoring this PCI device {vendor_id:04x}:{device_id:04x}");
+    }
+}
+
+fn probe_cmdline(_devices: &mut ArrayVec<FoundDevice, 8>, cmdline: &[u8]) {
+    let parser = Parser::new(cmdline);
+    for param in parser {
+        let param = param.expect("failed to parse cmdline");
+        match param.key {
+            _ => {
+                let s = core::str::from_utf8(param.key).unwrap();
+                trace!("unknown cmdline parameter: {}", s);
+            }
+        }
+    }
+}
+
+fn discover_devices(cmdline: &[u8]) -> ArrayVec<FoundDevice, 8> {
+    let mut devices = ArrayVec::new();
+    probe_pci(&mut devices);
+    probe_cmdline(&mut devices, cmdline);
+    devices
+}
+
+fn init_net_driver(devices: &[FoundDevice]) -> (&'static dyn Driver<Notifier = PollNotifier>, u8) {
+    for device in devices {
+        match device {
+            FoundDevice::VirtioNetOverPci(pci_device) => {
+                return init_virtio_net_over_pci(&pci_device);
+            }
+        }
+    }
+
+    panic!("no supported network device found");
+}
+
+pub fn init(cmdline: &[u8]) {
+    let devices = discover_devices(cmdline);
+    let (driver, irq) = init_net_driver(devices.as_slice());
     let device_id = NET_MUX
         .lock()
         .add_device(driver)

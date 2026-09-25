@@ -39,7 +39,7 @@ pub struct BootInfo {
 pub fn boot(mut bootinfo: BootInfo) -> ! {
     crate::memory::init(&mut bootinfo);
     crate::cpuvar::init(0);
-    crate::driver::init();
+    crate::driver::init(&bootinfo.cmdline);
     crate::net::init();
     crate::loader::load(&bootinfo);
     trace!("kernel is ready");
