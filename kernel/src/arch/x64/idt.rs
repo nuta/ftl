@@ -12,6 +12,7 @@ use super::console::COM1_IRQ;
 use super::gdt::GDT_KERNEL_CS;
 use super::get_cpuvar;
 use super::io_apic::IRQ_VECTOR_BASE;
+use super::local_apic::SPURIOUS_INTERRUPT_VECTOR;
 use super::syscall::syscall_copy_recover;
 use super::thread::Thread;
 use super::thread::XSTATE_MASK;
@@ -408,6 +409,9 @@ extern "C" fn handle_kernel_interrupt(frame: &mut InterruptFrame) {
                 frame.rip, frame.error_code
             );
         }
+        SPURIOUS_INTERRUPT_VECTOR => {
+            // Ignore spurious interrupts.
+        }
         vector if vector >= IRQ_VECTOR_BASE => {
             let irq = vector - IRQ_VECTOR_BASE;
             if irq == TIMER_IRQ {
@@ -454,6 +458,9 @@ extern "C" fn handle_user_interrupt(vector: u8, error_code: u64) -> ! {
                 "exiting thread due to user exception: exception={vector}, error_code={error_code:#x}"
             );
             super::syscall::try_exit_current();
+        }
+        SPURIOUS_INTERRUPT_VECTOR => {
+            // Ignore spurious interrupts.
         }
         vector if vector >= IRQ_VECTOR_BASE => {
             let irq = vector - IRQ_VECTOR_BASE;

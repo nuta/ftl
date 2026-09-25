@@ -4,6 +4,7 @@ use crate::address::PAddr;
 use crate::address::VAddr;
 
 const MSR_IA32_APIC_BASE: u32 = 0x1b;
+pub(super) const SPURIOUS_INTERRUPT_VECTOR: u8 = 0xff;
 
 fn write(base: VAddr, reg: Reg, value: u32) {
     let addr = (base.as_usize() + reg as usize) as *mut u32;
@@ -32,8 +33,12 @@ impl LocalApic {
 
         // Accept all interrupts.
         write(base, Reg::TaskPriority, 0);
-        // Enable APIC.
-        write(base, Reg::SpuriousInterruptVector, 1 << 8);
+        // Enable APIC and route spurious interrupts.
+        write(
+            base,
+            Reg::SpuriousInterruptVector,
+            (1 << 8) | (SPURIOUS_INTERRUPT_VECTOR as u32),
+        );
 
         Self { base }
     }
