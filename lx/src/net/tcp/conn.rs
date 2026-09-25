@@ -193,6 +193,13 @@ impl TcpConn {
         let acked_len = ack.wrapping_sub(mutable.snd_una) as usize;
         let inflight_len = mutable.snd_nxt.wrapping_sub(mutable.snd_una) as usize;
         if acked_len > inflight_len {
+            // Delayed ACK, where ack < snd_una, causes suspiciously very large
+            // acked lengths. Ignore the acknowledgement, but continue processing
+            // the segment since it may contain new data or FIN.
+            if acked_len >= 1 << 31 {
+                return Some(0);
+            }
+
             return None;
         }
 
