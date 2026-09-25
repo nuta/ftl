@@ -412,6 +412,7 @@ extern "C" fn handle_kernel_interrupt(frame: &mut InterruptFrame) {
             let irq = vector - IRQ_VECTOR_BASE;
             if irq == TIMER_IRQ {
                 super::timer::handle_interrupt();
+                crate::driver::poll(irq);
             } else if irq == COM1_IRQ {
                 crate::console::handle_interrupt();
                 super::io_apic::interrupt_acknowledge(irq);
