@@ -139,15 +139,11 @@ fn find_mpfp_table() -> Option<&'static MpPointerTable> {
     // > This structure must be stored in at least one of the following memory
     // > locations, because the operating system searches for the MP floating
     // > pointer structure in the order described below:
-    const SEARCH_LOCATIONS: [Range<usize>; 2] = [
+    const SEARCH_LOCATIONS: [Range<usize>; 3] = [
         // > a. In the first kilobyte of Extended BIOS Data Area (EBDA), or
         0x80000..0x81000,
-        // Ignored this case:
-        //
-        // > b. Within the last kilobyte of system base memory (e.g., 639K-640K for
-        // >    systems with 640 KB of base memory or 511K-512K for systems with
-        // >    512 KB of base memory) if the EBDA segment is undefined, or
-
+        // > b. Within the last kilobyte of system base memory (639K-640K).
+        0x9fc00..0xa0000,
         // > c. In the BIOS ROM address space between 0F0000h and 0FFFFFh
         0xf0000..0x100000,
     ];
@@ -177,6 +173,7 @@ struct MpTableIter<'a> {
     mp_config: &'a MpConfigTable,
     index: u16,
     entry_addr: usize,
+    table_end: usize,
 }
 
 impl<'a> MpTableIter<'a> {
@@ -184,10 +181,12 @@ impl<'a> MpTableIter<'a> {
         let mp_config_addr = mp_table.physical_addr_pointer as usize;
         let mp_config = unsafe { paddr2ptr::<MpConfigTable>(mp_config_addr) };
         let entry_addr = mp_config_addr + size_of::<MpConfigTable>();
+        let table_end = mp_config_addr + mp_config.length as usize;
         Self {
             mp_config,
             index: 0,
             entry_addr,
+            table_end,
         }
     }
 }
@@ -196,7 +195,12 @@ impl<'a> Iterator for MpTableIter<'a> {
     type Item = MpTableEntry<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.index >= self.mp_config.entry_count {
+        if self.mp_config.entry_count != 0 && self.index >= self.mp_config.entry_count {
+            return None;
+        }
+
+        if self.entry_addr >= self.table_end {
+            // qboot does not set mp_config.entry_count.
             return None;
         }
 

@@ -25,7 +25,7 @@ interface QemuArgs {
 function buildQemuArgs({ hostPort, init }: QemuArgs) {
     return [
         "qemu-system-x86_64",
-        "-machine", "pc,acpi=off",
+        "-machine", "microvm,acpi=off",
         "-m", "128",
         "-cpu", "qemu64,+fsgsbase,+xsave,+xsaveopt,+smep,+smap,+rdrand,+rdtscp",
         "-kernel", "ftl.elf",
@@ -36,7 +36,7 @@ function buildQemuArgs({ hostPort, init }: QemuArgs) {
         "--no-reboot",
         "-device", "isa-debug-exit,iobase=0x501,iosize=0x04",
         "-netdev", `user,id=net0,hostfwd=tcp:127.0.0.1:${hostPort}-:80`,
-        "-device", "virtio-net-pci,netdev=net0,romfile=",
+        "-device", "virtio-net-device,netdev=net0",
     ]
 }
 
