@@ -3,6 +3,7 @@
 extern crate alloc;
 
 pub mod alignment;
+pub mod cmdline;
 pub mod formatter;
 pub mod fxhash;
 pub mod reserve_slot;

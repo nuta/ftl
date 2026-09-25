@@ -5,7 +5,6 @@
 extern crate alloc;
 
 mod arch;
-mod cmdline;
 mod container;
 mod fd_table;
 mod initfs;
@@ -40,13 +39,27 @@ struct Aligned<const N: usize>([u8; N]);
 static INITFS: Aligned<{ include_bytes!("../../initfs.cpio").len() }> =
     Aligned(*include_bytes!("../../initfs.cpio"));
 
+fn parse_cmdline<'a>(
+    cmdline: &'a [u8],
+    key: &[u8],
+) -> Result<Option<&'a [u8]>, ftl_utils::cmdline::Error> {
+    for param in ftl_utils::cmdline::Parser::new(cmdline) {
+        let param = param?;
+        if param.key == key {
+            return Ok(Some(param.value));
+        }
+    }
+    Ok(None)
+}
+
 #[unsafe(no_mangle)]
 fn main(cmdline: &[u8]) {
     let root_hspace = unsafe { HandleSpace::from_handle(HandleId::new(1)) };
     let root_vmspace = unsafe { VmSpace::from_handle(HandleId::new(2)) };
 
-    let init =
-        cmdline::parse(cmdline, b"ftl.lx.init").expect("failed to parse ftl.lx.init in cmdline");
+    let init = parse_cmdline(cmdline, b"ftl.lx.init")
+        .expect("failed to parse cmdline")
+        .expect("ftl.lx.init not found in cmdline");
     let argv: Vec<&[u8]> = init
         .split(|b| b.is_ascii_whitespace())
         .filter(|arg| !arg.is_empty())
