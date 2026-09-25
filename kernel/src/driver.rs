@@ -1,5 +1,6 @@
 use alloc::collections::VecDeque;
 use core::fmt;
+use core::str;
 use core::sync::atomic::AtomicU8;
 use core::sync::atomic::Ordering;
 
@@ -159,6 +160,7 @@ fn init_virtio_net_over_pci(
 
 enum FoundDevice {
     VirtioNetOverPci(ftl_driver::pci::PciDevice),
+    VirtioMmio { base: usize, size: usize, irq: u8 },
 }
 
 fn probe_pci(devices: &mut ArrayVec<FoundDevice, 8>) {
@@ -182,14 +184,41 @@ fn probe_pci(devices: &mut ArrayVec<FoundDevice, 8>) {
     }
 }
 
-fn probe_cmdline(_devices: &mut ArrayVec<FoundDevice, 8>, cmdline: &[u8]) {
+/// Parses `512@0xfeb00e00:12` into (base, size, irq).
+fn parse_mmio_cmdline(value: &[u8]) -> (usize, usize, u8) {
+    // TODO: Avoid parsing as a UTF-8 string once slice::split_once gets stabilized.
+    let value = str::from_utf8(value).unwrap();
+
+    // Split the string into 3 parts.
+    let (size_str, rest) = value.split_once('@').unwrap();
+    let (base_str, irq_str) = rest.split_once(':').unwrap();
+
+    // Parse them as integers.
+    let size = size_str.parse::<usize>().unwrap();
+    let base = usize::from_str_radix(base_str.strip_prefix("0x").unwrap(), 16).unwrap();
+    let irq = irq_str.parse::<u8>().unwrap();
+
+    (base, size, irq)
+}
+
+fn probe_cmdline(devices: &mut ArrayVec<FoundDevice, 8>, cmdline: &[u8]) {
     let parser = Parser::new(cmdline);
     for param in parser {
         let param = param.expect("failed to parse cmdline");
         match param.key {
+            // Example: virtio_mmio.device=512@0xfeb00e00:12
+            b"virtio_mmio.device" => {
+                // Parse the value.
+                let (base, size, irq) = parse_mmio_cmdline(param.value);
+                let device = FoundDevice::VirtioMmio { base, size, irq };
+                if devices.try_push(device).is_err() {
+                    warn!(
+                        "too many devices found, ignoring this virtio-mmio device: base={base:#x}"
+                    );
+                }
+            }
             _ => {
-                let s = core::str::from_utf8(param.key).unwrap();
-                trace!("unknown cmdline parameter: {}", s);
+                // Unknown keys. Ignore.
             }
         }
     }
@@ -208,6 +237,9 @@ fn init_net_driver(devices: &[FoundDevice]) -> (&'static dyn Driver<Notifier = P
             FoundDevice::VirtioNetOverPci(pci_device) => {
                 return init_virtio_net_over_pci(&pci_device);
             }
+            FoundDevice::VirtioMmio { base, size, irq } => {
+                // return init_virtio_net_over_mmio(base);
+            }
         }
     }
 
@@ -216,6 +248,21 @@ fn init_net_driver(devices: &[FoundDevice]) -> (&'static dyn Driver<Notifier = P
 
 pub fn init(cmdline: &[u8]) {
     let devices = discover_devices(cmdline);
+    trace!("discovered {} devices:", devices.len());
+    for device in &devices {
+        match device {
+            FoundDevice::VirtioNetOverPci(pci_device) => {
+                trace!(
+                    "  virtio-net over PCI: bus={}, slot={}",
+                    pci_device.bus, pci_device.slot
+                );
+            }
+            FoundDevice::VirtioMmio { base, .. } => {
+                trace!("  virtio-net over MMIO: base={base:#x}");
+            }
+        }
+    }
+
     let (driver, irq) = init_net_driver(devices.as_slice());
     let device_id = NET_MUX
         .lock()
