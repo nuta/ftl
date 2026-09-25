@@ -1,8 +1,10 @@
 use ftl_driver::dma::DmaBuf;
 use ftl_driver::dma::DmaBufWithDrop;
 use ftl_driver::env::Env;
+use ftl_driver::info;
 use ftl_driver::net::Driver;
 use ftl_driver::net::Error;
+use ftl_driver::warn;
 use ftl_types::error::ErrorCode;
 use ftl_types::net::ETHTYPE_ARP;
 use ftl_types::net::ETHTYPE_IPV4;
@@ -195,7 +197,7 @@ impl<'a, N: RxNotify> NetMux<'a, N> {
         }
     }
 
-    fn handle_arp(&mut self, device_id: DeviceId, packet: &[u8]) {
+    fn handle_arp(&self, device_id: DeviceId, packet: &[u8]) {
         let arp = match ArpInspector::new(packet) {
             Ok(arp) => arp,
             Err(e) => {
@@ -323,12 +325,12 @@ impl<'a, N: RxNotify> NetMux<'a, N> {
         };
 
         if let Err(error) = self.add_dhcp_route(device_id, &config) {
-            ftl_driver::warn!(self.env, "failed to add DHCP route: {:?}", error);
+            warn!(self.env, "failed to add DHCP route: {:?}", error);
             return;
         }
 
         // TODO: Move this to kernel crate.
-        ftl_driver::info!(
+        info!(
             self.env,
             "DHCP configured: address {}, gateway {}, netmask {}",
             config.address,
@@ -387,41 +389,41 @@ impl<'a, N: RxNotify> NetMux<'a, N> {
         Ok(())
     }
 
-    pub fn handle_interrupt(&mut self, device_id: DeviceId) {
-        let Some(device) = self.devices.get(&device_id) else {
-            return;
-        };
-        let driver = device.driver();
-        let env = self.env;
+    pub fn poll(&mut self, irq: u8) {
+        for device in self.devices.values() {
+            if device.irq() == irq {
+                device.driver().handle_interrupt(self.env);
+            }
+        }
 
-        // Do driver's interrupt work.
-        driver.handle_interrupt(env);
+        while let Some((device_id, buf, headroom, frame_len)) = self.receive(irq) {
+            self.handle_eth_frame(device_id, buf, headroom, frame_len);
+        }
+    }
 
-        // Process pending RX packets.
-        let mut num_popped = 0;
-        loop {
-            match driver.try_receive(env) {
-                Ok((buf, headroom, frame_len)) => {
-                    num_popped += 1;
-                    self.handle_eth_frame(device_id, buf, headroom, frame_len);
-                }
-                Err(error) => {
-                    if error != Error::RxEmpty {
-                        // Something went wrong.
-                        ftl_driver::warn!(env, "failed to receive packet: {:?}", error);
-                        num_popped += 1;
+    fn receive(&self, irq: u8) -> Option<(DeviceId, DmaBuf, usize, usize)> {
+        for (id, device) in self.devices.iter() {
+            if device.irq() == irq {
+                let driver = device.driver();
+                match driver.try_receive(self.env) {
+                    Ok((buf, headroom, frame_len)) => {
+                        self.provide_rx_buffers(self.env, driver, 1);
+                        return Some((*id, buf, headroom, frame_len));
                     }
-
-                    break;
+                    Err(Error::RxEmpty) => {}
+                    Err(error) => {
+                        warn!(self.env, "failed to receive packet: {:?}", error);
+                        self.provide_rx_buffers(self.env, driver, 1);
+                    }
                 }
             }
         }
 
-        self.provide_rx_buffers(env, driver, num_popped);
+        None
     }
 
     pub(crate) fn provide_rx_buffers(
-        &mut self,
+        &self,
         env: &dyn Env,
         driver: &dyn Driver<Notifier = PollNotifier>,
         max_count: usize,
@@ -432,7 +434,7 @@ impl<'a, N: RxNotify> NetMux<'a, N> {
                 Ok(buf) => {
                     if let Err((e, buf)) = driver.provide(env, buf) {
                         if e != Error::RxFull {
-                            ftl_driver::warn!(env, "failed to provide RX buffer: {:?}", e);
+                            warn!(env, "failed to provide RX buffer: {:?}", e);
                         }
 
                         env.free_dma(buf);
@@ -440,7 +442,7 @@ impl<'a, N: RxNotify> NetMux<'a, N> {
                     }
                 }
                 Err(err) => {
-                    ftl_driver::warn!(env, "failed to allocate RX buffer: {:?}", err);
+                    warn!(env, "failed to allocate RX buffer: {:?}", err);
                     break;
                 }
             }

@@ -1,13 +1,11 @@
+use alloc::boxed::Box;
 use alloc::collections::VecDeque;
 use core::fmt;
 use core::str;
-use core::sync::atomic::AtomicU8;
-use core::sync::atomic::Ordering;
 
 use ftl_arrayvec::ArrayVec;
 use ftl_driver::dma::DmaBuf;
 use ftl_driver::net::Driver;
-use ftl_netmux::DeviceId;
 use ftl_netmux::PollNotifier;
 use ftl_utils::alignment::align_up;
 use ftl_utils::cmdline::Parser;
@@ -105,32 +103,15 @@ impl ftl_driver::env::Env for DriverEnv {
     }
 }
 
-#[cfg(target_arch = "x86_64")]
-static VIRTIO_NET_DRIVER: SpinLock<Option<VirtioNet<VirtioPci, PollNotifier>>> =
-    SpinLock::new(None);
-static VIRTIO_NET_DEVICE_ID: SpinLock<Option<DeviceId>> = SpinLock::new(None);
-static NET_IRQ: AtomicU8 = AtomicU8::new(0);
-
-pub fn is_irq(irq: u8) -> bool {
-    irq == NET_IRQ.load(Ordering::Relaxed)
-}
-
-pub fn net_device_id() -> DeviceId {
-    VIRTIO_NET_DEVICE_ID
-        .lock()
-        .expect("virtio-net is not initialized")
-}
-
-pub fn handle_interrupt() {
+pub fn poll(irq: u8) {
     let mut net = NET_MUX.lock();
-    let device_id = VIRTIO_NET_DEVICE_ID.lock().unwrap();
-    net.handle_interrupt(device_id);
+    net.poll(irq);
 }
 
 #[cfg(target_arch = "x86_64")]
 fn init_virtio_net_over_pci(
     pci_device: &ftl_driver::pci::PciDevice,
-) -> (&'static dyn Driver<Notifier = PollNotifier>, u8) {
+) -> (Box<dyn Driver<Notifier = PollNotifier>>, u8) {
     use ftl_driver::pci::get_bar;
     use ftl_driver::pci::get_interrupt_line;
     use ftl_driver::pci::set_bus_master;
@@ -147,19 +128,9 @@ fn init_virtio_net_over_pci(
     let transport = VirtioPci::new(iobase);
     let driver = VirtioNet::<VirtioPci, PollNotifier>::init(&DRIVER_ENV, transport)
         .expect("failed to initialize virtio-net");
-    *VIRTIO_NET_DRIVER.lock() = Some(driver);
-
-    let driver: &'static dyn Driver<Notifier = PollNotifier> = {
-        let guard = VIRTIO_NET_DRIVER.lock();
-        let ptr: *const VirtioNet<VirtioPci, PollNotifier> = guard.as_ref().unwrap();
-        // SAFETY: The driver is never removed from VIRTIO_NET_DRIVER.
-        unsafe { &*ptr }
-    };
-
     let irq = get_interrupt_line(&DRIVER_ENV, &pci_device);
-    arch::interrupt_acquire(irq).expect("failed to enable virtio-net IRQ");
 
-    (driver, irq)
+    (Box::new(driver), irq)
 }
 
 enum FoundDevice {
@@ -242,7 +213,7 @@ fn discover_devices(cmdline: &[u8]) -> ArrayVec<FoundDevice, 8> {
     devices
 }
 
-fn init_net_driver(devices: &[FoundDevice]) -> (&'static dyn Driver<Notifier = PollNotifier>, u8) {
+fn init_net_driver(devices: &[FoundDevice]) -> (Box<dyn Driver<Notifier = PollNotifier>>, u8) {
     for device in devices {
         match device {
             #[cfg(target_arch = "x86_64")]
@@ -278,11 +249,12 @@ pub fn init(cmdline: &[u8]) {
     }
 
     let (driver, irq) = init_net_driver(devices.as_slice());
-    let device_id = NET_MUX
-        .lock()
-        .add_device(driver)
+    let mut net = NET_MUX.lock();
+    let device_id = net
+        .add_device(driver, irq)
         .expect("failed to add network device");
+    net.start_dhcp(device_id);
+    drop(net);
 
-    *VIRTIO_NET_DEVICE_ID.lock() = Some(device_id);
-    NET_IRQ.store(irq, Ordering::Relaxed);
+    arch::interrupt_acquire(irq).expect("failed to enable virtio-net IRQ");
 }

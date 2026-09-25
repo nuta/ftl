@@ -196,8 +196,3 @@ impl ftl_netmux::BufWriter for USlice {
         subslice.write_bytes(buf)
     }
 }
-
-pub fn init() {
-    let device_id = crate::driver::net_device_id();
-    NET_MUX.lock().start_dhcp(device_id);
-}

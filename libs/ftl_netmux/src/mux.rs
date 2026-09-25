@@ -1,3 +1,5 @@
+use alloc::boxed::Box;
+
 use ftl_driver::env::Env;
 use ftl_driver::net::Driver;
 use ftl_types::error::ErrorCode;
@@ -41,16 +43,16 @@ impl<'a, N: RxNotify> NetMux<'a, N> {
 
     pub fn add_device(
         &mut self,
-        driver: &'a dyn Driver<Notifier = PollNotifier>,
+        driver: Box<dyn Driver<Notifier = PollNotifier>>,
+        irq: u8,
     ) -> Result<DeviceId, ErrorCode> {
         self.devices
             .try_reserve(1)
             .map_err(|_| ErrorCode::OutOfMemory)?;
 
-        self.provide_rx_buffers(self.env, driver, 64);
-
         let id = self.alloc_device_id()?;
-        self.devices.insert(id, Device::new(self.env, driver));
+        self.provide_rx_buffers(self.env, &*driver, 64);
+        self.devices.insert(id, Device::new(self.env, driver, irq));
         Ok(id)
     }
 

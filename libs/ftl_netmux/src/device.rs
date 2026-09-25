@@ -1,3 +1,5 @@
+use alloc::boxed::Box;
+
 use ftl_driver::dma::DmaBuf;
 use ftl_driver::env::Env;
 use ftl_driver::net::Driver;
@@ -130,19 +132,29 @@ impl DeviceId {
 
 pub struct Device<'a> {
     env: &'a dyn Env,
-    driver: &'a dyn Driver<Notifier = PollNotifier>,
+    driver: Box<dyn Driver<Notifier = PollNotifier>>,
+    irq: u8,
     arp_table: SpinLock<ArpTable<'a>>,
     dhcp: Option<Client>,
 }
 
 impl<'a> Device<'a> {
-    pub fn new(env: &'a dyn Env, driver: &'a dyn Driver<Notifier = PollNotifier>) -> Self {
+    pub fn new(
+        env: &'a dyn Env,
+        driver: Box<dyn Driver<Notifier = PollNotifier>>,
+        irq: u8,
+    ) -> Self {
         Self {
             env,
             driver,
+            irq,
             arp_table: SpinLock::new(ArpTable::new()),
             dhcp: None,
         }
+    }
+
+    pub fn irq(&self) -> u8 {
+        self.irq
     }
 
     pub fn send_ipv4(
@@ -213,8 +225,8 @@ impl<'a> Device<'a> {
         Ok(())
     }
 
-    pub fn driver(&self) -> &'a dyn Driver<Notifier = PollNotifier> {
-        self.driver
+    pub fn driver(&self) -> &dyn Driver<Notifier = PollNotifier> {
+        &*self.driver
     }
 
     /// Fills an ARP table entry.

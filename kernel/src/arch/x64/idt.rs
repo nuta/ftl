@@ -412,15 +412,12 @@ extern "C" fn handle_kernel_interrupt(frame: &mut InterruptFrame) {
             let irq = vector - IRQ_VECTOR_BASE;
             if irq == TIMER_IRQ {
                 super::timer::handle_interrupt();
-                crate::driver::handle_interrupt();
             } else if irq == COM1_IRQ {
                 crate::console::handle_interrupt();
                 super::io_apic::interrupt_acknowledge(irq);
-            } else if crate::driver::is_irq(irq) {
-                crate::driver::handle_interrupt();
-                super::io_apic::interrupt_acknowledge(irq);
             } else {
-                panic!("unhandled kernel interrupt ({vector})");
+                crate::driver::poll(irq);
+                super::io_apic::interrupt_acknowledge(irq);
             }
         }
         vector => {
@@ -462,15 +459,12 @@ extern "C" fn handle_user_interrupt(vector: u8, error_code: u64) -> ! {
             if irq == TIMER_IRQ {
                 // trace!("timer interrupt");
                 super::timer::handle_interrupt();
-                crate::driver::handle_interrupt();
             } else if irq == COM1_IRQ {
                 crate::console::handle_interrupt();
                 super::io_apic::interrupt_acknowledge(irq);
-            } else if crate::driver::is_irq(irq) {
-                crate::driver::handle_interrupt();
-                super::io_apic::interrupt_acknowledge(irq);
             } else {
-                trace!("unhandled interrupt ({vector}), error_code={error_code:#x}");
+                crate::driver::poll(irq);
+                super::io_apic::interrupt_acknowledge(irq);
             }
         }
         _ => {
