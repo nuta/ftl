@@ -1,5 +1,6 @@
 use core::mem::offset_of;
 use core::mem::size_of;
+use core::ops::ControlFlow;
 
 use crate::env::Env;
 
@@ -95,30 +96,42 @@ fn write_config16(env: &dyn Env, bus: u8, slot: u8, offset: usize, value: u16) {
     }
 }
 
-/// Scans the PCI bus for a device matching `vendor` / `device`.
-fn find_device(env: &dyn Env, vendor: u16, device: u16) -> Option<PciDevice> {
-    for bus in 0..=255 {
+const VIRTIO_VENDOR: u16 = 0x1af4;
+
+fn read_vendor(env: &dyn Env, bus: u8, slot: u8) -> u16 {
+    read_config16(env, bus, slot, offset_of!(PciConfig, vendor))
+}
+
+fn visit_pci_slots<F, R>(env: &dyn Env, mut f: F) -> Option<R>
+where
+    F: FnMut(u8, u8, u16) -> ControlFlow<R>,
+{
+    let mut saw_device = false;
+    for slot in 0..32 {
+        let vendor = read_vendor(env, 0, slot);
+        if vendor == 0xffff {
+            continue;
+        }
+        saw_device = true;
+        if let ControlFlow::Break(result) = f(0, slot, vendor) {
+            return Some(result);
+        }
+    }
+
+    if !saw_device {
+        return None;
+    }
+
+    for bus in 1..=255 {
         for slot in 0..32 {
-            if read_config16(env, bus, slot, offset_of!(PciConfig, vendor)) != vendor {
-                continue;
-            }
-            if read_config16(env, bus, slot, offset_of!(PciConfig, device)) != device {
+            let vendor = read_vendor(env, bus, slot);
+            if vendor == 0xffff {
                 continue;
             }
 
-            return Some(PciDevice {
-                bus,
-                slot,
-                vendor,
-                device,
-                subsystem_vendor_id: read_config16(
-                    env,
-                    bus,
-                    slot,
-                    offset_of!(PciConfig, subsystem_vendor),
-                ),
-                subsystem_id: read_config16(env, bus, slot, offset_of!(PciConfig, subsystem_id)),
-            });
+            if let ControlFlow::Break(result) = f(bus, slot, vendor) {
+                return Some(result);
+            }
         }
     }
 
@@ -127,14 +140,33 @@ fn find_device(env: &dyn Env, vendor: u16, device: u16) -> Option<PciDevice> {
 
 /// Scans for a virtio transitional device with the given subsystem device id.
 pub fn find_virtio_device(env: &dyn Env, subsystem_id: u16) -> Option<PciDevice> {
-    for device_id in 0x1000u16..=0x103f {
-        if let Some(dev) = find_device(env, 0x1af4, device_id) {
-            if dev.subsystem_id == subsystem_id {
-                return Some(dev);
-            }
+    visit_pci_slots(env, |bus, slot, vendor| {
+        if vendor != VIRTIO_VENDOR {
+            return ControlFlow::Continue(());
         }
-    }
-    None
+
+        let device = read_config16(env, bus, slot, offset_of!(PciConfig, device));
+        if !(0x1000..=0x103f).contains(&device) {
+            return ControlFlow::Continue(());
+        }
+
+        let subsystem = read_config16(env, bus, slot, offset_of!(PciConfig, subsystem_id));
+        if subsystem != subsystem_id {
+            return ControlFlow::Continue(());
+        }
+
+        let subsystem_vendor_id =
+            read_config16(env, bus, slot, offset_of!(PciConfig, subsystem_vendor));
+
+        ControlFlow::Break(PciDevice {
+            bus,
+            slot,
+            vendor,
+            device,
+            subsystem_vendor_id,
+            subsystem_id: subsystem,
+        })
+    })
 }
 
 pub fn set_bus_master(env: &dyn Env, dev: &PciDevice, enable: bool) {
