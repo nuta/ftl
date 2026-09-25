@@ -6,9 +6,9 @@ ARCH=${ARCH:-x64}
 
 build_rust_app() {
   local name="$1"
-  pushd "apps/${name}"
+  pushd "apps/${name}" >/dev/null
   cargo build --release --target x86_64-unknown-linux-musl
-  popd
+  popd >/dev/null
   cp "apps/${name}/target/x86_64-unknown-linux-musl/release/${name}" "initfs/bin/${name}"
 }
 
@@ -22,13 +22,21 @@ build_initfs() {
   local initfs_dir="$1"
   local initfs_cpio="$2"
 
-  pushd "${initfs_dir}"
-  find * -print0 | cpio -o -0 -H newc > "${initfs_cpio}"
-  popd
+  pushd "${initfs_dir}" >/dev/null
+  find * -print0 | cpio -o -0 -H newc > "${initfs_cpio}" 2>&1 \
+    | grep -v '^[0-9]* blocks$' >&2 || true
+  popd >/dev/null
 }
 
 build_os() {
   export CARGO_TERM_HYPERLINKS=false
+
+  # This is safe (for the time being) because we don't touch SSE/AVX
+  # stuff in libcore.
+  #
+  # TODO: Consider better way to suppress false-positive lints.
+  export CARGO_FUTURE_INCOMPAT_REPORT_FREQUENCY=never
+
   CARGOFLAGS=(
       -Z build-std=core,alloc
       -Z build-std-features=compiler-builtins-mem
