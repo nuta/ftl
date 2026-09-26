@@ -6,6 +6,7 @@ use core::num::NonZeroU32;
 
 use ftl::net::Net;
 use ftl::poll::Poll;
+use ftl::time::MonoTime;
 use ftl::trace;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
@@ -136,6 +137,12 @@ impl FlowTable {
             .map(|flow| flow.conn.clone())
     }
 
+    fn poll(&self, now: MonoTime) {
+        for flow in self.flows.values() {
+            flow.conn.poll(now);
+        }
+    }
+
     // TODO: Optimize this.
     fn pop_closed(&mut self) -> Option<Rule> {
         let mut to_remove = None;
@@ -242,13 +249,21 @@ impl TcpIp {
                 listener.handle_rx(&pkt, payload, listener_io);
             }
 
-            // Garbage-collect closed flows.
-            // TODO: This might take some time. Optimize this.
-            let mut flows = self.flows.lock();
-            while let Some(rule) = flows.pop_closed() {
-                if let Err(error) = self.io.net.unbind(&rule) {
-                    trace!("failed to unbind flow: {:?}", error);
-                }
+            self.garbage_collect();
+        }
+    }
+
+    pub fn handle_timeouts(&self, now: MonoTime) {
+        self.flows.lock().poll(now);
+        self.garbage_collect();
+    }
+
+    fn garbage_collect(&self) {
+        // TODO: This might take some time. Optimize this.
+        let mut flows = self.flows.lock();
+        while let Some(rule) = flows.pop_closed() {
+            if let Err(error) = self.io.net.unbind(&rule) {
+                trace!("failed to unbind flow: {:?}", error);
             }
         }
     }

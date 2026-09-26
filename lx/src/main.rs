@@ -26,9 +26,12 @@ use ftl::allocator;
 use ftl::hspace::HandleSpace;
 use ftl::net::Net;
 use ftl::poll::Poll;
+use ftl::time::MonoTime;
+use ftl::time::MonoTimeExt;
 use ftl::vmo::Vmo;
 use ftl::vmspace::VmSpace;
 use ftl_types::handle::HandleId;
+use ftl_types::time::Duration;
 use ftl_types::vmspace::PageAttrs;
 use ftl_utils::alignment::align_up;
 
@@ -117,7 +120,8 @@ fn main(cmdline: &[u8]) {
         .expect("failed to subscribe to console events");
 
     loop {
-        let event = poll.wait().expect("poll wait failed");
+        let deadline = MonoTime::now() + Duration::from_secs(1);
+        let event = poll.wait_until(deadline).expect("poll wait failed");
         if event.handle_id() == network.id() {
             network.handle_rx();
             network
@@ -129,5 +133,7 @@ fn main(cmdline: &[u8]) {
                 .subscribe(&poll)
                 .expect("failed to subscribe to console events");
         }
+
+        network.handle_timeouts(MonoTime::now());
     }
 }

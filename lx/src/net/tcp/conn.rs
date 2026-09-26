@@ -1,8 +1,11 @@
 use alloc::sync::Arc;
 use core::cmp::min;
 
+use ftl::time::MonoTime;
+use ftl::time::MonoTimeExt;
 use ftl::trace;
 use ftl_types::error::ErrorCode;
+use ftl_types::time::Duration;
 use ftl_utils::spinlock::SpinLock;
 
 use super::buffer::TcpBuffer;
@@ -26,6 +29,7 @@ use crate::wait_queue::WaitQueue;
 
 // TODO: Should we make this configurable?
 const MAX_SEGMENT_DATA_LEN: usize = 1460;
+const CLOSING_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum State {
@@ -49,6 +53,7 @@ struct Mutable {
     tx_buffer: TcpBuffer,
     rx_buffer: TcpBuffer,
     eof: bool,
+    closing_deadline: Option<MonoTime>,
 }
 
 pub struct TcpConn {
@@ -81,6 +86,7 @@ impl TcpConn {
             tx_buffer: TcpBuffer::new()?,
             rx_buffer: TcpBuffer::new()?,
             eof: false,
+            closing_deadline: None,
         };
 
         Ok(Arc::new(Self {
@@ -100,6 +106,23 @@ impl TcpConn {
 
     pub fn is_closed(&self) -> bool {
         self.mutable.lock().state == State::Closed
+    }
+
+    pub fn poll(&self, now: MonoTime) {
+        let mut mutable = self.mutable.lock();
+        let Some(deadline) = mutable.closing_deadline else {
+            return;
+        };
+
+        if now.duration_since(deadline).is_none() {
+            return;
+        }
+
+        // The deadline has passed. Mark the connection as closed.
+        mutable.state = State::Closed;
+        mutable.eof = true;
+        drop(mutable);
+        self.notify();
     }
 
     /// Send a segment.
@@ -237,7 +260,10 @@ impl TcpConn {
         mutable.eof = true;
         mutable.state = match mutable.state {
             State::Established => State::CloseWait,
-            State::FinWait1 => State::Closing,
+            State::FinWait1 => {
+                mutable.closing_deadline = Some(MonoTime::now() + CLOSING_TIMEOUT);
+                State::Closing
+            }
             State::FinWait2 => State::Closed,
             state => state,
         };
