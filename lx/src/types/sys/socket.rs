@@ -10,6 +10,10 @@ use crate::types::sys::fcntl::O_NONBLOCK;
 pub const SOCK_NONBLOCK: c_int = O_NONBLOCK;
 pub const SOCK_CLOEXEC: c_int = O_CLOEXEC;
 
+pub const SHUT_RD: c_int = 0;
+pub const SHUT_WR: c_int = 1;
+pub const SHUT_RDWR: c_int = 2;
+
 pub const SOL_SOCKET: c_int = 1;
 pub const SO_REUSEADDR: c_int = 2;
 

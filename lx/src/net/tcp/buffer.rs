@@ -85,4 +85,8 @@ impl TcpBuffer {
         let len = min(len, self.readable_len());
         self.bytes.drain(..len);
     }
+
+    pub fn clear(&mut self) {
+        self.bytes.clear();
+    }
 }

@@ -16,6 +16,9 @@ use crate::types::c_short;
 use crate::types::errno::Errno;
 use crate::types::sys::poll::POLLIN;
 use crate::types::sys::poll::POLLOUT;
+use crate::types::sys::socket::SHUT_RD;
+use crate::types::sys::socket::SHUT_RDWR;
+use crate::types::sys::socket::SHUT_WR;
 use crate::types::sys::socket::SockAddr;
 use crate::vfs::FileLike;
 use crate::wait_queue::Sleep;
@@ -37,7 +40,8 @@ enum State {
 
 struct Mutable {
     state: State,
-    closing: bool,
+    write_closed: bool,
+    read_closed: bool,
     snd_una: u32,
     snd_nxt: u32,
     snd_wnd: u16,
@@ -68,7 +72,8 @@ impl TcpConn {
         let snd_nxt = local_iss.wrapping_add(1);
         let mutable = Mutable {
             state: State::Established,
-            closing: false,
+            write_closed: false,
+            read_closed: false,
             snd_una: snd_nxt,
             snd_nxt,
             snd_wnd: remote_rcv_wnd,
@@ -178,7 +183,7 @@ impl TcpConn {
             return;
         }
 
-        if mutable.closing && mutable.tx_buffer.is_empty() {
+        if mutable.write_closed && mutable.tx_buffer.is_empty() {
             // We've sent all data, and the peer has acknowledged it. It's time
             // to send a FIN.
             self.send_fin(mutable);
@@ -270,15 +275,22 @@ impl TcpConn {
             0
         };
 
-        // Receive the TCP payload into the RX buffer.
         let received_len = payload.len();
-        let written_len = mutable.rx_buffer.write_with(received_len, |buf| {
-            if buf.len() != received_len {
-                return 0;
-            }
-            buf.copy_from_slice(payload);
-            received_len
-        });
+        let written_len = if mutable.read_closed {
+            // Process won't read any more data. Discard the payload, but
+            // acknowledge it.
+            Ok(received_len)
+        } else {
+            // Receive the TCP payload into the RX buffer.
+            mutable.rx_buffer.write_with(received_len, |buf| {
+                if buf.len() != received_len {
+                    return 0;
+                }
+
+                buf.copy_from_slice(payload);
+                received_len
+            })
+        };
 
         // Writes to the RX buffer may fail on OOM.
         let written_len = match written_len {
@@ -316,8 +328,41 @@ impl TcpConn {
     /// Initiates a connection close.
     pub fn do_close(&self) {
         let mut mutable = self.mutable.lock();
-        mutable.closing = true;
+        mutable.write_closed = true;
         self.flush(&mut mutable);
+    }
+
+    pub fn do_shutdown(&self, how: c_int) -> Result<(), Errno> {
+        // Determine what to do.
+        let (shutdown_read, shutdown_write) = match how {
+            SHUT_RD => (true, false),
+            SHUT_WR => (false, true),
+            SHUT_RDWR => (true, true),
+            _ => {
+                return Err(Errno::EINVAL);
+            }
+        };
+
+        let mut mutable = self.mutable.lock();
+        if mutable.state == State::Closed {
+            return Err(Errno::ENOTCONN);
+        }
+
+        // The process won't read any more data.
+        if shutdown_read {
+            mutable.read_closed = true;
+            mutable.rx_buffer.clear();
+        }
+
+        // The process won't write any more data.
+        if shutdown_write {
+            mutable.write_closed = true;
+            self.flush(&mut mutable);
+        }
+
+        drop(mutable);
+        self.notify();
+        Ok(())
     }
 
     fn recv(&self, buf: &mut [u8], nonblocking: bool, sleep: Sleep<'_>) -> Result<usize, Errno> {
@@ -328,6 +373,10 @@ impl TcpConn {
         let sleep_guard = sleep.guard(&self.wait_queue)?;
         loop {
             let mut mutable = self.mutable.lock();
+            if mutable.read_closed {
+                return Ok(0);
+            }
+
             if !mutable.rx_buffer.is_empty() {
                 let len = mutable.rx_buffer.read(buf);
 
@@ -396,6 +445,10 @@ impl FileLike for TcpConn {
         let sleep_guard = sleep.guard(&self.wait_queue)?;
         loop {
             let mut mutable = self.mutable.lock();
+            if mutable.write_closed {
+                return Err(Errno::EPIPE);
+            }
+
             if mutable.state != State::Established && mutable.state != State::CloseWait {
                 // The connection is not in a writable state.
                 // TODO: return an appropriate errno
@@ -442,16 +495,25 @@ impl FileLike for TcpConn {
         self.do_close();
     }
 
+    fn shutdown(&self, how: c_int) -> Result<(), Errno> {
+        self.do_shutdown(how)
+    }
+
     fn poll(&self) -> Result<c_short, Errno> {
         let mut status = 0;
         let mutable = self.mutable.lock();
 
         // This is readable if read() would return 0 anyway (EOF/closed).
-        if !mutable.rx_buffer.is_empty() || mutable.eof || mutable.state == State::Closed {
+        if !mutable.rx_buffer.is_empty()
+            || mutable.eof
+            || mutable.read_closed
+            || mutable.state == State::Closed
+        {
             status |= POLLIN;
         }
 
-        if (mutable.state == State::Established || mutable.state == State::CloseWait)
+        if !mutable.write_closed
+            && (mutable.state == State::Established || mutable.state == State::CloseWait)
             && mutable.tx_buffer.writable_len() > 0
         {
             status |= POLLOUT;

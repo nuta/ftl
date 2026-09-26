@@ -105,6 +105,10 @@ pub trait FileLike: Send + Sync {
 
     fn close(&self) {}
 
+    fn shutdown(&self, _how: c_int) -> Result<(), Errno> {
+        Err(Errno::ENOTSOCK)
+    }
+
     fn read(
         &self,
         buf: &mut [u8],

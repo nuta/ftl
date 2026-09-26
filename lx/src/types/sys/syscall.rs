@@ -14,6 +14,7 @@ pub const SYS_GETPID: usize = 39;
 pub const SYS_FORK: usize = 57;
 pub const SYS_KILL: usize = 62;
 pub const SYS_SOCKET: usize = 41;
+pub const SYS_SHUTDOWN: usize = 48;
 pub const SYS_ACCEPT: usize = 43;
 pub const SYS_SENDTO: usize = 44;
 pub const SYS_RECVFROM: usize = 45;
