@@ -1,8 +1,8 @@
 use alloc::sync::Arc;
 
+use super::SyscallResult;
 use crate::thread::LxThread;
 use crate::types::c_int;
-use crate::types::c_long;
 use crate::types::errno::Errno;
 use crate::types::sys::fcntl::O_CLOEXEC;
 use crate::types::sys::fcntl::O_NONBLOCK;
@@ -12,7 +12,11 @@ use crate::vfs::Pipe;
 
 const SUPPORTED_FLAGS: c_int = O_CLOEXEC | O_NONBLOCK;
 
-pub fn sys_pipe2(current: &LxThread, pipefd: *mut c_int, flags: c_int) -> Result<c_long, Errno> {
+pub fn sys_pipe2(
+    current: &LxThread,
+    pipefd: *mut c_int,
+    flags: c_int,
+) -> Result<SyscallResult, Errno> {
     if pipefd.is_null() {
         return Err(Errno::EFAULT);
     }
@@ -38,5 +42,5 @@ pub fn sys_pipe2(current: &LxThread, pipefd: *mut c_int, flags: c_int) -> Result
         *pipefd.add(1) = write_fd;
     }
 
-    Ok(0)
+    Ok(SyscallResult::Done(0))
 }

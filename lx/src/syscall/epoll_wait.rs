@@ -1,5 +1,6 @@
 use core::slice;
 
+use super::SyscallResult;
 use crate::thread::LxThread;
 use crate::types::c_int;
 use crate::types::c_long;
@@ -13,7 +14,7 @@ pub fn sys_epoll_wait(
     events: *mut EpollEvent,
     max_events: c_int,
     timeout: c_int,
-) -> Result<c_long, Errno> {
+) -> Result<SyscallResult, Errno> {
     if events.is_null() {
         return Err(Errno::EFAULT);
     }
@@ -31,5 +32,5 @@ pub fn sys_epoll_wait(
     let events = unsafe { slice::from_raw_parts_mut(events, max_events as usize) };
     let epoll = epfile.as_epoll().ok_or(Errno::EINVAL)?;
     let n = epoll.wait(events, timeout, Sleep::Interruptible(&process))?;
-    Ok(n as c_long)
+    Ok(SyscallResult::Done(n as c_long))
 }

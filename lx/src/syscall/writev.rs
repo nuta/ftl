@@ -1,6 +1,6 @@
+use super::SyscallResult;
 use crate::thread::LxThread;
 use crate::types::c_int;
-use crate::types::c_long;
 use crate::types::errno::Errno;
 use crate::types::sys::uio::IoVec;
 use crate::vfs::IoVecSlice;
@@ -11,7 +11,7 @@ pub fn sys_writev(
     fd: c_int,
     iov: *const IoVec,
     iovcnt: c_int,
-) -> Result<c_long, Errno> {
+) -> Result<SyscallResult, Errno> {
     let process = current.process();
     let file = {
         let fd_table = process.fd_table().lock();
@@ -19,7 +19,7 @@ pub fn sys_writev(
     };
 
     if iovcnt == 0 {
-        return Ok(0);
+        return Ok(SyscallResult::Done(0));
     }
 
     if iovcnt < 0 {
@@ -32,5 +32,5 @@ pub fn sys_writev(
 
     let iovecs = IoVecSlice::new(iov, iovcnt as usize);
     let n = file.writev(&iovecs, Sleep::Interruptible(&process))?;
-    Ok(n.try_into().unwrap()) // FIXME: Handle overflow
+    Ok(SyscallResult::Done(n.try_into().unwrap())) // FIXME: Handle overflow
 }

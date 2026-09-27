@@ -1,5 +1,6 @@
 use alloc::sync::Arc;
 
+use super::SyscallResult;
 use crate::thread::LxThread;
 use crate::types::c_int;
 use crate::types::c_long;
@@ -18,7 +19,7 @@ pub fn sys_eventfd2(
     current: &LxThread,
     initval: c_unsigned,
     flags: c_int,
-) -> Result<c_long, Errno> {
+) -> Result<SyscallResult, Errno> {
     if flags & !SUPPORTED_FLAGS != 0 {
         return Err(Errno::EINVAL);
     }
@@ -29,5 +30,5 @@ pub fn sys_eventfd2(
         .fd_table()
         .lock()
         .insert(Arc::new(eventfd), O_RDWR | (flags & OPEN_FLAGS))?;
-    Ok(fd as c_long)
+    Ok(SyscallResult::Done(fd as c_long))
 }

@@ -40,6 +40,8 @@ mod wait4;
 mod write;
 mod writev;
 
+use ftl_types::thread::ExitReason;
+
 use self::accept::sys_accept;
 use self::accept4::sys_accept4;
 use self::arch_prctl::sys_arch_prctl;
@@ -137,9 +139,21 @@ use crate::types::sys::syscall::SYS_WRITEV;
 use crate::types::sys::time::TimeSpec;
 use crate::types::sys::uio::IoVec;
 
+pub enum SyscallResult {
+    Done(c_long),
+    Exit(ExitReason),
+}
+
 pub extern "C" fn handle_syscall(frame: *mut SyscallFrame) -> *mut SyscallFrame {
     // SAFETY: `syscall_handler` passes its register frame.
     let frame = unsafe { &mut *frame };
+    match do_handle_syscall(frame) {
+        SyscallResult::Done(_) => frame,
+        SyscallResult::Exit(reason) => ftl::thread::exit(reason),
+    }
+}
+
+fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
     let nr = frame.nr();
     let arg0 = frame.arg0();
     let arg1 = frame.arg1();
@@ -288,7 +302,10 @@ pub extern "C" fn handle_syscall(frame: *mut SyscallFrame) -> *mut SyscallFrame 
     };
 
     let retval = match result {
-        Ok(retval) => retval,
+        Ok(SyscallResult::Done(retval)) => retval,
+        Ok(SyscallResult::Exit(reason)) => {
+            return SyscallResult::Exit(reason);
+        }
         Err(errno) => -(errno.as_int() as c_long),
     };
     frame.set_retval(retval);
@@ -298,5 +315,5 @@ pub extern "C" fn handle_syscall(frame: *mut SyscallFrame) -> *mut SyscallFrame 
         current.handle_pending_signal(frame);
     }
 
-    frame
+    SyscallResult::Done(frame.retval())
 }

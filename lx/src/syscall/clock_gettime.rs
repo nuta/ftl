@@ -4,9 +4,9 @@ use ftl::time::WallTime;
 use ftl::time::WallTimeExt;
 use ftl::warn;
 
+use super::SyscallResult;
 use crate::thread::LxThread;
 use crate::types::c_int;
-use crate::types::c_long;
 use crate::types::errno::Errno;
 use crate::types::sys::time::CLOCK_MONOTONIC;
 use crate::types::sys::time::CLOCK_REALTIME;
@@ -16,7 +16,7 @@ pub fn sys_clock_gettime(
     _current: &LxThread,
     clockid: c_int,
     tp: *mut TimeSpec,
-) -> Result<c_long, Errno> {
+) -> Result<SyscallResult, Errno> {
     if tp.is_null() {
         return Err(Errno::EFAULT);
     }
@@ -33,5 +33,5 @@ pub fn sys_clock_gettime(
     unsafe {
         tp.write(TimeSpec::from_nanos(nanos));
     }
-    Ok(0)
+    Ok(SyscallResult::Done(0))
 }

@@ -1,5 +1,6 @@
 use core::slice;
 
+use super::SyscallResult;
 use crate::thread::LxThread;
 use crate::types::c_long;
 use crate::types::c_unsigned;
@@ -12,9 +13,9 @@ pub fn sys_getrandom(
     buf: *mut c_void,
     size: size_t,
     _flags: c_unsigned,
-) -> Result<c_long, Errno> {
+) -> Result<SyscallResult, Errno> {
     if size == 0 {
-        return Ok(0);
+        return Ok(SyscallResult::Done(0));
     }
 
     if buf.is_null() {
@@ -24,5 +25,5 @@ pub fn sys_getrandom(
     // TODO: support flags.
     let bytes = unsafe { slice::from_raw_parts_mut(buf.cast::<u8>(), size) };
     ftl::random::read(bytes)?;
-    Ok(size as c_long)
+    Ok(SyscallResult::Done(size as c_long))
 }

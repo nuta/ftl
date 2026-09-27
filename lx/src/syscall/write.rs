@@ -1,6 +1,6 @@
+use super::SyscallResult;
 use crate::thread::LxThread;
 use crate::types::c_int;
-use crate::types::c_long;
 use crate::types::c_void;
 use crate::types::errno::Errno;
 use crate::types::size_t;
@@ -11,7 +11,7 @@ pub fn sys_write(
     fd: c_int,
     buf: *const c_void,
     count: size_t,
-) -> Result<c_long, Errno> {
+) -> Result<SyscallResult, Errno> {
     let process = current.process();
     let file = {
         let fd_table = process.fd_table().lock();
@@ -19,7 +19,7 @@ pub fn sys_write(
     };
 
     if count == 0 {
-        return Ok(0);
+        return Ok(SyscallResult::Done(0));
     }
 
     if buf.is_null() {
@@ -28,5 +28,5 @@ pub fn sys_write(
 
     let bytes = unsafe { core::slice::from_raw_parts(buf.cast::<u8>(), count) };
     let n = file.write(bytes, Sleep::Interruptible(&process))?;
-    Ok(n.try_into().unwrap()) // FIXME: Handle overflow
+    Ok(SyscallResult::Done(n.try_into().unwrap())) // FIXME: Handle overflow
 }

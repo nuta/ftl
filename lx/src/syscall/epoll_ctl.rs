@@ -1,6 +1,6 @@
+use super::SyscallResult;
 use crate::thread::LxThread;
 use crate::types::c_int;
-use crate::types::c_long;
 use crate::types::errno::Errno;
 use crate::types::sys::epoll::EPOLL_CTL_ADD;
 use crate::types::sys::epoll::EPOLL_CTL_DEL;
@@ -21,7 +21,7 @@ pub fn sys_epoll_ctl(
     op: c_int,
     fd: c_int,
     event: *const EpollEvent,
-) -> Result<c_long, Errno> {
+) -> Result<SyscallResult, Errno> {
     let process = current.process();
     let (epfile, file) = {
         let fd_table = process.fd_table().lock();
@@ -42,5 +42,5 @@ pub fn sys_epoll_ctl(
         _ => return Err(Errno::EINVAL),
     }
 
-    Ok(0)
+    Ok(SyscallResult::Done(0))
 }

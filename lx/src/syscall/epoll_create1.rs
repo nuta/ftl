@@ -1,5 +1,6 @@
 use alloc::sync::Arc;
 
+use super::SyscallResult;
 use crate::thread::LxThread;
 use crate::types::c_int;
 use crate::types::c_long;
@@ -10,7 +11,7 @@ use crate::vfs::Epoll;
 
 const SUPPORTED_FLAGS: c_int = EPOLL_CLOEXEC;
 
-pub fn sys_epoll_create1(current: &LxThread, flags: c_int) -> Result<c_long, Errno> {
+pub fn sys_epoll_create1(current: &LxThread, flags: c_int) -> Result<SyscallResult, Errno> {
     if flags & !SUPPORTED_FLAGS != 0 {
         return Err(Errno::EINVAL);
     }
@@ -20,5 +21,5 @@ pub fn sys_epoll_create1(current: &LxThread, flags: c_int) -> Result<c_long, Err
         .fd_table()
         .lock()
         .insert(Arc::new(Epoll::new()?), O_RDWR | flags)?;
-    Ok(fd as c_long)
+    Ok(SyscallResult::Done(fd as c_long))
 }

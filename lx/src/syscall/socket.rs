@@ -1,3 +1,4 @@
+use super::SyscallResult;
 use crate::thread::LxThread;
 use crate::types::c_int;
 use crate::types::c_long;
@@ -19,7 +20,7 @@ pub fn sys_socket(
     domain: c_int,
     socket_type: c_int,
     protocol: c_int,
-) -> Result<c_long, Errno> {
+) -> Result<SyscallResult, Errno> {
     if domain != AF_INET {
         return Err(Errno::ENOTSUP);
     }
@@ -42,5 +43,5 @@ pub fn sys_socket(
         .fd_table()
         .lock()
         .insert(listener, O_RDWR | (socket_type & SUPPORTED_FLAGS))?;
-    Ok(fd as c_long)
+    Ok(SyscallResult::Done(fd as c_long))
 }

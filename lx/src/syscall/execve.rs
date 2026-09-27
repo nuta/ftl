@@ -4,9 +4,9 @@ use core::ffi::CStr;
 
 use ftl_types::thread::ExitReason;
 
+use super::SyscallResult;
 use crate::initfs::InitFsLoader;
 use crate::thread::LxThread;
-use crate::types::c_long;
 use crate::types::errno::Errno;
 use crate::vfs::EmbeddedFile;
 
@@ -15,7 +15,7 @@ pub fn sys_execve(
     _path: *const u8,
     argv: *const *const u8,
     _envp: *const *const u8,
-) -> Result<c_long, Errno> {
+) -> Result<SyscallResult, Errno> {
     let mut argv_vec = Vec::new();
     if !argv.is_null() {
         for i in 0.. {
@@ -42,5 +42,5 @@ pub fn sys_execve(
 
     // TODO: envp support
     current.process().exec(current, elf_file, &argv_vec)?;
-    ftl::thread::exit(ExitReason::Success)
+    Ok(SyscallResult::Exit(ExitReason::Success))
 }

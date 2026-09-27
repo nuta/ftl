@@ -1,3 +1,4 @@
+use super::SyscallResult;
 use crate::thread::LxThread;
 use crate::types::c_int;
 use crate::types::c_long;
@@ -9,7 +10,7 @@ pub fn sys_lseek(
     fd: c_int,
     offset: off_t,
     whence: c_int,
-) -> Result<c_long, Errno> {
+) -> Result<SyscallResult, Errno> {
     let file = {
         let process = current.process();
         let fd_table = process.fd_table().lock();
@@ -17,5 +18,5 @@ pub fn sys_lseek(
     };
 
     let new_offset = file.seek(offset, whence)?;
-    Ok(new_offset as c_long)
+    Ok(SyscallResult::Done(new_offset as c_long))
 }

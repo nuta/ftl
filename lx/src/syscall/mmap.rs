@@ -1,3 +1,4 @@
+use super::SyscallResult;
 use crate::thread::LxThread;
 use crate::types::c_int;
 use crate::types::c_long;
@@ -12,7 +13,7 @@ pub fn sys_mmap(
     flags: c_int,
     _fd: c_int,
     _offset: i64,
-) -> Result<c_long, Errno> {
+) -> Result<SyscallResult, Errno> {
     let addr = if flags & MAP_ANONYMOUS != 0 {
         current.vm().mmap_anonymous(addr, len, prot)?
     } else {
@@ -20,5 +21,5 @@ pub fn sys_mmap(
         return Err(Errno::ENOSYS);
     };
 
-    Ok(addr as c_long)
+    Ok(SyscallResult::Done(addr as c_long))
 }

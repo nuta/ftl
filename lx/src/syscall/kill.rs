@@ -1,11 +1,11 @@
+use super::SyscallResult;
 use crate::process::PId;
 use crate::signal::Signal;
 use crate::thread::LxThread;
 use crate::types::c_int;
-use crate::types::c_long;
 use crate::types::errno::Errno;
 
-pub fn sys_kill(current: &LxThread, pid: c_int, signal: c_int) -> Result<c_long, Errno> {
+pub fn sys_kill(current: &LxThread, pid: c_int, signal: c_int) -> Result<SyscallResult, Errno> {
     let signal = if signal == 0 {
         // If signal is zero, signal won't be delivered but we still need to
         // check if it's deliverable (e.g. the target process exists).
@@ -27,5 +27,5 @@ pub fn sys_kill(current: &LxThread, pid: c_int, signal: c_int) -> Result<c_long,
         target.queue_signal(signal)?;
     }
 
-    Ok(0)
+    Ok(SyscallResult::Done(0))
 }

@@ -1,3 +1,4 @@
+use super::SyscallResult;
 use crate::thread::LxThread;
 use crate::types::c_int;
 use crate::types::c_long;
@@ -15,21 +16,25 @@ pub fn sys_wait4(
     pid: c_int,
     wstatus: *mut c_int,
     options: c_int,
-) -> Result<c_long, Errno> {
+) -> Result<SyscallResult, Errno> {
     if options & !SUPPORTED_FLAGS != 0 {
         return Err(Errno::EINVAL);
     }
 
     let wnohang = options & WNOHANG != 0;
-    match current.process().wait(pid, wnohang) {
+    let retval = match current.process().wait(pid, wnohang) {
         Ok(Some((pid, exit_status))) => {
             if !wstatus.is_null() {
                 unsafe { wstatus.write(encode_wait_status(exit_status)) };
             }
 
-            Ok(pid.as_int() as c_long)
+            pid.as_int() as c_long
         }
-        Ok(None) => Ok(0),
-        Err(errno) => Err(errno),
-    }
+        Ok(None) => 0,
+        Err(errno) => {
+            return Err(errno);
+        }
+    };
+
+    Ok(SyscallResult::Done(retval as c_long))
 }

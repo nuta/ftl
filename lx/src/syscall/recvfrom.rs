@@ -1,5 +1,6 @@
 use core::slice;
 
+use super::SyscallResult;
 use crate::thread::LxThread;
 use crate::types::c_int;
 use crate::types::c_long;
@@ -21,7 +22,7 @@ pub fn sys_recvfrom(
     flags: c_int,
     src_addr: *mut u8,
     addr_len: *mut u32,
-) -> Result<c_long, Errno> {
+) -> Result<SyscallResult, Errno> {
     if flags & !SUPPORTED_FLAGS != 0 {
         return Err(Errno::EINVAL);
     }
@@ -43,5 +44,5 @@ pub fn sys_recvfrom(
         write_sockaddr(src_addr, addr_len, &addr.as_raw())?;
     }
 
-    Ok(n as c_long)
+    Ok(SyscallResult::Done(n as c_long))
 }

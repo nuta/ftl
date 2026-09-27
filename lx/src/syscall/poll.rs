@@ -1,6 +1,7 @@
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 
+use super::SyscallResult;
 use crate::open_file::OpenFile;
 use crate::thread::LxThread;
 use crate::types::c_int;
@@ -18,9 +19,9 @@ pub fn sys_poll(
     fds: *mut PollFd,
     nfds: nfds_t,
     timeout: c_int,
-) -> Result<c_long, Errno> {
+) -> Result<SyscallResult, Errno> {
     if nfds == 0 {
-        return Ok(0);
+        return Ok(SyscallResult::Done(0));
     }
 
     if fds.is_null() {
@@ -46,11 +47,12 @@ pub fn sys_poll(
     drop(fd_table);
 
     if bad_fds > 0 {
-        return Ok(bad_fds);
+        return Ok(SyscallResult::Done(bad_fds));
     }
 
     if timeout == 0 {
-        return scan_pollfds(fds, &files);
+        let n = scan_pollfds(fds, &files)?;
+        return Ok(SyscallResult::Done(n));
     }
 
     // Subscribe to the files' wait queues.
@@ -69,7 +71,7 @@ pub fn sys_poll(
 
         let n = scan_pollfds(fds, &files)?;
         if n > 0 {
-            return Ok(n);
+            return Ok(SyscallResult::Done(n));
         }
 
         // No ready entries. Wait for events.

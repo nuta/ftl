@@ -1,5 +1,6 @@
 use core::slice;
 
+use super::SyscallResult;
 use crate::thread::LxThread;
 use crate::types::c_int;
 use crate::types::c_long;
@@ -13,7 +14,7 @@ pub fn sys_read(
     fd: c_int,
     buf: *mut c_void,
     count: size_t,
-) -> Result<c_long, Errno> {
+) -> Result<SyscallResult, Errno> {
     let process = current.process();
     let file = {
         let fd_table = process.fd_table().lock();
@@ -21,7 +22,7 @@ pub fn sys_read(
     };
 
     if count == 0 {
-        return Ok(0);
+        return Ok(SyscallResult::Done(0));
     }
 
     if buf.is_null() {
@@ -29,5 +30,7 @@ pub fn sys_read(
     }
 
     let bytes = unsafe { slice::from_raw_parts_mut(buf.cast::<u8>(), count) };
-    Ok(file.read(bytes, Sleep::Interruptible(&process))? as c_long)
+    Ok(SyscallResult::Done(
+        file.read(bytes, Sleep::Interruptible(&process))? as c_long,
+    ))
 }

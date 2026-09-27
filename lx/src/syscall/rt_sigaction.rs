@@ -1,9 +1,9 @@
+use super::SyscallResult;
 use crate::signal::SigAction;
 use crate::signal::Signal;
 use crate::thread::LxThread;
 use crate::types;
 use crate::types::c_int;
-use crate::types::c_long;
 use crate::types::errno::Errno;
 
 pub fn sys_rt_sigaction(
@@ -12,7 +12,7 @@ pub fn sys_rt_sigaction(
     action: *const types::signal::SigAction,
     old_action: *mut types::signal::SigAction,
     sigset_size: usize,
-) -> Result<c_long, Errno> {
+) -> Result<SyscallResult, Errno> {
     if sigset_size != size_of::<u64>() {
         return Err(Errno::EINVAL);
     }
@@ -34,5 +34,5 @@ pub fn sys_rt_sigaction(
         unsafe { old_action.write(old.to_raw()) };
     }
 
-    Ok(0)
+    Ok(SyscallResult::Done(0))
 }

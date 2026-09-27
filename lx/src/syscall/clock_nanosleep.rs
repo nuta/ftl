@@ -6,9 +6,9 @@ use ftl::trace;
 use ftl::warn;
 use ftl_types::time::Duration;
 
+use super::SyscallResult;
 use crate::thread::LxThread;
 use crate::types::c_int;
-use crate::types::c_long;
 use crate::types::errno::Errno;
 use crate::types::sys::time::CLOCK_MONOTONIC;
 use crate::types::sys::time::CLOCK_REALTIME;
@@ -23,7 +23,7 @@ pub fn sys_clock_nanosleep(
     flags: c_int,
     t: *const TimeSpec,
     remain: *mut TimeSpec,
-) -> Result<c_long, Errno> {
+) -> Result<SyscallResult, Errno> {
     if flags & !SUPPORTED_FLAGS != 0 {
         return Err(Errno::EINVAL);
     }
@@ -88,7 +88,7 @@ pub fn sys_clock_nanosleep(
         }
 
         if guard.wait_with_deadline(deadline)? {
-            return Ok(0);
+            return Ok(SyscallResult::Done(0));
         }
     }
 }
