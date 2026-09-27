@@ -22,11 +22,15 @@ mod wait_queue;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 
+use ftl::allocator;
 use ftl::hspace::HandleSpace;
 use ftl::net::Net;
 use ftl::poll::Poll;
+use ftl::vmo::Vmo;
 use ftl::vmspace::VmSpace;
 use ftl_types::handle::HandleId;
+use ftl_types::vmspace::PageAttrs;
+use ftl_utils::alignment::align_up;
 
 use crate::container::Container;
 use crate::initfs::InitFsLoader;
@@ -38,6 +42,14 @@ struct Aligned<const N: usize>([u8; N]);
 
 static INITFS: Aligned<{ include_bytes!("../../initfs.cpio").len() }> =
     Aligned(*include_bytes!("../../initfs.cpio"));
+
+/// The size of LX's heap.
+const HEAP_SIZE: usize = 128 * 1024 * 1024;
+
+unsafe extern "C" {
+    /// The end of the image, defined by the linker by default.
+    static _end: u8;
+}
 
 fn parse_cmdline<'a>(
     cmdline: &'a [u8],
@@ -56,6 +68,16 @@ fn parse_cmdline<'a>(
 fn main(cmdline: &[u8]) {
     let root_hspace = unsafe { HandleSpace::from_handle(HandleId::new(1)) };
     let root_vmspace = unsafe { VmSpace::from_handle(HandleId::new(2)) };
+
+    // Allocate the VMO for the heap.
+    let heap_addr = align_up(&raw const _end as usize, 4096);
+    let heap = Vmo::create(HEAP_SIZE).expect("failed to create heap VMO");
+    root_vmspace
+        .map(&heap, heap_addr, PageAttrs::READ | PageAttrs::WRITE)
+        .expect("failed to map heap VMO");
+
+    // SAFETY: The mapped heap is exclusive to the global allocator.
+    unsafe { allocator::init(heap_addr as *mut u8, HEAP_SIZE) };
 
     let init = parse_cmdline(cmdline, b"ftl.lx.init")
         .expect("failed to parse cmdline")
