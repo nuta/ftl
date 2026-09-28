@@ -4,6 +4,7 @@ pub mod eventfd;
 pub mod fcntl;
 pub mod mman;
 pub mod poll;
+pub mod sched;
 pub mod socket;
 pub mod syscall;
 pub mod time;

@@ -11,6 +11,7 @@ pub const SYS_BRK: usize = 12;
 pub const SYS_WRITEV: usize = 20;
 pub const SYS_PIPE: usize = 22;
 pub const SYS_GETPID: usize = 39;
+pub const SYS_CLONE: usize = 56;
 pub const SYS_FORK: usize = 57;
 pub const SYS_KILL: usize = 62;
 pub const SYS_SOCKET: usize = 41;

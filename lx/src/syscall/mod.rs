@@ -5,6 +5,7 @@ mod bind;
 mod brk;
 mod clock_gettime;
 mod clock_nanosleep;
+mod clone;
 mod close;
 mod dup2;
 mod dup3;
@@ -49,6 +50,7 @@ use self::bind::sys_bind;
 use self::brk::sys_brk;
 use self::clock_gettime::sys_clock_gettime;
 use self::clock_nanosleep::sys_clock_nanosleep;
+use self::clone::sys_clone;
 use self::close::sys_close;
 use self::dup2::sys_dup2;
 use self::dup3::sys_dup3;
@@ -88,6 +90,7 @@ use crate::thread::LxThread;
 use crate::types;
 use crate::types::c_int;
 use crate::types::c_long;
+use crate::types::c_ulong;
 use crate::types::c_unsigned;
 use crate::types::c_void;
 use crate::types::errno::Errno;
@@ -102,6 +105,7 @@ use crate::types::sys::syscall::SYS_BIND;
 use crate::types::sys::syscall::SYS_BRK;
 use crate::types::sys::syscall::SYS_CLOCK_GETTIME;
 use crate::types::sys::syscall::SYS_CLOCK_NANOSLEEP;
+use crate::types::sys::syscall::SYS_CLONE;
 use crate::types::sys::syscall::SYS_CLOSE;
 use crate::types::sys::syscall::SYS_DUP2;
 use crate::types::sys::syscall::SYS_DUP3;
@@ -239,6 +243,17 @@ fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
         SYS_PIPE2 => sys_pipe2(current, arg0 as *mut c_int, arg1 as c_int),
         SYS_POLL => sys_poll(current, arg0 as *mut PollFd, arg1 as nfds_t, arg2 as c_int),
         SYS_WRITEV => sys_writev(current, arg0 as c_int, arg1 as *const IoVec, arg2 as c_int),
+        SYS_CLONE => {
+            sys_clone(
+                current,
+                frame,
+                arg0 as c_ulong,
+                arg1,
+                arg2 as *mut c_int,
+                frame.arg3() as *mut c_int,
+                frame.arg4() as c_ulong,
+            )
+        }
         SYS_FORK => sys_fork(current, frame),
         SYS_GETPID => sys_getpid(current),
         SYS_GETRANDOM => sys_getrandom(current, arg0 as *mut c_void, arg1, arg2 as c_unsigned),
