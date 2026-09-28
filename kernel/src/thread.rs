@@ -1,3 +1,4 @@
+use alloc::vec::Vec;
 use core::cell::UnsafeCell;
 use core::mem::offset_of;
 use core::mem::size_of;
@@ -5,10 +6,12 @@ use core::mem::size_of;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use ftl_types::handle::HandleRight;
+use ftl_types::poll::EventKind;
 use ftl_types::thread::Regs;
 use ftl_types::thread::RegsKind;
 use ftl_types::thread::SyscallRegs;
 use ftl_types::time::MonoTime;
+use ftl_utils::reserve_slot::ReserveSlot;
 use ftl_utils::spinlock::SpinLock;
 use ftl_utils::static_assert;
 
@@ -19,6 +22,7 @@ use crate::arch::USER_ADDR_END;
 use crate::handle::Handle;
 use crate::handle::Handleable;
 use crate::hspace::HandleSpace;
+use crate::poll::EventEmitter;
 use crate::poll::Poll;
 use crate::scheduler::SCHEDULER;
 use crate::shared_ref::SharedRef;
@@ -39,6 +43,7 @@ enum State {
 
 struct Mutable {
     state: State,
+    subscriptions: Vec<EventEmitter>,
 }
 
 #[repr(C)]
@@ -79,6 +84,7 @@ impl Thread {
 
         let mutable = Mutable {
             state: State::NotStarted,
+            subscriptions: Vec::new(),
         };
 
         let arch_thread = arch::Thread::new(pc, sp, fault_pc, cookie)?;
@@ -102,6 +108,21 @@ impl Thread {
         // TODO: Avoid locking the spin lock.
         let mutable = self.mutable.lock();
         matches!(mutable.state, State::Runnable)
+    }
+
+    pub fn subscribe(&self, emitter: EventEmitter) -> Result<(), ErrorCode> {
+        let mut mutable = self.mutable.lock();
+        if matches!(mutable.state, State::Exited) {
+            drop(mutable);
+            return emitter.emit(EventKind::ThreadExited);
+        }
+
+        let slot = mutable
+            .subscriptions
+            .reserve_slot()
+            .map_err(|_| ErrorCode::OutOfMemory)?;
+        slot.push(emitter);
+        Ok(())
     }
 
     pub fn vmspace(&self) -> &SharedRef<VmSpace> {
@@ -182,16 +203,12 @@ impl Thread {
         Ok(())
     }
 
-    pub fn exit(&self) -> Result<(), ErrorCode> {
-        let mut mutable = self.mutable.lock();
-        if !matches!(mutable.state, State::Runnable) {
+    pub fn exit(self: SharedRef<Self>) -> Result<(), ErrorCode> {
+        if !self.is_runnable() {
             return Err(ErrorCode::ThreadNotRunnable);
         }
 
-        mutable.state = State::Exited;
-        drop(mutable);
-
-        self.hspace.remove_thread(self);
+        self.close();
         Ok(())
     }
 
@@ -240,6 +257,10 @@ impl Thread {
 impl Handleable for Thread {
     fn close(self: SharedRef<Self>) {
         let mut mutable = self.mutable.lock();
+        if matches!(mutable.state, State::Exited) {
+            return;
+        }
+
         if let State::Blocked { ref poll, .. } = mutable.state {
             let mut timer = GLOBAL_TIMER.lock();
             timer.cancel(&self);
@@ -247,11 +268,21 @@ impl Handleable for Thread {
         }
 
         mutable.state = State::Exited;
+        let subscriptions = core::mem::take(&mut mutable.subscriptions);
         drop(mutable);
 
         // Remove references to this thread.
         SCHEDULER.cancel(&self);
         self.hspace.remove_thread(&self);
+
+        // Notify that this thread has exited.
+        // FIXME: This is not safe with SMP. We might need to do an IPI to a CPU
+        //        that is running the thread.
+        for emitter in subscriptions {
+            if let Err(err) = emitter.emit(EventKind::ThreadExited) {
+                trace!("failed to notify thread termination: {:?}", err);
+            }
+        }
     }
 }
 
@@ -298,6 +329,24 @@ pub fn sys_thread_start(
         .hspace()
         .get::<Thread>(thread_id, HandleRight::WRITE)?;
     thread.start()?;
+    Ok(SyscallOutput::Done(0))
+}
+
+pub fn sys_thread_subscribe(
+    current: &SharedRef<Thread>,
+    ctx: &SyscallRegs,
+) -> Result<SyscallOutput, ErrorCode> {
+    let thread_id = HandleId::new(ctx.a0);
+    let poll_id = HandleId::new(ctx.a1);
+
+    let (thread, poll) = current.hspace().get2::<Thread, Poll>(
+        thread_id,
+        HandleRight::READ,
+        poll_id,
+        HandleRight::WRITE,
+    )?;
+
+    thread.subscribe(EventEmitter::new(poll, thread_id))?;
     Ok(SyscallOutput::Done(0))
 }
 
@@ -348,7 +397,7 @@ pub fn sys_thread_copy_regs(
 }
 
 pub fn sys_thread_exit(
-    current: &SharedRef<Thread>,
+    current: SharedRef<Thread>,
     ctx: &SyscallRegs,
 ) -> Result<SyscallOutput, ErrorCode> {
     let _reason = ctx.a0; // ignored for now

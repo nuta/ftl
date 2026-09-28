@@ -31,4 +31,5 @@ pub enum Syscall {
     ConsoleSubscribe = SYSCALL_BASE + 29,
     ConsoleOpen = SYSCALL_BASE + 30,
     WallTimeRead = SYSCALL_BASE + 31,
+    ThreadSubscribe = SYSCALL_BASE + 32,
 }

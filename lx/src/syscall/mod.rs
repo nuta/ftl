@@ -159,15 +159,17 @@ fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
     let arg1 = frame.arg1();
     let arg2 = frame.arg2();
 
-    // SAFETY: The kernel returns the cookie we gave.
+    // SAFETY: The reaper still owns a reference to this thread while executing
+    //         this handler.
     let current = unsafe { LxThread::from_cookie(frame.cookie) };
+
     let result = match nr {
-        SYS_WRITE => sys_write(&current, arg0 as c_int, arg1 as *const c_void, arg2),
-        SYS_READ => sys_read(&current, arg0 as c_int, arg1 as *mut c_void, arg2),
-        SYS_LSEEK => sys_lseek(&current, arg0 as c_int, arg1 as off_t, arg2 as c_int),
+        SYS_WRITE => sys_write(current, arg0 as c_int, arg1 as *const c_void, arg2),
+        SYS_READ => sys_read(current, arg0 as c_int, arg1 as *mut c_void, arg2),
+        SYS_LSEEK => sys_lseek(current, arg0 as c_int, arg1 as off_t, arg2 as c_int),
         SYS_RECVFROM => {
             sys_recvfrom(
-                &current,
+                current,
                 arg0 as c_int,
                 arg1 as *mut c_void,
                 arg2,
@@ -178,7 +180,7 @@ fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
         }
         SYS_SENDTO => {
             sys_sendto(
-                &current,
+                current,
                 arg0 as c_int,
                 arg1 as *const c_void,
                 arg2,
@@ -187,13 +189,13 @@ fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
                 frame.arg5(),
             )
         }
-        SYS_CLOSE => sys_close(&current, arg0 as c_int),
-        SYS_DUP2 => sys_dup2(&current, arg0 as c_int, arg1 as c_int),
-        SYS_DUP3 => sys_dup3(&current, arg0 as c_int, arg1 as c_int, arg2 as c_int),
-        SYS_EPOLL_CREATE1 => sys_epoll_create1(&current, arg0 as c_int),
+        SYS_CLOSE => sys_close(current, arg0 as c_int),
+        SYS_DUP2 => sys_dup2(current, arg0 as c_int, arg1 as c_int),
+        SYS_DUP3 => sys_dup3(current, arg0 as c_int, arg1 as c_int, arg2 as c_int),
+        SYS_EPOLL_CREATE1 => sys_epoll_create1(current, arg0 as c_int),
         SYS_EPOLL_CTL => {
             sys_epoll_ctl(
-                &current,
+                current,
                 arg0 as c_int,
                 arg1 as c_int,
                 arg2 as c_int,
@@ -202,7 +204,7 @@ fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
         }
         SYS_EPOLL_WAIT => {
             sys_epoll_wait(
-                &current,
+                current,
                 arg0 as c_int,
                 arg1 as *mut EpollEvent,
                 arg2 as c_int,
@@ -211,7 +213,7 @@ fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
         }
         SYS_EPOLL_PWAIT => {
             sys_epoll_pwait(
-                &current,
+                current,
                 arg0 as c_int,
                 arg1 as *mut EpollEvent,
                 arg2 as c_int,
@@ -219,12 +221,12 @@ fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
                 frame.arg4() as *const c_void,
             )
         }
-        SYS_EVENTFD => sys_eventfd(&current, arg0 as c_unsigned),
-        SYS_EVENTFD2 => sys_eventfd2(&current, arg0 as c_unsigned, arg1 as c_int),
-        SYS_BRK => sys_brk(&current, arg0),
+        SYS_EVENTFD => sys_eventfd(current, arg0 as c_unsigned),
+        SYS_EVENTFD2 => sys_eventfd2(current, arg0 as c_unsigned, arg1 as c_int),
+        SYS_BRK => sys_brk(current, arg0),
         SYS_MMAP => {
             sys_mmap(
-                &current,
+                current,
                 arg0,
                 arg1,
                 arg2 as c_int,
@@ -233,41 +235,41 @@ fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
                 frame.arg5() as i64,
             )
         }
-        SYS_PIPE => sys_pipe(&current, arg0 as *mut c_int),
-        SYS_PIPE2 => sys_pipe2(&current, arg0 as *mut c_int, arg1 as c_int),
-        SYS_POLL => sys_poll(&current, arg0 as *mut PollFd, arg1 as nfds_t, arg2 as c_int),
-        SYS_WRITEV => sys_writev(&current, arg0 as c_int, arg1 as *const IoVec, arg2 as c_int),
-        SYS_FORK => sys_fork(&current, frame),
-        SYS_GETPID => sys_getpid(&current),
-        SYS_GETRANDOM => sys_getrandom(&current, arg0 as *mut c_void, arg1, arg2 as c_unsigned),
-        SYS_CLOCK_GETTIME => sys_clock_gettime(&current, arg0 as c_int, arg1 as *mut TimeSpec),
+        SYS_PIPE => sys_pipe(current, arg0 as *mut c_int),
+        SYS_PIPE2 => sys_pipe2(current, arg0 as *mut c_int, arg1 as c_int),
+        SYS_POLL => sys_poll(current, arg0 as *mut PollFd, arg1 as nfds_t, arg2 as c_int),
+        SYS_WRITEV => sys_writev(current, arg0 as c_int, arg1 as *const IoVec, arg2 as c_int),
+        SYS_FORK => sys_fork(current, frame),
+        SYS_GETPID => sys_getpid(current),
+        SYS_GETRANDOM => sys_getrandom(current, arg0 as *mut c_void, arg1, arg2 as c_unsigned),
+        SYS_CLOCK_GETTIME => sys_clock_gettime(current, arg0 as c_int, arg1 as *mut TimeSpec),
         SYS_CLOCK_NANOSLEEP => {
             sys_clock_nanosleep(
-                &current,
+                current,
                 arg0 as c_int,
                 arg1 as c_int,
                 arg2 as *const TimeSpec,
                 frame.arg3() as *mut TimeSpec,
             )
         }
-        SYS_KILL => sys_kill(&current, arg0 as c_int, arg1 as c_int),
+        SYS_KILL => sys_kill(current, arg0 as c_int, arg1 as c_int),
         SYS_RT_SIGACTION => {
             sys_rt_sigaction(
-                &current,
+                current,
                 arg0 as c_int,
                 arg1 as *const types::signal::SigAction,
                 arg2 as *mut types::signal::SigAction,
                 frame.arg3(),
             )
         }
-        SYS_RT_SIGRETURN => sys_rt_sigreturn(&current, frame),
-        SYS_SOCKET => sys_socket(&current, arg0 as c_int, arg1 as c_int, arg2 as c_int),
-        SYS_SHUTDOWN => sys_shutdown(&current, arg0 as c_int, arg1 as c_int),
-        SYS_BIND => sys_bind(&current, arg0 as c_int, arg1 as *const u8, arg2),
-        SYS_LISTEN => sys_listen(&current, arg0 as c_int, arg1 as c_int),
+        SYS_RT_SIGRETURN => sys_rt_sigreturn(current, frame),
+        SYS_SOCKET => sys_socket(current, arg0 as c_int, arg1 as c_int, arg2 as c_int),
+        SYS_SHUTDOWN => sys_shutdown(current, arg0 as c_int, arg1 as c_int),
+        SYS_BIND => sys_bind(current, arg0 as c_int, arg1 as *const u8, arg2),
+        SYS_LISTEN => sys_listen(current, arg0 as c_int, arg1 as c_int),
         SYS_SETSOCKOPT => {
             sys_setsockopt(
-                &current,
+                current,
                 arg0 as c_int,
                 arg1 as c_int,
                 arg2 as c_int,
@@ -275,10 +277,10 @@ fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
                 frame.arg4(),
             )
         }
-        SYS_ACCEPT => sys_accept(&current, arg0 as c_int, arg1 as *mut u8, arg2 as *mut u32),
+        SYS_ACCEPT => sys_accept(current, arg0 as c_int, arg1 as *mut u8, arg2 as *mut u32),
         SYS_ACCEPT4 => {
             sys_accept4(
-                &current,
+                current,
                 arg0 as c_int,
                 arg1 as *mut u8,
                 arg2 as *mut u32,
@@ -287,17 +289,17 @@ fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
         }
         SYS_EXECVE => {
             sys_execve(
-                &current,
+                current,
                 arg0 as *const u8,
                 arg1 as *const *const u8,
                 arg2 as *const *const u8,
             )
         }
-        SYS_WAIT4 => sys_wait4(&current, arg0 as c_int, arg1 as *mut c_int, arg2 as c_int),
-        SYS_FCNTL => sys_fcntl(&current, arg0 as c_int, arg1 as c_int, arg2 as c_long),
-        SYS_ARCH_PRCTL => sys_arch_prctl(&current, arg0 as c_int, arg1),
-        SYS_SET_TID_ADDRESS => sys_set_tid_address(&current, arg0 as *mut c_int),
-        SYS_EXIT_GROUP => sys_exit_group(&current, arg0 as c_int),
+        SYS_WAIT4 => sys_wait4(current, arg0 as c_int, arg1 as *mut c_int, arg2 as c_int),
+        SYS_FCNTL => sys_fcntl(current, arg0 as c_int, arg1 as c_int, arg2 as c_long),
+        SYS_ARCH_PRCTL => sys_arch_prctl(current, arg0 as c_int, arg1),
+        SYS_SET_TID_ADDRESS => sys_set_tid_address(current, arg0 as *mut c_int),
+        SYS_EXIT_GROUP => sys_exit_group(current, arg0 as c_int),
         _ => Err(Errno::ENOSYS),
     };
 

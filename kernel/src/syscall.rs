@@ -17,7 +17,7 @@ fn do_handle_syscall() {
     let arch_thread = unsafe { &mut *thread.arch().get() };
     let regs = arch_thread.get_syscall_regs();
     let retval = match regs.n {
-        n if n == Syscall::ThreadExit as usize => crate::thread::sys_thread_exit(&thread, &regs),
+        n if n == Syscall::ThreadExit as usize => crate::thread::sys_thread_exit(thread, &regs),
         n if n == Syscall::VmoCreate as usize => crate::vmobject::sys_vmo_create(&thread, &regs),
         n if n == Syscall::VmoRead as usize => crate::vmobject::sys_vmo_read(&thread, &regs),
         n if n == Syscall::VmoWrite as usize => crate::vmobject::sys_vmo_write(&thread, &regs),
@@ -32,6 +32,9 @@ fn do_handle_syscall() {
             crate::thread::sys_thread_create(&thread, &regs)
         }
         n if n == Syscall::ThreadStart as usize => crate::thread::sys_thread_start(&thread, &regs),
+        n if n == Syscall::ThreadSubscribe as usize => {
+            crate::thread::sys_thread_subscribe(&thread, &regs)
+        }
         n if n == Syscall::ThreadWriteRegs as usize => {
             crate::thread::sys_thread_write_regs(&thread, arch_thread, &regs)
         }

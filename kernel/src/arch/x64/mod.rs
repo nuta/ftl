@@ -42,3 +42,4 @@ pub use vmspace::MIN_PAGE_SIZE;
 pub use vmspace::USER_ADDR_END;
 pub use vmspace::VmSpace;
 pub use vmspace::paddr2vaddr;
+pub use vmspace::vmspace_switch_to_kernel;

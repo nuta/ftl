@@ -3,9 +3,11 @@ use alloc::sync::Arc;
 use alloc::sync::Weak;
 
 use ftl::hspace::HandleSpace;
+use ftl::poll::Poll;
 use ftl::thread::Thread;
 use ftl::trace;
 use ftl_types::error::ErrorCode;
+use ftl_types::handle::HandleId;
 use ftl_types::thread::Regs;
 use ftl_types::thread::RegsKind;
 use ftl_utils::spinlock::SpinLock;
@@ -28,21 +30,11 @@ pub struct LxThread {
     tid: PId,
     inner: Thread,
     mutable: SpinLock<Mutable>,
+    _cookie: Box<Cookie>,
 }
 
 struct Cookie {
-    thread: Arc<LxThread>,
-}
-
-impl Cookie {
-    /// # Safety
-    ///
-    /// `cookie` must be the thread's cookie which we created in
-    /// [`LxThread::new`].
-    unsafe fn from_raw(cookie: usize) -> Arc<LxThread> {
-        let ptr = cookie as *const Cookie;
-        unsafe { (*ptr).thread.clone() }
-    }
+    thread: Weak<LxThread>,
 }
 
 impl LxThread {
@@ -62,21 +54,21 @@ impl LxThread {
         //       thread is started. Should we document and guarantee this?
         let inner = Thread::create(hspace, vm.vmspace(), entry, sp, fault_pc, cookie)?;
 
-        let thread = Arc::new(LxThread {
-            process,
-            vm,
-            tid,
-            inner,
-            mutable: SpinLock::new(Mutable { signal_frame: None }),
+        let thread = Arc::new_cyclic(|thread| {
+            LxThread {
+                process,
+                vm,
+                tid,
+                inner,
+                mutable: SpinLock::new(Mutable { signal_frame: None }),
+                _cookie: Box::write(
+                    this,
+                    Cookie {
+                        thread: thread.clone(),
+                    },
+                ),
+            }
         });
-
-        // Initialize and leak the thread context. We'll free manually later.
-        Box::leak(Box::write(
-            this,
-            Cookie {
-                thread: thread.clone(),
-            },
-        ));
 
         Ok(thread)
     }
@@ -85,12 +77,28 @@ impl LxThread {
         self.inner.start()
     }
 
+    pub fn id(&self) -> HandleId {
+        self.inner.id()
+    }
+
+    pub fn subscribe(&self, poll: &Poll) -> Result<(), ErrorCode> {
+        self.inner.subscribe(poll)
+    }
+
     pub fn tid(&self) -> PId {
         self.tid
     }
 
     pub fn process(&self) -> Arc<Process> {
         self.process.upgrade().unwrap()
+    }
+
+    pub fn on_exit(&self) -> Result<(), Errno> {
+        if let Some(process) = self.process.upgrade() {
+            process.on_thread_exit(self)?;
+        }
+
+        Ok(())
     }
 
     pub fn vm(&self) -> &Arc<Vm> {
@@ -159,8 +167,10 @@ impl LxThread {
     /// # Safety
     ///
     /// `cookie` must be the thread's cookie which we created in
-    /// [`LxThread::new`].
-    pub unsafe fn from_cookie(cookie: usize) -> Arc<LxThread> {
-        unsafe { Cookie::from_raw(cookie) }
+    /// [`LxThread::new`]. Also, the caller must ensure that the thread is
+    /// not freed.
+    pub unsafe fn from_cookie<'a>(cookie: usize) -> &'a LxThread {
+        let cookie = unsafe { &*(cookie as *const Cookie) };
+        unsafe { &*cookie.thread.as_ptr() }
     }
 }

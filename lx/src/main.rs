@@ -11,6 +11,7 @@ mod initfs;
 mod net;
 mod open_file;
 mod process;
+mod reaper;
 mod signal;
 mod syscall;
 mod thread;
@@ -25,13 +26,9 @@ use alloc::vec::Vec;
 use ftl::allocator;
 use ftl::hspace::HandleSpace;
 use ftl::net::Net;
-use ftl::poll::Poll;
-use ftl::time::MonoTime;
-use ftl::time::MonoTimeExt;
 use ftl::vmo::Vmo;
 use ftl::vmspace::VmSpace;
 use ftl_types::handle::HandleId;
-use ftl_types::time::Duration;
 use ftl_types::vmspace::PageAttrs;
 use ftl_utils::alignment::align_up;
 
@@ -101,7 +98,7 @@ fn main(cmdline: &[u8]) {
     let net = Net::create().expect("failed to create network");
     let network = net::TcpIp::new(net);
     let console = Arc::new(Console::new().expect("failed to create console"));
-    let _container = Container::new(
+    let container = Container::new(
         root_hspace,
         root_vmspace,
         network.clone(),
@@ -111,29 +108,5 @@ fn main(cmdline: &[u8]) {
     )
     .expect("failed to start LX");
 
-    let poll = Poll::create().expect("failed to create poll");
-    network
-        .subscribe(&poll)
-        .expect("failed to subscribe to network events");
-    console
-        .subscribe(&poll)
-        .expect("failed to subscribe to console events");
-
-    loop {
-        let deadline = MonoTime::now() + Duration::from_secs(1);
-        let event = poll.wait_until(deadline).expect("poll wait failed");
-        if event.handle_id() == network.id() {
-            network.handle_rx();
-            network
-                .subscribe(&poll)
-                .expect("failed to subscribe to network events");
-        } else if event.handle_id() == console.id() {
-            console.handle_rx();
-            console
-                .subscribe(&poll)
-                .expect("failed to subscribe to console events");
-        }
-
-        network.handle_timeouts(MonoTime::now());
-    }
+    container.run();
 }

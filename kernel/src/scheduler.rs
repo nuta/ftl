@@ -93,6 +93,7 @@ pub fn return_to_user() -> ! {
             // Clear the current thread. Otherwise, the interrupt handler would
             // overwrite the user's system call context (registers) with the idle
             // thread's context.
+            arch::vmspace_switch_to_kernel();
             current.clear();
 
             // No threads to run. Enter the idle loop.

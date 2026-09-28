@@ -25,7 +25,7 @@ pub fn sys_execve(
             }
 
             let arg = unsafe { CStr::from_ptr(ptr.cast()) };
-            argv_vec.push(arg.to_bytes_with_nul());
+            argv_vec.push(arg.to_bytes());
         }
     }
 

@@ -5,6 +5,7 @@ use crate::handle::HandleId;
 pub enum EventKind {
     PollNotified = 1,
     PollTimeout = 2,
+    ThreadExited = 3,
 }
 
 #[derive(Debug)]
@@ -35,6 +36,7 @@ impl Event {
         match kind_id {
             1 => EventKind::PollNotified,
             2 => EventKind::PollTimeout,
+            3 => EventKind::ThreadExited,
             _ => panic!("invalid event kind: {}", kind_id),
         }
     }

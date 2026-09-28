@@ -2,6 +2,7 @@ use alloc::sync::Arc;
 use alloc::sync::Weak;
 use alloc::vec::Vec;
 use core::fmt;
+use core::ptr;
 
 use ftl::trace;
 use ftl_types::thread::RegsKind;
@@ -115,9 +116,14 @@ impl Process {
             Arc::downgrade(self),
             self.tgid,
         )?;
-        thread.start()?;
 
         let mut mutable = self.mutable.lock();
+
+        // This should be done while locking the process's mutable, because the
+        // new thread is not yet added to `mutable.threads`, and the thread
+        // starts immediately in add_thread.
+        self.container.add_thread(thread.clone())?;
+
         mutable
             .threads
             .retain(|thread| !core::ptr::eq(thread.as_ref(), current));
@@ -171,7 +177,7 @@ impl Process {
 
         // Start the thread.
         process.mutable.lock().threads.push(thread.clone());
-        thread.start()?;
+        container.add_thread(thread)?;
 
         Ok(process)
     }
@@ -221,6 +227,30 @@ impl Process {
         Ok(tgid)
     }
 
+    pub fn on_thread_exit(&self, thread: &LxThread) -> Result<(), Errno> {
+        let mut mutable = self.mutable.lock();
+
+        if mutable.exit_status.is_some() {
+            // The process has already exited.
+            return Ok(());
+        }
+
+        // Remove the thread from the process's thread list.
+        mutable
+            .threads
+            .retain(|entry| !ptr::eq(entry.as_ref(), thread));
+
+        if !mutable.threads.is_empty() {
+            // Preserve the process if there are still threads running.
+            return Ok(());
+        }
+
+        drop(mutable);
+
+        // TODO: What's the proper exit status here?
+        self.exit(1)
+    }
+
     // TODO: Should we make this method infallible?
     pub fn exit(&self, status: c_int) -> Result<(), Errno> {
         if self.tgid == PId::new(1) {
@@ -238,6 +268,7 @@ impl Process {
 
         // Mark the process as exited.
         mutable.exit_status = Some(status);
+        mutable.threads.clear();
 
         // Reap this process if its parent is gone.
         if parent.is_none() {
