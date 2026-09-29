@@ -20,6 +20,7 @@ use crate::syscall::SyscallOutput;
 use crate::thread::Thread;
 use crate::vmobject::VmObject;
 
+#[derive(Clone)]
 struct Mapping {
     start: UAddr,
     end: UAddr,
@@ -67,7 +68,7 @@ impl VmSpace {
         let new_vmspace = Self::new()?;
         let mutable = self.mutable.lock();
         for mapping in &mutable.mappings {
-            new_vmspace.map(mapping.vmo.clone(), mapping.start, mapping.attrs)?;
+            new_vmspace.insert(mapping.clone())?;
         }
         Ok(new_vmspace)
     }
@@ -92,11 +93,20 @@ impl VmSpace {
             return Err(ErrorCode::NotAllowed);
         }
 
+        self.insert(Mapping {
+            start: uaddr,
+            end,
+            vmo,
+            attrs,
+        })
+    }
+
+    fn insert(&self, mapping: Mapping) -> Result<(), ErrorCode> {
         let mut mutable = self.mutable.lock();
         if mutable
             .mappings
             .iter()
-            .any(|mapping| mapping.overlaps_with(uaddr, end))
+            .any(|m| m.overlaps_with(mapping.start, mapping.end))
         {
             return Err(ErrorCode::AlreadyMapped);
         }
@@ -104,37 +114,18 @@ impl VmSpace {
         // Insert the mapping at the correct position to keep mappings sorted.
         let insert_at = mutable
             .mappings
-            .partition_point(|mapping| mapping.start < uaddr);
+            .partition_point(|m| m.start < mapping.start);
 
         mutable
             .mappings
             .reserve_slot()
             .map_err(|_| ErrorCode::OutOfMemory)?
-            .insert(
-                insert_at,
-                Mapping {
-                    start: uaddr,
-                    end,
-                    vmo,
-                    attrs,
-                },
-            );
+            .insert(insert_at, mapping);
         Ok(())
     }
 
     pub fn unmap(&self, uaddr: UAddr, len: usize) -> Result<(), ErrorCode> {
-        if len == 0 {
-            return Err(ErrorCode::InvalidArg);
-        }
-        if !uaddr.is_aligned_to(MIN_PAGE_SIZE) || !is_aligned(len, MIN_PAGE_SIZE) {
-            return Err(ErrorCode::NotAligned);
-        }
-
-        let end = uaddr.add(len).ok_or(ErrorCode::OutOfBounds)?;
-        if end.as_usize() > arch::USER_ADDR_END {
-            return Err(ErrorCode::NotAllowed);
-        }
-
+        let end = validate_mapping_range(uaddr, len)?;
         let mut mutable = self.mutable.lock();
         let index = mutable
             .mappings
@@ -177,6 +168,24 @@ impl VmSpace {
 }
 
 impl Handleable for VmSpace {}
+
+/// Returns `uaddr + len`. Returns an error if they are not valid parameters.
+fn validate_mapping_range(uaddr: UAddr, len: usize) -> Result<UAddr, ErrorCode> {
+    if len == 0 {
+        return Err(ErrorCode::InvalidArg);
+    }
+
+    if !uaddr.is_aligned_to(MIN_PAGE_SIZE) || !is_aligned(len, MIN_PAGE_SIZE) {
+        return Err(ErrorCode::NotAligned);
+    }
+
+    let end = uaddr.add(len).ok_or(ErrorCode::OutOfBounds)?;
+    if end.as_usize() > arch::USER_ADDR_END {
+        return Err(ErrorCode::NotAllowed);
+    }
+
+    Ok(end)
+}
 
 pub fn sys_vmspace_clone(
     current: &SharedRef<Thread>,
