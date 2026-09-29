@@ -64,14 +64,27 @@ impl Brk {
 
 // TODO: Do we really need to track mappings in LX? Can't we just use
 //       kernel's mappings?
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 struct Mapping {
     start: usize,
     len: usize,
     attrs: PageAttrs,
+    vmo: Arc<Vmo>,
+    /// The offset in the VMO.
+    offset: usize,
 }
 
 impl Mapping {
+    fn new(start: usize, len: usize, attrs: PageAttrs, vmo: Vmo) -> Self {
+        Self {
+            start,
+            len,
+            attrs,
+            vmo: Arc::new(vmo),
+            offset: 0,
+        }
+    }
+
     fn end(&self) -> usize {
         self.start + self.len
     }
@@ -108,6 +121,8 @@ impl Mutable {
             start: addr,
             len: left.end() - addr,
             attrs: left.attrs,
+            vmo: left.vmo.clone(),
+            offset: left.offset + (addr - left.start),
         };
 
         // Shrink the range of the original mapping.
@@ -147,18 +162,10 @@ impl Vm {
         let stack = Vmo::create(STACK_SIZE)?;
         let sp = prepare_stack(&stack, STACK_BOTTOM, STACK_SIZE, argv, &elf)?;
 
-        vmspace.map(
-            &stack,
-            STACK_BOTTOM,
-            0,
-            STACK_SIZE,
-            PageAttrs::READ | PageAttrs::WRITE,
-        )?;
-        mappings.push(Mapping {
-            start: STACK_BOTTOM,
-            len: STACK_SIZE,
-            attrs: PageAttrs::READ | PageAttrs::WRITE,
-        });
+        let attrs = PageAttrs::READ | PageAttrs::WRITE;
+        vmspace.map(&stack, STACK_BOTTOM, 0, STACK_SIZE, attrs)?;
+        let mapping = Mapping::new(STACK_BOTTOM, STACK_SIZE, attrs, stack);
+        mappings.push(mapping);
 
         let vm = Vm {
             vmspace,
@@ -202,11 +209,8 @@ impl Vm {
 
         let mut mutable = self.mutable.lock();
         self.vmspace.map(&vmo, uaddr, 0, len, attrs)?;
-        mutable.mappings.push(Mapping {
-            start: uaddr,
-            len,
-            attrs,
-        });
+        let mapping = Mapping::new(uaddr, len, attrs, vmo);
+        mutable.mappings.push(mapping);
 
         Ok(uaddr)
     }
@@ -254,6 +258,31 @@ impl Vm {
                 mapping.attrs = attrs;
             }
         }
+
+        Ok(())
+    }
+
+    /// Writes `buf` to the user memory at `addr`.
+    ///
+    /// This is useful when you want to write to another process's memory.
+    pub fn write(&self, addr: usize, buf: &[u8]) -> Result<(), Errno> {
+        let end = addr.checked_add(buf.len()).ok_or(Errno::EFAULT)?;
+
+        // Find the mapping containing `addr`.
+        let mutable = self.mutable.lock();
+        let mapping = mutable
+            .mappings
+            .iter()
+            .find(|m| m.start <= addr && end <= m.end())
+            .ok_or(Errno::EFAULT)?;
+
+        if !mapping.attrs.contains(PageAttrs::WRITE) {
+            return Err(Errno::EFAULT);
+        }
+
+        mapping
+            .vmo
+            .write(mapping.offset + (addr - mapping.start), buf)?;
 
         Ok(())
     }
@@ -307,11 +336,8 @@ impl Vm {
 
         // Record the mapping.
         let mut mutable = self.mutable.lock();
-        mutable.mappings.push(Mapping {
-            start: brk.current_aligned,
-            len,
-            attrs,
-        });
+        let mapping = Mapping::new(brk.current_aligned, len, attrs, vmo);
+        mutable.mappings.push(mapping);
 
         mutable.brk.current = addr;
         mutable.brk.current_aligned = current_aligned;
@@ -322,9 +348,9 @@ impl Vm {
         let vmspace = root_vmspace.try_clone()?;
 
         let mutable = self.mutable.lock();
-        let mappings = mutable.mappings.clone();
         let brk = mutable.brk;
-        for mapping in &mappings {
+        let mut mappings = Vec::with_capacity(mutable.mappings.len());
+        for mapping in &mutable.mappings {
             let vmo = Vmo::create(mapping.len)?;
 
             // PROT_NONE mappings (e.g. guard pages) are not readable. Skip
@@ -342,6 +368,8 @@ impl Vm {
             }
 
             vmspace.map(&vmo, mapping.start, 0, mapping.len, mapping.attrs)?;
+            let new_mapping = Mapping::new(mapping.start, mapping.len, mapping.attrs, vmo);
+            mappings.push(new_mapping);
         }
 
         Ok(Self {
@@ -481,11 +509,8 @@ fn load_elf(
 
         let attrs = attrs_from_phdr(phdr);
         vmspace.map(&vmo, region_base, 0, region_len, attrs)?;
-        mappings.push(Mapping {
-            start: region_base,
-            len: region_len,
-            attrs,
-        });
+        let mapping = Mapping::new(region_base, region_len, attrs, vmo);
+        mappings.push(mapping);
     }
 
     Ok(LoadedElf {
