@@ -25,6 +25,7 @@ mod kill;
 mod listen;
 mod lseek;
 mod mmap;
+mod munmap;
 mod pipe;
 mod pipe2;
 mod poll;
@@ -70,6 +71,7 @@ use self::kill::sys_kill;
 use self::listen::sys_listen;
 use self::lseek::sys_lseek;
 use self::mmap::sys_mmap;
+use self::munmap::sys_munmap;
 use self::pipe::sys_pipe;
 use self::pipe2::sys_pipe2;
 use self::poll::sys_poll;
@@ -125,6 +127,7 @@ use crate::types::sys::syscall::SYS_KILL;
 use crate::types::sys::syscall::SYS_LISTEN;
 use crate::types::sys::syscall::SYS_LSEEK;
 use crate::types::sys::syscall::SYS_MMAP;
+use crate::types::sys::syscall::SYS_MUNMAP;
 use crate::types::sys::syscall::SYS_PIPE;
 use crate::types::sys::syscall::SYS_PIPE2;
 use crate::types::sys::syscall::SYS_POLL;
@@ -239,6 +242,7 @@ fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
                 frame.arg5() as i64,
             )
         }
+        SYS_MUNMAP => sys_munmap(current, arg0, arg1),
         SYS_PIPE => sys_pipe(current, arg0 as *mut c_int),
         SYS_PIPE2 => sys_pipe2(current, arg0 as *mut c_int, arg1 as c_int),
         SYS_POLL => sys_poll(current, arg0 as *mut PollFd, arg1 as nfds_t, arg2 as c_int),

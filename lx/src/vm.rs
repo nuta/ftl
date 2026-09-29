@@ -15,6 +15,7 @@ use ftl_elf::PhdrType;
 use ftl_types::vmspace::PageAttrs;
 use ftl_utils::alignment::align_down;
 use ftl_utils::alignment::align_up;
+use ftl_utils::alignment::is_aligned;
 use ftl_utils::spinlock::SpinLock;
 
 use crate::types::c_int;
@@ -35,6 +36,7 @@ pub(crate) const PAGE_SIZE: usize = 4096; // TODO: system call?
 const STACK_BOTTOM: usize = 0x0200_0000;
 const STACK_SIZE: usize = 256 * 1024;
 const BRK_END: usize = STACK_BOTTOM;
+const USER_END: usize = 0x3000_0000;
 
 #[derive(Clone, Copy)]
 struct Brk {
@@ -59,6 +61,8 @@ impl Brk {
     }
 }
 
+// TODO: Do we really need to track mappings in LX? Can't we just use
+//       kernel's mappings?
 #[derive(Clone, Copy)]
 struct Mapping {
     start: usize,
@@ -66,9 +70,45 @@ struct Mapping {
     attrs: PageAttrs,
 }
 
+impl Mapping {
+    fn end(&self) -> usize {
+        self.start + self.len
+    }
+
+    fn overlaps_with(&self, start: usize, end: usize) -> bool {
+        start < self.end() && self.start < end
+    }
+}
+
 pub struct Mutable {
     mappings: Vec<Mapping>,
     brk: Brk,
+}
+
+impl Mutable {
+    /// Splits a mapping at `addr` into two mappings.
+    fn split_at(&mut self, addr: usize) {
+        // Find the mapping containing `addr`.
+        let Some(left) = self.mappings.iter_mut().find(|m| {
+            // Avoid "<=" intentionally to prevent creating empty mappings.
+            m.start < addr && addr < m.end()
+        }) else {
+            return;
+        };
+
+        // New mapping.
+        let right = Mapping {
+            start: addr,
+            len: left.end() - addr,
+            attrs: left.attrs,
+        };
+
+        // Shrink the range of the original mapping.
+        left.len = addr - left.start;
+
+        // Insert the new one. The order of mappings does not matter.
+        self.mappings.push(right);
+    }
 }
 
 /// A virtual memory space.
@@ -156,6 +196,18 @@ impl Vm {
         });
 
         Ok(uaddr)
+    }
+
+    pub fn munmap(&self, addr: usize, len: usize) -> Result<(), Errno> {
+        let end = validate_mapping_range(addr, len)?;
+        let mut mutable = self.mutable.lock();
+        self.vmspace.unmap(addr, end - addr)?;
+
+        // Update our own mapping state.
+        mutable.split_at(addr);
+        mutable.split_at(end);
+        mutable.mappings.retain(|m| !m.overlaps_with(addr, end));
+        Ok(())
     }
 
     /// `brk(2)` system call.
@@ -249,6 +301,29 @@ impl Vm {
             mutable: SpinLock::new(Mutable { mappings, brk }),
         })
     }
+}
+
+/// Returns `addr + len`. Returns an error if they are not valid parameters.
+///
+/// Note: `len` might not be aligned to `PAGE_SIZE`.
+fn validate_mapping_range(addr: usize, len: usize) -> Result<usize, Errno> {
+    if len == 0 || !is_aligned(addr, PAGE_SIZE) {
+        return Err(Errno::EINVAL);
+    }
+
+    let Some(aligned_len) = len.checked_next_multiple_of(PAGE_SIZE) else {
+        return Err(Errno::EINVAL);
+    };
+
+    let Some(end) = addr.checked_add(aligned_len) else {
+        return Err(Errno::EINVAL);
+    };
+
+    if end > USER_END {
+        return Err(Errno::EINVAL);
+    }
+
+    Ok(end)
 }
 
 fn attrs_from_prot(prot: c_int) -> PageAttrs {
