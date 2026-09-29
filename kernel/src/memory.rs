@@ -74,7 +74,7 @@ unsafe impl GlobalAlloc for GlobalAllocator {
             layout.size(),
             layout.align()
         );
-        return null_mut();
+        null_mut()
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, _layout: Layout) {

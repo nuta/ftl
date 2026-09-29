@@ -47,8 +47,8 @@ impl ftl_driver::env::Env for DriverEnv {
         // Try reusing a buffer from the free list.
         {
             let mut free_list = DMA_FREE_LIST.lock();
-            if let Some(buf) = free_list.back() {
-                if buf.capacity() >= len {
+            if let Some(buf) = free_list.back()
+                && buf.capacity() >= len {
                     let mut buf = free_list.pop_back().unwrap();
 
                     // SAFETY: We've checked the capacity is sufficient.
@@ -57,7 +57,6 @@ impl ftl_driver::env::Env for DriverEnv {
                     }
                     return Ok(buf);
                 }
-            }
         }
 
         // Allocate a new buffer.
@@ -74,8 +73,8 @@ impl ftl_driver::env::Env for DriverEnv {
 
     fn free_dma(&self, buf: DmaBuf) {
         let mut free_list = DMA_FREE_LIST.lock();
-        if free_list.len() >= DMA_FREE_LIST_MAX {
-            if let Some(buf) = free_list.pop_front() {
+        if free_list.len() >= DMA_FREE_LIST_MAX
+            && let Some(buf) = free_list.pop_front() {
                 let paddr = PAddr::new(buf.paddr());
                 // SAFETY: This page is allocated by global PAGE_ALLOCATOR, and
                 //         capacity is unchanged.
@@ -83,7 +82,6 @@ impl ftl_driver::env::Env for DriverEnv {
                     PAGE_ALLOCATOR.free(paddr, buf.capacity());
                 }
             }
-        }
 
         // Try to reserve a space in the free list. If it fails, free it
         // immediately.
@@ -228,7 +226,7 @@ fn discover_devices(cmdline: &[u8]) -> ArrayVec<FoundDevice, 8> {
 }
 
 fn init_net_driver(devices: &[FoundDevice]) -> (Box<dyn Driver<Notifier = PollNotifier>>, u8) {
-    for device in devices {
+    if let Some(device) = devices.iter().next() {
         match device {
             #[cfg(target_arch = "x86_64")]
             FoundDevice::VirtioNetOverPci(pci_device) => {

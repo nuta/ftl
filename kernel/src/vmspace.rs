@@ -1,6 +1,4 @@
 use alloc::vec::Vec;
-use core::cmp::max;
-use core::cmp::min;
 
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;

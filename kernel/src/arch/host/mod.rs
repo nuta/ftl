@@ -1,4 +1,3 @@
-use std::ops::Range;
 
 use ftl_arrayvec::ArrayVec;
 use ftl_types::error::ErrorCode;
@@ -30,7 +29,7 @@ pub fn console_read(_bytes: &mut [u8]) -> usize {
     todo!()
 }
 
-pub fn random_read(buf: &mut [u8]) {
+pub fn random_read(_buf: &mut [u8]) {
     todo!()
 }
 

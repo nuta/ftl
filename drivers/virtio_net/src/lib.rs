@@ -259,17 +259,15 @@ impl<T: VirtioTransport, N: Notifier> Driver for VirtioNet<T, N> {
                 }
             }
 
-            if mutable.txq.can_push() {
-                if let Some(notifier) = mutable.tx_notifier.take() {
+            if mutable.txq.can_push()
+                && let Some(notifier) = mutable.tx_notifier.take() {
                     notifier.notify(Event::TxAvailable);
                 }
-            }
 
-            if mutable.rxq.can_pop() {
-                if let Some(notifier) = mutable.rx_notifier.take() {
+            if mutable.rxq.can_pop()
+                && let Some(notifier) = mutable.rx_notifier.take() {
                     notifier.notify(Event::RxAvailable);
                 }
-            }
         }
     }
 }

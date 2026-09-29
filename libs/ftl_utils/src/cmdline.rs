@@ -101,14 +101,14 @@ impl<'a> Iterator for Parser<'a> {
         match self.state {
             State::Key { start, .. } => {
                 self.state = State::SkipWhitespace;
-                return Some(Ok(Parameter {
+                Some(Ok(Parameter {
                     key: &self.input[start..],
                     value: &b""[..],
-                }));
+                }))
             }
             State::Value { quoted: true, .. } => {
                 self.state = State::SkipWhitespace;
-                return Some(Err(Error::UnclosedQuote));
+                Some(Err(Error::UnclosedQuote))
             }
             State::Value {
                 key: k,
@@ -117,10 +117,10 @@ impl<'a> Iterator for Parser<'a> {
             } => {
                 // A value at the end of the input.
                 self.state = State::SkipWhitespace;
-                return Some(Ok(Parameter {
+                Some(Ok(Parameter {
                     key: k,
                     value: &self.input[start..],
-                }));
+                }))
             }
             State::SkipWhitespace => None,
         }
