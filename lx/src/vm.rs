@@ -184,6 +184,12 @@ impl Vm {
                 .unwrap_or(0)
         };
 
+        // Check if the new mapping overlaps with LX's memory area.
+        let end = uaddr.checked_add(len).ok_or(Errno::ENOMEM)?;
+        if end > USER_END {
+            return Err(Errno::ENOMEM);
+        }
+
         // Allocate a VMO and map it.
         let vmo = Vmo::create(len)?;
 
