@@ -21,6 +21,7 @@ mod fcntl;
 mod fork;
 mod getpid;
 mod getrandom;
+mod gettid;
 mod kill;
 mod listen;
 mod lseek;
@@ -68,6 +69,7 @@ use self::fcntl::sys_fcntl;
 use self::fork::sys_fork;
 use self::getpid::sys_getpid;
 use self::getrandom::sys_getrandom;
+use self::gettid::sys_gettid;
 use self::kill::sys_kill;
 use self::listen::sys_listen;
 use self::lseek::sys_lseek;
@@ -125,6 +127,7 @@ use crate::types::sys::syscall::SYS_FCNTL;
 use crate::types::sys::syscall::SYS_FORK;
 use crate::types::sys::syscall::SYS_GETPID;
 use crate::types::sys::syscall::SYS_GETRANDOM;
+use crate::types::sys::syscall::SYS_GETTID;
 use crate::types::sys::syscall::SYS_KILL;
 use crate::types::sys::syscall::SYS_LISTEN;
 use crate::types::sys::syscall::SYS_LSEEK;
@@ -264,6 +267,7 @@ fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
         }
         SYS_FORK => sys_fork(current, frame),
         SYS_GETPID => sys_getpid(current),
+        SYS_GETTID => sys_gettid(current),
         SYS_GETRANDOM => sys_getrandom(current, arg0 as *mut c_void, arg1, arg2 as c_unsigned),
         SYS_CLOCK_GETTIME => sys_clock_gettime(current, arg0 as c_int, arg1 as *mut TimeSpec),
         SYS_CLOCK_NANOSLEEP => {
