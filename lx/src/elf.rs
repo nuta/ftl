@@ -101,7 +101,7 @@ fn load_elf(
         }
 
         let attrs = attrs_from_phdr(phdr);
-        vmspace.map(&vmo, region_base, attrs)?;
+        vmspace.map(&vmo, region_base, 0, region_len, attrs)?;
         mappings.push(Mapping {
             start: region_base,
             len: region_len,

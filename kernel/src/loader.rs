@@ -63,7 +63,7 @@ fn load_elf(vmspace: &SharedRef<VmSpace>, elf_file: &[u8]) -> usize {
 
         // Map the region to the address space.
         vmspace
-            .map(vmo, UAddr::new(phdr.p_vaddr as usize), attrs)
+            .map(vmo, UAddr::new(phdr.p_vaddr as usize), 0, region_len, attrs)
             .unwrap();
     }
 
@@ -104,7 +104,13 @@ fn prepare_stack(vmspace: &SharedRef<VmSpace>, cmdline: &[u8]) -> usize {
     let sp_offset = write_stack(&vmo, stack_bottom, stack_size, cmdline);
 
     vmspace
-        .map(vmo, stack_bottom, PageAttrs::READ | PageAttrs::WRITE)
+        .map(
+            vmo,
+            stack_bottom,
+            0,
+            stack_size,
+            PageAttrs::READ | PageAttrs::WRITE,
+        )
         .unwrap();
     stack_bottom.as_usize() + sp_offset
 }

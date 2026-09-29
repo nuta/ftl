@@ -25,6 +25,8 @@ struct Mapping {
     start: UAddr,
     end: UAddr,
     vmo: SharedRef<VmObject>,
+    /// The offset in the VMO.
+    offset: usize,
     attrs: PageAttrs,
 }
 
@@ -77,6 +79,8 @@ impl VmSpace {
         &self,
         vmo: SharedRef<VmObject>,
         uaddr: UAddr,
+        offset: usize,
+        len: usize,
         attrs: PageAttrs,
     ) -> Result<(), ErrorCode> {
         let allowed_attrs = PageAttrs::READ | PageAttrs::WRITE | PageAttrs::EXEC;
@@ -84,19 +88,21 @@ impl VmSpace {
             return Err(ErrorCode::InvalidArg);
         }
 
-        if !uaddr.is_aligned_to(MIN_PAGE_SIZE) {
-            return Err(ErrorCode::InvalidArg);
+        if !is_aligned(offset, MIN_PAGE_SIZE) {
+            return Err(ErrorCode::NotAligned);
         }
 
-        let end = uaddr.add(vmo.len()).ok_or(ErrorCode::OutOfBounds)?;
-        if end.as_usize() > arch::USER_ADDR_END {
-            return Err(ErrorCode::NotAllowed);
+        let end = validate_mapping_range(uaddr, len)?;
+        let vmo_end = offset.checked_add(len).ok_or(ErrorCode::OutOfBounds)?;
+        if vmo_end > vmo.len() {
+            return Err(ErrorCode::OutOfBounds);
         }
 
         self.insert(Mapping {
             start: uaddr,
             end,
             vmo,
+            offset,
             attrs,
         })
     }
@@ -155,7 +161,8 @@ impl VmSpace {
                 }
 
                 // Found a mapping that contains the fault address.
-                let index = (aligned_uaddr.as_usize() - mapping.start.as_usize()) / MIN_PAGE_SIZE;
+                let offset = mapping.offset + (aligned_uaddr.as_usize() - mapping.start.as_usize());
+                let index = offset / MIN_PAGE_SIZE;
                 let paddr = mapping.vmo.ensure_page(index)?;
                 let len = MIN_PAGE_SIZE;
                 self.arch.map(aligned_uaddr, paddr, len, mapping.attrs)?;
@@ -210,7 +217,9 @@ pub fn sys_vmspace_map(
     let vmspace_id = HandleId::new(ctx.a0);
     let vmo_id = HandleId::new(ctx.a1);
     let uaddr = UAddr::new(ctx.a2);
-    let attrs = PageAttrs::from_raw(ctx.a3);
+    let offset = ctx.a3;
+    let len = ctx.a4;
+    let attrs = PageAttrs::from_raw(ctx.a5);
     let allowed_attrs = PageAttrs::READ | PageAttrs::WRITE | PageAttrs::EXEC;
     if !allowed_attrs.contains(attrs) {
         return Err(ErrorCode::InvalidPageAttrs);
@@ -225,7 +234,7 @@ pub fn sys_vmspace_map(
     let (vmspace, vmo) =
         hspace.get2::<VmSpace, VmObject>(vmspace_id, HandleRight::WRITE, vmo_id, vmo_rights)?;
 
-    vmspace.map(vmo, uaddr, attrs)?;
+    vmspace.map(vmo, uaddr, offset, len, attrs)?;
     Ok(SyscallOutput::Done(0))
 }
 

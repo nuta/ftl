@@ -5,7 +5,7 @@ use ftl_types::vmspace::PageAttrs;
 
 use crate::arch::syscall1;
 use crate::arch::syscall3;
-use crate::arch::syscall4;
+use crate::arch::syscall6;
 use crate::handle::OwnedHandle;
 use crate::vmo::Vmo;
 
@@ -26,12 +26,22 @@ impl VmSpace {
         Ok(this)
     }
 
-    pub fn map(&self, vmo: &Vmo, uaddr: usize, attrs: PageAttrs) -> Result<(), ErrorCode> {
-        syscall4(
+    /// Maps `len` bytes of `vmo` from `offset` at `uaddr`.
+    pub fn map(
+        &self,
+        vmo: &Vmo,
+        uaddr: usize,
+        offset: usize,
+        len: usize,
+        attrs: PageAttrs,
+    ) -> Result<(), ErrorCode> {
+        syscall6(
             Syscall::VmSpaceMap,
             self.handle.id().as_usize(),
             vmo.handle().id().as_usize(),
             uaddr,
+            offset,
+            len,
             attrs.as_raw(),
         )?;
         Ok(())

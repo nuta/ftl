@@ -73,7 +73,13 @@ fn main(cmdline: &[u8]) {
     let heap_addr = align_up(&raw const _end as usize, 4096);
     let heap = Vmo::create(HEAP_SIZE).expect("failed to create heap VMO");
     root_vmspace
-        .map(&heap, heap_addr, PageAttrs::READ | PageAttrs::WRITE)
+        .map(
+            &heap,
+            heap_addr,
+            0,
+            HEAP_SIZE,
+            PageAttrs::READ | PageAttrs::WRITE,
+        )
         .expect("failed to map heap VMO");
 
     // SAFETY: The mapped heap is exclusive to the global allocator.

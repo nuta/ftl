@@ -100,7 +100,13 @@ impl Vm {
         let stack = Vmo::create(STACK_SIZE)?;
         let sp = prepare_stack(&stack, STACK_BOTTOM, STACK_SIZE, argv, &elf)?;
 
-        vmspace.map(&stack, STACK_BOTTOM, PageAttrs::READ | PageAttrs::WRITE)?;
+        vmspace.map(
+            &stack,
+            STACK_BOTTOM,
+            0,
+            STACK_SIZE,
+            PageAttrs::READ | PageAttrs::WRITE,
+        )?;
         mappings.push(Mapping {
             start: STACK_BOTTOM,
             len: STACK_SIZE,
@@ -142,7 +148,7 @@ impl Vm {
         let vmo = Vmo::create(len)?;
 
         let mut mutable = self.mutable.lock();
-        self.vmspace.map(&vmo, uaddr, attrs)?;
+        self.vmspace.map(&vmo, uaddr, 0, len, attrs)?;
         mutable.mappings.push(Mapping {
             start: uaddr,
             len,
@@ -188,7 +194,11 @@ impl Vm {
         };
 
         // Map the pages.
-        if self.vmspace.map(&vmo, brk.current_aligned, attrs).is_err() {
+        if self
+            .vmspace
+            .map(&vmo, brk.current_aligned, 0, len, attrs)
+            .is_err()
+        {
             // This may fail if there are concurrent brk calls, and we've lost
             // the race. Return the latest break address.
             let mutable = self.mutable.lock();
@@ -231,7 +241,7 @@ impl Vm {
                 vmo.write(0, bytes)?;
             }
 
-            vmspace.map(&vmo, mapping.start, mapping.attrs)?;
+            vmspace.map(&vmo, mapping.start, 0, mapping.len, mapping.attrs)?;
         }
 
         Ok(Self {
@@ -344,7 +354,7 @@ fn load_elf(
         }
 
         let attrs = attrs_from_phdr(phdr);
-        vmspace.map(&vmo, region_base, attrs)?;
+        vmspace.map(&vmo, region_base, 0, region_len, attrs)?;
         mappings.push(Mapping {
             start: region_base,
             len: region_len,
