@@ -1,6 +1,7 @@
 use alloc::sync::Arc;
 use alloc::vec;
 use alloc::vec::Vec;
+use core::cmp::max;
 use core::cmp::min;
 use core::mem::MaybeUninit;
 use core::slice;
@@ -77,6 +78,12 @@ impl Mapping {
 
     fn overlaps_with(&self, start: usize, end: usize) -> bool {
         start < self.end() && self.start < end
+    }
+
+    fn overlapping_len(&self, start: usize, end: usize) -> usize {
+        let min_end = min(self.end(), end);
+        let max_start = max(self.start, start);
+        min_end.saturating_sub(max_start)
     }
 }
 
@@ -216,6 +223,41 @@ impl Vm {
         Ok(())
     }
 
+    pub fn mprotect(&self, addr: usize, len: usize, prot: c_int) -> Result<(), Errno> {
+        let attrs = attrs_from_prot(prot);
+        let end = validate_mapping_range(addr, len)?;
+
+        if prot & !(PROT_READ | PROT_WRITE | PROT_EXEC) != 0 {
+            return Err(Errno::EINVAL);
+        }
+
+        let mut mutable = self.mutable.lock();
+
+        // Check if the range is fully mapped.
+        let mut aligned_len = end - addr;
+        for mapping in &mutable.mappings {
+            aligned_len -= mapping.overlapping_len(addr, end);
+        }
+
+        // Return ENOMEM if the range contains unmapped pages.
+        if aligned_len != 0 {
+            return Err(Errno::ENOMEM);
+        }
+
+        self.vmspace.permit(addr, end - addr, attrs)?;
+
+        // Update our own mapping state.
+        mutable.split_at(addr);
+        mutable.split_at(end);
+        for mapping in &mut mutable.mappings {
+            if mapping.overlaps_with(addr, end) {
+                mapping.attrs = attrs;
+            }
+        }
+
+        Ok(())
+    }
+
     /// `brk(2)` system call.
     ///
     /// Returns the new break address, even if it fails. This is a documented
@@ -337,12 +379,15 @@ fn attrs_from_prot(prot: c_int) -> PageAttrs {
     if prot & PROT_EXEC != 0 {
         attrs |= PageAttrs::EXEC;
     }
+
     if prot & PROT_WRITE != 0 {
         attrs |= PageAttrs::WRITE;
     }
+
     if prot & PROT_READ != 0 {
         attrs |= PageAttrs::READ;
     }
+
     attrs
 }
 
