@@ -216,9 +216,21 @@ impl Vm {
         let brk = mutable.brk;
         for mapping in &mappings {
             let vmo = Vmo::create(mapping.len)?;
-            let bytes =
-                unsafe { core::slice::from_raw_parts(mapping.start as *const u8, mapping.len) };
-            vmo.write(0, bytes)?;
+
+            // PROT_NONE mappings (e.g. guard pages) are not readable. Skip
+            // copying them.
+            //
+            // TODO: This means we can't support write then mprotect(PROT_NONE)
+            //       properly, but it should be very uncommon.
+            if mapping.attrs != PageAttrs::EMPTY {
+                // Fill the new VMO with the current data.
+                //
+                // TODO: Copy-on-write support.
+                let bytes =
+                    unsafe { core::slice::from_raw_parts(mapping.start as *const u8, mapping.len) };
+                vmo.write(0, bytes)?;
+            }
+
             vmspace.map(&vmo, mapping.start, mapping.attrs)?;
         }
 

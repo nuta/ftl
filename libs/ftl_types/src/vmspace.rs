@@ -1,7 +1,7 @@
 use core::ops::BitOr;
 use core::ops::BitOrAssign;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PageAttrs(usize);
 
 impl PageAttrs {
