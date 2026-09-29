@@ -245,7 +245,7 @@ pub fn sys_vmo_create(
     let len = ctx.a0;
 
     let vmo = VmObject::new_anonymous(len)?;
-    let rights = HandleRight::READ | HandleRight::WRITE | HandleRight::MAP;
+    let rights = HandleRight::READ | HandleRight::WRITE;
     let handle = Handle::new(vmo, rights);
     let id = current.hspace().insert(handle)?;
     Ok(SyscallOutput::Done(id.as_usize()))

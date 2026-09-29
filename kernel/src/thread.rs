@@ -305,7 +305,7 @@ pub fn sys_thread_create(
 
     let current_hspace = current.hspace();
     let (hspace, vmspace) =
-        current_hspace.get2(hspace_id, HandleRight::WRITE, vmspace_id, HandleRight::READ)?;
+        current_hspace.get2(hspace_id, HandleRight::WRITE, vmspace_id, HandleRight::WRITE)?;
 
     let thread = Thread::new(hspace, vmspace, pc, sp, fault_pc, cookie)?;
     let rights = HandleRight::READ | HandleRight::WRITE;

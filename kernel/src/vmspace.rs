@@ -185,10 +185,10 @@ pub fn sys_vmspace_clone(
     let source_id = HandleId::new(ctx.a0);
     let source = current
         .hspace()
-        .get::<VmSpace>(source_id, HandleRight::READ)?;
+        .get::<VmSpace>(source_id, HandleRight::READ | HandleRight::WRITE)?;
     let vmspace = VmSpace::clone(&source)?;
     let vmspace = SharedRef::new(vmspace)?;
-    let rights = HandleRight::READ | HandleRight::WRITE | HandleRight::MAP;
+    let rights = HandleRight::READ | HandleRight::WRITE;
     let handle = Handle::new(vmspace, rights);
     let id = current.hspace().insert(handle)?;
     Ok(SyscallOutput::Done(id.as_usize()))
@@ -207,9 +207,14 @@ pub fn sys_vmspace_map(
         return Err(ErrorCode::InvalidPageAttrs);
     }
 
+    let mut vmo_rights = HandleRight::READ;
+    if attrs.contains(PageAttrs::WRITE) {
+        vmo_rights |= HandleRight::WRITE;
+    }
+
     let hspace = current.hspace();
     let (vmspace, vmo) =
-        hspace.get2::<VmSpace, VmObject>(vmspace_id, HandleRight::MAP, vmo_id, HandleRight::MAP)?;
+        hspace.get2::<VmSpace, VmObject>(vmspace_id, HandleRight::WRITE, vmo_id, vmo_rights)?;
 
     vmspace.map(vmo, uaddr, attrs)?;
     Ok(SyscallOutput::Done(0))
@@ -224,7 +229,7 @@ pub fn sys_vmspace_unmap(
     let len = ctx.a2;
     let vmspace = current
         .hspace()
-        .get::<VmSpace>(vmspace_id, HandleRight::MAP)?;
+        .get::<VmSpace>(vmspace_id, HandleRight::WRITE)?;
 
     vmspace.unmap(uaddr, len)?;
     Ok(SyscallOutput::Done(0))
