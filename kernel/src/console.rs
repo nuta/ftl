@@ -164,6 +164,14 @@ pub fn sys_console_subscribe(
 
     let mut device = DEVICE.lock();
     let emitter = EventEmitter::new(poll, console_id);
+
+    // Notify immediately if there is data to read.
+    if !device.buf.is_empty() {
+        drop(device);
+        emitter.emit(EventKind::PollNotified)?;
+        return Ok(SyscallOutput::Done(0));
+    }
+
     let slot = device
         .subscriptions
         .reserve_slot()
