@@ -28,6 +28,9 @@ fn do_handle_syscall() {
         n if n == Syscall::VmSpaceUnmap as usize => {
             crate::vmspace::sys_vmspace_unmap(&thread, &regs)
         }
+        n if n == Syscall::VmSpacePermit as usize => {
+            crate::vmspace::sys_vmspace_permit(&thread, &regs)
+        }
         n if n == Syscall::ThreadCreate as usize => {
             crate::thread::sys_thread_create(&thread, &regs)
         }

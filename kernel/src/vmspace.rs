@@ -1,4 +1,6 @@
 use alloc::vec::Vec;
+use core::cmp::max;
+use core::cmp::min;
 
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
@@ -184,6 +186,38 @@ impl VmSpace {
         Ok(())
     }
 
+    pub fn permit(&self, uaddr: UAddr, len: usize, attrs: PageAttrs) -> Result<(), ErrorCode> {
+        let end = validate_mapping_range(uaddr, len)?;
+
+        let allowed_attrs = PageAttrs::READ | PageAttrs::WRITE | PageAttrs::EXEC;
+        if !allowed_attrs.contains(attrs) {
+            return Err(ErrorCode::InvalidPageAttrs);
+        }
+
+        let mut mutable = self.mutable.lock();
+
+        // Split the mappings.
+        mutable.split_at(uaddr)?;
+        mutable.split_at(end)?;
+
+        // Unmap the pages. The page fault handler will map them again lazily.
+        //
+        // TODO: This is to reduce the arch code, but I think we can update now.
+        self.arch.unmap(uaddr, len)?;
+
+        // Update the attributes of the mappings, including the ones that are
+        // inbetween `uaddr` and `end`.
+        //
+        // TODO: Can we return indices of the mappings from split_at?
+        for mapping in &mut mutable.mappings {
+            if mapping.overlaps_with(uaddr, end) {
+                mapping.attrs = attrs;
+            }
+        }
+
+        Ok(())
+    }
+
     /// Handles a user page fault in this address space.
     pub fn handle_page_fault(
         &self,
@@ -264,14 +298,13 @@ pub fn sys_vmspace_map(
         return Err(ErrorCode::InvalidPageAttrs);
     }
 
-    let mut vmo_rights = HandleRight::READ;
-    if attrs.contains(PageAttrs::WRITE) {
-        vmo_rights |= HandleRight::WRITE;
-    }
-
     let hspace = current.hspace();
-    let (vmspace, vmo) =
-        hspace.get2::<VmSpace, VmObject>(vmspace_id, HandleRight::WRITE, vmo_id, vmo_rights)?;
+    let (vmspace, vmo) = hspace.get2::<VmSpace, VmObject>(
+        vmspace_id,
+        HandleRight::WRITE,
+        vmo_id,
+        HandleRight::READ | HandleRight::WRITE,
+    )?;
 
     vmspace.map(vmo, uaddr, offset, len, attrs)?;
     Ok(SyscallOutput::Done(0))
@@ -289,5 +322,21 @@ pub fn sys_vmspace_unmap(
         .get::<VmSpace>(vmspace_id, HandleRight::WRITE)?;
 
     vmspace.unmap(uaddr, len)?;
+    Ok(SyscallOutput::Done(0))
+}
+
+pub fn sys_vmspace_permit(
+    current: &SharedRef<Thread>,
+    ctx: &SyscallRegs,
+) -> Result<SyscallOutput, ErrorCode> {
+    let vmspace_id = HandleId::new(ctx.a0);
+    let uaddr = UAddr::new(ctx.a1);
+    let len = ctx.a2;
+    let attrs = PageAttrs::from_raw(ctx.a3);
+    let vmspace = current
+        .hspace()
+        .get::<VmSpace>(vmspace_id, HandleRight::WRITE)?;
+
+    vmspace.permit(uaddr, len, attrs)?;
     Ok(SyscallOutput::Done(0))
 }

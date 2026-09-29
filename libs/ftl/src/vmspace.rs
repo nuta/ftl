@@ -5,6 +5,7 @@ use ftl_types::vmspace::PageAttrs;
 
 use crate::arch::syscall1;
 use crate::arch::syscall3;
+use crate::arch::syscall4;
 use crate::arch::syscall6;
 use crate::handle::OwnedHandle;
 use crate::vmo::Vmo;
@@ -53,6 +54,18 @@ impl VmSpace {
             self.handle.id().as_usize(),
             uaddr,
             len,
+        )?;
+        Ok(())
+    }
+
+    /// Changes the attributes of all pages in the range.
+    pub fn permit(&self, uaddr: usize, len: usize, attrs: PageAttrs) -> Result<(), ErrorCode> {
+        syscall4(
+            Syscall::VmSpacePermit,
+            self.handle.id().as_usize(),
+            uaddr,
+            len,
+            attrs.as_raw(),
         )?;
         Ok(())
     }
