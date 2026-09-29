@@ -15,7 +15,7 @@ pub fn sys_random_read(
     _current: &SharedRef<Thread>,
     ctx: &SyscallRegs,
 ) -> Result<SyscallOutput, ErrorCode> {
-    let len = ctx.a1;
+    let len = core::cmp::min(ctx.a1, CHUNK_LEN);
     if len == 0 {
         return Ok(SyscallOutput::Done(0));
     }
@@ -30,5 +30,5 @@ pub fn sys_random_read(
         offset += n;
     }
 
-    Ok(SyscallOutput::Done(0))
+    Ok(SyscallOutput::Done(len))
 }

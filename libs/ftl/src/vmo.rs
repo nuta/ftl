@@ -24,13 +24,18 @@ impl Vmo {
     }
 
     pub fn write(&self, offset: usize, buf: &[u8]) -> Result<(), ErrorCode> {
-        syscall4(
-            Syscall::VmoWrite,
-            self.handle.id().as_usize(),
-            offset,
-            buf.as_ptr() as usize,
-            buf.len(),
-        )?;
+        let mut written = 0;
+        while written < buf.len() {
+            let rest = &buf[written..];
+            written += syscall4(
+                Syscall::VmoWrite,
+                self.handle.id().as_usize(),
+                offset + written,
+                rest.as_ptr() as usize,
+                rest.len(),
+            )?;
+        }
+
         Ok(())
     }
 

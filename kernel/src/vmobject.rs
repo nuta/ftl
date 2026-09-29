@@ -23,6 +23,8 @@ use crate::shared_ref::SharedRef;
 use crate::syscall::SyscallOutput;
 use crate::thread::Thread;
 
+const MAX_COPY_LEN: usize = 64 * 1024;
+
 /// A physical memory page.
 struct Page {
     paddr: PAddr,
@@ -256,13 +258,13 @@ pub fn sys_vmo_read(
     let id = HandleId::new(ctx.a0);
     let offset = ctx.a1;
     let uaddr = UAddr::new(ctx.a2);
-    let len = ctx.a3;
+    let len = min(ctx.a3, MAX_COPY_LEN);
 
     let uslice = USlice::new(uaddr, len)?;
     let vmo = current.hspace().get::<VmObject>(id, HandleRight::READ)?;
 
     vmo.read_user(offset, uslice)?;
-    Ok(SyscallOutput::Done(0))
+    Ok(SyscallOutput::Done(len))
 }
 
 pub fn sys_vmo_write(
@@ -272,11 +274,11 @@ pub fn sys_vmo_write(
     let id = HandleId::new(ctx.a0);
     let offset = ctx.a1;
     let uaddr = UAddr::new(ctx.a2);
-    let len = ctx.a3;
+    let len = min(ctx.a3, MAX_COPY_LEN);
 
     let uslice = USlice::new(uaddr, len)?;
     let vmo = current.hspace().get::<VmObject>(id, HandleRight::WRITE)?;
 
     vmo.write_user(offset, uslice)?;
-    Ok(SyscallOutput::Done(0))
+    Ok(SyscallOutput::Done(len))
 }
