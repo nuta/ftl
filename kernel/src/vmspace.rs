@@ -45,6 +45,41 @@ struct Mutable {
     mappings: Vec<Mapping>,
 }
 
+impl Mutable {
+    /// Splits a mapping at `uaddr` into two mappings.
+    ///
+    /// Returns `Ok` if `uaddr` is not in any mappings.
+    fn split_at(&mut self, uaddr: UAddr) -> Result<(), ErrorCode> {
+        // Find the mapping containing uaddr.
+        let Some(index) = self.mappings.iter().position(|mapping| {
+            // Avoid "<=" intentionally to prevent creating empty mappings.
+            mapping.start < uaddr && uaddr < mapping.end
+        }) else {
+            // No mapping contains uaddr.
+            return Ok(());
+        };
+
+        self.mappings
+            .try_reserve(1)
+            .map_err(|_| ErrorCode::OutOfMemory)?;
+
+        // Original mapping.
+        let left = &mut self.mappings[index];
+
+        // New mapping.
+        let mut right = left.clone();
+        right.start = uaddr;
+        right.offset += uaddr.as_usize() - left.start.as_usize();
+
+        // Shrink the range of the original mapping.
+        left.end = uaddr;
+
+        // Insert the new mapping after the original mapping.
+        self.mappings.insert(index + 1, right);
+        Ok(())
+    }
+}
+
 /// A virtual memory space.
 pub struct VmSpace {
     arch: arch::VmSpace,
@@ -132,16 +167,20 @@ impl VmSpace {
 
     pub fn unmap(&self, uaddr: UAddr, len: usize) -> Result<(), ErrorCode> {
         let end = validate_mapping_range(uaddr, len)?;
-        let mut mutable = self.mutable.lock();
-        let index = mutable
-            .mappings
-            .iter()
-            .position(|mapping| mapping.start == uaddr && mapping.end == end)
-            .ok_or(ErrorCode::NotFound)?;
 
-        let mapping = mutable.mappings.remove(index);
+        let mut mutable = self.mutable.lock();
+        mutable.split_at(uaddr)?;
+        mutable.split_at(end)?;
+
+        // Unmap from the page table before removing the mapping. It frees
+        // the pages.
         self.arch.unmap(uaddr, len)?;
-        drop(mapping);
+
+        // Remove the mapping. This decrements page reference counters and may
+        // free the pages.
+        mutable
+            .mappings
+            .retain(|mapping| !mapping.overlaps_with(uaddr, end));
         Ok(())
     }
 
