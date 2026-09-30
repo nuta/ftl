@@ -132,7 +132,7 @@ impl OpenFile {
     }
 
     pub fn seek(&self, offset: off_t, whence: c_int) -> Result<off_t, Errno> {
-        let offset_usize = offset.try_into().map_err(|_| Errno::EINVAL)?;
+        let offset_isize = offset.try_into().map_err(|_| Errno::EINVAL)?;
         let base = match whence {
             SEEK_SET => 0,
             SEEK_CUR => self.mutable.lock().offset,
@@ -140,7 +140,7 @@ impl OpenFile {
             _ => return Err(Errno::EINVAL),
         };
 
-        let new_offset = base.checked_add(offset_usize).ok_or(Errno::EINVAL)?;
+        let new_offset = base.checked_add_signed(offset_isize).ok_or(Errno::EINVAL)?;
         self.mutable.lock().offset = new_offset;
         // TODO: Is it possible to guarantee it is in [0, i64::MAX] in a type-safe way?
         let new_offset_i64 = new_offset.try_into().map_err(|_| Errno::EINVAL)?;
