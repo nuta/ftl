@@ -6,6 +6,7 @@ use core::ptr;
 
 use ftl::trace;
 use ftl_types::thread::RegsKind;
+use ftl_utils::alignment::align_down;
 use ftl_utils::spinlock::SpinLock;
 
 use crate::arch::SyscallFrame;
@@ -230,7 +231,86 @@ impl Process {
         Ok(tgid)
     }
 
+    /// Spawns a new thread (`clone(2)` with `CLONE_THREAD`).
+    pub fn spawn_thread(
+        self: &Arc<Self>,
+        current: &LxThread,
+        frame: &SyscallFrame,
+        stack: usize,
+        tls: Option<usize>,
+        parent_tid: Option<*mut c_int>,
+        clear_child_tid: Option<usize>,
+    ) -> Result<PId, Errno> {
+        // Calculate the user address to put a register frame.
+        let frame_addr = stack
+            .checked_sub(size_of::<SyscallFrame>())
+            .map(|addr| {
+                // Align the frame to 16 bytes (x86-64 ABI requirement).
+                align_down(addr, 16)
+            })
+            .ok_or(Errno::EINVAL)?;
+
+        // Allocate a new thread ID.
+        let mut pid_table = self.container.processes.lock();
+        let tid = pid_table.allocate()?;
+
+        // Create a thread.
+        let thread = LxThread::new(
+            &self.container.hspace,
+            current.vm().clone(),
+            restore_regs as *const () as usize,
+            frame_addr,
+            Arc::downgrade(self),
+            tid,
+        )?;
+
+        match tls {
+            // Set the TLS base if it is provided.
+            Some(tls) => thread.set_fsbase(tls)?,
+            // Otherwise, inherit the parent's FS base.
+            None => current.copy_regs_to(&thread, RegsKind::FsBase)?,
+        }
+
+        // TODO: Do we really need to copy the FP registers?
+        current.copy_regs_to(&thread, RegsKind::FpAndVector)?;
+
+        thread.set_clear_child_tid(clear_child_tid);
+
+        // Reserve the TID and release the table lock. The write to `parent_tid`
+        // may cause a page fault.
+        pid_table.insert(tid, self.clone());
+        drop(pid_table);
+
+        // Write the new thread's ID to the parent's clear_child_tid.
+        let tid = thread.tid();
+        if let Some(parent_tid) = parent_tid {
+            unsafe { parent_tid.write(tid.as_int()) };
+        }
+
+        // Write the new thread's initial registers.
+        let mut child_frame = *frame;
+        child_frame.set_retval(0);
+        child_frame.set_sp(stack);
+        unsafe { (frame_addr as *mut SyscallFrame).write(child_frame) };
+
+        // Start the thread.
+        let mut mutable = self.mutable.lock();
+        if let Err(err) = self.container.add_thread(thread.clone()) {
+            drop(mutable);
+            self.container.processes.lock().remove(tid);
+            return Err(err);
+        }
+
+        mutable.threads.push(thread);
+        Ok(tid)
+    }
+
     pub fn on_thread_exit(&self, thread: &LxThread) -> Result<(), Errno> {
+        if thread.tid() != self.tgid {
+            // This is not the main thread. Remove it from the PID table.
+            self.container.processes.lock().remove(thread.tid());
+        }
+
         let mut mutable = self.mutable.lock();
 
         if mutable.exit_status.is_some() {

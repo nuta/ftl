@@ -18,11 +18,8 @@ use crate::process::Process;
 use crate::signal::SigDisposition;
 use crate::types::c_int;
 use crate::types::c_long;
-use crate::types::c_ulong;
 use crate::types::errno::Errno;
-use crate::types::signal::SIGCHLD;
 use crate::types::sys::futex::FUTEX_BITSET_MATCH_ANY;
-use crate::types::sys::sched::CLONE_FLAGS_MASK;
 use crate::vm::Vm;
 
 struct Mutable {
@@ -155,24 +152,6 @@ impl LxThread {
 
     pub fn copy_regs_to(&self, dest: &LxThread, kind: RegsKind) -> Result<(), ErrorCode> {
         self.inner.copy_regs_to(&dest.inner, kind)
-    }
-
-    pub fn do_clone(&self, frame: &mut SyscallFrame, flags: c_ulong) -> Result<PId, Errno> {
-        const SUPPORTED_FLAGS: c_ulong = 0;
-
-        let exit_signal = (flags & CLONE_FLAGS_MASK) as c_int;
-        if exit_signal != SIGCHLD {
-            trace!("clone: unsupported exit signal {}", exit_signal);
-            return Err(Errno::EINVAL);
-        }
-
-        let flags = flags & !CLONE_FLAGS_MASK;
-        if flags & !SUPPORTED_FLAGS != 0 {
-            trace!("clone: unsupported flags {:#x}", flags & !SUPPORTED_FLAGS);
-            return Err(Errno::EINVAL);
-        }
-
-        self.process().fork(self, frame)
     }
 
     /// Modifies the thread's state to return to the signal handler.

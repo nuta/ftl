@@ -41,6 +41,10 @@ impl SyscallFrame {
         todo!()
     }
 
+    pub fn set_sp(&mut self, _sp: usize) {
+        todo!()
+    }
+
     pub unsafe fn enter_signal(&mut self, _signal: usize, _handler: usize, _restorer: usize) {
         todo!()
     }

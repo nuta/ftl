@@ -59,6 +59,10 @@ impl SyscallFrame {
         self.rax = retval as usize;
     }
 
+    pub fn set_sp(&mut self, sp: usize) {
+        self.rsp = sp;
+    }
+
     pub unsafe fn enter_signal(&mut self, signal: usize, handler: usize, restorer: usize) {
         // Use the beginning of the frame as the restorer, the return address
         // for RET instruction in signal handler.
