@@ -186,17 +186,20 @@ impl Vm {
         let len = align_up(len, PAGE_SIZE);
         let attrs = attrs_from_prot(prot);
 
-        // Find a space to map the new region.
-        let uaddr = {
-            let mutable = self.mutable.lock();
-            // TODO: Better way to find a hole in mappings.
-            mutable
-                .mappings
-                .iter()
-                .map(|mapping| mapping.start + mapping.len)
-                .max()
-                .unwrap_or(0)
-        };
+        // Allocate a VMO.
+        let vmo = Vmo::create(len)?;
+
+        // Find a space to map the new region. This must be done while holding
+        // the lock to prevent other threads from picking the same address.
+        //
+        // TODO: Better way to find a hole in mappings.
+        let mut mutable = self.mutable.lock();
+        let uaddr = mutable
+            .mappings
+            .iter()
+            .map(|mapping| mapping.start + mapping.len)
+            .max()
+            .unwrap_or(0);
 
         // Check if the new mapping overlaps with LX's memory area.
         let end = uaddr.checked_add(len).ok_or(Errno::ENOMEM)?;
@@ -204,10 +207,6 @@ impl Vm {
             return Err(Errno::ENOMEM);
         }
 
-        // Allocate a VMO and map it.
-        let vmo = Vmo::create(len)?;
-
-        let mut mutable = self.mutable.lock();
         self.vmspace.map(&vmo, uaddr, 0, len, attrs)?;
         let mapping = Mapping::new(uaddr, len, attrs, vmo);
         mutable.mappings.push(mapping);
