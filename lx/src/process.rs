@@ -122,6 +122,8 @@ impl Process {
 
         let mut mutable = self.mutable.lock();
 
+        // FIXME: Remove existing threads.
+
         // This should be done while locking the process's mutable, because the
         // new thread is not yet added to `mutable.threads`, and the thread
         // starts immediately in add_thread.

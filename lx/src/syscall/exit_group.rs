@@ -13,6 +13,6 @@ pub fn sys_exit_group(current: &LxThread, status: c_int) -> Result<SyscallResult
 
     current.process().exit(status)?;
 
-    // TODO: temrinate other threads too
+    // FIXME: Terminate other threads too
     Ok(SyscallResult::Exit(reason))
 }

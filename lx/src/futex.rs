@@ -51,6 +51,9 @@ impl FutexTable {
         let mut waiters = self.waiters.lock();
 
         // Check the current value.
+        //
+        // FIXME: Page fault if the address is not mapped, and keeps the
+        //        lock held.
         let current = unsafe { uaddr.read_volatile() };
         if current != val {
             return Err(Errno::EAGAIN);
