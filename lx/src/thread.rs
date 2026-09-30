@@ -21,12 +21,14 @@ use crate::types::c_long;
 use crate::types::c_ulong;
 use crate::types::errno::Errno;
 use crate::types::signal::SIGCHLD;
+use crate::types::sys::futex::FUTEX_BITSET_MATCH_ANY;
 use crate::types::sys::sched::CLONE_FLAGS_MASK;
 use crate::vm::Vm;
 
 struct Mutable {
     signal_frame: Option<SyscallFrame>,
     exit_status: Option<c_int>,
+    clear_child_tid: Option<usize>,
 }
 
 pub struct LxThread {
@@ -68,6 +70,7 @@ impl LxThread {
                 mutable: SpinLock::new(Mutable {
                     signal_frame: None,
                     exit_status: None,
+                    clear_child_tid: None,
                 }),
                 _cookie: Box::write(
                     this,
@@ -101,12 +104,36 @@ impl LxThread {
         self.process.upgrade().unwrap()
     }
 
-    pub fn on_exit(&self) -> Result<(), Errno> {
-        if let Some(process) = self.process.upgrade() {
-            process.on_thread_exit(self)?;
+    /// Cleans up an exited thread.
+    ///
+    /// Note: Call this in LX's main loop.
+    pub fn reap(&self) -> Result<(), Errno> {
+        let Some(process) = self.process.upgrade() else {
+            return Ok(());
+        };
+
+        // Clear the TID, and wake up the waiter.
+        let clear_child_tid = self.mutable.lock().clear_child_tid;
+        if let Some(uaddr) = clear_child_tid {
+            if let Err(err) = self.clear_child_tid(&process, uaddr) {
+                trace!("failed to clear child TID at {:#x}: {:?}", uaddr, err);
+            }
         }
 
+        process.on_thread_exit(self)
+    }
+
+    /// Note: Call this in LX's main loop.
+    fn clear_child_tid(&self, process: &Process, uaddr: usize) -> Result<(), Errno> {
+        // Don't access uaddr directly. It is in a different address space
+        // since we're in the LX's main loop.
+        self.vm.write(uaddr, &0u32.to_ne_bytes())?;
+        process.futexes().wake(uaddr, 1, FUTEX_BITSET_MATCH_ANY)?;
         Ok(())
+    }
+
+    pub fn set_clear_child_tid(&self, uaddr: Option<usize>) {
+        self.mutable.lock().clear_child_tid = uaddr;
     }
 
     pub fn exit_status(&self) -> Option<c_int> {

@@ -53,7 +53,7 @@ impl Reaper {
             return;
         };
 
-        if let Err(err) = thread.on_exit() {
+        if let Err(err) = thread.reap() {
             warn!("reaper: failed to reap a thread: {:?}", err);
         }
 
