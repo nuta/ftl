@@ -134,7 +134,12 @@ impl FdTable {
             return Err(Errno::EINVAL);
         }
 
-        for fd in (minfd as usize)..self.capacity {
+        let minfd = minfd as usize;
+        if minfd >= self.capacity {
+            return Err(Errno::EINVAL);
+        }
+
+        for fd in minfd..self.capacity {
             if fd >= self.open_files.len() || self.open_files[fd].is_none() {
                 return Ok(fd);
             }
