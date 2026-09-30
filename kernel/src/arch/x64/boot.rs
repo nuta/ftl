@@ -3,6 +3,7 @@ use core::arch::naked_asm;
 
 use super::multiboot;
 use super::pvh;
+use super::thread::MXCSR_INIT;
 use super::thread::XSTATE_MASK;
 use super::vmspace::BOOT_PDPT;
 use super::vmspace::BOOT_PML4;
@@ -97,8 +98,13 @@ fn enable_sse() {
             "mov eax, {xstate_mask_lo}",
             "mov edx, {xstate_mask_hi}",
             "xsetbv",
+
+            // Initialize FPU.
+            "fninit",
+            "ldmxcsr [{mxcsr}]",
             xstate_mask_lo = const XSTATE_MASK & 0xffff_ffff,
             xstate_mask_hi = const XSTATE_MASK >> 32,
+            mxcsr = in(reg) &MXCSR_INIT,
             out("rax") _,
             out("rcx") _,
             out("rdx") _,

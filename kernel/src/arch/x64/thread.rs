@@ -19,6 +19,19 @@ use crate::memory::PAGE_ALLOCATOR;
 use crate::memory::PageType;
 
 pub(super) const XSTATE_MASK: u64 = (1 << 0) | (1 << 1); // x87 | SSE
+pub(super) const MXCSR_INIT: u32 = 0x1f80; // All exceptions masked.
+
+/// Initializes an XSAVE area.
+fn init_xsave(ptr: *mut u8) {
+    unsafe {
+        // FCW (x87 FPU): All exceptions masked.
+        ptr.add(0).cast::<u16>().write(0x37f);
+        // MXCSR
+        ptr.add(24).cast::<u32>().write(MXCSR_INIT);
+        // XSTATE_BV
+        ptr.add(512).cast::<u64>().write(XSTATE_MASK);
+    }
+}
 
 #[derive(Debug)]
 #[repr(C, packed)]
@@ -65,6 +78,8 @@ impl Thread {
         let paddr = PAGE_ALLOCATOR
             .alloc(MIN_PAGE_SIZE, PageType::Zeroed)
             .ok_or(ErrorCode::OutOfMemory)?;
+        let xsave = arch::paddr2vaddr(paddr);
+        init_xsave(xsave.as_mut_ptr());
 
         Ok(Self {
             cs: GDT_USER_CS as u64,
@@ -73,7 +88,7 @@ impl Thread {
             rip: pc as u64,
             rsp: sp as u64,
             fault_pc: fault_pc as u64,
-            xsave_ptr: arch::paddr2vaddr(paddr).as_usize() as u64,
+            xsave_ptr: xsave.as_usize() as u64,
             cookie: cookie as u64,
             rax: 0,
             rbx: 0,
