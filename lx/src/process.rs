@@ -12,6 +12,7 @@ use crate::arch::SyscallFrame;
 use crate::arch::restore_regs;
 use crate::container::Container;
 use crate::fd_table::FdTable;
+use crate::futex::FutexTable;
 use crate::signal::SigAction;
 use crate::signal::SigDisposition;
 use crate::signal::Signal;
@@ -66,6 +67,7 @@ pub struct Process {
     mutable: SpinLock<Mutable>,
     fd_table: SpinLock<FdTable>,
     signal_wait: WaitQueue,
+    futexes: FutexTable,
 }
 
 impl Process {
@@ -161,6 +163,7 @@ impl Process {
             }),
             fd_table: SpinLock::new(fd_table),
             signal_wait,
+            futexes: FutexTable::new(),
         });
 
         // TODO: LX assumes that the cookie won't be dereferenced until the
@@ -395,6 +398,10 @@ impl Process {
         let signal = mutable.pending_signals.take_first()?;
         let action = *mutable.signal_actions.get(signal);
         Some((signal, action))
+    }
+
+    pub fn futexes(&self) -> &FutexTable {
+        &self.futexes
     }
 
     pub fn signal_wait_queue(&self) -> &WaitQueue {

@@ -7,6 +7,7 @@ extern crate alloc;
 mod arch;
 mod container;
 mod fd_table;
+mod futex;
 mod initfs;
 mod net;
 mod open_file;

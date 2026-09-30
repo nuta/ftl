@@ -19,6 +19,7 @@ mod execve;
 mod exit_group;
 mod fcntl;
 mod fork;
+mod futex;
 mod getpid;
 mod getrandom;
 mod gettid;
@@ -67,6 +68,7 @@ use self::execve::sys_execve;
 use self::exit_group::sys_exit_group;
 use self::fcntl::sys_fcntl;
 use self::fork::sys_fork;
+use self::futex::sys_futex;
 use self::getpid::sys_getpid;
 use self::getrandom::sys_getrandom;
 use self::gettid::sys_gettid;
@@ -125,6 +127,7 @@ use crate::types::sys::syscall::SYS_EXECVE;
 use crate::types::sys::syscall::SYS_EXIT_GROUP;
 use crate::types::sys::syscall::SYS_FCNTL;
 use crate::types::sys::syscall::SYS_FORK;
+use crate::types::sys::syscall::SYS_FUTEX;
 use crate::types::sys::syscall::SYS_GETPID;
 use crate::types::sys::syscall::SYS_GETRANDOM;
 use crate::types::sys::syscall::SYS_GETTID;
@@ -268,6 +271,16 @@ fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
         SYS_FORK => sys_fork(current, frame),
         SYS_GETPID => sys_getpid(current),
         SYS_GETTID => sys_gettid(current),
+        SYS_FUTEX => {
+            sys_futex(
+                current,
+                arg0 as *mut u32,
+                arg1 as c_int,
+                arg2 as u32,
+                frame.arg3() as *const TimeSpec,
+                frame.arg5() as u32,
+            )
+        }
         SYS_GETRANDOM => sys_getrandom(current, arg0 as *mut c_void, arg1, arg2 as c_unsigned),
         SYS_CLOCK_GETTIME => sys_clock_gettime(current, arg0 as c_int, arg1 as *mut TimeSpec),
         SYS_CLOCK_NANOSLEEP => {

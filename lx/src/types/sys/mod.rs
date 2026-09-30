@@ -2,6 +2,7 @@ pub mod auxv;
 pub mod epoll;
 pub mod eventfd;
 pub mod fcntl;
+pub mod futex;
 pub mod mman;
 pub mod poll;
 pub mod sched;
