@@ -12,6 +12,7 @@ impl Errno {
     pub const ENOENT: Self = Self(2);
     pub const ESRCH: Self = Self(3);
     pub const EINTR: Self = Self(4);
+    pub const ENOEXEC: Self = Self(8);
     pub const EBADF: Self = Self(9);
     pub const ECHILD: Self = Self(10);
     pub const EAGAIN: Self = Self(11);

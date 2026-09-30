@@ -439,7 +439,10 @@ fn read_exact(file: &dyn FileLike, mut offset: usize, buf: &mut [u8]) -> Result<
     let mut total = 0;
     while total < buf.len() {
         let n = file.read(&mut buf[total..], offset, false, Sleep::Uninterruptible)?;
-        assert!(n > 0); // FIXME: proper errno
+        if n == 0 {
+            return Err(Errno::ENOEXEC);
+        }
+
         total += n;
         offset += n;
     }
@@ -477,7 +480,7 @@ fn load_elf(
     let mut header_region = vec![0u8; phdrs_end]; // TODO: Use MaybeUninit
     read_exact(elf_file, 0, &mut header_region)?;
 
-    let elf = Elf::parse(&header_region, ftl_elf::ET_EXEC).expect("failed to parse ELF");
+    let elf = Elf::parse(&header_region, ftl_elf::ET_EXEC).map_err(|_| Errno::ENOEXEC)?;
     let mut phdr_vaddr = 0;
     for phdr in elf.phdrs {
         if phdr.p_type == PhdrType::Phdr as u32 {
