@@ -56,7 +56,7 @@ async fn handle(req: Request<Incoming>) -> Result<Response<Full<Bytes>>, Infalli
     Ok(respond(status, file))
 }
 
-#[tokio::main(flavor = "current_thread")]
+#[tokio::main]
 async fn main() -> io::Result<()> {
     let addr = SocketAddr::from((Ipv4Addr::UNSPECIFIED, 80));
     let listener = TcpListener::bind(addr).await?;

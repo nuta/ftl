@@ -7,9 +7,17 @@ edition = "2024"
 
 [dependencies]
 http-body-util = { version = "0.1", default-features = false }
-hyper = { version = "1", default-features = false, features = ["http1", "server"] }
+hyper = { version = "1", default-features = false, features = [
+    "http1",
+    "server",
+] }
 hyper-util = { version = "0.1", default-features = false, features = ["tokio"] }
-tokio = { version = "1", default-features = false, features = ["rt", "macros", "net", "io-util"] }
+tokio = { version = "1", default-features = false, features = [
+    "rt-multi-thread",
+    "macros",
+    "net",
+    "io-util",
+] }
 
 [profile.release]
 opt-level = "z"
