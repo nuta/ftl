@@ -48,15 +48,16 @@ impl ftl_driver::env::Env for DriverEnv {
         {
             let mut free_list = DMA_FREE_LIST.lock();
             if let Some(buf) = free_list.back()
-                && buf.capacity() >= len {
-                    let mut buf = free_list.pop_back().unwrap();
+                && buf.capacity() >= len
+            {
+                let mut buf = free_list.pop_back().unwrap();
 
-                    // SAFETY: We've checked the capacity is sufficient.
-                    unsafe {
-                        buf.set_len(len);
-                    }
-                    return Ok(buf);
+                // SAFETY: We've checked the capacity is sufficient.
+                unsafe {
+                    buf.set_len(len);
                 }
+                return Ok(buf);
+            }
         }
 
         // Allocate a new buffer.
@@ -74,14 +75,15 @@ impl ftl_driver::env::Env for DriverEnv {
     fn free_dma(&self, buf: DmaBuf) {
         let mut free_list = DMA_FREE_LIST.lock();
         if free_list.len() >= DMA_FREE_LIST_MAX
-            && let Some(buf) = free_list.pop_front() {
-                let paddr = PAddr::new(buf.paddr());
-                // SAFETY: This page is allocated by global PAGE_ALLOCATOR, and
-                //         capacity is unchanged.
-                unsafe {
-                    PAGE_ALLOCATOR.free(paddr, buf.capacity());
-                }
+            && let Some(buf) = free_list.pop_front()
+        {
+            let paddr = PAddr::new(buf.paddr());
+            // SAFETY: This page is allocated by global PAGE_ALLOCATOR, and
+            //         capacity is unchanged.
+            unsafe {
+                PAGE_ALLOCATOR.free(paddr, buf.capacity());
             }
+        }
 
         // Try to reserve a space in the free list. If it fails, free it
         // immediately.

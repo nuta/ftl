@@ -124,10 +124,7 @@ pub fn load(bootinfo: &BootInfo) {
 
     let hspace = SharedRef::new(HandleSpace::new()).unwrap();
     let hspace_handle = Handle::new(hspace.clone(), HandleRight::WRITE);
-    let vmspace_handle = Handle::new(
-        vmspace.clone(),
-        HandleRight::READ | HandleRight::WRITE,
-    );
+    let vmspace_handle = Handle::new(vmspace.clone(), HandleRight::READ | HandleRight::WRITE);
     hspace.insert_at(HandleId::new(1), hspace_handle).unwrap();
     hspace.insert_at(HandleId::new(2), vmspace_handle).unwrap();
     let thread = Thread::new(hspace, vmspace, entry, sp, 0, 0).unwrap();
