@@ -49,6 +49,10 @@ impl Poll {
     fn enqueue(&self, event: Event) -> Result<(), ErrorCode> {
         let mut timer = GLOBAL_TIMER.lock();
         let mut mutable = self.mutable.lock();
+        if mutable.destroyed {
+            return Err(ErrorCode::Destroyed);
+        }
+
         let slot = mutable
             .queue
             .reserve_slot()
