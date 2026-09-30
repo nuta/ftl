@@ -42,9 +42,16 @@ impl<'a> IoVecSlice<'a> {
     }
 
     pub fn buffers(&self) -> impl Iterator<Item = &[u8]> {
-        self.iovecs.iter().map(|iovec| unsafe {
-            slice::from_raw_parts(iovec.iov_base as *const u8, iovec.iov_len)
-        })
+        self.iovecs
+            .iter()
+            .filter(|iovec| {
+                // Buffer pointer may be null if iov_len is 0, but it is invalid
+                // for Rust slices. Skip such iovecs.
+                iovec.iov_len != 0
+            })
+            .map(|iovec| unsafe {
+                slice::from_raw_parts(iovec.iov_base as *const u8, iovec.iov_len)
+            })
     }
 }
 
