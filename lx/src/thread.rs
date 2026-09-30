@@ -26,6 +26,7 @@ use crate::vm::Vm;
 
 struct Mutable {
     signal_frame: Option<SyscallFrame>,
+    exit_status: Option<c_int>,
 }
 
 pub struct LxThread {
@@ -64,7 +65,10 @@ impl LxThread {
                 vm,
                 tid,
                 inner,
-                mutable: SpinLock::new(Mutable { signal_frame: None }),
+                mutable: SpinLock::new(Mutable {
+                    signal_frame: None,
+                    exit_status: None,
+                }),
                 _cookie: Box::write(
                     this,
                     Cookie {
@@ -103,6 +107,14 @@ impl LxThread {
         }
 
         Ok(())
+    }
+
+    pub fn exit_status(&self) -> Option<c_int> {
+        self.mutable.lock().exit_status
+    }
+
+    pub fn set_exit_status(&self, status: c_int) {
+        self.mutable.lock().exit_status = Some(status);
     }
 
     pub fn vm(&self) -> &Arc<Vm> {

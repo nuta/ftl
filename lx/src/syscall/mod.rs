@@ -16,6 +16,7 @@ mod epoll_wait;
 mod eventfd;
 mod eventfd2;
 mod execve;
+mod exit;
 mod exit_group;
 mod fcntl;
 mod fork;
@@ -65,6 +66,7 @@ use self::epoll_wait::sys_epoll_wait;
 use self::eventfd::sys_eventfd;
 use self::eventfd2::sys_eventfd2;
 use self::execve::sys_execve;
+use self::exit::sys_exit;
 use self::exit_group::sys_exit_group;
 use self::fcntl::sys_fcntl;
 use self::fork::sys_fork;
@@ -124,6 +126,7 @@ use crate::types::sys::syscall::SYS_EPOLL_WAIT;
 use crate::types::sys::syscall::SYS_EVENTFD;
 use crate::types::sys::syscall::SYS_EVENTFD2;
 use crate::types::sys::syscall::SYS_EXECVE;
+use crate::types::sys::syscall::SYS_EXIT;
 use crate::types::sys::syscall::SYS_EXIT_GROUP;
 use crate::types::sys::syscall::SYS_FCNTL;
 use crate::types::sys::syscall::SYS_FORK;
@@ -339,6 +342,7 @@ fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
         SYS_FCNTL => sys_fcntl(current, arg0 as c_int, arg1 as c_int, arg2 as c_long),
         SYS_ARCH_PRCTL => sys_arch_prctl(current, arg0 as c_int, arg1),
         SYS_SET_TID_ADDRESS => sys_set_tid_address(current, arg0 as *mut c_int),
+        SYS_EXIT => sys_exit(current, arg0 as c_int),
         SYS_EXIT_GROUP => sys_exit_group(current, arg0 as c_int),
         _ => Err(Errno::ENOSYS),
     };

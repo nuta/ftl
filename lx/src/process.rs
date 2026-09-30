@@ -250,8 +250,13 @@ impl Process {
 
         drop(mutable);
 
-        // TODO: What's the proper exit status here?
-        self.exit(1)
+        // This is the last thread in the process. Exit the process with its
+        // exit status.
+        //
+        // TODO: What's the proper exit status if thread has aborted without
+        //       exit(2), such as page faults?
+        let status = thread.exit_status().unwrap_or(1);
+        self.exit(status)
     }
 
     // TODO: Should we make this method infallible?
