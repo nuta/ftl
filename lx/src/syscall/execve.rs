@@ -37,7 +37,7 @@ pub fn sys_execve(
     let mut initfs = InitFsLoader::new(&crate::INITFS.0);
     let initfs_file = initfs
         .find(|file| file.name == argv_vec[0].trim_prefix(b"/"))
-        .expect("init not found in initfs");
+        .ok_or(Errno::ENOENT)?;
     let elf_file = Arc::new(EmbeddedFile::new(initfs_file.data));
 
     // TODO: envp support
