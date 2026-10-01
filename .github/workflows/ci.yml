@@ -14,7 +14,6 @@ on:
 
 permissions:
   contents: read
-  actions: write
 
 env:
   CARGO_TERM_COLOR: always
@@ -58,7 +57,7 @@ jobs:
       with:
         name: dist
     - uses: oven-sh/setup-bun@v2
-    - run: sudo apt-get update && sudo apt-get install -y qemu-system-x86
+    - run: sudo apt-get install -y --no-install-recommends qemu-system-x86
     - name: E2E tests
       run: SKIP_BUILD=1 ./test.sh
 
