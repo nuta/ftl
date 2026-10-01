@@ -67,10 +67,34 @@ impl Header {
 
         Some((new_header_ptr as *mut MaybeUninit<Header>, remainder))
     }
+
+    /// Merges the next free chunk into this if it is adjacent.
+    fn try_merge_next(&mut self) {
+        let Some(next) = self.next else {
+            return;
+        };
+
+        // Check if the next chunk is adjacent.
+        let end = unsafe { self.data_ptr().add(self.capacity as usize) };
+        if end != next.as_ptr().cast::<u8>() {
+            return;
+        }
+
+        // Merge the next chunk into this.
+        let next = unsafe { next.as_ref() };
+        let Some(new_capacity) = (HEADER_SIZE as u32 + self.capacity).checked_add(next.capacity)
+        else {
+            return;
+        };
+
+        self.capacity = new_capacity;
+        self.next = next.next;
+    }
 }
 
 /// A K&R malloc implementation.
 pub struct LinkedListAllocator {
+    /// The head of the free list. Sorted by address.
     head: Option<NonNull<Header>>,
 }
 
@@ -112,11 +136,49 @@ impl LinkedListAllocator {
 
         unsafe {
             (ptr as *mut Header).write(Header {
-                next: self.head,
+                next: None,
                 capacity,
                 magic: MAGIC_FREE,
             });
-            self.head = Some(NonNull::new_unchecked(ptr as *mut Header));
+
+            self.insert_free_chunk(NonNull::new_unchecked(ptr as *mut Header));
+        }
+    }
+
+    /// Inserts a free chunk into the free list.
+    ///
+    /// # Safety
+    ///
+    /// `header_ptr` must be an initialized header.
+    unsafe fn insert_free_chunk(&mut self, mut header_ptr: NonNull<Header>) {
+        // Find the position to insert the chunk to keep the list sorted by
+        // address.
+        let mut prev: Option<NonNull<Header>> = None;
+        let mut next = self.head;
+        while let Some(head) = next {
+            if head > header_ptr {
+                break;
+            }
+
+            prev = Some(head);
+            next = unsafe { head.as_ref() }.next;
+        }
+
+        // Update the header, and try merging the next chunk.
+        let header = unsafe { header_ptr.as_mut() };
+        header.next = next;
+        header.try_merge_next();
+
+        // Insert the chunk into the list.
+        if let Some(mut prev) = prev {
+            let prev = unsafe { prev.as_mut() };
+            prev.next = Some(header_ptr);
+
+            // Try merging the new chunk into the previous one.
+            prev.try_merge_next();
+        } else {
+            // This is the first chunk in the list.
+            self.head = Some(header_ptr);
         }
     }
 
@@ -196,9 +258,52 @@ impl LinkedListAllocator {
         debug_assert_eq!(header.magic, MAGIC_ALLOCATED);
 
         header.magic = MAGIC_FREE;
-        header.next = self.head;
-        self.head = Some(header_ptr);
+        unsafe { self.insert_free_chunk(header_ptr) };
     }
 }
 
 unsafe impl Send for LinkedListAllocator {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const CHUNK_SIZE: usize = 128;
+
+    #[repr(align(16))]
+    struct Chunk([u8; CHUNK_SIZE]);
+
+    fn new_allocator(arena: &mut Chunk) -> LinkedListAllocator {
+        let mut allocator = LinkedListAllocator::new();
+        unsafe { allocator.add_chunk(arena.0.as_mut_ptr(), CHUNK_SIZE) };
+        allocator
+    }
+
+    #[test]
+    fn test_malloc() {
+        let mut chunk = Chunk([0; CHUNK_SIZE]);
+        let chunk_addr = chunk.0.as_ptr() as usize;
+        let mut allocator = new_allocator(&mut chunk);
+
+        let addr = allocator.malloc(32, 8).unwrap() as usize;
+        assert_eq!(addr, chunk_addr + HEADER_SIZE);
+    }
+
+    #[test]
+    fn test_try_merge_next() {
+        let mut chunk = Chunk([0; CHUNK_SIZE]);
+        let chunk_addr = chunk.0.as_ptr() as usize;
+        let mut allocator = new_allocator(&mut chunk);
+
+        let a_addr = allocator.malloc(32, 8).unwrap() as usize;
+        assert_eq!(a_addr, chunk_addr + HEADER_SIZE);
+
+        let b_addr = allocator.malloc(32, 8).unwrap() as usize;
+        assert_eq!(b_addr, a_addr + 32 + HEADER_SIZE);
+
+        unsafe { allocator.free(a_addr as *mut u8) };
+        unsafe { allocator.free(b_addr as *mut u8) };
+        let c_addr = allocator.malloc(100, 8).unwrap() as usize;
+        assert_eq!(c_addr, chunk_addr + HEADER_SIZE);
+    }
+}
