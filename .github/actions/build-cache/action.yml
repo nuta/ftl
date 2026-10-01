@@ -17,7 +17,8 @@ runs:
         ~/.cargo/registry/index
         ~/.cargo/registry/cache
         target
-      key: build-${{ runner.os }}-${{ github.ref_name }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
+        apps/*/target
+      key: build-${{ runner.os }}-${{ github.ref_name }}-${{ hashFiles('Cargo.lock', 'apps/*/Cargo.lock', 'rust-toolchain.toml') }}
       restore-keys: |
         build-${{ runner.os }}-${{ github.ref_name }}-
         build-${{ runner.os }}-main-
