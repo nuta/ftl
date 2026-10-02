@@ -35,8 +35,8 @@ FTL is a new operating system aiming to be an alternative OS in cloud environmen
 Install Rust toolchain, LLVM tools, and QEMU:
 
 ```
-brew install rustup llvm qemu        # macOS
-apt  install rustup llvm qemu-system # Ubuntu
+brew install rustup qemu        # macOS
+apt  install rustup qemu-system # Ubuntu
 ```
 
 Build and run:
