@@ -1,17 +1,284 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <title>FTL operating system</title>
+    <meta charset="UTF-8">
+    <title>FTL: A new operating system for clouds</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="light dark">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Raleway:ital,wght@1,900&amp;text=FTL&amp;display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Sans:wght@400;700&display=optional" rel="stylesheet">
+    <style>
+        :root {
+            --fg: #111;
+            --bg: #fff;
+            --button-fg: #000;
+            --button-hover-bg: #f0f0f0;
+            --border: #ddd;
+            --diagram-bg: #f8f8f8;
+            --red: #9b0707;
+            --green: #006e00;
+            --link: #4169e1;
+            --link-visited: #8b008b;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --fg: #eee;
+                --bg: #111;
+                --button-fg: #eee;
+                --button-hover-bg: #2a2a2a;
+                --border: #333;
+                --diagram-bg: #1c1c1c;
+                --red: #ff7878;
+                --green: #6ed26e;
+                --link: #7da2ff;
+                --link-visited: #d48bd4;
+            }
+        }
+
+        body {
+            font-family: 'Fira Sans', sans-serif;
+            background: var(--bg);
+            color: var(--fg);
+            line-height: 1.6;
+        }
+
+        .wallpaper {
+            margin: 0 auto;
+            padding: 1rem;
+            max-width: 650px;
+        }
+
+        header {
+            text-align: center;
+        }
+
+        .logo {
+            font-family: 'Raleway', sans-serif;
+            font-size: 3.2rem;
+            margin: 1rem 0;
+            font-weight: 900;
+            font-style: italic;
+        }
+
+        .headline {
+            font-size: 1.1rem;
+            margin: 0;
+            text-wrap: balance;
+        }
+
+        nav ul {
+            list-style: none;
+            padding: 0;
+            margin: 2rem 0;
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            font-weight: 700;
+        }
+
+        nav li {
+            border: 2px solid var(--button-fg);
+            box-shadow: 4px 4px 0 var(--button-fg);
+            font-size: 1.4rem;
+            background: var(--bg);
+            transition: background 0.12s ease, transform 0.08s ease, box-shadow 0.08s ease;
+        }
+
+        nav li:hover {
+            background: var(--button-hover-bg);
+        }
+
+        nav li:active {
+            transform: translate(4px, 4px);
+            box-shadow: 0 0 0 var(--button-fg);
+        }
+
+        nav a {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 1rem;
+            line-height: 1;
+        }
+
+        nav svg {
+            width: 1.2cap;
+            height: 1.2cap;
+            fill: currentColor;
+        }
+
+        nav .label {
+            /* To align the label with the icon nicely. */
+            text-box: trim-both cap alphabetic;
+        }
+
+        nav a, nav a:visited {
+            color: var(--button-fg);
+        }
+
+        nav a:hover {
+            text-decoration: none;
+        }
+
+        main section {
+            border-top: 1px solid var(--border);
+        }
+
+        main section:not(:first-child) {
+            margin-top: 2rem;
+        }
+
+        main h2 {
+            font-size: 1.4rem;
+            line-height: 1.3;
+            margin: 1.5rem 0;
+            text-wrap: balance;
+        }
+
+        main p {
+            margin: 0;
+        }
+
+        main p + p {
+            margin-top: 1rem;
+        }
+
+        main p,
+        main li {
+            text-wrap: pretty;
+        }
+
+        .ascii-diagram {
+            background: var(--diagram-bg);
+            margin: 2rem auto;
+            padding: 0.8rem;
+            font-size: 0.8rem;
+            line-height: 1.3;
+            width: fit-content;
+            max-width: 100%;
+            overflow-x: auto;
+        }
+
+        footer {
+            font-size: 0.8rem;
+            margin-top: 3rem;
+            text-align: center;
+        }
+
+        main ul {
+            margin: 0;
+            padding-left: 1.5rem;
+        }
+
+        main li + li {
+            margin-top: 0.5rem;
+        }
+
+        .red {
+            color: var(--red);
+        }
+
+        .green {
+            color: var(--green);
+        }
+
+        .highlight {
+            font-weight: 700;
+        }
+
+        a {
+            color: var(--link);
+            text-decoration: none;
+        }
+
+        a:hover {
+            text-decoration: underline;
+        }
+
+        a:visited {
+            color: var(--link-visited);
+        }
+    </style>
 </head>
-<body style="max-width: 400px;">
-  <h1>FTL operating system</h1>
-  <hr>
-  <p>If you can read this page, FTL is working correctly. Yay!</p>
-  <img src="/hill.webp" alt="Hill" style="max-width: 100%; height:auto;">
-  <hr>
-  <p>The source code is available on <b><a href="https://github.com/nuta/ftl">GitHub</a></b>.</p>
-  <hr>
-  <address>Powered by FTL</address>
+<body>
+  <div class="wallpaper">
+    <header>
+      <h1 class="logo">FTL</h1>
+      <p class="headline">A new operating system for clouds.</p>
+    </header>
+    <nav>
+      <ul>
+        <li>
+          <a href="https://github.com/nuta/ftl">
+            <!-- Octocat icon from https://github.com/primer/octicons (MIT license with Logo guidelines) -->
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="M10.226 17.284c-2.965-.36-5.054-2.493-5.054-5.256 0-1.123.404-2.336 1.078-3.144-.292-.741-.247-2.314.09-2.965.898-.112 2.111.36 2.83 1.01.853-.269 1.752-.404 2.853-.404 1.1 0 1.999.135 2.807.382.696-.629 1.932-1.1 2.83-.988.315.606.36 2.179.067 2.942.72.854 1.101 2 1.101 3.167 0 2.763-2.089 4.852-5.098 5.234.763.494 1.28 1.572 1.28 2.807v2.336c0 .674.561 1.056 1.235.786 4.066-1.55 7.255-5.615 7.255-10.646C23.5 6.188 18.334 1 11.978 1 5.62 1 .5 6.188.5 12.545c0 4.986 3.167 9.12 7.435 10.669.606.225 1.19-.18 1.19-.786V20.63a2.9 2.9 0 0 1-1.078.224c-1.483 0-2.359-.808-2.987-2.313-.247-.607-.517-.966-1.034-1.033-.27-.023-.359-.135-.359-.27 0-.27.45-.471.898-.471.652 0 1.213.404 1.797 1.235.45.651.921.943 1.483.943.561 0 .92-.202 1.437-.719.382-.381.674-.718.944-.943"/></svg>
+            <span class="label">GitHub</span>
+          </a>
+        </li>
+      </ul>
+    </nav>
+    <main>
+      <section>
+        <h2>What's FTL?</h2>
+        <ul>
+          <li>You can <span class="highlight">build your own OS as a library</span>. This userspace OS design makes it easy to add features, debug, upgrade the OS safely, as if writing applications.</li>
+          <li>FTL kernel isolates containers (userspace OS instances) better than existing monolithic kernels, with <span class="highlight">a hypervisor-like interface</span> based on a lightweight hardware-based isolation (user mode). You don't need bare-metal machines.</li>
+          <li>FTL is <span class="highlight">compatible with Linux binaries</span>. For example, the Rust-based HTTP server serving this website is a Linux application running on FTL. You can also run Unikernel-like specialized applications without POSIX abstractions.</li>
+        </ul>
+      </section>
+        <section>
+        <h2>How it works</h2>
+        <p>Each container runs a userspace OS. It is a shared library which implements most of OS concepts such as Linux process, VFS, and TCP/IP. FTL kernel provides a minimal interface to implement Linux system calls in userspace, just like a hypervisor.</p>
+
+        <p>FTL combines the best of microkernels (flexible & secure) and monolithic kernels (performant & simple). Our goal is to <span class="highlight">make lightweight containers as secure as VMs, and unlock new OS-level abilities in applications</span>, without sacrificing performance:</p>
+
+<pre class="ascii-diagram" role="img" aria-label="A diagram comparing FTL and Linux">
+FTL                                   Linux
+┌────────────────────────────────┐    ┌────────────────────────────────┐
+│┏━━━━━━━━━━━━━┓  ┏━━━━━━━━━━━━━┓│    │┏━━━━━━━━━━━━━┓  ┏━━━━━━━━━━━━━┓│
+│┃             ┃  ┃             ┃│    │┃             ┃  ┃             ┃│
+│┃    Linux    ┃  ┃    Linux    ┃│    │┃    Linux    ┃  ┃    Linux    ┃│
+│┃   Process   ┃  ┃   Process   ┃│    │┃   Process   ┃  ┃   Process   ┃│
+│┃             ┃  ┃             ┃│    │┃             ┃  ┃             ┃│
+│┃╌╌╌╌╌ Linux system calls ╌╌╌╌╌┃│    │┗━━━━━━━━━━━━━┛  ┗━━━━━━━━━━━━━┛│
+│┃                              ┃│    └────────────────────────────────┘
+│┃         Userspace OS         ┃│    <span class="red">╌╌╌╌╌╌╌╌ <b>Linux's interface</b> ╌╌╌╌╌╌╌</span>
+│┃   (Process, VFS, TCP, ...)   ┃│    ╔════════════════════════════════╗
+│┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛│    ║                                ║
+└────────────────────────────────┘    ║          Linux Kernel          ║
+<span class="green">╌╌╌╌╌╌╌ <b>minimal interface</b> ╌╌╌╌╌╌╌╌</span>    ║                                ║
+╔════════════════════════════════╗    ║   process, fork/exec, memory,  ║
+║           FTL Kernel           ║    ║     signals, TCP/IP, /proc,    ║
+║    vCPU, memory, drivers, ...  ║    ║       /dev, drivers ...        ║
+╚════════════════════════════════╝    ╚════════════════════════════════╝
+</pre>
+
+        <p>Userspace OS design also enables you to extend most of Linux kernel features without kernel/eBPF programming. You can add printfs, apply security updates, and add new features quickly and safely. In FTL, <span class="highlight">OS is just a library</span>. <a href="https://seiya.me/blog/introducing-ftl">Read more</a>.</p>
+      </section>
+      <section>
+        <h2>Roadmap</h2>
+        <ul>
+          <li><span class="highlight">September 2026</span>: Run a simple Linux HTTP server on FTL <span class="highlight">(released in <a href="https://seiya.me/blog/introducing-ftl">v0.0.1</a> ✅)</span></li>
+          <li><span class="highlight">October 2026</span>: Async Rust apps support - Linux threads, epoll, ... <span class="highlight">(released in <a href="https://seiya.me/blog/ftl-v0.1.0">v0.1.0</a> ✅)</span></li>
+          <li><span class="highlight">November 2026</span>: Filesystem</li>
+          <li><span class="highlight">December 2026</span>: Node.js / Go support</li>
+          <li><span class="highlight">January 2027</span>: SMP, container images, 64-bit Arm support</li>
+        </ul>
+      </section>
+      <section>
+        <h2>Links</h2>
+        <ul>
+          <li><a href="https://github.com/nuta/ftl">GitHub repository</a></li>
+          <li><a href="https://seiya.me/blog/introducing-ftl">Introducing FTL: A new operating system for clouds (blog post)</a></li>
+        </ul>
+      </section>
+    </main>
+    <footer>
+      This website is served by FTL
+    </footer>
+  </div>
 </body>
 </html>
