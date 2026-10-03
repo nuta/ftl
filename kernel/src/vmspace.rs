@@ -172,8 +172,7 @@ impl VmSpace {
         mutable.split_at(uaddr)?;
         mutable.split_at(end)?;
 
-        // Unmap from the page table before removing the mapping. It frees
-        // the pages.
+        // Unmap from the page table before removing the mapping.
         self.arch.unmap(uaddr, len)?;
 
         // Remove the mapping. This decrements page reference counters and may
