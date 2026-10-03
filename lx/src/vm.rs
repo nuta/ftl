@@ -37,6 +37,7 @@ pub(crate) const PAGE_SIZE: usize = 4096; // TODO: system call?
 const STACK_BOTTOM: usize = 0x0200_0000;
 const STACK_SIZE: usize = 256 * 1024;
 const BRK_END: usize = STACK_BOTTOM;
+const MMAP_START: usize = STACK_BOTTOM + STACK_SIZE;
 const USER_END: usize = 0x3000_0000;
 
 #[derive(Clone, Copy)]
@@ -191,20 +192,24 @@ impl Vm {
 
         // Find a space to map the new region. This must be done while holding
         // the lock to prevent other threads from picking the same address.
-        //
-        // TODO: Better way to find a hole in mappings.
         let mut mutable = self.mutable.lock();
-        let uaddr = mutable
-            .mappings
-            .iter()
-            .map(|mapping| mapping.start + mapping.len)
-            .max()
-            .unwrap_or(0);
+        let mut uaddr = MMAP_START;
+        'retry: loop {
+            // Check if the new mapping overlaps with LX's memory area.
+            let end = uaddr.checked_add(len).ok_or(Errno::ENOMEM)?;
+            if end > USER_END {
+                return Err(Errno::ENOMEM);
+            }
 
-        // Check if the new mapping overlaps with LX's memory area.
-        let end = uaddr.checked_add(len).ok_or(Errno::ENOMEM)?;
-        if end > USER_END {
-            return Err(Errno::ENOMEM);
+            for mapping in &mutable.mappings {
+                if mapping.overlaps_with(uaddr, end) {
+                    // The range is already mapped. Try the next hole.
+                    uaddr = mapping.end();
+                    continue 'retry;
+                }
+            }
+
+            break;
         }
 
         self.vmspace.map(&vmo, uaddr, 0, len, attrs)?;
