@@ -11,7 +11,7 @@ test("HTTP server handles a request", async () => {
         signal: AbortSignal.timeout(500),
     });
     expect(resp1.status).toBe(200);
-    expect(await resp1.text()).toContain("<h1>FTL operating system</h1>");
+    expect(await resp1.text()).toContain('<h1 class="logo">FTL</h1>');
 
     const resp2 = await fetch(`http://127.0.0.1:${hostPort}/missing`, {
         signal: AbortSignal.timeout(500),
