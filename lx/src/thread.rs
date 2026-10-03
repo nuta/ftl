@@ -45,18 +45,17 @@ impl LxThread {
     pub fn new(
         hspace: &HandleSpace,
         vm: Arc<Vm>,
-        entry: usize,
-        sp: usize,
         process: Weak<Process>,
         tid: PId,
     ) -> Result<Arc<Self>, ErrorCode> {
         let this = Box::<Cookie>::new_uninit();
-        let fault_pc = crate::arch::syscall_handler as *const () as usize;
+        let syscall_pc = crate::arch::syscall_handler as *const () as usize;
+        let fault_pc = crate::arch::fault_handler as *const () as usize;
         let cookie = this.as_ptr() as usize;
 
         // TODO: LX assumes that the cookie won't be derefernced until the
         //       thread is started. Should we document and guarantee this?
-        let inner = Thread::create(hspace, vm.vmspace(), entry, sp, fault_pc, cookie)?;
+        let inner = Thread::create(hspace, vm.vmspace(), syscall_pc, fault_pc, cookie)?;
 
         let thread = Arc::new_cyclic(|thread| {
             LxThread {
@@ -81,8 +80,8 @@ impl LxThread {
         Ok(thread)
     }
 
-    pub fn start(&self) -> Result<(), ErrorCode> {
-        self.inner.start()
+    pub fn start(&self, entry: usize, sp: usize) -> Result<(), ErrorCode> {
+        self.inner.start(entry, sp)
     }
 
     pub fn id(&self) -> HandleId {

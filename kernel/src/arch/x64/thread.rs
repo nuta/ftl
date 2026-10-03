@@ -61,6 +61,7 @@ pub struct Thread {
     pub(super) gsbase: u64,
     pub(super) fsbase: u64,
     pub(super) xsave_ptr: u64,
+    pub(super) syscall_pc: u64,
     pub(super) fault_pc: u64,
     pub(super) cookie: u64,
 }
@@ -74,7 +75,7 @@ impl Drop for Thread {
 }
 
 impl Thread {
-    pub fn new(pc: usize, sp: usize, fault_pc: usize, cookie: usize) -> Result<Self, ErrorCode> {
+    pub fn new(syscall_pc: usize, fault_pc: usize, cookie: usize) -> Result<Self, ErrorCode> {
         let paddr = PAGE_ALLOCATOR
             .alloc(MIN_PAGE_SIZE, PageType::Zeroed)
             .ok_or(ErrorCode::OutOfMemory)?;
@@ -85,8 +86,9 @@ impl Thread {
             cs: GDT_USER_CS as u64,
             rflags: 0x202, // interrupts enabled
             ss: GDT_USER_DS as u64,
-            rip: pc as u64,
-            rsp: sp as u64,
+            rip: 0,
+            rsp: 0,
+            syscall_pc: syscall_pc as u64,
             fault_pc: fault_pc as u64,
             xsave_ptr: xsave.as_usize() as u64,
             cookie: cookie as u64,
@@ -108,6 +110,11 @@ impl Thread {
             gsbase: 0,
             fsbase: 0,
         })
+    }
+
+    pub fn set_start_regs(&mut self, pc: usize, sp: usize) {
+        self.rip = pc as u64;
+        self.rsp = sp as u64;
     }
 
     pub fn get_syscall_regs(&self) -> SyscallRegs {

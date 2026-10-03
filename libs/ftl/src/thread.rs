@@ -27,8 +27,7 @@ impl Thread {
     pub fn create(
         hspace: &HandleSpace,
         vmspace: &VmSpace,
-        pc: usize,
-        sp: usize,
+        syscall_pc: usize,
         fault_pc: usize,
         cookie: usize,
     ) -> Result<Self, ErrorCode> {
@@ -36,10 +35,10 @@ impl Thread {
             Syscall::ThreadCreate,
             hspace.handle().id().as_usize(),
             vmspace.handle().id().as_usize(),
-            pc,
-            sp,
+            syscall_pc,
             fault_pc,
             cookie,
+            0,
         )?;
 
         // SAFETY: Kernel returns a valid handle.
@@ -47,8 +46,8 @@ impl Thread {
         Ok(this)
     }
 
-    pub fn start(&self) -> Result<(), ErrorCode> {
-        syscall1(Syscall::ThreadStart, self.handle.id().as_usize())?;
+    pub fn start(&self, pc: usize, sp: usize) -> Result<(), ErrorCode> {
+        syscall3(Syscall::ThreadStart, self.handle.id().as_usize(), pc, sp)?;
         Ok(())
     }
 

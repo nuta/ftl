@@ -1,4 +1,7 @@
 use core::arch::naked_asm;
+use core::mem::offset_of;
+
+use ftl_types::thread::Fault;
 
 #[derive(Clone, Copy)]
 #[repr(C)]
@@ -116,6 +119,70 @@ pub extern "C" fn syscall_handler() -> ! {
     )
 }
 
+#[repr(C, packed)]
+pub struct FaultFrame {
+    pub r11: usize,
+    pub r10: usize,
+    pub r9: usize,
+    pub r8: usize,
+    pub rdi: usize,
+    pub rsi: usize,
+    pub rdx: usize,
+    pub rcx: usize,
+    pub rax: usize,
+
+    // Fields from ftl_types::thread::FaultFrame:
+    pub rflags: usize,
+    pub rip: usize,
+    pub cookie: usize,
+    pub fault: Fault,
+    pub addr: usize,
+    pub info: usize,
+}
+
+const RED_ZONE_SIZE: usize = 128;
+
+#[unsafe(naked)]
+pub extern "C" fn fault_handler() -> ! {
+    naked_asm!(
+        // Save caller-saved registers. Callee-saved registers are preserved by
+        // handle_fault.
+        "push rax",
+        "push rcx",
+        "push rdx",
+        "push rsi",
+        "push rdi",
+        "push r8",
+        "push r9",
+        "push r10",
+        "push r11",
+
+        // Align the stack to 16 bytes.
+        "mov rdi, rsp", // handle_fault argument
+        "and rsp, -16",
+        "call {handle_fault}",
+
+        // Restore the user registers from the frame.
+        "mov rsp, rax",
+        "pop r11",
+        "pop r10",
+        "pop r9",
+        "pop r8",
+        "pop rdi",
+        "pop rsi",
+        "pop rdx",
+        "pop rcx",
+        "pop rax",
+        "popfq", // user RFLAGS
+
+        // Pop user RIP, and then skip the rest of the fault frame & red zone
+        // to move RSP to the user RSP.
+        "ret {skip_size}",
+        handle_fault = sym crate::fault::handle_fault,
+        skip_size = const (size_of::<FaultFrame>() - offset_of!(FaultFrame, cookie)) + RED_ZONE_SIZE,
+    )
+}
+
 #[unsafe(naked)]
 pub extern "C" fn restore_regs() -> ! {
     naked_asm!(
@@ -131,10 +198,10 @@ pub extern "C" fn restore_regs() -> ! {
         "pop rdx",
         "pop rsi",
         "pop rdi",
-        "pop rax",    // return value
+        "pop rax",     // return value
         "add rsp, 16", // Skip cookie and reserved
-        "pop rcx", // user RSP
-        "pop r11", // user RIP
+        "pop rcx",     // user RSP
+        "pop r11",     // user RIP
         "mov rsp, rcx",
         "jmp r11",
     )

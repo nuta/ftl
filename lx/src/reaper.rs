@@ -27,7 +27,13 @@ impl Reaper {
         })
     }
 
-    pub fn start_thread(&self, poll: &Poll, thread: Arc<LxThread>) -> Result<(), ErrorCode> {
+    pub fn start_thread(
+        &self,
+        poll: &Poll,
+        thread: Arc<LxThread>,
+        entry: usize,
+        sp: usize,
+    ) -> Result<(), ErrorCode> {
         let mut mutable = self.mutable.lock();
         if mutable.threads.contains_key(&thread.id()) {
             return Err(ErrorCode::AlreadyExists);
@@ -38,7 +44,7 @@ impl Reaper {
         mutable.threads.insert(thread.id(), thread.clone());
         drop(mutable);
 
-        if let Err(err) = thread.start() {
+        if let Err(err) = thread.start(entry, sp) {
             self.mutable.lock().threads.remove(&thread.id());
             return Err(err);
         }

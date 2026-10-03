@@ -4,6 +4,8 @@ use core::arch::naked_asm;
 use core::mem::offset_of;
 
 use ftl_types::error::ErrorCode;
+use ftl_types::thread::Fault;
+use ftl_types::thread::FaultFrame;
 use ftl_types::vmspace::PageAttrs;
 use ftl_utils::spinlock::SpinLock;
 
@@ -13,11 +15,14 @@ use super::gdt::GDT_KERNEL_CS;
 use super::get_cpuvar;
 use super::io_apic::IRQ_VECTOR_BASE;
 use super::local_apic::SPURIOUS_INTERRUPT_VECTOR;
+use super::syscall::RED_ZONE_SIZE;
+use super::syscall::USER_RFLAGS;
 use super::syscall::syscall_copy_recover;
 use super::thread::Thread;
 use super::thread::XSTATE_MASK;
 use super::timer::TIMER_IRQ;
 use crate::address::UAddr;
+use crate::address::USlice;
 use crate::address::VAddr;
 use crate::cpuvar::CpuVar;
 
@@ -73,7 +78,7 @@ const EXCEPTION_INVALID_OPCODE: u8 = 6;
 const EXCEPTION_STACK_SEGMENT_FAULT: u8 = 12;
 const EXCEPTION_GENERAL_PROTECTION_FAULT: u8 = 13;
 const EXCEPTION_PAGE_FAULT: u8 = 14;
-const EXCEPTION_X87_FLOATING_POINT: u8 = 16;
+const EXCEPTION_FLOATING_POINT: u8 = 16;
 const EXCEPTION_ALIGNMENT_CHECK: u8 = 17;
 const EXCEPTION_SIMD_FLOATING_POINT: u8 = 19;
 
@@ -436,34 +441,80 @@ extern "C" fn handle_kernel_interrupt(frame: &mut InterruptFrame) {
     }
 }
 
+fn do_raise_user_fault(
+    regs: &mut Thread,
+    fault: Fault,
+    addr: usize,
+    info: usize,
+) -> Result<(), ErrorCode> {
+    let mut rsp = regs.rsp as usize;
+    // Reserve the frame space in the user stack, right below the red zone.
+    rsp = rsp.saturating_sub(RED_ZONE_SIZE + size_of::<FaultFrame>());
+
+    // Write the fault frame.
+    let uslice = USlice::new(UAddr::new(rsp), size_of::<FaultFrame>())?;
+    uslice.write(FaultFrame {
+        rflags: regs.rflags as usize,
+        rip: regs.rip as usize,
+        cookie: regs.cookie as usize,
+        fault,
+        addr,
+        info,
+    })?;
+
+    // Update the registers. When switching to this thread again, it will start
+    // from the fault handler.
+    regs.rsp = rsp as u64;
+    regs.rip = regs.fault_pc;
+    regs.rflags = USER_RFLAGS;
+    Ok(())
+}
+
+fn raise_user_fault(fault: Fault, addr: usize, info: usize) {
+    let Some(thread) = get_cpuvar().current_thread.thread() else {
+        // TODO: Can we make non-optional?
+        trace!("can't jump to fault PC: no current thread");
+        return;
+    };
+
+    let arch = unsafe { &mut *thread.arch().get() };
+    if let Err(err) = do_raise_user_fault(arch, fault, addr, info) {
+        trace!("failed to write a fault frame: {err:?}");
+        super::syscall::try_exit_current();
+    }
+}
+
 extern "C" fn handle_user_interrupt(vector: u8, error_code: u64) -> ! {
     match vector {
         EXCEPTION_PAGE_FAULT => {
             let cr2 = read_cr2();
+            // Try resolving the page fault in the kernel, such as lazy page allocation.
             if let Err(err) = handle_user_page_fault(cr2, error_code) {
-                trace!(
-                    "exiting thread due to user page fault: {err:?}, (CR2={cr2:#x}, error_code={error_code:#x})"
-                );
-                super::syscall::try_exit_current();
+                trace!("user fault (#PF): error={err:?}, CR2={cr2:#x}, x64_error={error_code:#x}");
+                raise_user_fault(Fault::PageFault, cr2 as usize, error_code as usize);
             }
-        }
-        EXCEPTION_DIVIDE_ERROR
-        | EXCEPTION_DEBUG
-        | EXCEPTION_BREAKPOINT
-        | EXCEPTION_INVALID_OPCODE
-        | EXCEPTION_STACK_SEGMENT_FAULT
-        | EXCEPTION_GENERAL_PROTECTION_FAULT
-        | EXCEPTION_X87_FLOATING_POINT
-        | EXCEPTION_ALIGNMENT_CHECK
-        | EXCEPTION_SIMD_FLOATING_POINT => {
-            trace!(
-                "exiting thread due to user exception: exception={vector}, error_code={error_code:#x}"
-            );
-            super::syscall::try_exit_current();
         }
         vector if vector >= IRQ_VECTOR_BASE => handle_external_interrupt(vector),
         _ => {
-            panic!("unhandled user exception: exception={vector}, error_code={error_code:#x}");
+            let fault = match vector {
+                EXCEPTION_DIVIDE_ERROR => Fault::DivideError,
+                EXCEPTION_DEBUG => Fault::Debug,
+                EXCEPTION_BREAKPOINT => Fault::Breakpoint,
+                EXCEPTION_INVALID_OPCODE => Fault::InvalidOpcode,
+                EXCEPTION_STACK_SEGMENT_FAULT => Fault::StackSegmentFault,
+                EXCEPTION_GENERAL_PROTECTION_FAULT => Fault::GeneralProtectionFault,
+                EXCEPTION_FLOATING_POINT => Fault::FloatingPointError,
+                EXCEPTION_ALIGNMENT_CHECK => Fault::AlignmentCheck,
+                EXCEPTION_SIMD_FLOATING_POINT => Fault::SimdFloatingPoint,
+                _ => {
+                    panic!(
+                        "unhandled user exception: exception={vector}, error_code={error_code:#x}"
+                    );
+                }
+            };
+
+            trace!("user exception ({vector}): error_code={error_code:#x}");
+            raise_user_fault(fault, 0, 0);
         }
     }
 

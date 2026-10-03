@@ -114,8 +114,6 @@ impl Process {
         let thread = LxThread::new(
             &self.container.hspace,
             Arc::new(vm),
-            entry,
-            sp,
             Arc::downgrade(self),
             self.tgid,
         )?;
@@ -127,7 +125,7 @@ impl Process {
         // This should be done while locking the process's mutable, because the
         // new thread is not yet added to `mutable.threads`, and the thread
         // starts immediately in add_thread.
-        self.container.add_thread(thread.clone())?;
+        self.container.add_thread(thread.clone(), entry, sp)?;
 
         mutable
             .threads
@@ -174,8 +172,6 @@ impl Process {
         let thread = LxThread::new(
             &container.hspace,
             Arc::new(vm),
-            entry,
-            sp,
             Arc::downgrade(&process),
             tgid,
         )?;
@@ -183,7 +179,7 @@ impl Process {
 
         // Start the thread.
         process.mutable.lock().threads.push(thread.clone());
-        container.add_thread(thread)?;
+        container.add_thread(thread, entry, sp)?;
 
         Ok(process)
     }
@@ -260,8 +256,6 @@ impl Process {
         let thread = LxThread::new(
             &self.container.hspace,
             current.vm().clone(),
-            restore_regs as *const () as usize,
-            frame_addr,
             Arc::downgrade(self),
             tid,
         )?;
@@ -297,7 +291,8 @@ impl Process {
 
         // Start the thread.
         let mut mutable = self.mutable.lock();
-        if let Err(err) = self.container.add_thread(thread.clone()) {
+        let entry = restore_regs as *const () as usize;
+        if let Err(err) = self.container.add_thread(thread.clone(), entry, frame_addr) {
             drop(mutable);
             self.container.processes.lock().remove(tid);
             return Err(err);

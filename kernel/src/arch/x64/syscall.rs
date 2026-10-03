@@ -18,8 +18,8 @@ use super::vmspace::USER_ADDR_END;
 use crate::cpuvar::CpuVar;
 use crate::scheduler;
 
-const USER_RFLAGS: u64 = 0x202;
-const RED_ZONE_SIZE: usize = 128;
+pub(super) const USER_RFLAGS: u64 = 0x202;
+pub(super) const RED_ZONE_SIZE: usize = 128;
 
 pub(super) fn try_exit_current() {
     let cpuvar = super::get_cpuvar();
@@ -160,11 +160,11 @@ extern "C" fn syscall_handler() -> ! {
 
         "clac", // Disable user page access.
 
-        // Load fault_pc from the current thread.
+        // Load syscall_pc from the current thread.
         "mov rcx, gs:[{current_thread_offset}]",
-        "mov rcx, [rcx + {fault_pc_offset}]", // user RIP (when SYSRET-ing)
-        "mov rsp, r11", // user RSP (for fault handler)
-        "mov r11, {user_rflags}", // user RFLAGS (for fault handler)
+        "mov rcx, [rcx + {syscall_pc_offset}]", // user RIP (when SYSRET-ing)
+        "mov rsp, r11", // user RSP (for syscall handler)
+        "mov r11, {user_rflags}", // user RFLAGS (for syscall handler)
         "swapgs",
         "sysretq",
         handle_syscall = sym crate::syscall::handle_syscall,
@@ -179,7 +179,7 @@ extern "C" fn syscall_handler() -> ! {
         fsbase_offset = const offset_of!(Thread, fsbase),
         gsbase_offset = const offset_of!(Thread, gsbase),
         xsave_ptr_offset = const offset_of!(Thread, xsave_ptr),
-        fault_pc_offset = const offset_of!(Thread, fault_pc),
+        syscall_pc_offset = const offset_of!(Thread, syscall_pc),
         cookie_offset = const offset_of!(Thread, cookie),
         frame_rsp_offset = const offset_of!(SyscallFrame, rsp),
         frame_rip_offset = const offset_of!(SyscallFrame, rip),

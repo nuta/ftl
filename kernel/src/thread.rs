@@ -71,14 +71,13 @@ impl Thread {
     pub fn new(
         hspace: SharedRef<HandleSpace>,
         vmspace: SharedRef<VmSpace>,
-        pc: usize,
-        sp: usize,
+        syscall_pc: usize,
         fault_pc: usize,
         cookie: usize,
     ) -> Result<SharedRef<Self>, ErrorCode> {
         // SYSRET-ing to the kernel pages should trigger a page fault, but it
         // is obviously invalid. Reject it early.
-        if fault_pc >= USER_ADDR_END {
+        if syscall_pc >= USER_ADDR_END || fault_pc >= USER_ADDR_END {
             return Err(ErrorCode::InvalidUserAddr);
         }
 
@@ -87,7 +86,7 @@ impl Thread {
             subscriptions: Vec::new(),
         };
 
-        let arch_thread = arch::Thread::new(pc, sp, fault_pc, cookie)?;
+        let arch_thread = arch::Thread::new(syscall_pc, fault_pc, cookie)?;
         SCHEDULER.reserve_capacity()?;
         let thread = SharedRef::new(Thread {
             arch: UnsafeCell::new(arch_thread),
@@ -193,12 +192,13 @@ impl Thread {
     }
 
     /// Starts the thread.
-    pub fn start(self: &SharedRef<Self>) -> Result<(), ErrorCode> {
+    pub fn start(self: &SharedRef<Self>, pc: usize, sp: usize) -> Result<(), ErrorCode> {
         let mut mutable = self.mutable.lock();
         if !matches!(mutable.state, State::NotStarted) {
             return Err(ErrorCode::ThreadAlreadyStarted);
         }
 
+        unsafe { &mut *self.arch.get() }.set_start_regs(pc, sp);
         self.resume_locked(&mut mutable);
         Ok(())
     }
@@ -298,10 +298,9 @@ pub fn sys_thread_create(
 ) -> Result<SyscallOutput, ErrorCode> {
     let hspace_id = HandleId::new(ctx.a0);
     let vmspace_id = HandleId::new(ctx.a1);
-    let pc = ctx.a2;
-    let sp = ctx.a3;
-    let fault_pc = ctx.a4;
-    let cookie = ctx.a5;
+    let syscall_pc = ctx.a2;
+    let fault_pc = ctx.a3;
+    let cookie = ctx.a4;
 
     let current_hspace = current.hspace();
     let (hspace, vmspace) = current_hspace.get2(
@@ -311,7 +310,7 @@ pub fn sys_thread_create(
         HandleRight::WRITE,
     )?;
 
-    let thread = Thread::new(hspace, vmspace, pc, sp, fault_pc, cookie)?;
+    let thread = Thread::new(hspace, vmspace, syscall_pc, fault_pc, cookie)?;
     let rights = HandleRight::READ | HandleRight::WRITE;
     let handle = Handle::new(thread.clone(), rights);
     let id = match current_hspace.insert(handle) {
@@ -329,10 +328,13 @@ pub fn sys_thread_start(
     ctx: &SyscallRegs,
 ) -> Result<SyscallOutput, ErrorCode> {
     let thread_id = HandleId::new(ctx.a0);
+    let pc = ctx.a1;
+    let sp = ctx.a2;
+
     let thread = current
         .hspace()
         .get::<Thread>(thread_id, HandleRight::WRITE)?;
-    thread.start()?;
+    thread.start(pc, sp)?;
     Ok(SyscallOutput::Done(0))
 }
 

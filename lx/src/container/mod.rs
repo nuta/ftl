@@ -63,8 +63,9 @@ impl Container {
         &self.network
     }
 
-    pub fn add_thread(&self, thread: Arc<LxThread>) -> Result<(), Errno> {
-        self.reaper.start_thread(&self.poll, thread.clone())?;
+    pub fn add_thread(&self, thread: Arc<LxThread>, entry: usize, sp: usize) -> Result<(), Errno> {
+        self.reaper
+            .start_thread(&self.poll, thread.clone(), entry, sp)?;
         Ok(())
     }
 

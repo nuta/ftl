@@ -87,12 +87,11 @@ impl VmSpace {
 pub struct Thread {}
 
 impl Thread {
-    pub fn new(
-        _pc: usize,
-        _sp: usize,
-        _fault_pc: usize,
-        _cookie: usize,
-    ) -> Result<Self, ErrorCode> {
+    pub fn new(_syscall_pc: usize, _fault_pc: usize, _cookie: usize) -> Result<Self, ErrorCode> {
+        todo!()
+    }
+
+    pub fn set_start_regs(&mut self, _pc: usize, _sp: usize) {
         todo!()
     }
 

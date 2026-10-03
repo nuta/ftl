@@ -46,3 +46,30 @@ pub struct SyscallFrame {
     pub rsp: usize,
     pub rip: usize,
 }
+
+/// The user fault type.
+#[repr(usize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Fault {
+    DivideError = 0,
+    Debug = 1,
+    Breakpoint = 3,
+    InvalidOpcode = 6,
+    StackSegmentFault = 12,
+    GeneralProtectionFault = 13,
+    PageFault = 14,
+    FloatingPointError = 16,
+    AlignmentCheck = 17,
+    SimdFloatingPoint = 19,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct FaultFrame {
+    pub rflags: usize,
+    pub rip: usize,
+    pub cookie: usize,
+    pub fault: Fault,
+    pub addr: usize,
+    pub info: usize,
+}

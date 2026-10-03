@@ -50,9 +50,21 @@ impl SyscallFrame {
     }
 }
 
+pub struct FaultFrame {
+    pub rip: usize,
+    pub cookie: usize,
+    pub fault: ftl_types::thread::Fault,
+    pub addr: usize,
+    pub info: usize,
+}
+
 pub extern "C" fn syscall_handler() -> ! {
     let mut frame = SyscallFrame { nr: 0, cookie: 0 };
     crate::syscall::handle_syscall(&mut frame as *mut SyscallFrame);
+    todo!()
+}
+
+pub extern "C" fn fault_handler() -> ! {
     todo!()
 }
 
