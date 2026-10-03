@@ -41,7 +41,8 @@ pub struct SyscallRegs {
 #[repr(C)]
 pub struct SyscallFrame {
     pub cookie: usize,
-    pub rflags: usize,
+    /// A padding to keep the frame 16-byte aligned.
+    pub reserved: usize,
     pub rsp: usize,
     pub rip: usize,
 }

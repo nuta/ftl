@@ -120,7 +120,10 @@ extern "C" fn syscall_handler() -> ! {
         "mov gs:[{scratch_offset}], rsp",
         "mov rsp, gs:[{kernel_rsp_offset}]", // Switch to the kernel stack.
         "push rcx", // user RIP
-        "push r11", // user RFLAGS
+
+        // User RFLAGS (R11) is not saved because major personalities such as
+        // Linux, Windows, XNU, BSD, and Fuchsia don't assume RFLAGS to be
+        // preserved.
 
         // Check if user RSP is safe to use. We're in kernel mode and need to
         // extremely carefully avoid reading/writing kernel memory on behalf of
@@ -144,20 +147,15 @@ extern "C" fn syscall_handler() -> ! {
         ".global syscall_copy0; syscall_copy0:",
         "mov [r11 + {frame_rsp_offset}], rcx",
 
-        // Write user RFLAGS
+        // Write user RIP
         "mov rcx, [rsp]",
         ".global syscall_copy1; syscall_copy1:",
-        "mov [r11 + {frame_rflags_offset}], rcx",
-
-        // Write user RIP
-        "mov rcx, [rsp + 8]",
-        ".global syscall_copy2; syscall_copy2:",
         "mov [r11 + {frame_rip_offset}], rcx",
 
         // Write cookie
         "mov rcx, gs:[{current_thread_offset}]",
         "mov rcx, [rcx + {cookie_offset}]",
-        ".global syscall_copy3; syscall_copy3:",
+        ".global syscall_copy2; syscall_copy2:",
         "mov [r11 + {frame_cookie_offset}], rcx",
 
         "clac", // Disable user page access.
@@ -184,7 +182,6 @@ extern "C" fn syscall_handler() -> ! {
         fault_pc_offset = const offset_of!(Thread, fault_pc),
         cookie_offset = const offset_of!(Thread, cookie),
         frame_rsp_offset = const offset_of!(SyscallFrame, rsp),
-        frame_rflags_offset = const offset_of!(SyscallFrame, rflags),
         frame_rip_offset = const offset_of!(SyscallFrame, rip),
         frame_cookie_offset = const offset_of!(SyscallFrame, cookie),
         scratch_offset = const offset_of!(CpuVar, arch.scratch),

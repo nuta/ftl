@@ -17,7 +17,7 @@ pub struct SyscallFrame {
     pub rdi: usize,
     pub rax: usize,
     pub cookie: usize,
-    pub rflags: usize,
+    pub reserved: usize,
     pub rsp: usize,
     pub rip: usize,
 }
@@ -132,10 +132,7 @@ pub extern "C" fn restore_regs() -> ! {
         "pop rsi",
         "pop rdi",
         "pop rax",    // return value
-        "add rsp, 8", // Skip cookie
-        "pop r11",    // user RFLAGS
-        "push r11",
-        "popfq",
+        "add rsp, 16", // Skip cookie and reserved
         "pop rcx", // user RSP
         "pop r11", // user RIP
         "mov rsp, rcx",
