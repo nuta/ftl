@@ -31,8 +31,9 @@ pub enum ErrorCode {
     PacketTooLong = -24,
     Destroyed = -25,
     BadAccess = -26,
+    BadSysretValue = -27,
     // This must be the last variant.
-    BadErrorCode = -27,
+    BadErrorCode = -28,
 }
 
 impl ErrorCode {

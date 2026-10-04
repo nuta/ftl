@@ -62,7 +62,8 @@ fn do_handle_syscall() {
     let retval = match retval {
         Ok(SyscallOutput::Done(retval)) if retval > isize::MAX as usize => {
             // TODO: Prevent this.
-            unreachable!();
+            error!("syscall {} returned too large value: {:#x}", regs.n, retval);
+            ErrorCode::OutOfBounds.as_usize()
         }
         Ok(SyscallOutput::Blocked) => return,
         Ok(SyscallOutput::Done(retval)) => retval,
