@@ -79,10 +79,46 @@ impl FileLike for Zero {
     }
 }
 
+/// `/dev/urandom`.
+struct URandom;
+
+impl FileLike for URandom {
+    fn read(
+        &self,
+        buf: &mut [u8],
+        _offset: usize,
+        _nonblocking: bool,
+        _sleep: Sleep<'_>,
+    ) -> Result<usize, Errno> {
+        ftl::random::read(buf)?;
+        Ok(buf.len())
+    }
+
+    fn write(
+        &self,
+        buf: &[u8],
+        _offset: usize,
+        _nonblocking: bool,
+        _sleep: Sleep<'_>,
+    ) -> Result<usize, Errno> {
+        // Discard the data.
+        Ok(buf.len())
+    }
+
+    fn size(&self) -> Result<usize, Errno> {
+        Ok(0)
+    }
+
+    fn poll(&self) -> Result<c_short, Errno> {
+        Ok(POLLIN | POLLOUT)
+    }
+}
+
 /// The device file system (`/dev`).
 pub struct DevFs {
     null: INode,
     zero: INode,
+    urandom: INode,
 }
 
 impl DevFs {
@@ -90,6 +126,7 @@ impl DevFs {
         Self {
             null: INode::File(Arc::new(Null)),
             zero: INode::File(Arc::new(Zero)),
+            urandom: INode::File(Arc::new(URandom)),
         }
     }
 }
@@ -99,6 +136,7 @@ impl Directory for DevFs {
         match name {
             b"null" => Ok(self.null.clone()),
             b"zero" => Ok(self.zero.clone()),
+            b"urandom" => Ok(self.urandom.clone()),
             _ => Err(Errno::ENOENT),
         }
     }
