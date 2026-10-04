@@ -65,6 +65,13 @@ struct Mutable {
     cwd: Arc<PathNode>,
 }
 
+/// A Linux process.
+///
+/// # Lock order
+///
+/// 1. Parent's `mutable`
+/// 2. Child's `mutable`
+/// 3. `Container::processes`
 pub struct Process {
     tgid: PId,
     child_exit: WaitQueue,
@@ -186,6 +193,9 @@ impl Process {
         thread_prestart(&thread)?;
 
         // Start the thread.
+        //
+        // `fork` calls this while holding `Container::processes`. Locking
+        // `mutable` here is fine because nobody else can reach this process yet.
         process.mutable.lock().threads.push(thread.clone());
         container.add_thread(thread, entry, sp)?;
 
@@ -235,6 +245,11 @@ impl Process {
         )?;
 
         pid_table.insert(tgid, child.clone());
+
+        // Release the PID table lock before locking mutable, to follow the
+        // lock order.
+        drop(pid_table);
+
         self.mutable.lock().children.push(child);
         Ok(tgid)
     }
