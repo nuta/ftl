@@ -1,4 +1,4 @@
-#[repr(C)]
+#[repr(C, packed)]
 pub struct Dirent64 {
     pub d_ino: u64,
     pub d_off: i64,

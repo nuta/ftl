@@ -160,8 +160,9 @@ impl OpenFile {
         while let Some(entry) = self.file.readdir(mutable.offset)? {
             let name_offset = offset_of!(Dirent64, d_name);
 
-            // Calculate the length of this entry.
-            let reclen = align_up(name_offset + entry.name.len() + 1, align_of::<Dirent64>());
+            // Calculate the length of this entry. We can't use
+            // align_of::<Dirent64>() here because it is 1 (due to "packed" attribute).
+            let reclen = align_up(name_offset + entry.name.len() + 1, align_of::<u64>());
 
             // Do a range check, and get the slice for this entry.
             let Some(dirent) = buf.get_mut(written..written + reclen) else {
