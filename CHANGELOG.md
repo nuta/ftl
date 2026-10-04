@@ -11,5 +11,5 @@ The first release. Hello world!
 - Wall-clock time API.
 - virtio-mmio and [QEMU microVM](https://www.qemu.org/docs/master/system/i386/microvm.html) support.
 - Anonymous memory pages are now allocated lazily.
-- Blocking Linux system calls are not interruptible by signals.
+- Blocking Linux system calls are now interruptible by signals.
 - x86-64 SMEP/SMAP support.
