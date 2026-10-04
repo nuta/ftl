@@ -24,7 +24,7 @@ build_initfs() {
   local initfs_cpio="$2"
 
   pushd "${initfs_dir}" >/dev/null
-  find * -print0 | cpio -o -0 -H newc > "${initfs_cpio}" 2>&1 \
+  find * -print0 | cpio -o -0 -H newc 2>&1 > "${initfs_cpio}" \
     | grep -v '^[0-9]* blocks$' >&2 || true
   popd >/dev/null
 }
