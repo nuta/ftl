@@ -3,6 +3,7 @@ mod accept4;
 mod arch_prctl;
 mod bind;
 mod brk;
+mod chdir;
 mod clock_gettime;
 mod clock_nanosleep;
 mod clone;
@@ -54,6 +55,7 @@ use self::accept4::sys_accept4;
 use self::arch_prctl::sys_arch_prctl;
 use self::bind::sys_bind;
 use self::brk::sys_brk;
+use self::chdir::sys_chdir;
 use self::clock_gettime::sys_clock_gettime;
 use self::clock_nanosleep::sys_clock_nanosleep;
 use self::clone::sys_clone;
@@ -115,6 +117,7 @@ use crate::types::sys::syscall::SYS_ACCEPT4;
 use crate::types::sys::syscall::SYS_ARCH_PRCTL;
 use crate::types::sys::syscall::SYS_BIND;
 use crate::types::sys::syscall::SYS_BRK;
+use crate::types::sys::syscall::SYS_CHDIR;
 use crate::types::sys::syscall::SYS_CLOCK_GETTIME;
 use crate::types::sys::syscall::SYS_CLOCK_NANOSLEEP;
 use crate::types::sys::syscall::SYS_CLONE;
@@ -213,6 +216,7 @@ fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
         }
         SYS_OPEN => sys_open(current, arg0 as *const u8, arg1 as c_int),
         SYS_CLOSE => sys_close(current, arg0 as c_int),
+        SYS_CHDIR => sys_chdir(current, arg0 as *const u8),
         SYS_DUP2 => sys_dup2(current, arg0 as c_int, arg1 as c_int),
         SYS_DUP3 => sys_dup3(current, arg0 as c_int, arg1 as c_int, arg2 as c_int),
         SYS_EPOLL_CREATE1 => sys_epoll_create1(current, arg0 as c_int),

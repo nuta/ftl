@@ -26,6 +26,8 @@ use crate::types::sys::fcntl::O_RDONLY;
 use crate::types::sys::fcntl::O_WRONLY;
 use crate::vfs::Console;
 use crate::vfs::FileLike;
+use crate::vfs::INode;
+use crate::vfs::PathNode;
 use crate::vfs::Tty;
 use crate::vm::Vm;
 use crate::wait_queue::WaitQueue;
@@ -59,6 +61,8 @@ struct Mutable {
     exit_status: Option<c_int>,
     signal_actions: SignalMap<SigAction>,
     pending_signals: SignalSet,
+    /// The current working directory.
+    cwd: Arc<PathNode>,
 }
 
 pub struct Process {
@@ -87,10 +91,12 @@ impl Process {
         fd_table.insert_at(1, tty.clone(), O_WRONLY)?;
         fd_table.insert_at(2, tty, O_WRONLY)?;
 
+        let cwd = container.root_dir.clone();
         let process = Self::new(
             container,
             vm,
             fd_table,
+            cwd,
             PId(1),
             None,
             entry,
@@ -138,6 +144,7 @@ impl Process {
         container: Arc<Container>,
         vm: Vm,
         fd_table: FdTable,
+        cwd: Arc<PathNode>,
         tgid: PId,
         parent: Option<Weak<Process>>,
         entry: usize,
@@ -161,6 +168,7 @@ impl Process {
                 exit_status: None,
                 signal_actions,
                 pending_signals: SignalSet::empty(),
+                cwd,
             }),
             fd_table: SpinLock::new(fd_table),
             signal_wait,
@@ -200,6 +208,7 @@ impl Process {
         let mutable = self.mutable.lock();
         let new_vm = current.vm().fork(&self.container.root_vmspace)?;
         let signal_actions = mutable.signal_actions.fork();
+        let cwd = mutable.cwd.clone();
         drop(mutable);
 
         // Allocate a new PID for the child process.
@@ -212,6 +221,7 @@ impl Process {
             self.container.clone(),
             new_vm,
             fd_table,
+            cwd,
             tgid,
             Some(Arc::downgrade(self)),
             entry,
@@ -432,6 +442,33 @@ impl Process {
 
     pub fn fd_table(&self) -> &SpinLock<FdTable> {
         &self.fd_table
+    }
+
+    /// Resolves a path, from the current working directory of this process.
+    pub fn lookup_path(&self, path: &[u8]) -> Result<Arc<PathNode>, Errno> {
+        let dir = if path.starts_with(b"/") {
+            // Absolute paths. Start from the root directory.
+            self.container.root_dir.clone()
+        } else {
+            // Relative paths.
+            self.mutable.lock().cwd.clone()
+        };
+
+        dir.lookup(path)
+    }
+
+    /// Changes the current working directory of this process.
+    pub fn chdir(&self, path: &[u8]) -> Result<(), Errno> {
+        // Find the new directory.
+        let pnode = self.lookup_path(path)?;
+        if !matches!(pnode.inode(), INode::Dir(_)) {
+            return Err(Errno::ENOTDIR);
+        }
+
+        // Replace the old pnode with the new one.
+        let mut mutable = self.mutable.lock();
+        mutable.cwd = pnode;
+        Ok(())
     }
 
     pub fn id(&self) -> PId {

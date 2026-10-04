@@ -12,14 +12,13 @@ pub fn sys_open(current: &LxThread, path: *const u8, flags: c_int) -> Result<Sys
         return Err(Errno::EFAULT);
     }
 
-    // TODO: Support current working directory.
     let path = unsafe { CStr::from_ptr(path.cast()) }.to_bytes();
     if path.is_empty() {
         return Err(Errno::ENOENT);
     }
 
     let process = current.process();
-    let pnode = process.container().root_dir.lookup(path)?;
+    let pnode = process.lookup_path(path)?;
 
     let file = match pnode.inode() {
         INode::File(file) => file.clone(),
