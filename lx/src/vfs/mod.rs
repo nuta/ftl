@@ -10,6 +10,7 @@ use crate::wait_queue::Sleep;
 use crate::wait_queue::WaitQueue;
 
 mod console;
+mod devfs;
 mod directory;
 mod embedded_file;
 mod epoll;
@@ -22,6 +23,7 @@ mod root_dir;
 mod tty;
 
 pub use console::Console;
+pub use devfs::DevFs;
 pub use directory::Directory;
 pub use embedded_file::EmbeddedFile;
 pub use epoll::Epoll;
