@@ -88,29 +88,40 @@ pub fn return_to_user() -> ! {
         SCHEDULER.push_back(current);
     }
 
-    let next = loop {
-        let Some(thread) = SCHEDULER.pop() else {
-            // Clear the current thread. Otherwise, the interrupt handler would
-            // overwrite the user's system call context (registers) with the idle
-            // thread's context.
-            arch::vmspace_switch_to_kernel();
-            current.clear();
+    loop {
+        // Find the next thread to switch to.
+        let next = loop {
+            let Some(thread) = SCHEDULER.pop() else {
+                // Clear the current thread. Otherwise, the interrupt handler would
+                // overwrite the user's system call context (registers) with the idle
+                // thread's context.
+                arch::vmspace_switch_to_kernel();
+                current.clear();
 
-            // No threads to run. Enter the idle loop.
-            arch::idle();
-            continue;
+                // No threads to run. Enter the idle loop.
+                arch::idle();
+                continue;
+            };
+
+            // Try resuming the thread if it is blocked.
+            thread.try_wake();
+
+            // The thread can be blocked while in the runqueue. Make sure it
+            // is still runnable.
+            if thread.is_runnable() {
+                break thread;
+            }
         };
 
-        // Try resuming the thread if it is blocked.
-        thread.try_wake();
+        // Jump into the next thread. This function does not return on success.
+        let Err(err) = current.enter(next);
 
-        // The thread can be blocked while in the runqueue. Make sure it
-        // is still runnable.
-        if thread.is_runnable() {
-            break thread;
+        // Failed to enter the thread due to its invalid state. Terminate it.
+        trace!("failed to enter a thread, terminating it: {:?}", err);
+        if let Some(thread) = current.thread()
+            && let Err(err) = thread.exit()
+        {
+            trace!("failed to exit the thread: {:?}", err);
         }
-    };
-
-    // Switch to the new thread.
-    current.enter(next);
+    }
 }

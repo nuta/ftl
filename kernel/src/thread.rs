@@ -1,5 +1,6 @@
 use alloc::vec::Vec;
 use core::cell::UnsafeCell;
+use core::convert::Infallible;
 use core::mem::offset_of;
 use core::mem::size_of;
 
@@ -494,8 +495,8 @@ impl CurrentThread {
     /// # Warning
     ///
     /// Drop reference counters and lock guards before calling this; this
-    /// function never returns.
-    pub fn enter(&self, new_thread: SharedRef<Thread>) -> ! {
+    /// function never returns on success.
+    pub fn enter(&self, new_thread: SharedRef<Thread>) -> Result<Infallible, ErrorCode> {
         // Switch to the new thread's virtual memory space.
         new_thread.vmspace().switch();
 
@@ -504,6 +505,6 @@ impl CurrentThread {
         // SAFETY: We've set the new pointer and SharedRef is always non-null.
         let arch_thread = unsafe { self.arch_thread() };
 
-        arch::Thread::enter(arch_thread);
+        arch::Thread::enter(arch_thread)
     }
 }

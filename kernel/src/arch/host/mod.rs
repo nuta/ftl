@@ -1,3 +1,5 @@
+use core::convert::Infallible;
+
 use ftl_arrayvec::ArrayVec;
 use ftl_types::error::ErrorCode;
 use ftl_types::thread::RegsKind;
@@ -111,7 +113,7 @@ impl Thread {
         todo!()
     }
 
-    pub fn enter(_thread: *const Thread) -> ! {
+    pub fn enter(_thread: *const Thread) -> Result<Infallible, ErrorCode> {
         todo!()
     }
 }

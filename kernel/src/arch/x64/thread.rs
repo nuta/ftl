@@ -1,4 +1,5 @@
 use core::arch::asm;
+use core::convert::Infallible;
 use core::mem::MaybeUninit;
 use core::mem::offset_of;
 
@@ -167,21 +168,11 @@ impl Thread {
         Ok(())
     }
 
-    pub fn enter(thread: *const Thread) -> ! {
+    pub fn enter(thread: *const Thread) -> Result<Infallible, ErrorCode> {
         // IRETQ causes an exception in kernel mode if RIP or RSP is non-canonical.
         let t = unsafe { &*thread };
         if t.rip as usize >= USER_ADDR_END || t.rsp as usize >= USER_ADDR_END {
-            // Exit the current thread.
-            {
-                let cpuvar = super::get_cpuvar();
-                if let Some(current) = cpuvar.current_thread.thread() {
-                    if let Err(e) = current.exit() {
-                        warn!("failed to exit the thread on bad IRETQ: {:?}", e);
-                    }
-                }
-            }
-
-            crate::scheduler::return_to_user();
+            return Err(ErrorCode::InvalidUserAddr);
         }
 
         unsafe {
