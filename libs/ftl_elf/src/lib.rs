@@ -143,7 +143,7 @@ pub struct Elf<'a> {
 }
 
 impl<'a> Elf<'a> {
-    pub fn parse(buf: &[u8], expected_type: u16) -> Result<Elf<'a>, ParseError> {
+    pub fn parse(buf: &'a [u8], expected_type: u16) -> Result<Elf<'a>, ParseError> {
         if buf.len() < size_of::<Ehdr>() {
             return Err(ParseError::BufferTooShort);
         }
@@ -170,7 +170,10 @@ impl<'a> Elf<'a> {
         }
 
         let phdrs_size = ehdr.e_phnum as usize * size_of::<Phdr>();
-        if buf.len() < ehdr.e_phoff as usize + phdrs_size {
+        let phdrs_end = (ehdr.e_phoff as usize)
+            .checked_add(phdrs_size)
+            .ok_or(ParseError::BufferTooShort)?;
+        if buf.len() < phdrs_end {
             return Err(ParseError::BufferTooShort);
         }
 
