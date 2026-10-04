@@ -13,6 +13,7 @@ fn main() -> ExitCode {
     match name.as_str() {
         "cat" => commands::cat::main(&args[2..]),
         "ls" => commands::ls::main(&args[2..]),
+        "pwd" => commands::pwd::main(&args[2..]),
         "" => {
             eprintln!("usage: util <command> [args...]");
             ExitCode::FAILURE

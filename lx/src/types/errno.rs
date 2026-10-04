@@ -26,6 +26,7 @@ impl Errno {
     pub const EINVAL: Self = Self(22);
     pub const ESPIPE: Self = Self(29);
     pub const EPIPE: Self = Self(32);
+    pub const ERANGE: Self = Self(34);
     pub const ENOSYS: Self = Self(38);
     pub const ENOTSOCK: Self = Self(88);
     pub const ENOTSUP: Self = Self(95);

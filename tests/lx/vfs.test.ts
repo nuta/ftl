@@ -22,6 +22,14 @@ describe("ls", () => {
     });
 });
 
+describe("pwd", () => {
+    test("prints the directory after chdir", async () => {
+        const hostPort = await getAvailablePort();
+        using vm = await boot({ hostPort, init: "/bin/util pwd /dev/./../proc" });
+        await vm.waitForLog("\r\n/proc\r\n");
+    });
+});
+
 describe("cat", () => {
     test("reads a file", async () => {
         const hostPort = await getAvailablePort();

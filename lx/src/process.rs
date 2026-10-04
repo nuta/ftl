@@ -457,6 +457,10 @@ impl Process {
         dir.lookup(path)
     }
 
+    pub fn cwd(&self) -> Arc<PathNode> {
+        self.mutable.lock().cwd.clone()
+    }
+
     /// Changes the current working directory of this process.
     pub fn chdir(&self, path: &[u8]) -> Result<(), Errno> {
         // Find the new directory.

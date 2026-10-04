@@ -1,4 +1,5 @@
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 
 use crate::types::errno::Errno;
 use crate::vfs::INode;
@@ -13,6 +14,7 @@ use crate::vfs::INode;
 pub struct PathNode {
     /// The parent pnode (that is "..").
     parent_dir: Option<Arc<PathNode>>,
+    name: Vec<u8>,
     inode: INode,
     // TODO: Cache child pnodes to avoid creating new ones on each lookup,
     // but ... how should we invalidate them?
@@ -22,6 +24,7 @@ impl PathNode {
     pub fn root_dir(root_dir: INode) -> Arc<Self> {
         Arc::new(Self {
             parent_dir: None,
+            name: Vec::new(),
             inode: root_dir,
         })
     }
@@ -60,10 +63,54 @@ impl PathNode {
             let inode = dir.lookup(name)?;
             current = Arc::new(Self {
                 parent_dir: Some(current.clone()),
+                name: name.into(),
                 inode,
             });
         }
 
         Ok(current)
+    }
+
+    /// Writes the absolute path to `buf`.
+    pub fn absolute_path(&self, buf: &mut [u8]) -> Result<usize, Errno> {
+        // The root directory.
+        if self.parent_dir.is_none() {
+            let path = b"/\0";
+            if path.len() > buf.len() {
+                return Err(Errno::ERANGE);
+            }
+
+            buf[..path.len()].copy_from_slice(path);
+            return Ok(path.len());
+        }
+
+        // Calculate the total length of the path.
+        let mut len = 1;
+        let mut current = self;
+        while let Some(parent) = &current.parent_dir {
+            // The name + the slash.
+            len += current.name.len() + 1;
+            current = parent;
+        }
+
+        if len > buf.len() {
+            return Err(Errno::ERANGE);
+        }
+
+        // Write the null terminator.
+        let mut end = len - 1;
+        buf[end] = 0;
+
+        // Write path components, from the end to the start.
+        let mut current = self;
+        while let Some(parent) = &current.parent_dir {
+            let start = end - current.name.len();
+            buf[start..end].copy_from_slice(&current.name);
+            buf[start - 1] = b'/';
+            end = start - 1;
+            current = parent;
+        }
+
+        Ok(len)
     }
 }
