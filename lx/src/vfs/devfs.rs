@@ -4,9 +4,10 @@ use crate::types::c_short;
 use crate::types::errno::Errno;
 use crate::types::sys::poll::POLLIN;
 use crate::types::sys::poll::POLLOUT;
-use crate::vfs::Directory;
+use crate::vfs::DirEntry;
 use crate::vfs::FileLike;
 use crate::vfs::INode;
+use crate::vfs::StaticDir;
 use crate::wait_queue::Sleep;
 
 /// `/dev/null`.
@@ -116,28 +117,15 @@ impl FileLike for URandom {
 
 /// The device file system (`/dev`).
 pub struct DevFs {
-    null: INode,
-    zero: INode,
-    urandom: INode,
+    _private: (),
 }
 
 impl DevFs {
-    pub fn new() -> Self {
-        Self {
-            null: INode::File(Arc::new(Null)),
-            zero: INode::File(Arc::new(Zero)),
-            urandom: INode::File(Arc::new(URandom)),
-        }
-    }
-}
-
-impl Directory for DevFs {
-    fn lookup(&self, name: &[u8]) -> Result<INode, Errno> {
-        match name {
-            b"null" => Ok(self.null.clone()),
-            b"zero" => Ok(self.zero.clone()),
-            b"urandom" => Ok(self.urandom.clone()),
-            _ => Err(Errno::ENOENT),
-        }
+    pub fn new() -> StaticDir<3> {
+        StaticDir::new([
+            DirEntry::new(b"null", INode::File(Arc::new(Null))),
+            DirEntry::new(b"zero", INode::File(Arc::new(Zero))),
+            DirEntry::new(b"urandom", INode::File(Arc::new(URandom))),
+        ])
     }
 }

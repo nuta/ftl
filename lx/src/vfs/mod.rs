@@ -24,7 +24,10 @@ mod tty;
 
 pub use console::Console;
 pub use devfs::DevFs;
+pub use directory::DirEntry;
 pub use directory::Directory;
+pub use directory::OpenedDir;
+pub use directory::StaticDir;
 pub use embedded_file::EmbeddedFile;
 pub use epoll::Epoll;
 pub use eventfd::EventFd;
@@ -184,6 +187,11 @@ pub trait FileLike: Send + Sync {
         }
 
         Ok(total)
+    }
+
+    fn readdir(&self, index: usize) -> Result<Option<DirEntry>, Errno> {
+        let _ = index;
+        Err(Errno::ENOTDIR)
     }
 
     fn size(&self) -> Result<usize, Errno> {

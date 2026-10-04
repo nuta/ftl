@@ -1,6 +1,7 @@
 #![allow(non_camel_case_types)]
 
 pub mod asm;
+pub mod dirent;
 pub mod errno;
 pub mod signal;
 pub mod sys;

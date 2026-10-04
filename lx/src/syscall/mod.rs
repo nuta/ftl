@@ -22,6 +22,7 @@ mod exit_group;
 mod fcntl;
 mod fork;
 mod futex;
+mod getdents64;
 mod getpid;
 mod getrandom;
 mod gettid;
@@ -74,6 +75,7 @@ use self::exit_group::sys_exit_group;
 use self::fcntl::sys_fcntl;
 use self::fork::sys_fork;
 use self::futex::sys_futex;
+use self::getdents64::sys_getdents64;
 use self::getpid::sys_getpid;
 use self::getrandom::sys_getrandom;
 use self::gettid::sys_gettid;
@@ -136,6 +138,7 @@ use crate::types::sys::syscall::SYS_EXIT_GROUP;
 use crate::types::sys::syscall::SYS_FCNTL;
 use crate::types::sys::syscall::SYS_FORK;
 use crate::types::sys::syscall::SYS_FUTEX;
+use crate::types::sys::syscall::SYS_GETDENTS64;
 use crate::types::sys::syscall::SYS_GETPID;
 use crate::types::sys::syscall::SYS_GETRANDOM;
 use crate::types::sys::syscall::SYS_GETTID;
@@ -217,6 +220,7 @@ fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
         SYS_OPEN => sys_open(current, arg0 as *const u8, arg1 as c_int),
         SYS_CLOSE => sys_close(current, arg0 as c_int),
         SYS_CHDIR => sys_chdir(current, arg0 as *const u8),
+        SYS_GETDENTS64 => sys_getdents64(current, arg0 as c_int, arg1 as *mut c_void, arg2),
         SYS_DUP2 => sys_dup2(current, arg0 as c_int, arg1 as c_int),
         SYS_DUP3 => sys_dup3(current, arg0 as c_int, arg1 as c_int, arg2 as c_int),
         SYS_EPOLL_CREATE1 => sys_epoll_create1(current, arg0 as c_int),

@@ -34,6 +34,7 @@ pub const SYS_CHDIR: usize = 80;
 pub const SYS_ARCH_PRCTL: usize = 158;
 pub const SYS_GETTID: usize = 186;
 pub const SYS_FUTEX: usize = 202;
+pub const SYS_GETDENTS64: usize = 217;
 pub const SYS_SET_TID_ADDRESS: usize = 218;
 pub const SYS_CLOCK_GETTIME: usize = 228;
 pub const SYS_CLOCK_NANOSLEEP: usize = 230;

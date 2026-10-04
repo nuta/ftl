@@ -1,32 +1,20 @@
 use alloc::sync::Arc;
 
-use crate::types::errno::Errno;
 use crate::vfs::DevFs;
-use crate::vfs::Directory;
+use crate::vfs::DirEntry;
 use crate::vfs::INode;
 use crate::vfs::ProcFs;
+use crate::vfs::StaticDir;
 
 /// The root directory.
-pub struct RootDir {
-    devfs: INode,
-    procfs: INode,
-}
+pub struct RootDir;
 
 impl RootDir {
     pub fn new() -> INode {
-        let devfs = INode::Dir(Arc::new(DevFs::new()));
-        let procfs = INode::Dir(Arc::new(ProcFs::new()));
-        INode::Dir(Arc::new(Self { devfs, procfs }))
-    }
-}
-
-impl Directory for RootDir {
-    fn lookup(&self, name: &[u8]) -> Result<INode, Errno> {
         // TODO: Support dynamic mount points
-        match name {
-            b"dev" => Ok(self.devfs.clone()),
-            b"proc" => Ok(self.procfs.clone()),
-            _ => Err(Errno::ENOENT),
-        }
+        INode::Dir(Arc::new(StaticDir::new([
+            DirEntry::new(b"dev", INode::Dir(Arc::new(DevFs::new()))),
+            DirEntry::new(b"proc", INode::Dir(Arc::new(ProcFs::new()))),
+        ])))
     }
 }

@@ -12,6 +12,7 @@ fn main() -> ExitCode {
     let name = &args[1];
     match name.as_str() {
         "cat" => commands::cat::main(&args[2..]),
+        "ls" => commands::ls::main(&args[2..]),
         "" => {
             eprintln!("usage: util <command> [args...]");
             ExitCode::FAILURE

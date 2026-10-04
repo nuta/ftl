@@ -1,12 +1,17 @@
 use alloc::sync::Arc;
 use alloc::sync::Weak;
 use alloc::vec::Vec;
+use core::mem::offset_of;
 use core::ops::Deref;
 
+use ftl_utils::alignment::align_up;
 use ftl_utils::spinlock::SpinLock;
 
 use crate::signal::Signal;
 use crate::types::c_int;
+use crate::types::dirent::DT_DIR;
+use crate::types::dirent::DT_REG;
+use crate::types::dirent::Dirent64;
 use crate::types::errno::Errno;
 use crate::types::off_t;
 use crate::types::sys::fcntl::O_NONBLOCK;
@@ -16,6 +21,7 @@ use crate::types::unistd::SEEK_CUR;
 use crate::types::unistd::SEEK_END;
 use crate::types::unistd::SEEK_SET;
 use crate::vfs::FileLike;
+use crate::vfs::INode;
 use crate::vfs::IoVecSlice;
 use crate::wait_queue::Sleep;
 
@@ -145,6 +151,52 @@ impl OpenFile {
         // TODO: Is it possible to guarantee it is in [0, i64::MAX] in a type-safe way?
         let new_offset_i64 = new_offset.try_into().map_err(|_| Errno::EINVAL)?;
         Ok(new_offset_i64)
+    }
+
+    /// Writes directory entries (`struct dirent64`) to `buf`.
+    pub fn getdents(&self, buf: &mut [u8]) -> Result<usize, Errno> {
+        let mut mutable = self.mutable.lock();
+        let mut written = 0;
+        while let Some(entry) = self.file.readdir(mutable.offset)? {
+            let name_offset = offset_of!(Dirent64, d_name);
+
+            // Calculate the length of this entry.
+            let reclen = align_up(name_offset + entry.name.len() + 1, align_of::<Dirent64>());
+
+            // Do a range check, and get the slice for this entry.
+            let Some(dirent) = buf.get_mut(written..written + reclen) else {
+                break;
+            };
+
+            let header = Dirent64 {
+                d_ino: mutable.offset as u64 + 1,
+                d_off: mutable.offset as i64 + 1,
+                d_reclen: reclen as u16,
+                d_type: match entry.inode {
+                    INode::Dir(_) => DT_DIR,
+                    INode::File(_) => DT_REG,
+                },
+                d_name: [],
+            };
+
+            // Write the header.
+            unsafe {
+                dirent
+                    .as_mut_ptr()
+                    .cast::<Dirent64>()
+                    .write_unaligned(header)
+            };
+
+            // Write the name string, which is next to the header.
+            dirent[name_offset..][..entry.name.len()].copy_from_slice(entry.name);
+            // Write the null terminator.
+            dirent[name_offset + entry.name.len()] = 0;
+
+            written += reclen;
+            mutable.offset += 1;
+        }
+
+        Ok(written)
     }
 
     pub fn recvfrom(
