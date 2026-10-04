@@ -30,7 +30,7 @@ function buildQemuArgs({ hostPort, init }: QemuArgs) {
         "-cpu", "qemu64,+fsgsbase,+xsave,+xsaveopt,+smep,+smap,+rdrand,+rdtscp",
         "-kernel", "ftl.elf",
         "-initrd", "lx.elf",
-        "-append", `ftl.lx.init=${init}`,
+        "-append", `ftl.lx.init="${init}"`,
         "-nographic",
         "-serial", "mon:stdio",
         "--no-reboot",
