@@ -16,61 +16,47 @@ fn do_handle_syscall() {
     // TODO: safety
     let arch_thread = unsafe { &mut *thread.arch().get() };
     let regs = arch_thread.get_syscall_regs();
-    let retval = match regs.n {
-        n if n == Syscall::ThreadExit as usize => crate::thread::sys_thread_exit(thread, &regs),
-        n if n == Syscall::VmoCreate as usize => crate::vmobject::sys_vmo_create(&thread, &regs),
-        n if n == Syscall::VmoRead as usize => crate::vmobject::sys_vmo_read(&thread, &regs),
-        n if n == Syscall::VmoWrite as usize => crate::vmobject::sys_vmo_write(&thread, &regs),
-        n if n == Syscall::VmSpaceClone as usize => {
-            crate::vmspace::sys_vmspace_clone(&thread, &regs)
-        }
-        n if n == Syscall::VmSpaceMap as usize => crate::vmspace::sys_vmspace_map(&thread, &regs),
-        n if n == Syscall::VmSpaceUnmap as usize => {
-            crate::vmspace::sys_vmspace_unmap(&thread, &regs)
-        }
-        n if n == Syscall::VmSpacePermit as usize => {
-            crate::vmspace::sys_vmspace_permit(&thread, &regs)
-        }
-        n if n == Syscall::ThreadCreate as usize => {
-            crate::thread::sys_thread_create(&thread, &regs)
-        }
-        n if n == Syscall::ThreadStart as usize => crate::thread::sys_thread_start(&thread, &regs),
-        n if n == Syscall::ThreadSubscribe as usize => {
-            crate::thread::sys_thread_subscribe(&thread, &regs)
-        }
-        n if n == Syscall::ThreadWriteRegs as usize => {
+    let retval = match Syscall::from_usize(regs.n) {
+        Some(Syscall::ThreadExit) => crate::thread::sys_thread_exit(thread, &regs),
+        Some(Syscall::VmoCreate) => crate::vmobject::sys_vmo_create(&thread, &regs),
+        Some(Syscall::VmoRead) => crate::vmobject::sys_vmo_read(&thread, &regs),
+        Some(Syscall::VmoWrite) => crate::vmobject::sys_vmo_write(&thread, &regs),
+        Some(Syscall::VmSpaceClone) => crate::vmspace::sys_vmspace_clone(&thread, &regs),
+        Some(Syscall::VmSpaceMap) => crate::vmspace::sys_vmspace_map(&thread, &regs),
+        Some(Syscall::VmSpaceUnmap) => crate::vmspace::sys_vmspace_unmap(&thread, &regs),
+        Some(Syscall::VmSpacePermit) => crate::vmspace::sys_vmspace_permit(&thread, &regs),
+        Some(Syscall::ThreadCreate) => crate::thread::sys_thread_create(&thread, &regs),
+        Some(Syscall::ThreadStart) => crate::thread::sys_thread_start(&thread, &regs),
+        Some(Syscall::ThreadSubscribe) => crate::thread::sys_thread_subscribe(&thread, &regs),
+        Some(Syscall::ThreadWriteRegs) => {
             crate::thread::sys_thread_write_regs(&thread, arch_thread, &regs)
         }
-        n if n == Syscall::ThreadCopyRegs as usize => {
+        Some(Syscall::ThreadCopyRegs) => {
             crate::thread::sys_thread_copy_regs(&thread, arch_thread, &regs)
         }
-        n if n == Syscall::PollCreate as usize => crate::poll::sys_poll_create(&thread, &regs),
-        n if n == Syscall::PollWait as usize => {
+        Some(Syscall::PollCreate) => crate::poll::sys_poll_create(&thread, &regs),
+        Some(Syscall::PollWait) => {
             crate::poll::sys_poll_wait(&thread, &cpuvar.current_thread, &regs)
         }
-        n if n == Syscall::PollWaitUntil as usize => {
+        Some(Syscall::PollWaitUntil) => {
             crate::poll::sys_poll_wait_until(&thread, &cpuvar.current_thread, &regs)
         }
-        n if n == Syscall::PollNotify as usize => crate::poll::sys_poll_notify(&thread, &regs),
-        n if n == Syscall::NetCreate as usize => crate::net::sys_net_create(&thread, &regs),
-        n if n == Syscall::NetSubscribe as usize => crate::net::sys_net_subscribe(&thread, &regs),
-        n if n == Syscall::NetBind as usize => crate::net::sys_net_bind(&thread, &regs),
-        n if n == Syscall::NetUnbind as usize => crate::net::sys_net_unbind(&thread, &regs),
-        n if n == Syscall::NetRecv as usize => crate::net::sys_net_recv(&thread, &regs),
-        n if n == Syscall::NetSend as usize => crate::net::sys_net_send(&thread, &regs),
-        n if n == Syscall::HandleClose as usize => crate::handle::sys_handle_close(&thread, &regs),
-        n if n == Syscall::MonoTimeRead as usize => crate::timer::sys_monotime_read(&thread, &regs),
-        n if n == Syscall::WallTimeRead as usize => crate::timer::sys_walltime_read(&thread, &regs),
-        n if n == Syscall::RandomRead as usize => crate::random::sys_random_read(&thread, &regs),
-        n if n == Syscall::ConsoleOpen as usize => crate::console::sys_console_open(&thread, &regs),
-        n if n == Syscall::ConsoleWrite as usize => {
-            crate::console::sys_console_write(&thread, &regs)
-        }
-        n if n == Syscall::ConsoleRead as usize => crate::console::sys_console_read(&thread, &regs),
-        n if n == Syscall::ConsoleSubscribe as usize => {
-            crate::console::sys_console_subscribe(&thread, &regs)
-        }
-        _ => Err(ErrorCode::UnknownSyscall),
+        Some(Syscall::PollNotify) => crate::poll::sys_poll_notify(&thread, &regs),
+        Some(Syscall::NetCreate) => crate::net::sys_net_create(&thread, &regs),
+        Some(Syscall::NetSubscribe) => crate::net::sys_net_subscribe(&thread, &regs),
+        Some(Syscall::NetBind) => crate::net::sys_net_bind(&thread, &regs),
+        Some(Syscall::NetUnbind) => crate::net::sys_net_unbind(&thread, &regs),
+        Some(Syscall::NetRecv) => crate::net::sys_net_recv(&thread, &regs),
+        Some(Syscall::NetSend) => crate::net::sys_net_send(&thread, &regs),
+        Some(Syscall::HandleClose) => crate::handle::sys_handle_close(&thread, &regs),
+        Some(Syscall::MonoTimeRead) => crate::timer::sys_monotime_read(&thread, &regs),
+        Some(Syscall::WallTimeRead) => crate::timer::sys_walltime_read(&thread, &regs),
+        Some(Syscall::RandomRead) => crate::random::sys_random_read(&thread, &regs),
+        Some(Syscall::ConsoleOpen) => crate::console::sys_console_open(&thread, &regs),
+        Some(Syscall::ConsoleWrite) => crate::console::sys_console_write(&thread, &regs),
+        Some(Syscall::ConsoleRead) => crate::console::sys_console_read(&thread, &regs),
+        Some(Syscall::ConsoleSubscribe) => crate::console::sys_console_subscribe(&thread, &regs),
+        None => Err(ErrorCode::UnknownSyscall),
     };
 
     let retval = match retval {

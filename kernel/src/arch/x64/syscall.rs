@@ -2,7 +2,7 @@ use core::arch::naked_asm;
 use core::mem::offset_of;
 use core::mem::size_of;
 
-use ftl_types::syscall::SYSCALL_BASE;
+use ftl_types::syscall::Syscall;
 use ftl_types::thread::SyscallFrame;
 use ftl_utils::static_assert;
 
@@ -169,7 +169,7 @@ extern "C" fn syscall_handler() -> ! {
         "sysretq",
         handle_syscall = sym crate::syscall::handle_syscall,
         syscall_copy_recover = sym syscall_copy_recover,
-        ftl_syscall_base = const SYSCALL_BASE as isize,
+        ftl_syscall_base = const Syscall::BASE as isize,
         user_addr_end = const USER_ADDR_END,
         syscall_frame_size = const RED_ZONE_SIZE + size_of::<SyscallFrame>(),
         user_rflags = const USER_RFLAGS,

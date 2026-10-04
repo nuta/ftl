@@ -19,7 +19,7 @@ fn convert_retval(rax: usize) -> Result<usize, ErrorCode> {
 }
 
 pub fn syscall0(n: Syscall) -> Result<usize, ErrorCode> {
-    let mut rax = n as usize;
+    let mut rax = n.as_usize();
     unsafe {
         asm!("syscall", inlateout("rax") rax, out("rcx") _, out("r11") _,);
     }
@@ -27,7 +27,7 @@ pub fn syscall0(n: Syscall) -> Result<usize, ErrorCode> {
 }
 
 pub fn syscall1(n: Syscall, a0: usize) -> Result<usize, ErrorCode> {
-    let mut rax = n as usize;
+    let mut rax = n.as_usize();
     unsafe {
         asm!(
             "syscall",
@@ -41,7 +41,7 @@ pub fn syscall1(n: Syscall, a0: usize) -> Result<usize, ErrorCode> {
 }
 
 pub fn syscall2(n: Syscall, a0: usize, a1: usize) -> Result<usize, ErrorCode> {
-    let mut rax = n as usize;
+    let mut rax = n.as_usize();
     unsafe {
         asm!(
             "syscall",
@@ -56,7 +56,7 @@ pub fn syscall2(n: Syscall, a0: usize, a1: usize) -> Result<usize, ErrorCode> {
 }
 
 pub fn syscall3(n: Syscall, a0: usize, a1: usize, a2: usize) -> Result<usize, ErrorCode> {
-    let mut rax = n as usize;
+    let mut rax = n.as_usize();
     unsafe {
         asm!(
             "syscall",
@@ -78,7 +78,7 @@ pub fn syscall4(
     a2: usize,
     a3: usize,
 ) -> Result<usize, ErrorCode> {
-    let mut rax = n as usize;
+    let mut rax = n.as_usize();
     unsafe {
         asm!(
             "syscall",
@@ -103,7 +103,7 @@ pub fn syscall6(
     a4: usize,
     a5: usize,
 ) -> Result<usize, ErrorCode> {
-    let mut rax = n as usize;
+    let mut rax = n.as_usize();
     unsafe {
         asm!(
             "syscall",

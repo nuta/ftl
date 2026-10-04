@@ -6,24 +6,24 @@ pub fn unreachable() -> ! {
 }
 
 pub fn syscall0(n: Syscall) -> Result<usize, ErrorCode> {
-    panic!("syscall0(0x{:x}) is not implemented", n as usize);
+    panic!("syscall0(0x{:x}) is not implemented", n.as_usize());
 }
 
 pub fn syscall1(n: Syscall, a0: usize) -> Result<usize, ErrorCode> {
-    panic!("syscall1(0x{:x}, {a0:x}) is not implemented", n as usize);
+    panic!("syscall1(0x{:x}, {a0:x}) is not implemented", n.as_usize());
 }
 
 pub fn syscall2(n: Syscall, a0: usize, a1: usize) -> Result<usize, ErrorCode> {
     panic!(
         "syscall2(0x{:x}, {a0:x}, {a1:x}) is not implemented",
-        n as usize
+        n.as_usize()
     );
 }
 
 pub fn syscall3(n: Syscall, a0: usize, a1: usize, a2: usize) -> Result<usize, ErrorCode> {
     panic!(
         "syscall3(0x{:x}, {a0:x}, {a1:x}, {a2:x}) is not implemented",
-        n as usize
+        n.as_usize()
     );
 }
 
@@ -36,7 +36,7 @@ pub fn syscall4(
 ) -> Result<usize, ErrorCode> {
     panic!(
         "syscall4(0x{:x}, {a0:x}, {a1:x}, {a2:x}, {a3:x}) is not implemented",
-        n as usize
+        n.as_usize()
     );
 }
 
@@ -51,6 +51,6 @@ pub fn syscall6(
 ) -> Result<usize, ErrorCode> {
     panic!(
         "syscall6(0x{:x}, {a0:x}, {a1:x}, {a2:x}, {a3:x}, {a4:x}, {a5:x}) is not implemented",
-        n as usize
+        n.as_usize()
     );
 }
