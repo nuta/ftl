@@ -18,6 +18,8 @@ use crate::thread::LxThread;
 use crate::types::errno::Errno;
 use crate::vfs::Console;
 use crate::vfs::FileLike;
+use crate::vfs::PathNode;
+use crate::vfs::RootDir;
 
 mod pid_table;
 
@@ -29,6 +31,7 @@ pub struct Container {
     pub reaper: Reaper,
     network: Arc<TcpIp>,
     console: Arc<Console>,
+    pub root_dir: Arc<PathNode>,
 }
 
 impl Container {
@@ -44,6 +47,7 @@ impl Container {
         network.subscribe(&poll)?;
         console.subscribe(&poll)?;
 
+        let root_dir = RootDir::new();
         let this = Arc::new(Self {
             poll,
             hspace,
@@ -52,6 +56,7 @@ impl Container {
             reaper: Reaper::new()?,
             network,
             console: console.clone(),
+            root_dir: PathNode::root_dir(root_dir),
         });
 
         let init_process = Process::new_init(this.clone(), console, elf_file, argv)?;

@@ -30,6 +30,7 @@ mod lseek;
 mod mmap;
 mod mprotect;
 mod munmap;
+mod open;
 mod pipe;
 mod pipe2;
 mod poll;
@@ -80,6 +81,7 @@ use self::lseek::sys_lseek;
 use self::mmap::sys_mmap;
 use self::mprotect::sys_mprotect;
 use self::munmap::sys_munmap;
+use self::open::sys_open;
 use self::pipe::sys_pipe;
 use self::pipe2::sys_pipe2;
 use self::poll::sys_poll;
@@ -140,6 +142,7 @@ use crate::types::sys::syscall::SYS_LSEEK;
 use crate::types::sys::syscall::SYS_MMAP;
 use crate::types::sys::syscall::SYS_MPROTECT;
 use crate::types::sys::syscall::SYS_MUNMAP;
+use crate::types::sys::syscall::SYS_OPEN;
 use crate::types::sys::syscall::SYS_PIPE;
 use crate::types::sys::syscall::SYS_PIPE2;
 use crate::types::sys::syscall::SYS_POLL;
@@ -208,6 +211,7 @@ fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
                 frame.arg5(),
             )
         }
+        SYS_OPEN => sys_open(current, arg0 as *const u8, arg1 as c_int),
         SYS_CLOSE => sys_close(current, arg0 as c_int),
         SYS_DUP2 => sys_dup2(current, arg0 as c_int, arg1 as c_int),
         SYS_DUP3 => sys_dup3(current, arg0 as c_int, arg1 as c_int, arg2 as c_int),

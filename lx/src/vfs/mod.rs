@@ -10,17 +10,27 @@ use crate::wait_queue::Sleep;
 use crate::wait_queue::WaitQueue;
 
 mod console;
+mod directory;
 mod embedded_file;
 mod epoll;
 mod eventfd;
+mod inode;
+mod path;
 mod pipe;
+mod procfs;
+mod root_dir;
 mod tty;
 
 pub use console::Console;
+pub use directory::Directory;
 pub use embedded_file::EmbeddedFile;
 pub use epoll::Epoll;
 pub use eventfd::EventFd;
+pub use inode::INode;
+pub use path::PathNode;
 pub use pipe::Pipe;
+pub use procfs::ProcFs;
+pub use root_dir::RootDir;
 pub use tty::Tty;
 
 pub struct IoVecSlice<'a> {

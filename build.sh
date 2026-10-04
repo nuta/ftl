@@ -16,6 +16,7 @@ build_default_initfs() {
   mkdir -p initfs/bin
   build_rust_app echo
   build_rust_app httpd
+  build_rust_app util
 }
 
 build_initfs() {
