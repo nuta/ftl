@@ -104,9 +104,13 @@ impl VirtioTransport for VirtioPci {
 
         // Write the physical address, divided by 4096 to the Queue Address
         //    field.
-        let pfn: u32 = (dmabuf.paddr() / 4096)
-            .try_into()
-            .map_err(|_| Error::TooHighPAddr)?;
+        let pfn: u32 = match (dmabuf.paddr() / 4096).try_into() {
+            Ok(pfn) => pfn,
+            Err(_) => {
+                env.free_dma(dmabuf);
+                return Err(Error::TooHighPAddr);
+            }
+        };
 
         let queue = match VirtQueue::new(queue_index, queue_size, dmabuf) {
             Ok(queue) => queue,
