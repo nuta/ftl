@@ -124,10 +124,10 @@ pub(super) const KERNEL_STACK_SIZE: usize = if cfg!(debug_assertions) {
 struct Stack(#[allow(dead_code)] [u8; KERNEL_STACK_SIZE]);
 
 #[unsafe(link_section = ".bss")]
-static BSP_STACK: Stack = Stack([0; KERNEL_STACK_SIZE]);
+static mut BSP_STACK: Stack = Stack([0; KERNEL_STACK_SIZE]);
 
 pub(super) fn bsp_stack_top() -> u64 {
-    BSP_STACK.0.as_ptr() as u64 + KERNEL_STACK_SIZE as u64
+    &raw const BSP_STACK as u64 + KERNEL_STACK_SIZE as u64
 }
 
 #[unsafe(no_mangle)]
