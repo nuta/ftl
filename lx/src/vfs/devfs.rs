@@ -44,15 +44,52 @@ impl FileLike for Null {
     }
 }
 
+/// `/dev/zero`.
+struct Zero;
+
+impl FileLike for Zero {
+    fn read(
+        &self,
+        buf: &mut [u8],
+        _offset: usize,
+        _nonblocking: bool,
+        _sleep: Sleep<'_>,
+    ) -> Result<usize, Errno> {
+        buf.fill(0);
+        Ok(buf.len())
+    }
+
+    fn write(
+        &self,
+        buf: &[u8],
+        _offset: usize,
+        _nonblocking: bool,
+        _sleep: Sleep<'_>,
+    ) -> Result<usize, Errno> {
+        // Discard the data.
+        Ok(buf.len())
+    }
+
+    fn size(&self) -> Result<usize, Errno> {
+        Ok(0)
+    }
+
+    fn poll(&self) -> Result<c_short, Errno> {
+        Ok(POLLIN | POLLOUT)
+    }
+}
+
 /// The device file system (`/dev`).
 pub struct DevFs {
     null: INode,
+    zero: INode,
 }
 
 impl DevFs {
     pub fn new() -> Self {
         Self {
             null: INode::File(Arc::new(Null)),
+            zero: INode::File(Arc::new(Zero)),
         }
     }
 }
@@ -61,6 +98,7 @@ impl Directory for DevFs {
     fn lookup(&self, name: &[u8]) -> Result<INode, Errno> {
         match name {
             b"null" => Ok(self.null.clone()),
+            b"zero" => Ok(self.zero.clone()),
             _ => Err(Errno::ENOENT),
         }
     }
