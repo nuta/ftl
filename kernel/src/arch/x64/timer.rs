@@ -1,4 +1,4 @@
-//! Programmable Interval Timer (PIT), aka i8253/i8254.
+//! Programmable Interval Timer (PIT), aka i8254.
 //!
 //! <https://wiki.osdev.org/Programmable_Interval_Timer>
 use core::arch::asm;
@@ -20,17 +20,17 @@ pub(super) const TIMER_IRQ: u8 = 0;
 const TIMER_HZ: u64 = 1000;
 
 const PIT_CH0_DATA: u16 = 0x40;
-const PIT_CH2_DATA: u16 = 0x42;
 const PIT_COMMAND: u16 = 0x43;
-const SPEAKER_PORT: u16 = 0x61;
-const SPEAKER_PIT: u8 = 1 << 0;
-const SPEAKER_DATA: u8 = 1 << 1;
+
+/// > Bit 7 indicates the state of the PIT channel's output pin
+/// > <https://wiki.osdev.org/Programmable_Interval_Timer#:~:text=below).-,Read%20Back%20Status%20Byte,-After>
+const PIT_STATUS_OUTPUT: u8 = 1 << 7;
 
 // A well-known fixed frequency.
 const PIT_HZ: u64 = 1_193_182;
 
 const DIVISOR: u16 = (PIT_HZ / TIMER_HZ) as u16;
-const TSC_CALIBRATION_DURATION: Duration = Duration::from_millis(10);
+const CALIBRATION_DURATION: Duration = Duration::from_millis(10);
 
 static TSC_HZ: AtomicU64 = AtomicU64::new(0);
 static UNIX_TIME_BASE_NS: AtomicU64 = AtomicU64::new(0);
@@ -50,36 +50,32 @@ fn read_tsc() -> u64 {
 }
 
 fn measure_tsc_frequency() {
-    let calibration_count = (PIT_HZ * TSC_CALIBRATION_DURATION.as_nanos() / 1_000_000_000) as u16;
-    let (start, end) = unsafe {
-        let value = in8(SPEAKER_PORT);
+    let calibration_ticks = (PIT_HZ * CALIBRATION_DURATION.as_nanos() / 1_000_000_000) as u16;
 
-        // Configure PIT in oneshot mode. Use the speaker channel to busy-wait
-        // for the timer to fire, not for frightening humans with beeping noise.
-        out8(SPEAKER_PORT, value & !(SPEAKER_PIT | SPEAKER_DATA));
-        out8(PIT_COMMAND, 0xb0); // oneshot mode
-        out8(PIT_CH2_DATA, calibration_count as u8);
-        out8(PIT_CH2_DATA, (calibration_count >> 8) as u8);
+    // Configure PIT in oneshot mode.
+    unsafe {
+        out8(PIT_COMMAND, 0x30); // oneshot mode
+        out8(PIT_CH0_DATA, calibration_ticks as u8);
+        out8(PIT_CH0_DATA, (calibration_ticks >> 8) as u8);
+    }
 
-        let start = read_tsc();
-
-        // Start the timer, and wait for it to fire.
-        out8(SPEAKER_PORT, (value & !SPEAKER_DATA) | SPEAKER_PIT);
-        while in8(SPEAKER_PORT) & (1 << 5) == 0 {
-            core::hint::spin_loop();
+    // Wait for the timer to complete...
+    let start = read_tsc();
+    loop {
+        unsafe {
+            out8(PIT_COMMAND, 0xe2); // read back the status
+            if in8(PIT_CH0_DATA) & PIT_STATUS_OUTPUT != 0 {
+                break;
+            }
         }
 
-        let end = read_tsc();
+        core::hint::spin_loop();
+    }
+    let end = read_tsc();
 
-        // Restore the original speaker port configuration.
-        out8(SPEAKER_PORT, value);
-        (start, end)
-    };
-
-    TSC_HZ.store(
-        (end - start) * PIT_HZ / calibration_count as u64,
-        Ordering::Relaxed,
-    );
+    let elapsed = end - start;
+    let tsc_hz = elapsed * PIT_HZ / calibration_ticks as u64;
+    TSC_HZ.store(tsc_hz, Ordering::Relaxed);
 }
 
 pub(super) fn handle_interrupt() {
