@@ -47,7 +47,7 @@ impl From<ErrorCode> for Errno {
             ErrorCode::InvalidState
             | ErrorCode::ThreadNotRunnable
             | ErrorCode::ThreadAlreadyStarted => Self::EBUSY,
-            ErrorCode::PageFault => Self::EFAULT,
+            ErrorCode::PageAbsent | ErrorCode::BadAccess => Self::EFAULT,
             ErrorCode::Unsupported => Self::ENOTSUP,
             ErrorCode::UnknownSyscall => Self::ENOSYS,
             ErrorCode::TooManyHandles => Self::EMFILE,

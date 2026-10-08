@@ -91,7 +91,7 @@ impl FileLike for URandom {
         _nonblocking: bool,
         _sleep: Sleep<'_>,
     ) -> Result<usize, Errno> {
-        ftl::random::read(buf)?;
+        crate::random::read(buf)?;
         Ok(buf.len())
     }
 

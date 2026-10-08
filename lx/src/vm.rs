@@ -13,6 +13,8 @@ use ftl_elf::PF_R;
 use ftl_elf::PF_W;
 use ftl_elf::PF_X;
 use ftl_elf::PhdrType;
+use ftl_types::error::ErrorCode;
+use ftl_types::thread::PageFaultInfo;
 use ftl_types::vmspace::PageAttrs;
 use ftl_utils::alignment::align_down;
 use ftl_utils::alignment::align_up;
@@ -73,6 +75,17 @@ struct Mapping {
     vmo: Arc<Vmo>,
     /// The offset in the VMO.
     offset: usize,
+    /// The backing file.
+    file: Option<BackingFile>,
+}
+
+#[derive(Clone)]
+struct BackingFile {
+    file: Arc<dyn FileLike>,
+    /// The start offset in the file.
+    offset: usize,
+    /// The end offset in the file.
+    offset_end: usize,
 }
 
 impl Mapping {
@@ -83,7 +96,32 @@ impl Mapping {
             attrs,
             vmo: Arc::new(vmo),
             offset: 0,
+            file: None,
         }
+    }
+
+    fn page_filler(&self, addr: usize) -> Option<PageFiller> {
+        let Some(backing_file) = &self.file else {
+            // Not a file-backed mapping (zeroed pages). We don't need to fill
+            // it, as kernel will do it automatically.
+            return None;
+        };
+
+        let mapping_offset = addr - self.start;
+        let vmo_offset = self.offset + mapping_offset;
+        let file_offset = backing_file.offset + mapping_offset;
+        let len = min(
+            PAGE_SIZE,
+            backing_file.offset_end.saturating_sub(file_offset),
+        );
+
+        Some(PageFiller {
+            vmo: self.vmo.clone(),
+            file: backing_file.file.clone(),
+            file_offset,
+            vmo_offset,
+            len,
+        })
     }
 
     fn end(&self) -> usize {
@@ -117,6 +155,16 @@ impl Mutable {
             return;
         };
 
+        let file = if let Some(file) = &left.file {
+            Some(BackingFile {
+                offset: file.offset + (addr - left.start),
+                offset_end: file.offset_end,
+                file: file.file.clone(),
+            })
+        } else {
+            None
+        };
+
         // New mapping.
         let right = Mapping {
             start: addr,
@@ -124,6 +172,7 @@ impl Mutable {
             attrs: left.attrs,
             vmo: left.vmo.clone(),
             offset: left.offset + (addr - left.start),
+            file,
         };
 
         // Shrink the range of the original mapping.
@@ -149,7 +198,7 @@ impl Vm {
         let vmspace = root_vmspace.try_clone()?;
 
         let mut mappings = Vec::new();
-        let elf = load_elf(&vmspace, elf_file.as_ref(), &mut mappings)?;
+        let elf = load_elf(&vmspace, &elf_file, &mut mappings)?;
 
         // Find the end of the program segments.
         // TODO: Can we guarantee that mappings is not empty?
@@ -266,6 +315,37 @@ impl Vm {
         Ok(())
     }
 
+    pub fn handle_page_fault(&self, addr: usize, info: PageFaultInfo) -> Result<(), Errno> {
+        if info.reason() != ErrorCode::PageAbsent {
+            return Err(Errno::EFAULT);
+        }
+
+        let mutable = self.mutable.lock();
+
+        // Find the mapping containing addr.
+        let mapping = mutable
+            .mappings
+            .iter()
+            .find(|m| m.start <= addr && addr < m.end())
+            .ok_or(Errno::EFAULT)?;
+
+        // Check if the access is allowed.
+        if !mapping.attrs.contains(info.access()) {
+            return Err(Errno::EFAULT);
+        }
+
+        let aligned_addr = align_down(addr, PAGE_SIZE);
+        let Some(filler) = mapping.page_filler(aligned_addr) else {
+            // The page fault occurred in an anonymous VMO, which means kernel
+            // failed to fill the page somehow. We can't resolve this case.
+            return Err(Errno::EFAULT);
+        };
+
+        drop(mutable);
+        filler.fill()?;
+        Ok(())
+    }
+
     /// Writes `buf` to the user memory at `addr`.
     ///
     /// This is useful when you want to write to another process's memory.
@@ -284,11 +364,26 @@ impl Vm {
             return Err(Errno::EFAULT);
         }
 
-        mapping
-            .vmo
-            .write(mapping.offset + (addr - mapping.start), buf)?;
-
-        Ok(())
+        let vmo_offset = mapping.offset + (addr - mapping.start);
+        loop {
+            match mapping.vmo.write(vmo_offset, buf) {
+                Ok(()) => {
+                    return Ok(());
+                }
+                Err(ErrorCode::PageAbsent) => {
+                    // Handle a page fault, and try again.
+                    let aligned_addr = align_down(addr, PAGE_SIZE);
+                    for page in (aligned_addr..end).step_by(PAGE_SIZE) {
+                        if let Some(filler) = mapping.page_filler(page) {
+                            filler.fill()?;
+                        }
+                    }
+                }
+                Err(error) => {
+                    return Err(error.into());
+                }
+            }
+        }
     }
 
     /// `brk(2)` system call.
@@ -355,31 +450,45 @@ impl Vm {
         let brk = mutable.brk;
         let mut mappings = Vec::with_capacity(mutable.mappings.len());
         for mapping in &mutable.mappings {
-            let vmo = Vmo::create(mapping.len)?;
-
-            // PROT_NONE mappings (e.g. guard pages) are not readable. Skip
-            // copying them.
-            //
-            // TODO: This means we can't support write then mprotect(PROT_NONE)
-            //       properly, but it should be very uncommon.
-            if mapping.attrs != PageAttrs::EMPTY {
-                // Fill the new VMO with the current data.
-                //
-                // TODO: Copy-on-write support.
-                let bytes =
-                    unsafe { core::slice::from_raw_parts(mapping.start as *const u8, mapping.len) };
-                vmo.write(0, bytes)?;
-            }
-
-            vmspace.map(&vmo, mapping.start, 0, mapping.len, mapping.attrs)?;
-            let new_mapping = Mapping::new(mapping.start, mapping.len, mapping.attrs, vmo);
-            mappings.push(new_mapping);
+            let new_vmo = mapping.vmo.snapshot(mapping.offset, mapping.len)?;
+            vmspace.map(&new_vmo, mapping.start, 0, mapping.len, mapping.attrs)?;
+            mappings.push(Mapping {
+                vmo: Arc::new(new_vmo),
+                offset: 0,
+                ..mapping.clone()
+            });
         }
 
         Ok(Self {
             vmspace,
             mutable: SpinLock::new(Mutable { mappings, brk }),
         })
+    }
+}
+
+/// An owned file-to-vmo transfer.
+///
+/// This struct extracts things from mappings that we need to read and fill a
+/// file-backed mapping, so that we don't need to hold the Vm lock.
+struct PageFiller {
+    vmo: Arc<Vmo>,
+    file: Arc<dyn FileLike>,
+    file_offset: usize,
+    vmo_offset: usize,
+    len: usize,
+}
+
+impl PageFiller {
+    pub fn fill(self) -> Result<(), Errno> {
+        // Read the page from the file.
+        // TODO: Zero-filling the vec is not necessary.
+        // TODO: Eliminate this memory copy.
+        let mut buf = vec![0u8; PAGE_SIZE];
+        read_exact(self.file.as_ref(), self.file_offset, &mut buf[..self.len])?;
+
+        // Fill the page with the file data.
+        self.vmo.supply(self.vmo_offset, &buf)?;
+        Ok(())
     }
 }
 
@@ -475,17 +584,18 @@ struct LoadedElf {
 
 fn load_elf(
     vmspace: &VmSpace,
-    elf_file: &dyn FileLike,
+    elf_file: &Arc<dyn FileLike>,
     mappings: &mut Vec<Mapping>,
 ) -> Result<LoadedElf, Errno> {
     let mut ehdr = MaybeUninit::<ftl_elf::Ehdr>::uninit();
-    let ehdr = read_uninit(elf_file, 0, &mut ehdr)?;
+    let ehdr = read_uninit(elf_file.as_ref(), 0, &mut ehdr)?;
 
     let phdrs_end = ehdr.e_phoff as usize + ehdr.e_phnum as usize * size_of::<ftl_elf::Phdr>();
     let mut header_region = vec![0u8; phdrs_end]; // TODO: Use MaybeUninit
-    read_exact(elf_file, 0, &mut header_region)?;
+    read_exact(elf_file.as_ref(), 0, &mut header_region)?;
 
     let elf = Elf::parse(&header_region, ftl_elf::ET_EXEC).map_err(|_| Errno::ENOEXEC)?;
+    let file_size = elf_file.size().map_err(|_| Errno::ENOEXEC)?;
     let mut phdr_vaddr = 0;
     for phdr in elf.phdrs {
         if phdr.p_type == PhdrType::Phdr as u32 {
@@ -500,24 +610,49 @@ fn load_elf(
         let region_base = align_down(vaddr, PAGE_SIZE);
         let page_offset = vaddr - region_base;
         let region_len = align_up(page_offset + phdr.p_memsz as usize, PAGE_SIZE);
-        let vmo = Vmo::create(region_len)?;
+        let file_len = align_up(page_offset + phdr.p_filesz as usize, PAGE_SIZE);
 
-        let filesz = phdr.p_filesz as usize;
-        let mut buf = [0u8; PAGE_SIZE];
-        let mut offset = 0;
-        while offset < filesz {
-            let len = min(buf.len(), filesz - offset);
-            let chunk = &mut buf[..len];
-            // FIXME: do not copy twice
-            read_exact(elf_file, phdr.p_offset as usize + offset, chunk)?;
-            vmo.write(page_offset + offset, chunk)?;
-            offset += len;
+        // Calculate the offset in the file. Subtract page_offset since the
+        // mapping starts at a page boundary (region_base), not p_vaddr.
+        let file_offset = (phdr.p_offset as usize)
+            .checked_sub(page_offset)
+            .ok_or(Errno::ENOEXEC)?;
+
+        let Some(file_offset_end) = (phdr.p_offset as usize).checked_add(phdr.p_filesz as usize)
+        else {
+            return Err(Errno::ENOEXEC);
+        };
+
+        if file_offset_end > file_size {
+            return Err(Errno::ENOEXEC);
+        }
+
+        if phdr.p_filesz > phdr.p_memsz {
+            return Err(Errno::ENOEXEC);
         }
 
         let attrs = attrs_from_phdr(phdr);
-        vmspace.map(&vmo, region_base, 0, region_len, attrs)?;
-        let mapping = Mapping::new(region_base, region_len, attrs, vmo);
-        mappings.push(mapping);
+        if file_len > 0 {
+            let vmo = Vmo::create_user(file_len)?;
+            vmspace.map(&vmo, region_base, 0, file_len, attrs)?;
+            let mut mapping = Mapping::new(region_base, file_len, attrs, vmo);
+            mapping.file = Some(BackingFile {
+                file: elf_file.clone(),
+                offset: file_offset,
+                offset_end: file_offset_end,
+            });
+            mappings.push(mapping);
+        }
+
+        if region_len > file_len {
+            // If p_memsz > p_filesz, allocate an anonymous VMO to provide
+            // zero-filled pages by kernel, not via user page faults.
+            let start = region_base + file_len;
+            let size = region_len - file_len;
+            let vmo = Vmo::create(size)?;
+            vmspace.map(&vmo, start, 0, size, attrs)?;
+            mappings.push(Mapping::new(start, size, attrs, vmo));
+        }
     }
 
     Ok(LoadedElf {
@@ -581,4 +716,25 @@ fn prepare_stack(
     let bytes = unsafe { slice::from_raw_parts(words.as_ptr().cast(), len) };
     stack.write(sp_offset, bytes)?;
     Ok(sp_bottom + sp_offset)
+}
+
+/// Reads a byte in each page of the buffer to trigger page faults, to handle
+/// page faults proactively.
+///
+/// Call this when a system call fails with `ErrorCode::PageAbsent`. Kernel
+/// returns it when memory access fails due to absent pages, not bad access like
+/// writes to read-only pages.
+pub fn trigger_proactive_page_faults(buf: &[u8]) {
+    let range = buf.as_ptr_range();
+    let end = range.end as usize;
+    let mut addr = range.start as usize;
+
+    // Read a byte in each page.
+    while addr < end {
+        // SAFETY: addr is in the buffer.
+        unsafe { (addr as *const u8).read_volatile() };
+
+        // Move to the beginning of the next page.
+        addr = align_down(addr, PAGE_SIZE) + PAGE_SIZE;
+    }
 }

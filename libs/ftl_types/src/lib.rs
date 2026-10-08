@@ -7,4 +7,5 @@ pub mod poll;
 pub mod syscall;
 pub mod thread;
 pub mod time;
+pub mod vmo;
 pub mod vmspace;

@@ -12,7 +12,7 @@ pub enum ErrorCode {
     InvalidState = -5,
     InvalidType = -6,
     OutOfBounds = -7,
-    PageFault = -8,
+    PageAbsent = -8,
     Unsupported = -9,
     TooManyHandles = -10,
     NoRoute = -11,

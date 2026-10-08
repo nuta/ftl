@@ -4,6 +4,7 @@ use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use ftl_types::handle::HandleRight;
 use ftl_types::thread::SyscallRegs;
+use ftl_types::vmo::SupplyMode;
 use ftl_utils::alignment::is_aligned;
 use ftl_utils::fxhash::FxHashMap;
 use ftl_utils::reserve_slot::ReserveSlot;
@@ -31,9 +32,21 @@ struct Page {
 }
 
 impl Page {
-    fn allocate() -> Result<SharedRef<Self>, ErrorCode> {
+    /// Allocates a zero-filled page.
+    fn allocate_zeroed() -> Result<SharedRef<Self>, ErrorCode> {
+        Self::allocate_with(PageType::Zeroed)
+    }
+
+    /// Allocates a page without zeroing it.
+    ///
+    /// The caller must initialize the page before mapping it.
+    fn allocate_dirty() -> Result<SharedRef<Self>, ErrorCode> {
+        Self::allocate_with(PageType::Dirty)
+    }
+
+    fn allocate_with(page_type: PageType) -> Result<SharedRef<Self>, ErrorCode> {
         let paddr = PAGE_ALLOCATOR
-            .alloc(MIN_PAGE_SIZE, PageType::Zeroed)
+            .alloc(MIN_PAGE_SIZE, page_type)
             .ok_or(ErrorCode::OutOfMemory)?;
 
         SharedRef::new(Self { paddr })
@@ -52,9 +65,16 @@ struct Mutable {
 }
 
 impl Mutable {
+    /// Returns the page at the given index. Returns `None` if the page is not present.
+    fn get(&mut self, index: usize) -> Option<SharedRef<Page>> {
+        self.pages.get(&index).cloned()
+    }
+
+    /// Returns the page at the given index. If the page is not present, it
+    /// is allocated on demand.
     fn get_or_fill(&mut self, index: usize) -> Result<SharedRef<Page>, ErrorCode> {
-        if let Some(page) = self.pages.get(&index) {
-            return Ok(page.clone());
+        if let Some(page) = self.get(index) {
+            return Ok(page);
         }
 
         // Allocate the slot.
@@ -64,26 +84,42 @@ impl Mutable {
             .map_err(|_| ErrorCode::OutOfMemory)?;
 
         // Allocate a page and insert it into the slot.
-        let page = Page::allocate()?;
+        let page = Page::allocate_zeroed()?;
         slot.insert(index, page.clone());
         Ok(page)
     }
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Source {
+    Zeroed,
+    User,
+}
+
 /// A virtually-contiguous memory region.
 pub struct VmObject {
+    source: Source,
     mutable: SpinLock<Mutable>,
     len: usize,
 }
 
 impl VmObject {
     pub fn new_anonymous(len: usize) -> Result<SharedRef<Self>, ErrorCode> {
+        Self::new(len, Source::Zeroed)
+    }
+
+    pub fn new_user(len: usize) -> Result<SharedRef<Self>, ErrorCode> {
+        Self::new(len, Source::User)
+    }
+
+    fn new(len: usize, source: Source) -> Result<SharedRef<Self>, ErrorCode> {
         if len == 0 || !is_aligned(len, MIN_PAGE_SIZE) {
             return Err(ErrorCode::NotAligned);
         }
 
         SharedRef::new(Self {
             len,
+            source,
             mutable: SpinLock::new(Mutable {
                 pages: FxHashMap::new(),
             }),
@@ -94,14 +130,137 @@ impl VmObject {
         self.len
     }
 
+    fn get_page(&self, index: usize) -> Result<SharedRef<Page>, ErrorCode> {
+        let mut mutable = self.mutable.lock();
+        match self.source {
+            Source::Zeroed => mutable.get_or_fill(index),
+            // User VMOs are filled by the user explicitly. If the page
+            // is not present, just return an error.
+            Source::User => mutable.get(index).ok_or(ErrorCode::PageAbsent),
+        }
+    }
+
     pub fn ensure_page(&self, index: usize) -> Result<PAddr, ErrorCode> {
         if index >= self.len / MIN_PAGE_SIZE {
             return Err(ErrorCode::OutOfBounds);
         }
 
-        let mut mutable = self.mutable.lock();
-        let page = mutable.get_or_fill(index)?;
+        let page = self.get_page(index)?;
         Ok(page.paddr)
+    }
+
+    /// Fill pages in a user-paged VMO.
+    pub fn supply(&self, mode: SupplyMode, offset: usize, uslice: USlice) -> Result<(), ErrorCode> {
+        if self.source != Source::User {
+            return Err(ErrorCode::Unsupported);
+        }
+
+        if !is_aligned(offset, MIN_PAGE_SIZE) || !is_aligned(uslice.len(), MIN_PAGE_SIZE) {
+            return Err(ErrorCode::NotAligned);
+        }
+
+        let end = offset
+            .checked_add(uslice.len())
+            .ok_or(ErrorCode::OutOfBounds)?;
+
+        if end > self.len {
+            return Err(ErrorCode::OutOfBounds);
+        }
+
+        // Fill each page, starting at the offset, from the user slice.
+        let mut off = 0;
+        while off < uslice.len() {
+            let index = (offset + off) / MIN_PAGE_SIZE;
+
+            // Skip present pages.
+            if self.mutable.lock().pages.contains_key(&index) {
+                off += MIN_PAGE_SIZE;
+                continue;
+            }
+
+            let page = match mode {
+                SupplyMode::Copy => {
+                    // Copy the buffer to a new page.
+                    // TODO: Copy-on-write to share the same physical page.
+                    let page = Page::allocate_dirty()?;
+                    let src = uslice.subslice(off, MIN_PAGE_SIZE)?;
+                    let page_slice = PageSlice::new(page.clone(), 0, MIN_PAGE_SIZE)?;
+                    page_slice.read_user(src)?;
+                    page
+                }
+            };
+
+            // Register the page into the VMO.
+            //
+            // When the userspace page fault handler resumes the page-faulted
+            // thread, it will trigger another page fault on this VMO, kernel
+            // finds this new page, and resolves it.
+            let mut mutable = self.mutable.lock();
+            if !mutable.pages.contains_key(&index) {
+                mutable
+                    .pages
+                    .reserve_slot()
+                    .map_err(|_| ErrorCode::OutOfMemory)?
+                    .insert(index, page);
+            }
+
+            off += MIN_PAGE_SIZE;
+        }
+
+        Ok(())
+    }
+
+    /// Copies present pages in the range into a new VMO.
+    ///
+    /// This method copies from `offset` to `offset + len` , and the newly
+    /// created VMO will be `len` bytes long.
+    pub fn snapshot(&self, offset: usize, len: usize) -> Result<SharedRef<Self>, ErrorCode> {
+        if !is_aligned(offset, MIN_PAGE_SIZE) || !is_aligned(len, MIN_PAGE_SIZE) {
+            return Err(ErrorCode::NotAligned);
+        }
+
+        let end = offset.checked_add(len).ok_or(ErrorCode::OutOfBounds)?;
+        if end > self.len {
+            return Err(ErrorCode::OutOfBounds);
+        }
+
+        // Allocate a new VMO.
+        let new_vmo = Self::new(len, self.source)?;
+
+        // Copy each present page in the range.
+        // FIXME: If VMO is large, this could block the kernel for a long time.
+        let mut new_mutable = new_vmo.mutable.lock();
+        let mutable = self.mutable.lock();
+        let start_index = offset / MIN_PAGE_SIZE;
+        let end_index = end / MIN_PAGE_SIZE;
+        for (index, page) in mutable.pages.iter() {
+            if !(start_index..end_index).contains(index) {
+                // TODO: Use BTreeMap?
+                continue;
+            }
+
+            // Allocate the slot in the new VMO.
+            let slot = new_mutable
+                .pages
+                .reserve_slot()
+                .map_err(|_| ErrorCode::OutOfMemory)?;
+
+            // Copy the page.
+            // TODO: Copy-on-write to share the same physical page.
+            let new_page = Page::allocate_dirty()?;
+            let src: *const u8 = arch::paddr2vaddr(page.paddr).as_ptr();
+            let dst: *mut u8 = arch::paddr2vaddr(new_page.paddr).as_mut_ptr();
+
+            // SAFETY: We still have references to the pages, so they won't be
+            //         freed while copying.
+            unsafe { core::ptr::copy_nonoverlapping(src, dst, MIN_PAGE_SIZE) };
+
+            // Insert the new page into the new VMO.
+            slot.insert(index - start_index, new_page);
+        }
+
+        drop(new_mutable);
+        Ok(new_vmo)
     }
 
     pub fn read_user(&self, offset: usize, uslice: USlice) -> Result<(), ErrorCode> {
@@ -159,15 +318,13 @@ impl VmObject {
             let page_offset = vmo_offset % MIN_PAGE_SIZE;
             let len = min(remaining, MIN_PAGE_SIZE - page_offset);
 
-            let page = {
-                // Release the VMO lock before calling the callback. When the
-                // callback accesses an unmapped user page, it may cause a page
-                // fault on this VMO, causing a dead lock.
-                let mut mutable = self.mutable.lock();
-                mutable.get_or_fill(page_index)?
-            };
-
+            let page = self.get_page(page_index)?;
             let page_slice = PageSlice::new(page, page_offset, len)?;
+
+            // Note: Do not hold the VMO lock before calling the callback.
+            //
+            // When the callback accesses an unmapped user page, it may cause
+            // a page fault on this VMO, causing a dead lock.
             f(page_slice)?;
 
             vmo_offset += len;
@@ -251,6 +408,19 @@ pub fn sys_vmo_create(
     Ok(SyscallOutput::Done(id.as_usize()))
 }
 
+pub fn sys_vmo_create_user(
+    current: &SharedRef<Thread>,
+    ctx: &SyscallRegs,
+) -> Result<SyscallOutput, ErrorCode> {
+    let len = ctx.a0;
+
+    let vmo = VmObject::new_user(len)?;
+    let rights = HandleRight::READ | HandleRight::WRITE;
+    let handle = Handle::new(vmo, rights);
+    let id = current.hspace().insert(handle)?;
+    Ok(SyscallOutput::Done(id.as_usize()))
+}
+
 pub fn sys_vmo_read(
     current: &SharedRef<Thread>,
     ctx: &SyscallRegs,
@@ -281,4 +451,39 @@ pub fn sys_vmo_write(
 
     vmo.write_user(offset, uslice)?;
     Ok(SyscallOutput::Done(len))
+}
+
+pub fn sys_vmo_supply(
+    current: &SharedRef<Thread>,
+    ctx: &SyscallRegs,
+) -> Result<SyscallOutput, ErrorCode> {
+    let id = HandleId::new(ctx.a0);
+    let offset = ctx.a1;
+    let mode = SupplyMode::from_usize(ctx.a2).ok_or(ErrorCode::InvalidArg)?;
+    let uaddr = UAddr::new(ctx.a3);
+    let len = min(ctx.a4, MAX_COPY_LEN);
+
+    let uslice = USlice::new(uaddr, len)?;
+    let vmo = current.hspace().get::<VmObject>(id, HandleRight::WRITE)?;
+
+    vmo.supply(mode, offset, uslice)?;
+    Ok(SyscallOutput::Done(len))
+}
+
+pub fn sys_vmo_snapshot(
+    current: &SharedRef<Thread>,
+    ctx: &SyscallRegs,
+) -> Result<SyscallOutput, ErrorCode> {
+    let id = HandleId::new(ctx.a0);
+    let offset = ctx.a1;
+    let len = ctx.a2;
+
+    let hspace = current.hspace();
+    let vmo = hspace.get::<VmObject>(id, HandleRight::READ)?;
+
+    let new_vmo = vmo.snapshot(offset, len)?;
+    let rights = HandleRight::READ | HandleRight::WRITE;
+    let handle = Handle::new(new_vmo, rights);
+    let id = hspace.insert(handle)?;
+    Ok(SyscallOutput::Done(id.as_usize()))
 }

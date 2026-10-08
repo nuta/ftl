@@ -31,12 +31,15 @@ pub enum Syscall {
     MonoTimeRead = 28,
     WallTimeRead = 29,
     RandomRead = 30,
+    VmoCreateUser = 31,
+    VmoSupply = 32,
+    VmoSnapshot = 33,
     // Note: Do not forget to update Syscall::END when adding a new syscall.
 }
 
 impl Syscall {
     pub const BASE: usize = usize::MAX - 0x1000;
-    const END: usize = Self::BASE + Self::RandomRead as usize;
+    const END: usize = Self::BASE + Self::VmoSnapshot as usize;
 
     pub const fn as_usize(self) -> usize {
         Self::BASE + self as usize

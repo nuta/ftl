@@ -17,7 +17,7 @@ pub unsafe fn usercopy_read(src: UAddr, dst: *mut u8, len: usize) -> Result<(), 
         asm!(
             // RAX remains zero if rep movsb goes well. If it causes a page
             // fault, the interrupt handler jumps back to usercopy0_recover,
-            // with RAX == 1.
+            // with an ErrorCode in RAX.
             "xor eax, eax",
             "stac", // Enable user page access.
             ".global usercopy0; .set usercopy0, 2f; 2:",
@@ -33,7 +33,7 @@ pub unsafe fn usercopy_read(src: UAddr, dst: *mut u8, len: usize) -> Result<(), 
     }
 
     if retval != 0 {
-        return Err(ErrorCode::PageFault);
+        return Err(ErrorCode::from_usize(retval));
     }
 
     Ok(())
@@ -65,7 +65,7 @@ pub unsafe fn usercopy_write(src: *const u8, dst: UAddr, len: usize) -> Result<(
     }
 
     if retval != 0 {
-        return Err(ErrorCode::PageFault);
+        return Err(ErrorCode::from_usize(retval));
     }
 
     Ok(())

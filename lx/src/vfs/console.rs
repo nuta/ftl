@@ -104,11 +104,20 @@ impl FileLike for Console {
         let mut n = 0;
         while n < buf.len() {
             match ftl::console::write(&buf[n..]) {
+                Ok(0) => {
+                    // The device is full.
+                    break;
+                }
                 Ok(written) => {
                     n += written;
                 }
+                Err(ErrorCode::PageAbsent) => {
+                    crate::vm::trigger_proactive_page_faults(&buf[n..]);
+                }
+                Err(error) if n == 0 => return Err(error.into()),
                 Err(_) => {
-                    // TODO: Handle error.
+                    // The write failed, but some bytes were written
+                    // successfully in previous writes. Report it.
                     break;
                 }
             }

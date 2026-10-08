@@ -24,6 +24,6 @@ pub fn sys_getrandom(
 
     // TODO: support flags.
     let bytes = unsafe { slice::from_raw_parts_mut(buf.cast::<u8>(), size) };
-    ftl::random::read(bytes)?;
+    crate::random::read(bytes)?;
     Ok(SyscallResult::Done(size as c_long))
 }

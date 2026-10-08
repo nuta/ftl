@@ -3,6 +3,7 @@ use alloc::vec::Vec;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use ftl_types::handle::HandleRight;
+use ftl_types::thread::PageFaultInfo;
 use ftl_types::thread::SyscallRegs;
 use ftl_types::vmspace::PageAttrs;
 use ftl_utils::alignment::align_down;
@@ -219,13 +220,13 @@ impl VmSpace {
     pub fn handle_page_fault(
         &self,
         fault_addr: UAddr,
-        fault_attrs: PageAttrs,
+        info: PageFaultInfo,
     ) -> Result<(), ErrorCode> {
         let aligned_uaddr = UAddr::new(align_down(fault_addr.as_usize(), MIN_PAGE_SIZE));
         let mutable = self.mutable.lock();
         for mapping in &mutable.mappings {
             if mapping.contains(aligned_uaddr) {
-                if !mapping.attrs.contains(fault_attrs) {
+                if !mapping.attrs.contains(info.access()) {
                     // The page fault was caused by an invalid access.
                     return Err(ErrorCode::BadAccess);
                 }
@@ -240,7 +241,7 @@ impl VmSpace {
             }
         }
 
-        Err(ErrorCode::OutOfBounds)
+        Err(ErrorCode::BadAccess)
     }
 }
 

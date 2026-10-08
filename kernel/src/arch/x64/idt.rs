@@ -6,6 +6,7 @@ use core::mem::offset_of;
 use ftl_types::error::ErrorCode;
 use ftl_types::thread::Fault;
 use ftl_types::thread::FaultFrame;
+use ftl_types::thread::PageFaultInfo;
 use ftl_types::vmspace::PageAttrs;
 use ftl_utils::spinlock::SpinLock;
 
@@ -354,30 +355,34 @@ const PF_WRITE: u64 = 1 << 1;
 const PF_EXEC: u64 = 1 << 4;
 const RFLAGS_AC: u64 = 1 << 18;
 
+fn page_fault_info(error_code: u64) -> PageFaultInfo {
+    if error_code & PF_EXEC != 0 {
+        PageFaultInfo::new(PageAttrs::EXEC)
+    } else if error_code & PF_WRITE != 0 {
+        PageFaultInfo::new(PageAttrs::WRITE)
+    } else {
+        PageFaultInfo::new(PageAttrs::READ)
+    }
+}
+
 fn handle_user_page_fault(cr2: u64, error_code: u64) -> Result<(), ErrorCode> {
     if error_code & PF_PRESENT != 0 {
-        return Err(ErrorCode::NotAllowed);
+        return Err(ErrorCode::BadAccess);
     }
 
     if (cr2 as usize) >= USER_ADDR_END {
-        return Err(ErrorCode::OutOfBounds);
+        return Err(ErrorCode::BadAccess);
     }
 
     // Determine where and why the page fault happened.
     let fault_addr = UAddr::new(cr2 as usize);
-    let fault_attrs = if error_code & PF_EXEC != 0 {
-        PageAttrs::EXEC
-    } else if error_code & PF_WRITE != 0 {
-        PageAttrs::WRITE
-    } else {
-        PageAttrs::READ
-    };
+    let fault_info = page_fault_info(error_code);
 
     let Some(thread) = get_cpuvar().current_thread.thread() else {
         return Err(ErrorCode::InvalidState);
     };
 
-    thread.vmspace().handle_page_fault(fault_addr, fault_attrs)
+    thread.vmspace().handle_page_fault(fault_addr, fault_info)
 }
 
 fn handle_external_interrupt(vector: u8) {
@@ -411,16 +416,19 @@ extern "C" fn handle_kernel_interrupt(frame: &mut InterruptFrame) {
                     );
                 }
 
-                if frame.error_code & PF_PRESENT == 0 {
+                let error = if frame.error_code & PF_PRESENT == 0 {
                     // The page is not present. Handle it as a user page fault,
                     // and retry the usercopy if it succeeds.
-                    if handle_user_page_fault(read_cr2(), frame.error_code).is_ok() {
-                        return;
+                    match handle_user_page_fault(read_cr2(), frame.error_code) {
+                        Ok(()) => return,
+                        Err(err) => err,
                     }
-                }
+                } else {
+                    ErrorCode::BadAccess
+                };
 
                 frame.rip = recover_rip;
-                frame.rax = 1;
+                frame.rax = error.as_usize() as u64;
                 return;
             }
 
@@ -490,8 +498,8 @@ extern "C" fn handle_user_interrupt(vector: u8, error_code: u64) -> ! {
             let cr2 = read_cr2();
             // Try resolving the page fault in the kernel, such as lazy page allocation.
             if let Err(err) = handle_user_page_fault(cr2, error_code) {
-                trace!("user fault (#PF): error={err:?}, CR2={cr2:#x}, x64_error={error_code:#x}");
-                raise_user_fault(Fault::PageFault, cr2 as usize, error_code as usize);
+                let info = page_fault_info(error_code).with_reason(err);
+                raise_user_fault(Fault::PageFault, cr2 as usize, info.into_raw());
             }
         }
         vector if vector >= IRQ_VECTOR_BASE => handle_external_interrupt(vector),
