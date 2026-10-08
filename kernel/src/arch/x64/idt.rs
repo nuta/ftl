@@ -26,6 +26,7 @@ use crate::address::UAddr;
 use crate::address::USlice;
 use crate::address::VAddr;
 use crate::cpuvar::CpuVar;
+use crate::scheduler::Resched;
 
 #[derive(Debug, Clone, Copy)]
 #[repr(C, packed)]
@@ -378,10 +379,7 @@ fn handle_user_page_fault(cr2: u64, error_code: u64) -> Result<(), ErrorCode> {
     let fault_addr = UAddr::new(cr2 as usize);
     let fault_info = page_fault_info(error_code);
 
-    let Some(thread) = get_cpuvar().current_thread.thread() else {
-        return Err(ErrorCode::InvalidState);
-    };
-
+    let thread = get_cpuvar().current_thread.thread();
     thread.vmspace().handle_page_fault(fault_addr, fault_info)
 }
 
@@ -479,12 +477,7 @@ fn do_raise_user_fault(
 }
 
 fn raise_user_fault(fault: Fault, addr: usize, info: usize) {
-    let Some(thread) = get_cpuvar().current_thread.thread() else {
-        // TODO: Can we make non-optional?
-        trace!("can't jump to fault PC: no current thread");
-        return;
-    };
-
+    let thread = get_cpuvar().current_thread.thread();
     let arch = unsafe { &mut *thread.arch().get() };
     if let Err(err) = do_raise_user_fault(arch, fault, addr, info) {
         trace!("failed to write a fault frame: {err:?}");
@@ -526,7 +519,7 @@ extern "C" fn handle_user_interrupt(vector: u8, error_code: u64) -> ! {
         }
     }
 
-    crate::scheduler::return_to_user();
+    crate::scheduler::return_to_user(Resched::Preempt);
 }
 
 pub(super) fn init() {

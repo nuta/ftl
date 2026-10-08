@@ -3,6 +3,7 @@ use ftl_types::syscall::Syscall;
 
 use crate::arch::get_cpuvar;
 use crate::scheduler;
+use crate::scheduler::Resched;
 
 pub enum SyscallOutput {
     Done(usize),
@@ -10,11 +11,18 @@ pub enum SyscallOutput {
     Exited,
 }
 
-fn do_handle_syscall() {
+fn do_handle_syscall() -> Resched {
     let cpuvar = get_cpuvar();
-    let thread = cpuvar.current_thread.thread().unwrap();
-    // TODO: safety
+
+    // SAFETY: We're in a thread context, and context switch doesn't happen
+    //         until this function returns. `thread` is referenced in this
+    //         function only.
+    let thread = unsafe { cpuvar.current_thread.borrow() };
+
+    // SAFETY: The current thread is alive in this function because context
+    //         switch doesn't happen here.
     let arch_thread = unsafe { &mut *thread.arch().get() };
+
     let regs = arch_thread.get_syscall_regs();
     let retval = match Syscall::from_usize(regs.n) {
         Some(Syscall::ThreadExit) => crate::thread::sys_thread_exit(&thread, &regs),
@@ -64,18 +72,18 @@ fn do_handle_syscall() {
             error!("syscall {} returned too large value: {:#x}", regs.n, retval);
             ErrorCode::OutOfBounds.as_usize()
         }
-        Ok(SyscallOutput::Blocked) => return,
         Ok(SyscallOutput::Done(retval)) => retval,
-        Ok(SyscallOutput::Exited) => return,
+        Ok(SyscallOutput::Blocked | SyscallOutput::Exited) => return Resched::Block,
         Err(err) => err.as_usize(),
     };
 
     arch_thread.set_syscall_retval(retval);
+    Resched::Preempt
 }
 
 pub extern "C" fn handle_syscall() -> ! {
     // `return_to_user` won't return. To make sure all objects are dropped,
     // do not add any more logic to this function.
-    do_handle_syscall();
-    scheduler::return_to_user();
+    let resched = do_handle_syscall();
+    scheduler::return_to_user(resched);
 }

@@ -432,31 +432,35 @@ impl CurrentThread {
         }
     }
 
-    /// Clears the current thread.
-    pub fn clear(&self) {
-        let old_ptr = unsafe { self.ptr.replace(core::ptr::null()) };
+    pub fn thread(&self) -> SharedRef<Thread> {
+        let ptr = unsafe { *self.ptr.get() };
+        assert!(!ptr.is_null());
 
-        // Release the ref count of the previous thread.
-        if !old_ptr.is_null() {
-            drop(unsafe { SharedRef::from_raw(old_ptr) });
-        }
-    }
-
-    /// Returns the current thread.
-    pub fn thread(&self) -> Option<SharedRef<Thread>> {
         unsafe {
-            let ptr = *self.ptr.get();
-            if ptr.is_null() {
-                return None;
-            }
-
             // Create and clone a temporary ref to increment the reference count.
             let temp = SharedRef::from_raw(ptr);
             let cloned = temp.clone();
             core::mem::forget(temp);
 
-            Some(cloned)
+            cloned
         }
+    }
+
+    /// Returns a reference to the current thread, without modifying the
+    /// reference counter for performance.
+    ///
+    /// # Safety
+    ///
+    /// - The CPU is in a thread context, after the first `return_to_user`
+    ///   call.
+    /// - The caller must not switch the current thread while referencing
+    ///   the return value.
+    pub unsafe fn borrow(&self) -> ManuallyDrop<SharedRef<Thread>> {
+        let ptr = unsafe { *self.ptr.get() };
+        debug_assert!(!ptr.is_null());
+
+        // SAFETY: The pointer was returned by SharedRef::into_raw.
+        ManuallyDrop::new(unsafe { SharedRef::from_raw(ptr) })
     }
 
     /// Returns the pointer to the arch-specific thread struct.
@@ -482,6 +486,7 @@ impl CurrentThread {
 
         // Decrement the ref count of the current thread.
         if !old_ptr.is_null() {
+            // SAFETY: The pointer was returned by SharedRef::into_raw.
             drop(unsafe { SharedRef::from_raw(old_ptr) });
         }
     }

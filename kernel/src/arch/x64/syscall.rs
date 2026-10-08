@@ -17,16 +17,13 @@ use super::thread::XSTATE_MASK;
 use super::vmspace::USER_ADDR_END;
 use crate::cpuvar::CpuVar;
 use crate::scheduler;
+use crate::scheduler::Resched;
 
 pub(super) const USER_RFLAGS: u64 = 0x202;
 pub(super) const RED_ZONE_SIZE: usize = 128;
 
 pub(super) fn try_exit_current() {
-    let cpuvar = super::get_cpuvar();
-    let Some(thread) = cpuvar.current_thread.thread() else {
-        return;
-    };
-
+    let thread = super::get_cpuvar().current_thread.thread();
     if let Err(e) = thread.exit() {
         warn!("failed to terminate thread: {:?}", e);
         return;
@@ -35,7 +32,7 @@ pub(super) fn try_exit_current() {
 
 extern "C" fn do_syscall_copy_recover() -> ! {
     try_exit_current();
-    scheduler::return_to_user()
+    scheduler::return_to_user(Resched::Preempt)
 }
 
 #[unsafe(naked)]

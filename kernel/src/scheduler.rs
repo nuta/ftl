@@ -71,34 +71,42 @@ impl Scheduler {
     }
 }
 
+/// Why context switching (`return_to_user`) happens.
+pub enum Resched {
+    /// The current thread can continue running, but the kernel decided to
+    /// preempt and schedule a new thread to run.
+    Preempt,
+    /// The current thread is now blocked.
+    Block,
+}
+
 /// Schedules a new thread to run, leave the kernel, and jumps to it.
 ///
 /// The kernel will be resumed when an exception or interrupt occurs.
 ///
 /// Unlike traditional operating systems, this function never returns because of
 /// the single kernel stack design.
-pub fn return_to_user() -> ! {
+pub fn return_to_user(resched: Resched) -> ! {
     let cpuvar = arch::get_cpuvar();
     let current = &cpuvar.current_thread;
 
-    if let Some(current) = current.thread()
-        && current.is_runnable()
-    {
-        // The current thread is runnable. Push it back to the scheduler.
-        SCHEDULER.push_back(current);
+    // Requeue the current thread to the runqueue if it is runnable.
+    if matches!(resched, Resched::Preempt) {
+        let thread = current.thread();
+        // The thread might have been terminated by a different CPU. Check
+        // the latest state.
+        if thread.is_runnable() {
+            // The current thread is runnable. Push it back to the scheduler.
+            SCHEDULER.push_back(thread);
+        }
     }
 
     loop {
         // Find the next thread to switch to.
         let next = loop {
             let Some(thread) = SCHEDULER.pop() else {
-                // Clear the current thread. Otherwise, the interrupt handler would
-                // overwrite the user's system call context (registers) with the idle
-                // thread's context.
-                arch::vmspace_switch_to_kernel();
-                current.clear();
-
                 // No threads to run. Enter the idle loop.
+                arch::vmspace_switch_to_kernel();
                 arch::idle();
                 continue;
             };
@@ -118,9 +126,7 @@ pub fn return_to_user() -> ! {
 
         // Failed to enter the thread due to its invalid state. Terminate it.
         trace!("failed to enter a thread, terminating it: {:?}", err);
-        if let Some(thread) = current.thread()
-            && let Err(err) = thread.exit()
-        {
+        if let Err(err) = current.thread().exit() {
             trace!("failed to exit the thread: {:?}", err);
         }
     }

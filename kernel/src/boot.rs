@@ -5,6 +5,7 @@ use ftl_arrayvec::ArrayVec;
 
 use crate::address::PAddr;
 use crate::arch;
+use crate::scheduler::Resched;
 
 pub struct FreeRam {
     pub addr: PAddr,
@@ -42,5 +43,5 @@ pub fn boot(mut bootinfo: BootInfo) -> ! {
     crate::driver::init(bootinfo.cmdline);
     crate::loader::load(&bootinfo);
     trace!("kernel is ready");
-    crate::scheduler::return_to_user();
+    crate::scheduler::return_to_user(Resched::Block);
 }
