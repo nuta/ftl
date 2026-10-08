@@ -24,6 +24,7 @@ rustc-hash = { version = "2.1", default-features = false }
 
 [profile.dev]
 panic = "abort"
+opt-level = 1
 
 [profile.release]
 panic = "abort"
