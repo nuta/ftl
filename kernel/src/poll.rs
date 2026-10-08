@@ -20,7 +20,6 @@ use crate::handle::Handleable;
 use crate::scheduler::SCHEDULER;
 use crate::shared_ref::SharedRef;
 use crate::syscall::SyscallOutput;
-use crate::thread::CurrentThread;
 use crate::thread::Thread;
 use crate::timer::GLOBAL_TIMER;
 
@@ -163,19 +162,17 @@ pub fn sys_poll_create(
 
 pub fn sys_poll_wait(
     current: &SharedRef<Thread>,
-    current_thread: &CurrentThread,
     ctx: &SyscallRegs,
 ) -> Result<SyscallOutput, ErrorCode> {
     let handle_id = HandleId::new(ctx.a0);
 
     let poll = current.hspace().get::<Poll>(handle_id, HandleRight::READ)?;
 
-    current.start_polling(current_thread, poll, handle_id, None)
+    current.start_polling(poll, handle_id, None)
 }
 
 pub fn sys_poll_wait_until(
     current: &SharedRef<Thread>,
-    current_thread: &CurrentThread,
     ctx: &SyscallRegs,
 ) -> Result<SyscallOutput, ErrorCode> {
     let handle_id = HandleId::new(ctx.a0);
@@ -186,7 +183,7 @@ pub fn sys_poll_wait_until(
     let mut deadline_buf = MaybeUninit::uninit();
     let deadline = unsafe { deadline_uslice.read_uninit(&mut deadline_buf)? };
 
-    current.start_polling(current_thread, poll, handle_id, Some(*deadline))
+    current.start_polling(poll, handle_id, Some(*deadline))
 }
 
 pub fn sys_poll_notify(

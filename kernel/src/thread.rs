@@ -1,6 +1,7 @@
 use alloc::vec::Vec;
 use core::cell::UnsafeCell;
 use core::convert::Infallible;
+use core::mem::ManuallyDrop;
 use core::mem::offset_of;
 use core::mem::size_of;
 
@@ -135,7 +136,6 @@ impl Thread {
 
     pub fn start_polling(
         self: &SharedRef<Self>,
-        current_thread: &CurrentThread,
         poll: SharedRef<Poll>,
         poll_id: HandleId,
         deadline: Option<MonoTime>,
@@ -153,10 +153,6 @@ impl Thread {
                     poll_id,
                     deadline,
                 };
-
-                // Avoid enqueuing this thread twice: in Poll::enqueue (by
-                // another CPU), and in return_to_user (by us).
-                current_thread.clear();
 
                 Ok(SyscallOutput::Blocked)
             }
@@ -404,12 +400,12 @@ pub fn sys_thread_copy_regs(
 }
 
 pub fn sys_thread_exit(
-    current: SharedRef<Thread>,
+    current: &SharedRef<Thread>,
     ctx: &SyscallRegs,
 ) -> Result<SyscallOutput, ErrorCode> {
     let _reason = ctx.a0; // ignored for now
 
-    current.exit()?;
+    current.clone().exit()?;
     Ok(SyscallOutput::Exited)
 }
 

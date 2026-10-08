@@ -17,7 +17,7 @@ fn do_handle_syscall() {
     let arch_thread = unsafe { &mut *thread.arch().get() };
     let regs = arch_thread.get_syscall_regs();
     let retval = match Syscall::from_usize(regs.n) {
-        Some(Syscall::ThreadExit) => crate::thread::sys_thread_exit(thread, &regs),
+        Some(Syscall::ThreadExit) => crate::thread::sys_thread_exit(&thread, &regs),
         Some(Syscall::VmoCreateZeroed) => crate::vmobject::sys_vmo_create_zeroed(&thread, &regs),
         Some(Syscall::VmoRead) => crate::vmobject::sys_vmo_read(&thread, &regs),
         Some(Syscall::VmoWrite) => crate::vmobject::sys_vmo_write(&thread, &regs),
@@ -38,12 +38,8 @@ fn do_handle_syscall() {
             crate::thread::sys_thread_copy_regs(&thread, arch_thread, &regs)
         }
         Some(Syscall::PollCreate) => crate::poll::sys_poll_create(&thread, &regs),
-        Some(Syscall::PollWait) => {
-            crate::poll::sys_poll_wait(&thread, &cpuvar.current_thread, &regs)
-        }
-        Some(Syscall::PollWaitUntil) => {
-            crate::poll::sys_poll_wait_until(&thread, &cpuvar.current_thread, &regs)
-        }
+        Some(Syscall::PollWait) => crate::poll::sys_poll_wait(&thread, &regs),
+        Some(Syscall::PollWaitUntil) => crate::poll::sys_poll_wait_until(&thread, &regs),
         Some(Syscall::PollNotify) => crate::poll::sys_poll_notify(&thread, &regs),
         Some(Syscall::NetCreate) => crate::net::sys_net_create(&thread, &regs),
         Some(Syscall::NetSubscribe) => crate::net::sys_net_subscribe(&thread, &regs),
