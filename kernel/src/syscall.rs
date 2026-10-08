@@ -18,7 +18,7 @@ fn do_handle_syscall() {
     let regs = arch_thread.get_syscall_regs();
     let retval = match Syscall::from_usize(regs.n) {
         Some(Syscall::ThreadExit) => crate::thread::sys_thread_exit(thread, &regs),
-        Some(Syscall::VmoCreate) => crate::vmobject::sys_vmo_create(&thread, &regs),
+        Some(Syscall::VmoCreateZeroed) => crate::vmobject::sys_vmo_create_zeroed(&thread, &regs),
         Some(Syscall::VmoRead) => crate::vmobject::sys_vmo_read(&thread, &regs),
         Some(Syscall::VmoWrite) => crate::vmobject::sys_vmo_write(&thread, &regs),
         Some(Syscall::VmoCreateUser) => crate::vmobject::sys_vmo_create_user(&thread, &regs),

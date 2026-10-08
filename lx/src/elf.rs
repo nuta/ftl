@@ -86,7 +86,7 @@ fn load_elf(
         let region_base = align_down(vaddr, PAGE_SIZE);
         let page_offset = vaddr - region_base;
         let region_len = align_up(page_offset + phdr.p_memsz as usize, PAGE_SIZE);
-        let vmo = Vmo::create(region_len).unwrap();
+        let vmo = Vmo::create_zeroed(region_len).unwrap();
 
         let filesz = phdr.p_filesz as usize;
         let mut buf = [0u8; PAGE_SIZE];

@@ -74,7 +74,7 @@ fn main(cmdline: &[u8]) {
 
     // Allocate the VMO for the heap.
     let heap_addr = align_up(&raw const _end as usize, 4096);
-    let heap = Vmo::create(HEAP_SIZE).expect("failed to create heap VMO");
+    let heap = Vmo::create_zeroed(HEAP_SIZE).expect("failed to create heap VMO");
     root_vmspace
         .map(
             &heap,

@@ -58,7 +58,7 @@ fn load_elf(vmspace: &SharedRef<VmSpace>, elf_file: &[u8]) -> usize {
         }
 
         // Copy the file contents to the allocated memory.
-        let vmo = VmObject::new_anonymous(region_len).unwrap();
+        let vmo = VmObject::new_zeroed(region_len).unwrap();
         vmo.write(0, bytes).unwrap();
 
         // Map the region to the address space.
@@ -98,7 +98,7 @@ fn write_stack(
 
 fn prepare_stack(vmspace: &SharedRef<VmSpace>, cmdline: &[u8]) -> usize {
     let stack_size = 256 * 1024;
-    let vmo = VmObject::new_anonymous(stack_size).unwrap();
+    let vmo = VmObject::new_zeroed(stack_size).unwrap();
 
     let stack_bottom = UAddr::new(0x40000000 - stack_size); // TODO: find an empty region in vmspace
     let sp_offset = write_stack(&vmo, stack_bottom, stack_size, cmdline);

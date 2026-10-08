@@ -209,7 +209,7 @@ impl Vm {
             .unwrap_or(0);
         let brk_end = BRK_END;
 
-        let stack = Vmo::create(STACK_SIZE)?;
+        let stack = Vmo::create_zeroed(STACK_SIZE)?;
         let sp = prepare_stack(&stack, STACK_BOTTOM, STACK_SIZE, argv, &elf)?;
 
         let attrs = PageAttrs::READ | PageAttrs::WRITE;
@@ -237,7 +237,7 @@ impl Vm {
         let attrs = attrs_from_prot(prot);
 
         // Allocate a VMO.
-        let vmo = Vmo::create(len)?;
+        let vmo = Vmo::create_zeroed(len)?;
 
         // Find a space to map the new region. This must be done while holding
         // the lock to prevent other threads from picking the same address.
@@ -336,7 +336,7 @@ impl Vm {
 
         let aligned_addr = align_down(addr, PAGE_SIZE);
         let Some(filler) = mapping.page_filler(aligned_addr) else {
-            // The page fault occurred in an anonymous VMO, which means kernel
+            // The page fault occurred in a zeroed VMO, which means kernel
             // failed to fill the page somehow. We can't resolve this case.
             return Err(Errno::EFAULT);
         };
@@ -417,7 +417,7 @@ impl Vm {
         // Allocate pages for the new area.
         let len = current_aligned - brk.current_aligned;
         let attrs = PageAttrs::READ | PageAttrs::WRITE;
-        let Ok(vmo) = Vmo::create(len) else {
+        let Ok(vmo) = Vmo::create_zeroed(len) else {
             return brk.current;
         };
 
@@ -645,11 +645,11 @@ fn load_elf(
         }
 
         if region_len > file_len {
-            // If p_memsz > p_filesz, allocate an anonymous VMO to provide
+            // If p_memsz > p_filesz, allocate a zeroed VMO to provide
             // zero-filled pages by kernel, not via user page faults.
             let start = region_base + file_len;
             let size = region_len - file_len;
-            let vmo = Vmo::create(size)?;
+            let vmo = Vmo::create_zeroed(size)?;
             vmspace.map(&vmo, start, 0, size, attrs)?;
             mappings.push(Mapping::new(start, size, attrs, vmo));
         }

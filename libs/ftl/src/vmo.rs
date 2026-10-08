@@ -19,8 +19,8 @@ impl Vmo {
         Self { handle }
     }
 
-    pub fn create(len: usize) -> Result<Self, ErrorCode> {
-        let id = syscall1(Syscall::VmoCreate, len)?;
+    pub fn create_zeroed(len: usize) -> Result<Self, ErrorCode> {
+        let id = syscall1(Syscall::VmoCreateZeroed, len)?;
         // SAFETY: Kernel returns a valid handle.
         let this = unsafe { Self::from_handle(HandleId::new(id)) };
         Ok(this)

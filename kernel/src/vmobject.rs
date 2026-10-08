@@ -104,7 +104,7 @@ pub struct VmObject {
 }
 
 impl VmObject {
-    pub fn new_anonymous(len: usize) -> Result<SharedRef<Self>, ErrorCode> {
+    pub fn new_zeroed(len: usize) -> Result<SharedRef<Self>, ErrorCode> {
         Self::new(len, Source::Zeroed)
     }
 
@@ -395,13 +395,13 @@ impl PageSlice {
     }
 }
 
-pub fn sys_vmo_create(
+pub fn sys_vmo_create_zeroed(
     current: &SharedRef<Thread>,
     ctx: &SyscallRegs,
 ) -> Result<SyscallOutput, ErrorCode> {
     let len = ctx.a0;
 
-    let vmo = VmObject::new_anonymous(len)?;
+    let vmo = VmObject::new_zeroed(len)?;
     let rights = HandleRight::READ | HandleRight::WRITE;
     let handle = Handle::new(vmo, rights);
     let id = current.hspace().insert(handle)?;
