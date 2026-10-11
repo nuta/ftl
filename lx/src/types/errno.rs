@@ -30,8 +30,13 @@ impl Errno {
     pub const ENOSYS: Self = Self(38);
     pub const ENOTSOCK: Self = Self(88);
     pub const ENOTSUP: Self = Self(95);
+    pub const EADDRINUSE: Self = Self(98);
+    pub const EADDRNOTAVAIL: Self = Self(99);
+    pub const EISCONN: Self = Self(106);
     pub const ENOTCONN: Self = Self(107);
     pub const ETIMEDOUT: Self = Self(110);
+    pub const ECONNREFUSED: Self = Self(111);
+    pub const EINPROGRESS: Self = Self(115);
 
     pub const fn as_int(self) -> c_int {
         self.0

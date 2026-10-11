@@ -19,3 +19,19 @@ test("HTTP server handles a request", async () => {
     expect(resp2.status).toBe(404);
     expect(await resp2.text()).toContain("<h1>404 Not Found</h1>");
 }, 5000);
+
+test("TCP active open", async () => {
+    using server = Bun.listen({
+        hostname: "127.0.0.1",
+        port: 0,
+        socket: {
+            data(socket, data) {
+                socket.end(`echo: ${data}`);
+            },
+        },
+    });
+
+    const hostPort = await getAvailablePort();
+    using vm = await boot({ hostPort, init: `/bin/util nc 10.0.2.2 ${server.port}` });
+    await vm.waitForLog("echo: hello from nc");
+}, 5000);

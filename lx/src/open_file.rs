@@ -220,6 +220,10 @@ impl OpenFile {
         self.file.sendto(buf, dest, flags, nonblocking, sleep)
     }
 
+    pub fn connect(&self, addr: SockAddr, sleep: Sleep<'_>) -> Result<(), Errno> {
+        self.file.connect(addr, self.nonblocking(), sleep)
+    }
+
     pub fn accept(&self, sleep: Sleep<'_>) -> Result<Arc<dyn FileLike>, Errno> {
         self.file.accept(self.nonblocking(), sleep)
     }

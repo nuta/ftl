@@ -87,6 +87,11 @@ pub trait FileLike: Send + Sync {
         Err(Errno::ENOTSUP)
     }
 
+    fn connect(&self, addr: SockAddr, nonblocking: bool, sleep: Sleep<'_>) -> Result<(), Errno> {
+        let _ = (addr, nonblocking, sleep);
+        Err(Errno::ENOTSOCK)
+    }
+
     fn peer_addr(&self) -> Result<SockAddr, Errno> {
         Err(Errno::ENOTSUP)
     }

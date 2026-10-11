@@ -7,7 +7,9 @@ use ftl::trace;
 use ftl_types::error::ErrorCode;
 use ftl_types::time::Duration;
 use ftl_utils::spinlock::SpinLock;
+use ftl_utils::spinlock::SpinLockGuard;
 
+use super::buffer::TCP_BUFFER_SIZE;
 use super::buffer::TcpBuffer;
 use super::packet::Endpoint;
 use super::packet::Segment;
@@ -17,6 +19,7 @@ use crate::net::tcpip::Io;
 use crate::types::c_int;
 use crate::types::c_short;
 use crate::types::errno::Errno;
+use crate::types::sys::poll::POLLERR;
 use crate::types::sys::poll::POLLIN;
 use crate::types::sys::poll::POLLOUT;
 use crate::types::sys::socket::SHUT_RD;
@@ -30,9 +33,12 @@ use crate::wait_queue::WaitQueue;
 // TODO: Should we make this configurable?
 const MAX_SEGMENT_DATA_LEN: usize = 1460;
 const CLOSING_TIMEOUT: Duration = Duration::from_secs(5);
+const SYN_TIMEOUT_SECS: u64 = 1;
+const MAX_SYN_RETRIES: u32 = 5;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum State {
+    SynSent,
     Established,
     CloseWait,
     LastAck,
@@ -54,11 +60,14 @@ struct Mutable {
     rx_buffer: TcpBuffer,
     eof: bool,
     closing_deadline: Option<MonoTime>,
+    syn_deadline: Option<MonoTime>,
+    syn_retries: u32,
+    error: Option<Errno>,
 }
 
 pub struct TcpConn {
     io: Arc<Io>,
-    wait_queue: WaitQueue,
+    wait_queue: Arc<WaitQueue>,
     remote: Endpoint,
     local_port: u16,
     mutable: SpinLock<Mutable>,
@@ -73,20 +82,39 @@ impl TcpConn {
         remote_rcv_nxt: u32,
         remote_rcv_wnd: u16,
     ) -> Result<Arc<Self>, ErrorCode> {
-        let wait_queue = WaitQueue::new()?;
-        let snd_nxt = local_iss.wrapping_add(1);
+        let wq = WaitQueue::new()?;
+        let conn = Self::new_active(io, Arc::new(wq), remote, local_port, local_iss)?;
+        let mut mutable = conn.mutable.lock();
+        mutable.state = State::Established;
+        mutable.snd_una = mutable.snd_nxt;
+        mutable.snd_wnd = remote_rcv_wnd;
+        mutable.rcv_nxt = remote_rcv_nxt;
+        drop(mutable);
+        Ok(conn)
+    }
+
+    pub fn new_active(
+        io: Arc<Io>,
+        wait_queue: Arc<WaitQueue>,
+        remote: Endpoint,
+        local_port: u16,
+        local_iss: u32,
+    ) -> Result<Arc<Self>, ErrorCode> {
         let mutable = Mutable {
-            state: State::Established,
+            state: State::SynSent,
             write_closed: false,
             read_closed: false,
-            snd_una: snd_nxt,
-            snd_nxt,
-            snd_wnd: remote_rcv_wnd,
-            rcv_nxt: remote_rcv_nxt,
+            snd_una: local_iss,
+            snd_nxt: local_iss.wrapping_add(1),
+            snd_wnd: 0,
+            rcv_nxt: 0,
             tx_buffer: TcpBuffer::new()?,
             rx_buffer: TcpBuffer::new()?,
             eof: false,
             closing_deadline: None,
+            syn_deadline: None,
+            syn_retries: 0,
+            error: None,
         };
 
         Ok(Arc::new(Self {
@@ -108,8 +136,39 @@ impl TcpConn {
         self.mutable.lock().state == State::Closed
     }
 
+    pub fn is_connecting(&self) -> bool {
+        self.mutable.lock().state == State::SynSent
+    }
+
     pub fn poll(&self, now: MonoTime) {
         let mut mutable = self.mutable.lock();
+
+        // Active open connections.
+        if mutable.state == State::SynSent {
+            let expired = match mutable.syn_deadline {
+                Some(deadline) => now.duration_since(deadline).is_some(),
+                None => false,
+            };
+
+            if !expired {
+                // Too early to retransmit a SYN.
+                return;
+            }
+
+            if mutable.syn_retries >= MAX_SYN_RETRIES {
+                self.destroy(mutable, Errno::ETIMEDOUT);
+                return;
+            }
+
+            // Retransmit a SYN.
+            mutable.syn_retries += 1;
+            if let Err(err) = self.send_syn(&mut mutable) {
+                trace!("failed to retransmit SYN: {:?}", err);
+            }
+
+            return;
+        }
+
         let Some(deadline) = mutable.closing_deadline else {
             return;
         };
@@ -130,6 +189,111 @@ impl TcpConn {
         self.io
             .send_segment(self.remote, self.local_port, segment)
             .map_err(Errno::from)
+    }
+
+    /// Aborts a connection with an error.
+    fn destroy(&self, mut mutable: SpinLockGuard<'_, Mutable>, error: Errno) {
+        mutable.state = State::Closed;
+        mutable.eof = true;
+        mutable.error = Some(error);
+        drop(mutable);
+        self.notify();
+    }
+
+    /// Starts an active-open connection.
+    ///
+    /// This method does not return an error. It will retry sending the SYN
+    /// later if it fails.
+    pub fn start_active(&self) {
+        let mut mutable = self.mutable.lock();
+        if let Err(err) = self.send_syn(&mut mutable) {
+            trace!("failed to send SYN: {:?}", err);
+        }
+    }
+
+    /// Send a SYN packet, and arm a timeout for retransmission.
+    fn send_syn(&self, mutable: &mut Mutable) -> Result<(), Errno> {
+        let timeout = Duration::from_secs(SYN_TIMEOUT_SECS << mutable.syn_retries);
+        mutable.syn_deadline = Some(MonoTime::now() + timeout);
+        self.send(Segment {
+            seq: mutable.snd_una,
+            ack: 0,
+            window_size: TCP_BUFFER_SIZE as u16,
+            flags: TcpFlags::SYN,
+            payload: &[],
+        })
+    }
+
+    fn receive_syn_sent(&self, mut mutable: SpinLockGuard<'_, Mutable>, pkt: &TcpPacketInfo) {
+        let flags = TcpFlags::from_u8(pkt.flags);
+        if !flags.contains(TcpFlags::ACK) {
+            // A reply to our SYN must set ACK.
+            return;
+        }
+
+        if pkt.ack != mutable.snd_nxt {
+            // The peer did not acknowledge our SYN. Send a RST if they didn't.
+            if !flags.contains(TcpFlags::RST) {
+                let segment = Segment {
+                    seq: pkt.ack,
+                    ack: 0,
+                    window_size: 0,
+                    flags: TcpFlags::RST,
+                    payload: &[],
+                };
+
+                if let Err(err) = self.send(segment) {
+                    trace!("failed to send RST: {:?}", err);
+                }
+            }
+
+            return;
+        }
+
+        if flags.contains(TcpFlags::RST) {
+            self.destroy(mutable, Errno::ECONNREFUSED);
+            return;
+        }
+
+        if !flags.contains(TcpFlags::SYN) {
+            return;
+        }
+
+        mutable.state = State::Established;
+        mutable.snd_una = pkt.ack;
+        mutable.snd_wnd = pkt.window_size;
+        mutable.rcv_nxt = pkt.seq.wrapping_add(1);
+        self.send_ack(&mutable);
+
+        self.flush(&mut mutable);
+        drop(mutable);
+        self.notify();
+    }
+
+    /// Blocks until the connection completes (or fails) the handshake.
+    pub fn wait_for_handshake(&self, nonblocking: bool, sleep: Sleep<'_>) -> Result<(), Errno> {
+        let sleep_guard = sleep.guard(&self.wait_queue)?;
+        loop {
+            let mut mutable = self.mutable.lock();
+            if let Some(error) = mutable.error.take() {
+                return Err(error);
+            }
+
+            if mutable.state != State::SynSent {
+                return Ok(());
+            }
+
+            if nonblocking {
+                return Err(Errno::EINPROGRESS);
+            }
+
+            if sleep_guard.is_interrupted() {
+                return Err(Errno::EINTR);
+            }
+
+            drop(mutable);
+            sleep_guard.wait()?;
+        }
     }
 
     /// Sends an ACK.
@@ -272,6 +436,10 @@ impl TcpConn {
     pub fn handle_rx(&self, pkt: &TcpPacketInfo, payload: &[u8]) {
         let flags = TcpFlags::from_u8(pkt.flags);
         let mut mutable = self.mutable.lock();
+        if mutable.state == State::SynSent {
+            self.receive_syn_sent(mutable, pkt);
+            return;
+        }
 
         // Handle out-of-order segments.
         if pkt.seq != mutable.rcv_nxt {
@@ -355,6 +523,13 @@ impl TcpConn {
     pub fn do_close(&self) {
         let mut mutable = self.mutable.lock();
         mutable.write_closed = true;
+
+        if mutable.state == State::SynSent {
+            // The connection is not established yet, and it is safe to close
+            // this socket immediately.
+            mutable.state = State::Closed;
+        }
+
         self.flush(&mut mutable);
     }
 
@@ -399,6 +574,10 @@ impl TcpConn {
         let sleep_guard = sleep.guard(&self.wait_queue)?;
         loop {
             let mut mutable = self.mutable.lock();
+            if let Some(error) = mutable.error.take() {
+                return Err(error);
+            }
+
             if mutable.read_closed {
                 return Ok(0);
             }
@@ -471,20 +650,25 @@ impl FileLike for TcpConn {
         let sleep_guard = sleep.guard(&self.wait_queue)?;
         loop {
             let mut mutable = self.mutable.lock();
+            if let Some(error) = mutable.error.take() {
+                return Err(error);
+            }
+
             if mutable.write_closed {
                 return Err(Errno::EPIPE);
             }
 
-            if mutable.state != State::Established && mutable.state != State::CloseWait {
-                // The connection is not in a writable state.
-                // TODO: return an appropriate errno
-                return Err(Errno::EINVAL);
-            }
+            if mutable.state != State::SynSent {
+                if mutable.state != State::Established && mutable.state != State::CloseWait {
+                    // The connection is not in a writable state.
+                    return Err(Errno::EPIPE);
+                }
 
-            let written_len = mutable.tx_buffer.write(buf).map_err(Errno::from)?;
-            if written_len > 0 {
-                self.flush(&mut mutable);
-                return Ok(written_len);
+                let written_len = mutable.tx_buffer.write(buf).map_err(Errno::from)?;
+                if written_len > 0 {
+                    self.flush(&mut mutable);
+                    return Ok(written_len);
+                }
             }
 
             if nonblocking {
@@ -543,6 +727,10 @@ impl FileLike for TcpConn {
             && mutable.tx_buffer.writable_len() > 0
         {
             status |= POLLOUT;
+        }
+
+        if mutable.error.is_some() {
+            status |= POLLERR | POLLOUT;
         }
 
         Ok(status)

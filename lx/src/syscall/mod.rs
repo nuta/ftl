@@ -8,6 +8,7 @@ mod clock_gettime;
 mod clock_nanosleep;
 mod clone;
 mod close;
+mod connect;
 mod dup2;
 mod dup3;
 mod epoll_create1;
@@ -62,6 +63,7 @@ use self::clock_gettime::sys_clock_gettime;
 use self::clock_nanosleep::sys_clock_nanosleep;
 use self::clone::sys_clone;
 use self::close::sys_close;
+use self::connect::sys_connect;
 use self::dup2::sys_dup2;
 use self::dup3::sys_dup3;
 use self::epoll_create1::sys_epoll_create1;
@@ -126,6 +128,7 @@ use crate::types::sys::syscall::SYS_CLOCK_GETTIME;
 use crate::types::sys::syscall::SYS_CLOCK_NANOSLEEP;
 use crate::types::sys::syscall::SYS_CLONE;
 use crate::types::sys::syscall::SYS_CLOSE;
+use crate::types::sys::syscall::SYS_CONNECT;
 use crate::types::sys::syscall::SYS_DUP2;
 use crate::types::sys::syscall::SYS_DUP3;
 use crate::types::sys::syscall::SYS_EPOLL_CREATE1;
@@ -326,6 +329,7 @@ fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
         SYS_SHUTDOWN => sys_shutdown(current, arg0 as c_int, arg1 as c_int),
         SYS_BIND => sys_bind(current, arg0 as c_int, arg1 as *const u8, arg2),
         SYS_LISTEN => sys_listen(current, arg0 as c_int, arg1 as c_int),
+        SYS_CONNECT => sys_connect(current, arg0 as c_int, arg1 as *const u8, arg2),
         SYS_SETSOCKOPT => {
             sys_setsockopt(
                 current,
