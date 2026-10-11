@@ -5,4 +5,4 @@ if [[ ! -n "${SKIP_BUILD:-}" ]]; then
   ./build.sh
 fi
 
-bun test tests
+bun test --parallel --concurrent tests

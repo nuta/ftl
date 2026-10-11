@@ -26,7 +26,7 @@ function buildQemuArgs({ hostPort, init }: QemuArgs) {
     return [
         "qemu-system-x86_64",
         "-machine", "microvm,acpi=off",
-        "-m", "128",
+        "-m", "32",
         "-cpu", "qemu64,+fsgsbase,+xsave,+xsaveopt,+smep,+smap,+rdrand,+rdtscp",
         "-kernel", "ftl.elf",
         "-initrd", "lx.elf",
