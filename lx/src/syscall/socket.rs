@@ -37,11 +37,11 @@ pub fn sys_socket(
     let network = process.container().network();
 
     // FIXME: support other socket types
-    let listener = network.create_listener().map_err(Errno::from)?;
+    let socket = network.create_socket().map_err(Errno::from)?;
 
     let fd = process
         .fd_table()
         .lock()
-        .insert(listener, O_RDWR | (socket_type & SUPPORTED_FLAGS))?;
+        .insert(socket, O_RDWR | (socket_type & SUPPORTED_FLAGS))?;
     Ok(SyscallResult::Done(fd as c_long))
 }

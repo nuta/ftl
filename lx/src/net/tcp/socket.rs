@@ -35,46 +35,49 @@ struct Handshake {
     remote_rcv_wnd: u16,
 }
 
-struct Mutable {
-    local_port: Option<u16>,
+struct Listening {
+    local_port: u16,
     backlog: usize,
     inflights: Vec<Handshake>,
     established: VecDeque<Arc<TcpConn>>,
 }
 
-pub struct TcpListener {
-    io: Arc<Io>,
-    wait_queue: WaitQueue,
-    mutable: SpinLock<Mutable>,
+enum State {
+    Init { local_port: Option<u16> },
+    Listening(Listening),
 }
 
-impl TcpListener {
+pub struct TcpSocket {
+    io: Arc<Io>,
+    wait_queue: WaitQueue,
+    state: SpinLock<State>,
+}
+
+impl TcpSocket {
     pub fn new(io: Arc<Io>) -> Result<Arc<Self>, ErrorCode> {
         let wait_queue = WaitQueue::new()?;
-        let mutable = Mutable {
-            local_port: None,
-            backlog: 0,
-            inflights: Vec::new(),
-            established: VecDeque::new(),
-        };
         Ok(Arc::new(Self {
             io,
             wait_queue,
-            mutable: SpinLock::new(mutable),
+            state: SpinLock::new(State::Init { local_port: None }),
         }))
     }
 
     /// `bind(2)` implementation.
     pub fn do_bind(&self, port: u16) -> Result<(), Errno> {
-        let mut mutable = self.mutable.lock();
-        if mutable.local_port.is_some() {
-            // The listener is already bound to a port.
+        let mut state = self.state.lock();
+        let State::Init { local_port } = &mut *state else {
+            return Err(Errno::EINVAL);
+        };
+
+        if local_port.is_some() {
+            // The socket is already bound to a port.
             return Err(Errno::EINVAL);
         }
 
         // Bind this port to the network to start receiving packets.
         self.io.bind_listener(port).map_err(Errno::from)?;
-        mutable.local_port = Some(port);
+        *local_port = Some(port);
         Ok(())
     }
 
@@ -84,31 +87,53 @@ impl TcpListener {
             return Err(Errno::EINVAL);
         }
 
-        let mut mutable = self.mutable.lock();
-        if mutable.local_port.is_none() {
-            // The listener is not bound to a port.
-            return Err(Errno::EINVAL);
+        let mut state = self.state.lock();
+        match &mut *state {
+            State::Init {
+                local_port: Some(local_port),
+            } => {
+                *state = State::Listening(Listening {
+                    local_port: *local_port,
+                    backlog: backlog as usize,
+                    inflights: Vec::new(),
+                    established: VecDeque::new(),
+                });
+            }
+            State::Listening(listening) => {
+                // Already listening. Update the backlog.
+                listening.backlog = backlog as usize;
+            }
+            _ => {
+                // The socket is not bound to a port.
+                return Err(Errno::EINVAL);
+            }
         }
 
-        mutable.backlog = backlog as usize;
         Ok(())
     }
 
     /// `accept(2)` implementation (non-blocking).
-    pub fn try_accept(&self) -> Option<Arc<TcpConn>> {
-        self.mutable.lock().established.pop_front()
+    pub fn try_accept(&self) -> Result<Option<Arc<TcpConn>>, Errno> {
+        match &mut *self.state.lock() {
+            State::Listening(listening) => Ok(listening.established.pop_front()),
+            _ => Err(Errno::EINVAL),
+        }
     }
 
     /// Returns true if the `pkt` is targeted at this listener.
     pub fn matches(&self, pkt: &TcpPacketInfo) -> bool {
-        let mutable = self.mutable.lock();
-        mutable.local_port == Some(pkt.local_port)
+        match &*self.state.lock() {
+            State::Listening(listening) => listening.local_port == pkt.local_port,
+            _ => false,
+        }
     }
 
     /// Returns true if the listener can accept a connection.
     pub fn can_accept(&self) -> bool {
-        let mutable = self.mutable.lock();
-        mutable.backlog > 0
+        match &*self.state.lock() {
+            State::Listening(listening) => listening.backlog > 0,
+            _ => false,
+        }
     }
 
     fn send_syn_ack(&self, handshake: &Handshake, local_port: u16) {
@@ -125,9 +150,9 @@ impl TcpListener {
         }
     }
 
-    fn find_handshake(&self, mutable: &Mutable, remote: Endpoint) -> Option<usize> {
-        for index in 0..mutable.inflights.len() {
-            if mutable.inflights[index].remote == remote {
+    fn find_handshake(&self, listening: &Listening, remote: Endpoint) -> Option<usize> {
+        for index in 0..listening.inflights.len() {
+            if listening.inflights[index].remote == remote {
                 return Some(index);
             }
         }
@@ -142,19 +167,23 @@ impl TcpListener {
         };
 
         // Find the handshake with this peer.
-        let mut mutable = self.mutable.lock();
-        let Some(index) = self.find_handshake(&mutable, remote) else {
+        let mut state = self.state.lock();
+        let State::Listening(listening) = &mut *state else {
             return;
         };
 
-        let handshake = mutable.inflights[index];
+        let Some(index) = self.find_handshake(listening, remote) else {
+            return;
+        };
+
+        let handshake = listening.inflights[index];
         if pkt.seq != handshake.remote_rcv_nxt {
             // Unexpected sequence number. Ignore this RST.
             return;
         }
 
         // Remove the handshake.
-        mutable.inflights.remove(index);
+        listening.inflights.remove(index);
     }
 
     fn start_handshake(&self, pkt: &TcpPacketInfo) {
@@ -163,16 +192,17 @@ impl TcpListener {
             port: pkt.remote_port,
         };
 
-        let mut mutable = self.mutable.lock();
-        let Some(local_port) = mutable.local_port else {
-            // The listener is not bound to a port.
+        let mut state = self.state.lock();
+        let State::Listening(listening) = &mut *state else {
+            // The socket is not listening.
             return;
         };
 
         // Check if the handshake with the peer is already in progress.
-        if let Some(index) = self.find_handshake(&mutable, remote) {
-            let handshake = mutable.inflights[index];
-            drop(mutable);
+        let local_port = listening.local_port;
+        if let Some(index) = self.find_handshake(listening, remote) {
+            let handshake = listening.inflights[index];
+            drop(state);
 
             // Send a SYN-ACK packet again.
             self.send_syn_ack(&handshake, local_port);
@@ -180,7 +210,7 @@ impl TcpListener {
         }
 
         // Do we have room for a new connection?
-        if mutable.inflights.len() + mutable.established.len() >= mutable.backlog {
+        if listening.inflights.len() + listening.established.len() >= listening.backlog {
             // No room for a new connection.
             return;
         }
@@ -193,8 +223,8 @@ impl TcpListener {
             remote_rcv_nxt: pkt.seq.wrapping_add(1),
             remote_rcv_wnd: pkt.window_size,
         };
-        mutable.inflights.push(handshake);
-        drop(mutable);
+        listening.inflights.push(handshake);
+        drop(state);
         self.send_syn_ack(&handshake, local_port);
     }
 
@@ -207,29 +237,29 @@ impl TcpListener {
 
         // Find the handshake with this peer.
         let (handshake, local_port) = {
-            let mut mutable = self.mutable.lock();
-            let Some(local_port) = mutable.local_port else {
-                // The listener is not bound to a port.
+            let mut state = self.state.lock();
+            let State::Listening(listening) = &mut *state else {
+                // The socket is not listening.
                 return;
             };
 
-            let Some(index) = self.find_handshake(&mutable, remote) else {
+            let Some(index) = self.find_handshake(listening, remote) else {
                 // No handshake with this peer.
                 return;
             };
 
-            let expected_ack = mutable.inflights[index].local_iss.wrapping_add(1);
+            let expected_ack = listening.inflights[index].local_iss.wrapping_add(1);
             if pkt.ack != expected_ack {
                 // Unexpected ACK.
                 return;
             }
 
-            if pkt.seq != mutable.inflights[index].remote_rcv_nxt {
+            if pkt.seq != listening.inflights[index].remote_rcv_nxt {
                 // Unexpected sequence number.
                 return;
             }
 
-            (mutable.inflights.remove(index), local_port)
+            (listening.inflights.remove(index), listening.local_port)
         };
 
         // The connection has been established.
@@ -263,7 +293,12 @@ impl TcpListener {
         }
 
         // Add the connection to accept later.
-        self.mutable.lock().established.push_back(conn);
+        let mut state = self.state.lock();
+        let State::Listening(listening) = &mut *state else {
+            return;
+        };
+        listening.established.push_back(conn);
+        drop(state);
 
         if let Err(error) = self.wait_queue.notify_all() {
             trace!("failed to notify listener waiters: {:?}", error);
@@ -288,25 +323,30 @@ impl TcpListener {
     }
 }
 
-impl Drop for TcpListener {
+impl Drop for TcpSocket {
     fn drop(&mut self) {
-        let mut mutable = self.mutable.lock();
+        let mut state = self.state.lock();
+        let local_port = match &mut *state {
+            State::Init { local_port } => *local_port,
+            State::Listening(listening) => {
+                // Close all established (but not yet accepted) connections.
+                for conn in listening.established.drain(..) {
+                    conn.do_close();
+                }
 
-        // Close all established (but not yet accepted) connections.
-        for conn in mutable.established.drain(..) {
-            conn.do_close();
-        }
+                Some(listening.local_port)
+            }
+        };
 
         // Unbind the listener from the port.
-        let local_port = mutable.local_port;
-        drop(mutable);
+        drop(state);
         if let Some(port) = local_port {
             self.io.unbind_listener(port);
         }
     }
 }
 
-impl FileLike for TcpListener {
+impl FileLike for TcpSocket {
     fn bind(&self, addr: SockAddr) -> Result<(), Errno> {
         match addr {
             SockAddr::Inet { ip, port } => {
@@ -339,7 +379,7 @@ impl FileLike for TcpListener {
     fn accept(&self, nonblocking: bool, sleep: Sleep<'_>) -> Result<Arc<dyn FileLike>, Errno> {
         let sleep_guard = sleep.guard(&self.wait_queue)?;
         loop {
-            if let Some(conn) = self.try_accept() {
+            if let Some(conn) = self.try_accept()? {
                 return Ok(conn);
             }
 
@@ -356,14 +396,11 @@ impl FileLike for TcpListener {
     }
 
     fn poll(&self) -> Result<c_short, Errno> {
-        let mut status = 0;
-
-        let mutable = self.mutable.lock();
-        if !mutable.established.is_empty() {
-            status |= POLLIN;
+        match &*self.state.lock() {
+            State::Init { .. } => Ok(0),
+            State::Listening(listening) if listening.established.is_empty() => Ok(0),
+            State::Listening(_) => Ok(POLLIN),
         }
-
-        Ok(status)
     }
 
     fn wait_queue(&self) -> Option<&WaitQueue> {

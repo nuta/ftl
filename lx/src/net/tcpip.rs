@@ -21,8 +21,8 @@ use super::tcp::Endpoint;
 use super::tcp::HeaderBuilder;
 use super::tcp::Segment;
 use super::tcp::TcpConn;
-use super::tcp::TcpListener;
 use super::tcp::TcpPacketInfo;
+use super::tcp::TcpSocket;
 
 const RX_HEADER_LEN: usize = 128;
 const RX_PAYLOAD_LEN: usize = 2048;
@@ -168,7 +168,7 @@ impl FlowTable {
 ///        explicitly when it's closed, not lazily. I need some more time to
 ///        come up with a cleaner solution...
 struct ListenerTable {
-    listeners: Vec<Weak<TcpListener>>,
+    listeners: Vec<Weak<TcpSocket>>,
 }
 
 impl ListenerTable {
@@ -178,13 +178,13 @@ impl ListenerTable {
         }
     }
 
-    fn add(&mut self, listener: &Arc<TcpListener>) {
+    fn add(&mut self, listener: &Arc<TcpSocket>) {
         self.listeners
             .retain(|listener| listener.strong_count() > 0);
         self.listeners.push(Arc::downgrade(listener));
     }
 
-    fn lookup(&self, pkt: &TcpPacketInfo) -> Option<Arc<TcpListener>> {
+    fn lookup(&self, pkt: &TcpPacketInfo) -> Option<Arc<TcpSocket>> {
         self.listeners
             .iter()
             .filter_map(Weak::upgrade)
@@ -215,10 +215,10 @@ impl TcpIp {
         self.io.net.subscribe(poll)
     }
 
-    pub fn create_listener(self: &Arc<Self>) -> Result<Arc<TcpListener>, ErrorCode> {
-        let listener = TcpListener::new(self.io.clone())?;
-        self.listeners.lock().add(&listener);
-        Ok(listener)
+    pub fn create_socket(self: &Arc<Self>) -> Result<Arc<TcpSocket>, ErrorCode> {
+        let socket = TcpSocket::new(self.io.clone())?;
+        self.listeners.lock().add(&socket);
+        Ok(socket)
     }
 
     pub fn handle_rx(&self) {
