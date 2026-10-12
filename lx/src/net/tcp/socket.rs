@@ -6,8 +6,7 @@ use ftl_utils::spinlock::SpinLock;
 use super::conn::TcpConn;
 use super::listener::TcpListener;
 use super::packet::Endpoint;
-use super::packet::TcpPacketInfo;
-use crate::net::tcpip::Io;
+use crate::net::tcpip::TcpIp;
 use crate::types::c_int;
 use crate::types::c_short;
 use crate::types::errno::Errno;
@@ -26,16 +25,16 @@ enum State {
 }
 
 pub struct TcpSocket {
-    io: Arc<Io>,
+    tcpip: Arc<TcpIp>,
     wait_queue: Arc<WaitQueue>,
     state: SpinLock<State>,
 }
 
 impl TcpSocket {
-    pub fn new(io: Arc<Io>) -> Result<Arc<Self>, ErrorCode> {
+    pub fn new(tcpip: Arc<TcpIp>) -> Result<Arc<Self>, ErrorCode> {
         let wait_queue = Arc::new(WaitQueue::new()?);
         Ok(Arc::new(Self {
-            io,
+            tcpip,
             wait_queue,
             state: SpinLock::new(State::Init { local_port: None }),
         }))
@@ -83,7 +82,7 @@ impl TcpSocket {
                 local_port: Some(local_port),
             } => {
                 let listener = TcpListener::new(
-                    self.io.clone(),
+                    self.tcpip.clone(),
                     self.wait_queue.clone(),
                     *local_port,
                     backlog as usize,
@@ -116,7 +115,7 @@ impl TcpSocket {
                 State::Init { local_port } => {
                     // Start a handshake.
                     let wq = self.wait_queue.clone();
-                    let conn = self.io.connect_tcp(remote, *local_port, wq)?;
+                    let conn = self.tcpip.connect_tcp(remote, *local_port, wq)?;
                     *state = State::Conn(conn.clone());
                     conn
                 }
@@ -132,26 +131,6 @@ impl TcpSocket {
         };
 
         conn.wait_for_handshake(nonblocking, sleep)
-    }
-
-    pub fn matches(&self, pkt: &TcpPacketInfo) -> bool {
-        match self.as_listener() {
-            Ok(listener) => listener.matches(pkt),
-            Err(_) => false,
-        }
-    }
-
-    pub fn can_accept(&self) -> bool {
-        match self.as_listener() {
-            Ok(listener) => listener.can_accept(),
-            Err(_) => false,
-        }
-    }
-
-    pub fn handle_rx(&self, pkt: &TcpPacketInfo, payload: &[u8]) {
-        if let Ok(listener) = self.as_listener() {
-            listener.handle_rx(pkt, payload);
-        }
     }
 }
 
@@ -216,8 +195,10 @@ impl FileLike for TcpSocket {
     }
 
     fn close(&self) {
-        if let Ok(conn) = self.as_conn() {
-            conn.do_close();
+        match &*self.state.lock() {
+            State::Init { .. } => {}
+            State::Listener(listener) => listener.close(),
+            State::Conn(conn) => conn.do_close(),
         }
     }
 

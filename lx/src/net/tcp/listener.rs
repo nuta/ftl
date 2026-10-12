@@ -12,7 +12,7 @@ use super::packet::Endpoint;
 use super::packet::Segment;
 use super::packet::TcpFlags;
 use super::packet::TcpPacketInfo;
-use crate::net::tcpip::Io;
+use crate::net::tcpip::TcpIp;
 use crate::types::errno::Errno;
 use crate::types::sys::poll::POLLIN;
 use crate::wait_queue::Sleep;
@@ -47,7 +47,7 @@ impl Mutable {
 }
 
 pub struct TcpListener {
-    io: Arc<Io>,
+    tcpip: Arc<TcpIp>,
     wait_queue: Arc<WaitQueue>,
     local_port: u16,
     mutable: SpinLock<Mutable>,
@@ -55,20 +55,13 @@ pub struct TcpListener {
 
 impl TcpListener {
     pub fn new(
-        io: Arc<Io>,
+        tcpip: Arc<TcpIp>,
         wait_queue: Arc<WaitQueue>,
         local_port: u16,
         backlog: usize,
     ) -> Result<Arc<Self>, Errno> {
-        // Bind the listening port.
-        match io.bind_tcp_listener(local_port) {
-            Ok(()) => {}
-            Err(ErrorCode::AlreadyExists) => return Err(Errno::EADDRINUSE),
-            Err(error) => return Err(error.into()),
-        }
-
-        Ok(Arc::new(Self {
-            io,
+        let listener = Arc::new(Self {
+            tcpip: tcpip.clone(),
             wait_queue,
             local_port,
             mutable: SpinLock::new(Mutable {
@@ -76,7 +69,13 @@ impl TcpListener {
                 inflights: Vec::new(),
                 established: VecDeque::new(),
             }),
-        }))
+        });
+
+        match tcpip.bind_tcp_listener(local_port, listener.clone()) {
+            Ok(()) => Ok(listener),
+            Err(ErrorCode::AlreadyExists) => Err(Errno::EADDRINUSE),
+            Err(error) => Err(error.into()),
+        }
     }
 
     fn notify(&self) {
@@ -85,16 +84,6 @@ impl TcpListener {
 
     pub fn set_backlog(&self, backlog: usize) {
         self.mutable.lock().backlog = backlog;
-    }
-
-    /// Returns true if the `pkt` is targeted at this listener.
-    pub fn matches(&self, pkt: &TcpPacketInfo) -> bool {
-        self.local_port == pkt.local_port
-    }
-
-    /// Returns true if the listener can accept a connection.
-    pub fn can_accept(&self) -> bool {
-        self.mutable.lock().backlog > 0
     }
 
     pub fn is_readable(&self) -> bool {
@@ -135,7 +124,7 @@ impl TcpListener {
         };
 
         if let Err(err) = self
-            .io
+            .tcpip
             .send_tcp_segment(handshake.remote, self.local_port, segment)
         {
             trace!("failed to send SYN-ACK packet: {:?}", err);
@@ -232,7 +221,7 @@ impl TcpListener {
 
         // The connection has been established.
         let conn = match TcpConn::new_established(
-            self.io.clone(),
+            self.tcpip.clone(),
             handshake.remote,
             self.local_port,
             handshake.local_iss,
@@ -249,7 +238,7 @@ impl TcpListener {
             }
         };
 
-        if let Err(err) = self.io.add_tcp_conn(conn.clone(), pkt) {
+        if let Err(err) = self.tcpip.add_tcp_conn(conn.clone(), pkt) {
             trace!("failed to add connection: {:?}", err);
             return;
         }
@@ -281,16 +270,15 @@ impl TcpListener {
             self.finish_handshake(pkt, payload);
         }
     }
-}
 
-impl Drop for TcpListener {
-    fn drop(&mut self) {
+    pub fn close(&self) {
         // Close all connections in the backlog.
-        for conn in self.mutable.lock().established.drain(..) {
+        let established = core::mem::take(&mut self.mutable.lock().established);
+        for conn in established {
             conn.do_close();
         }
 
         // Unbind the listening port.
-        self.io.unbind_tcp_listener(self.local_port);
+        self.tcpip.unbind_tcp_listener(self.local_port);
     }
 }

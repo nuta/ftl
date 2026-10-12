@@ -10,7 +10,7 @@ use ftl_utils::spinlock::SpinLock;
 
 use super::rx_queue::RxQueue;
 use crate::net::ipv4::Endpoint;
-use crate::net::tcpip::Io;
+use crate::net::tcpip::TcpIp;
 use crate::types::c_int;
 use crate::types::c_short;
 use crate::types::errno::Errno;
@@ -33,17 +33,17 @@ struct Mutable {
 }
 
 pub struct UdpSocket {
-    io: Arc<Io>,
+    tcpip: Arc<TcpIp>,
     wait_queue: Arc<WaitQueue>,
     rx_queue: Arc<RxQueue>,
     mutable: SpinLock<Mutable>,
 }
 
 impl UdpSocket {
-    pub fn new(io: Arc<Io>) -> Result<Arc<Self>, ErrorCode> {
+    pub fn new(tcpip: Arc<TcpIp>) -> Result<Arc<Self>, ErrorCode> {
         let wait_queue = Arc::new(WaitQueue::new()?);
         Ok(Arc::new(Self {
-            io,
+            tcpip,
             rx_queue: Arc::new(RxQueue::new(wait_queue.clone())),
             wait_queue,
             mutable: SpinLock::new(Mutable {
@@ -59,7 +59,7 @@ impl UdpSocket {
             return Err(Errno::EINVAL);
         }
 
-        let port = self.io.bind_udp(Some(port), self.rx_queue.clone())?;
+        let port = self.tcpip.bind_udp(Some(port), self.rx_queue.clone())?;
         mutable.local_port = Some(port);
         Ok(())
     }
@@ -74,7 +74,7 @@ impl UdpSocket {
             return Ok(port);
         }
 
-        let port = self.io.bind_udp(None, self.rx_queue.clone())?;
+        let port = self.tcpip.bind_udp(None, self.rx_queue.clone())?;
         mutable.local_port = Some(port);
         Ok(port)
     }
@@ -98,7 +98,7 @@ impl UdpSocket {
         }
 
         let local_port = self.ensure_bound()?;
-        self.io.send_udp(remote, local_port, &buf.to_vec())?;
+        self.tcpip.send_udp(remote, local_port, &buf.to_vec())?;
         Ok(buf.len())
     }
 
@@ -226,7 +226,7 @@ impl FileLike for UdpSocket {
 
     fn close(&self) {
         if let Some(port) = self.mutable.lock().local_port.take() {
-            self.io.unbind_udp(port);
+            self.tcpip.unbind_udp(port);
         }
     }
 

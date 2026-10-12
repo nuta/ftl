@@ -1,6 +1,4 @@
 use alloc::sync::Arc;
-use alloc::sync::Weak;
-use alloc::vec::Vec;
 
 use ftl::time::MonoTime;
 use ftl_types::net::Rule;
@@ -8,7 +6,6 @@ use hashbrown::HashMap;
 
 use super::conn::TcpConn;
 use super::packet::TcpPacketInfo;
-use super::socket::TcpSocket;
 use crate::net::ipv4::Endpoint;
 
 struct TcpFlow {
@@ -81,35 +78,5 @@ impl TcpFlows {
         } else {
             None
         }
-    }
-}
-
-/// TCP listeners.
-///
-/// FIXME: Weak references are used to GC, but we should remove the listener
-///        explicitly when it's closed, not lazily. I need some more time to
-///        come up with a cleaner solution...
-pub struct TcpListenerTable {
-    listeners: Vec<Weak<TcpSocket>>,
-}
-
-impl TcpListenerTable {
-    pub fn new() -> Self {
-        Self {
-            listeners: Vec::new(),
-        }
-    }
-
-    pub fn add(&mut self, listener: &Arc<TcpSocket>) {
-        self.listeners
-            .retain(|listener| listener.strong_count() > 0);
-        self.listeners.push(Arc::downgrade(listener));
-    }
-
-    pub fn lookup(&self, pkt: &TcpPacketInfo) -> Option<Arc<TcpSocket>> {
-        self.listeners
-            .iter()
-            .filter_map(Weak::upgrade)
-            .find(|listener| listener.matches(pkt) && listener.can_accept())
     }
 }

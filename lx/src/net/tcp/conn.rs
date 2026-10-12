@@ -15,7 +15,7 @@ use super::packet::Endpoint;
 use super::packet::Segment;
 use super::packet::TcpFlags;
 use super::packet::TcpPacketInfo;
-use crate::net::tcpip::Io;
+use crate::net::tcpip::TcpIp;
 use crate::types::c_int;
 use crate::types::c_short;
 use crate::types::errno::Errno;
@@ -73,7 +73,7 @@ struct Mutable {
 }
 
 pub struct TcpConn {
-    io: Arc<Io>,
+    tcpip: Arc<TcpIp>,
     wait_queue: Arc<WaitQueue>,
     remote: Endpoint,
     local_port: u16,
@@ -82,7 +82,7 @@ pub struct TcpConn {
 
 impl TcpConn {
     pub fn new_established(
-        io: Arc<Io>,
+        tcpip: Arc<TcpIp>,
         remote: Endpoint,
         local_port: u16,
         local_iss: u32,
@@ -90,7 +90,7 @@ impl TcpConn {
         remote_rcv_wnd: u16,
     ) -> Result<Arc<Self>, ErrorCode> {
         let wq = WaitQueue::new()?;
-        let conn = Self::new_active(io, Arc::new(wq), remote, local_port, local_iss)?;
+        let conn = Self::new_active(tcpip, Arc::new(wq), remote, local_port, local_iss)?;
         let mut mutable = conn.mutable.lock();
         mutable.state = State::Established;
         mutable.snd_una = mutable.snd_nxt;
@@ -101,7 +101,7 @@ impl TcpConn {
     }
 
     pub fn new_active(
-        io: Arc<Io>,
+        tcpip: Arc<TcpIp>,
         wait_queue: Arc<WaitQueue>,
         remote: Endpoint,
         local_port: u16,
@@ -129,7 +129,7 @@ impl TcpConn {
         };
 
         Ok(Arc::new(Self {
-            io,
+            tcpip,
             wait_queue,
             remote,
             local_port,
@@ -220,7 +220,7 @@ impl TcpConn {
 
     /// Send a segment.
     fn send(&self, segment: Segment) -> Result<(), Errno> {
-        self.io
+        self.tcpip
             .send_tcp_segment(self.remote, self.local_port, segment)
             .map_err(Errno::from)
     }

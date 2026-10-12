@@ -22,7 +22,7 @@ use super::tcp::HeaderBuilder;
 use super::tcp::Segment;
 use super::tcp::TcpConn;
 use super::tcp::TcpFlows;
-use super::tcp::TcpListenerTable;
+use super::tcp::TcpListener;
 use super::tcp::TcpPacketInfo;
 use super::tcp::TcpSocket;
 use super::udp::HeaderBuilder as UdpHeaderBuilder;
@@ -45,19 +45,33 @@ fn alloc_buf(len: usize) -> Result<Vec<u8>, ErrorCode> {
     Ok(buf)
 }
 
-pub struct Io {
+pub struct TcpIp {
     net: Net,
     tcp_flows: SpinLock<TcpFlows>,
+    tcp_listeners: SpinLock<HashMap<u16, Arc<TcpListener>>>,
     udp_ports: SpinLock<HashMap<u16, Arc<RxQueue>>>,
 }
 
-impl Io {
-    fn new(net: Net) -> Self {
-        Self {
+impl TcpIp {
+    pub fn new(net: Net) -> Arc<Self> {
+        Arc::new(Self {
             net,
             tcp_flows: SpinLock::new(TcpFlows::new()),
+            tcp_listeners: SpinLock::new(HashMap::new()),
             udp_ports: SpinLock::new(HashMap::new()),
-        }
+        })
+    }
+
+    pub fn subscribe(&self, poll: &Poll, cookie: usize) -> Result<(), ErrorCode> {
+        self.net.subscribe(poll, cookie)
+    }
+
+    pub fn create_tcp_socket(self: &Arc<Self>) -> Result<Arc<TcpSocket>, ErrorCode> {
+        TcpSocket::new(self.clone())
+    }
+
+    pub fn create_udp_socket(self: &Arc<Self>) -> Result<Arc<UdpSocket>, ErrorCode> {
+        UdpSocket::new(self.clone())
     }
 
     pub fn send_tcp_segment(
@@ -70,7 +84,11 @@ impl Io {
         self.net.send(&header, segment.payload)
     }
 
-    pub fn bind_tcp_listener(&self, port: u16) -> Result<(), ErrorCode> {
+    pub fn bind_tcp_listener(
+        &self,
+        port: u16,
+        listener: Arc<TcpListener>,
+    ) -> Result<(), ErrorCode> {
         let local_port = NonZeroU16::new(port).ok_or(ErrorCode::InvalidArg)?;
         let rule = Rule::new(
             ETHTYPE_IPV4,
@@ -80,7 +98,9 @@ impl Io {
             None,
             None,
         );
-        self.net.bind(&rule)
+        self.net.bind(&rule)?;
+        self.tcp_listeners.lock().insert(port, listener);
+        Ok(())
     }
 
     fn bind_tcp_conn(
@@ -280,6 +300,7 @@ impl Io {
     }
 
     pub fn unbind_tcp_listener(&self, port: u16) {
+        self.tcp_listeners.lock().remove(&port);
         let Some(local_port) = NonZeroU16::new(port) else {
             return;
         };
@@ -293,34 +314,6 @@ impl Io {
         );
         let _ = self.net.unbind(&rule);
     }
-}
-
-pub struct TcpIp {
-    io: Arc<Io>,
-    tcp_listeners: SpinLock<TcpListenerTable>,
-}
-
-impl TcpIp {
-    pub fn new(net: Net) -> Arc<Self> {
-        Arc::new(Self {
-            io: Arc::new(Io::new(net)),
-            tcp_listeners: SpinLock::new(TcpListenerTable::new()),
-        })
-    }
-
-    pub fn subscribe(&self, poll: &Poll, cookie: usize) -> Result<(), ErrorCode> {
-        self.io.net.subscribe(poll, cookie)
-    }
-
-    pub fn create_tcp_socket(self: &Arc<Self>) -> Result<Arc<TcpSocket>, ErrorCode> {
-        let socket = TcpSocket::new(self.io.clone())?;
-        self.tcp_listeners.lock().add(&socket);
-        Ok(socket)
-    }
-
-    pub fn create_udp_socket(self: &Arc<Self>) -> Result<Arc<UdpSocket>, ErrorCode> {
-        UdpSocket::new(self.io.clone())
-    }
 
     pub fn handle_rx(&self) {
         let Ok(mut header) = alloc_buf(RX_HEADER_LEN) else {
@@ -333,7 +326,7 @@ impl TcpIp {
         };
 
         loop {
-            let payload_len = match self.io.net.recv(&mut header, &mut payload) {
+            let payload_len = match self.net.recv(&mut header, &mut payload) {
                 Ok(len) => len,
                 Err(error) if error == ErrorCode::Empty => return,
                 Err(_) => panic!("failed to receive a network packet"),
@@ -352,10 +345,14 @@ impl TcpIp {
         let pkt = TcpPacketInfo::parse(header);
 
         // Lookup the flow or listener.
-        if let Some(conn) = self.io.tcp_flows.lock().lookup(&pkt) {
+        let conn = self.tcp_flows.lock().lookup(&pkt);
+        if let Some(conn) = conn {
             conn.handle_rx(&pkt, payload);
-        } else if let Some(listener) = self.tcp_listeners.lock().lookup(&pkt) {
-            listener.handle_rx(&pkt, payload);
+        } else {
+            let listener = self.tcp_listeners.lock().get(&pkt.local_port).cloned();
+            if let Some(listener) = listener {
+                listener.handle_rx(&pkt, payload);
+            }
         }
 
         self.garbage_collect();
@@ -368,22 +365,22 @@ impl TcpIp {
             return;
         };
 
-        let rx_queue = self.io.udp_ports.lock().get(&pkt.local_port).cloned();
+        let rx_queue = self.udp_ports.lock().get(&pkt.local_port).cloned();
         if let Some(rx_queue) = rx_queue {
             rx_queue.handle_rx(pkt.remote, payload);
         }
     }
 
     pub fn handle_timeouts(&self, now: MonoTime) {
-        self.io.tcp_flows.lock().poll(now);
+        self.tcp_flows.lock().poll(now);
         self.garbage_collect();
     }
 
     fn garbage_collect(&self) {
         // TODO: This might take some time. Optimize this.
-        let mut flows = self.io.tcp_flows.lock();
+        let mut flows = self.tcp_flows.lock();
         while let Some(rule) = flows.pop_closed() {
-            if let Err(error) = self.io.net.unbind(&rule) {
+            if let Err(error) = self.net.unbind(&rule) {
                 trace!("failed to unbind flow: {:?}", error);
             }
         }
