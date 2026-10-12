@@ -5,21 +5,11 @@ use core::ops::BitOrAssign;
 
 use ftl_types::net::IPPROTO_TCP;
 
-#[repr(C, packed)]
-struct Ipv4Header {
-    version_ihl: u8,
-    dscp_ecn: u8,
-    total_len: u16,
-    id: u16,
-    flags_and_frag: u16,
-    ttl: u8,
-    protocol: u8,
-    checksum: u16,
-    src_ip: u32,
-    dst_ip: u32,
-}
-
-const IPV4_HEADER_LEN: usize = size_of::<Ipv4Header>();
+use crate::endian::read_u16_be;
+use crate::endian::read_u32_be;
+pub use crate::net::ipv4::Endpoint;
+use crate::net::ipv4::IPV4_HEADER_LEN;
+use crate::net::ipv4::Ipv4Header;
 
 #[repr(C, packed)]
 struct TcpHeader {
@@ -35,12 +25,6 @@ struct TcpHeader {
 }
 
 const TCP_HEADER_LEN: usize = size_of::<TcpHeader>();
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub struct Endpoint {
-    pub ip: u32,
-    pub port: u16,
-}
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct TcpFlags(u8);
@@ -104,16 +88,16 @@ impl TcpPacketInfo {
         // already done it.
         let version_ihl = header[offset_of!(Ipv4Header, version_ihl)];
         let ip_header_len = (version_ihl & 0x0f) as usize * 4;
-        let remote_ip = read_u32(header, offset_of!(Ipv4Header, src_ip));
-        let total_len = read_u16(header, offset_of!(Ipv4Header, total_len)) as usize;
+        let remote_ip = read_u32_be(header, offset_of!(Ipv4Header, src_ip));
+        let total_len = read_u16_be(header, offset_of!(Ipv4Header, total_len)) as usize;
 
         // Parser TCP header.
         let tcp_header = &header[ip_header_len..ip_header_len + TCP_HEADER_LEN];
-        let local_port = read_u16(tcp_header, offset_of!(TcpHeader, dst_port));
-        let remote_port = read_u16(tcp_header, offset_of!(TcpHeader, src_port));
-        let seq = read_u32(tcp_header, offset_of!(TcpHeader, seq));
-        let ack = read_u32(tcp_header, offset_of!(TcpHeader, ack));
-        let window_size = read_u16(tcp_header, offset_of!(TcpHeader, window_size));
+        let local_port = read_u16_be(tcp_header, offset_of!(TcpHeader, dst_port));
+        let remote_port = read_u16_be(tcp_header, offset_of!(TcpHeader, src_port));
+        let seq = read_u32_be(tcp_header, offset_of!(TcpHeader, seq));
+        let ack = read_u32_be(tcp_header, offset_of!(TcpHeader, ack));
+        let window_size = read_u16_be(tcp_header, offset_of!(TcpHeader, window_size));
         let flags = tcp_header[offset_of!(TcpHeader, flags)];
         let tcp_header_len = (tcp_header[offset_of!(TcpHeader, data_offset)] >> 4) as usize * 4;
 
@@ -129,14 +113,6 @@ impl TcpPacketInfo {
             flags,
         }
     }
-}
-
-fn read_u16(buf: &[u8], offset: usize) -> u16 {
-    u16::from_be_bytes(buf[offset..offset + size_of::<u16>()].try_into().unwrap())
-}
-
-fn read_u32(buf: &[u8], offset: usize) -> u32 {
-    u32::from_be_bytes(buf[offset..offset + size_of::<u32>()].try_into().unwrap())
 }
 
 pub struct HeaderBuilder {

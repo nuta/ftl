@@ -187,7 +187,7 @@ impl TcpConn {
     /// Send a segment.
     fn send(&self, segment: Segment) -> Result<(), Errno> {
         self.io
-            .send_segment(self.remote, self.local_port, segment)
+            .send_tcp_segment(self.remote, self.local_port, segment)
             .map_err(Errno::from)
     }
 

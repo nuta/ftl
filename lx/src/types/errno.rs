@@ -29,6 +29,8 @@ impl Errno {
     pub const ERANGE: Self = Self(34);
     pub const ENOSYS: Self = Self(38);
     pub const ENOTSOCK: Self = Self(88);
+    pub const EDESTADDRREQ: Self = Self(89);
+    pub const EMSGSIZE: Self = Self(90);
     pub const ENOTSUP: Self = Self(95);
     pub const EADDRINUSE: Self = Self(98);
     pub const EADDRNOTAVAIL: Self = Self(99);

@@ -110,18 +110,38 @@ impl<'a> UdpRewriter<'a> {
         write_u16(self.buf, offset_of!(UdpHeader, dst_port), port);
     }
 
-    pub fn set_len(&mut self) {
-        write_u16(self.buf, offset_of!(UdpHeader, len), self.buf.len() as u16);
+    pub fn src_port(&self) -> u16 {
+        read_u16(self.buf, offset_of!(UdpHeader, src_port))
     }
 
-    pub fn update_checksum(&mut self, src_ip: Ipv4Addr, dst_ip: Ipv4Addr) {
+    pub fn dst_port(&self) -> u16 {
+        read_u16(self.buf, offset_of!(UdpHeader, dst_port))
+    }
+
+    pub fn set_len(&mut self, len: u16) {
+        write_u16(self.buf, offset_of!(UdpHeader, len), len);
+    }
+
+    pub fn update_checksum(&mut self, src_ip: Ipv4Addr, dst_ip: Ipv4Addr, payload: Option<&[u8]>) {
         write_u16(self.buf, offset_of!(UdpHeader, checksum), 0);
+
+        let payload_len = if let Some(payload) = payload {
+            payload.len()
+        } else {
+            0
+        };
+
         let mut checksum = Checksum::new();
         checksum.add_ipv4(src_ip);
         checksum.add_ipv4(dst_ip);
         checksum.add_u16(IPPROTO_UDP as u16);
-        checksum.add_u16(self.buf.len() as u16);
+        checksum.add_u16((self.buf.len() + payload_len) as u16);
         checksum.add_bytes(self.buf);
+
+        if let Some(payload) = payload {
+            checksum.add_bytes(payload);
+        }
+
         let checksum = checksum.finish();
         write_u16(
             self.buf,

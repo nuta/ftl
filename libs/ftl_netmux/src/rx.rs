@@ -33,6 +33,7 @@ use crate::packet::ethernet::EthernetInspector;
 use crate::packet::ipv4::Ipv4Inspector;
 use crate::packet::ipv4::NetMask;
 use crate::packet::tcp::TcpInspector;
+use crate::packet::udp::UDP_HEADER_LEN;
 use crate::packet::udp::UdpInspector;
 use crate::tx::Route;
 
@@ -268,10 +269,7 @@ impl<'a, N: RxNotify> NetMux<'a, N> {
         // Forward to the upper layer, and get the routing key.
         let five_tuple = match ipv4.ip_proto() {
             IPPROTO_TCP => self.handle_tcp(&ipv4),
-            IPPROTO_UDP => {
-                self.handle_udp(device_id, &ipv4);
-                return;
-            }
+            IPPROTO_UDP => self.handle_udp(device_id, &ipv4),
             _ => {
                 ftl_driver::trace!(self.env, "unsupported IP protocol: {:x}", ipv4.ip_proto());
                 return;
@@ -298,28 +296,51 @@ impl<'a, N: RxNotify> NetMux<'a, N> {
         nic.receive(packet);
     }
 
-    fn handle_udp(&mut self, device_id: DeviceId, ipv4: &Ipv4Inspector<'_>) {
+    fn handle_udp(
+        &mut self,
+        device_id: DeviceId,
+        ipv4: &Ipv4Inspector<'_>,
+    ) -> Option<(FiveTuple, usize)> {
         let udp = match UdpInspector::new(ipv4.payload()) {
             Ok(udp) => udp,
             Err(e) => {
                 ftl_driver::trace!(self.env, "failed to inspect UDP datagram: {:?}", e);
-                return;
+                return None;
             }
         };
 
         if let Err(e) = udp.validate(ipv4) {
             ftl_driver::trace!(self.env, "failed to validate UDP datagram: {:?}", e);
-            return;
+            return None;
         }
 
-        if udp.src_port() != DHCP_SERVER_PORT || udp.dst_port() != DHCP_CLIENT_PORT {
-            return;
+        if udp.src_port() == DHCP_SERVER_PORT && udp.dst_port() == DHCP_CLIENT_PORT {
+            self.handle_dhcp(device_id, ipv4, &udp);
+            return None;
         }
 
+        let five_tuple = FiveTuple {
+            eth_type: ETHTYPE_IPV4,
+            ip_proto: IPPROTO_UDP,
+            local_ip: ipv4.dst_ip().as_u32(),
+            local_port: udp.dst_port(),
+            remote_ip: ipv4.src_ip().as_u32(),
+            remote_port: udp.src_port(),
+        };
+
+        Some((five_tuple, UDP_HEADER_LEN))
+    }
+
+    fn handle_dhcp(
+        &mut self,
+        device_id: DeviceId,
+        ipv4: &Ipv4Inspector<'_>,
+        udp: &UdpInspector<'_>,
+    ) {
         let Some(config) = self
             .devices
             .get_mut(&device_id)
-            .and_then(|device| device.handle_dhcp_rx(ipv4, &udp))
+            .and_then(|device| device.handle_dhcp_rx(ipv4, udp))
         else {
             return;
         };

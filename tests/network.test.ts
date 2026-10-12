@@ -35,3 +35,23 @@ test("TCP active open", async () => {
     using vm = await boot({ hostPort, init: `/bin/util nc 10.0.2.2 ${server.port}` });
     await vm.waitForLog("echo: hello from nc");
 }, 5000);
+
+test("UDP send and receive", async () => {
+    const server = await Bun.udpSocket({
+        hostname: "127.0.0.1",
+        port: 0,
+        socket: {
+            data(socket, data, port, address) {
+                socket.send(`echo: ${data}`, port, address);
+            },
+        },
+    });
+
+    try {
+        const hostPort = await getAvailablePort();
+        using vm = await boot({ hostPort, init: `/bin/util nc -u 10.0.2.2 ${server.port}` });
+        await vm.waitForLog("echo: hello from nc");
+    } finally {
+        server.close();
+    }
+}, 5000);

@@ -39,3 +39,22 @@ impl TimeSpec {
             .checked_add(self.tv_nsec as u64)
     }
 }
+
+#[allow(non_camel_case_types)]
+#[repr(C)]
+pub struct TimeVal {
+    pub tv_sec: time_t,
+    pub tv_usec: c_long,
+}
+
+impl TimeVal {
+    pub fn to_nanos(&self) -> Option<u64> {
+        if self.tv_sec < 0 || self.tv_usec < 0 || self.tv_usec >= 1_000_000 {
+            return None;
+        }
+
+        (self.tv_sec as u64)
+            .checked_mul(1_000_000_000)?
+            .checked_add(self.tv_usec as u64 * 1_000)
+    }
+}

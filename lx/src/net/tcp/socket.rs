@@ -116,7 +116,7 @@ impl TcpSocket {
                 State::Init { local_port } => {
                     // Start a handshake.
                     let wq = self.wait_queue.clone();
-                    let conn = self.io.connect(remote, *local_port, wq)?;
+                    let conn = self.io.connect_tcp(remote, *local_port, wq)?;
                     *state = State::Conn(conn.clone());
                     conn
                 }

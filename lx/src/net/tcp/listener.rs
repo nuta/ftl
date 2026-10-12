@@ -60,7 +60,7 @@ impl TcpListener {
         backlog: usize,
     ) -> Result<Arc<Self>, Errno> {
         // Bind the listening port.
-        match io.bind_listener(local_port) {
+        match io.bind_tcp_listener(local_port) {
             Ok(()) => {}
             Err(ErrorCode::AlreadyExists) => return Err(Errno::EADDRINUSE),
             Err(error) => return Err(error.into()),
@@ -137,7 +137,7 @@ impl TcpListener {
 
         if let Err(err) = self
             .io
-            .send_segment(handshake.remote, self.local_port, segment)
+            .send_tcp_segment(handshake.remote, self.local_port, segment)
         {
             trace!("failed to send SYN-ACK packet: {:?}", err);
         }
@@ -250,7 +250,7 @@ impl TcpListener {
             }
         };
 
-        if let Err(err) = self.io.add_connection(conn.clone(), pkt) {
+        if let Err(err) = self.io.add_tcp_conn(conn.clone(), pkt) {
             trace!("failed to add connection: {:?}", err);
             return;
         }
@@ -292,6 +292,6 @@ impl Drop for TcpListener {
         }
 
         // Unbind the listening port.
-        self.io.unbind_listener(self.local_port);
+        self.io.unbind_tcp_listener(self.local_port);
     }
 }

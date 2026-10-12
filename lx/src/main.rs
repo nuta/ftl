@@ -6,6 +6,7 @@ extern crate alloc;
 
 mod arch;
 mod container;
+mod endian;
 mod fault;
 mod fd_table;
 mod futex;

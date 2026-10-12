@@ -31,8 +31,8 @@ pub fn send_broadcast<'a>(
     let mut udp = UdpRewriter::new(udp_packet).map_err(|_| ErrorCode::InvalidArg)?;
     udp.set_src_port(src_port);
     udp.set_dst_port(dst_port);
-    udp.set_len();
-    udp.update_checksum(IPV4_UNSPECIFIED, IPV4_BROADCAST);
+    udp.set_len((UDP_HEADER_LEN + payload.len()) as u16);
+    udp.update_checksum(IPV4_UNSPECIFIED, IPV4_BROADCAST, None);
 
     let mut ipv4 = Ipv4Rewriter::new(packet).map_err(|_| ErrorCode::InvalidArg)?;
     ipv4.set_version_and_header_len();

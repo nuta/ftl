@@ -1,6 +1,6 @@
 use alloc::sync::Arc;
-use alloc::sync::Weak;
 use alloc::vec::Vec;
+use core::mem::offset_of;
 use core::num::NonZeroU16;
 use core::num::NonZeroU32;
 
@@ -12,16 +12,24 @@ use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use ftl_types::net::ETHTYPE_IPV4;
 use ftl_types::net::IPPROTO_TCP;
+use ftl_types::net::IPPROTO_UDP;
 use ftl_types::net::Rule;
 use ftl_utils::spinlock::SpinLock;
 use hashbrown::HashMap;
 
-use super::tcp::Endpoint;
+use super::ipv4::Endpoint;
+use super::ipv4::Ipv4Header;
 use super::tcp::HeaderBuilder;
 use super::tcp::Segment;
 use super::tcp::TcpConn;
+use super::tcp::TcpFlows;
+use super::tcp::TcpListenerTable;
 use super::tcp::TcpPacketInfo;
 use super::tcp::TcpSocket;
+use super::udp::HeaderBuilder as UdpHeaderBuilder;
+use super::udp::RxQueue;
+use super::udp::UdpPacketInfo;
+use super::udp::UdpSocket;
 use crate::types::errno::Errno;
 use crate::wait_queue::WaitQueue;
 
@@ -40,18 +48,20 @@ fn alloc_buf(len: usize) -> Result<Vec<u8>, ErrorCode> {
 
 pub struct Io {
     net: Net,
-    flows: SpinLock<FlowTable>,
+    tcp_flows: SpinLock<TcpFlows>,
+    udp_ports: SpinLock<HashMap<u16, Arc<RxQueue>>>,
 }
 
 impl Io {
     fn new(net: Net) -> Self {
         Self {
             net,
-            flows: SpinLock::new(FlowTable::new()),
+            tcp_flows: SpinLock::new(TcpFlows::new()),
+            udp_ports: SpinLock::new(HashMap::new()),
         }
     }
 
-    pub fn send_segment(
+    pub fn send_tcp_segment(
         &self,
         remote: Endpoint,
         local_port: u16,
@@ -61,7 +71,7 @@ impl Io {
         self.net.send(&header, segment.payload)
     }
 
-    pub fn bind_listener(&self, port: u16) -> Result<(), ErrorCode> {
+    pub fn bind_tcp_listener(&self, port: u16) -> Result<(), ErrorCode> {
         let local_port = NonZeroU16::new(port).ok_or(ErrorCode::InvalidArg)?;
         let rule = Rule::new(
             ETHTYPE_IPV4,
@@ -74,7 +84,11 @@ impl Io {
         self.net.bind(&rule)
     }
 
-    fn bind_flow(&self, local_port: Option<u16>, remote: Endpoint) -> Result<(u16, Rule), Errno> {
+    fn bind_tcp_conn(
+        &self,
+        local_port: Option<u16>,
+        remote: Endpoint,
+    ) -> Result<(u16, Rule), Errno> {
         let remote_ip = NonZeroU32::new(remote.ip).ok_or(Errno::EINVAL)?;
         let remote_port = NonZeroU16::new(remote.port).ok_or(Errno::EINVAL)?;
 
@@ -131,7 +145,84 @@ impl Io {
         Err(Errno::EADDRNOTAVAIL)
     }
 
-    pub fn connect(
+    pub fn bind_udp(&self, local_port: Option<u16>, rx_queue: Arc<RxQueue>) -> Result<u16, Errno> {
+        let local_port = match local_port {
+            Some(0) | None => None,
+            Some(port) => NonZeroU16::new(port),
+        };
+
+        if let Some(local_port) = local_port {
+            let rule = Rule::new(
+                ETHTYPE_IPV4,
+                IPPROTO_UDP,
+                None,
+                Some(local_port),
+                None,
+                None,
+            );
+
+            match self.net.bind(&rule) {
+                Ok(()) => {
+                    self.udp_ports.lock().insert(local_port.get(), rx_queue);
+                    return Ok(local_port.get());
+                }
+                Err(ErrorCode::AlreadyExists) => return Err(Errno::EADDRINUSE),
+                Err(error) => return Err(error.into()),
+            }
+        }
+
+        // Assign an ephemeral port.
+        for port in EPHEMERAL_PORT_MIN..=EPHEMERAL_PORT_MAX {
+            let rule = Rule::new(
+                ETHTYPE_IPV4,
+                IPPROTO_UDP,
+                None,
+                NonZeroU16::new(port),
+                None,
+                None,
+            );
+
+            match self.net.bind(&rule) {
+                Ok(()) => {
+                    self.udp_ports.lock().insert(port, rx_queue);
+                    return Ok(port);
+                }
+                Err(ErrorCode::AlreadyExists) => {
+                    // The port is already in use. Try the next one.
+                }
+                Err(error) => return Err(error.into()),
+            }
+        }
+
+        Err(Errno::EADDRINUSE)
+    }
+
+    pub fn unbind_udp(&self, port: u16) {
+        self.udp_ports.lock().remove(&port);
+        let rule = Rule::new(
+            ETHTYPE_IPV4,
+            IPPROTO_UDP,
+            None,
+            NonZeroU16::new(port),
+            None,
+            None,
+        );
+
+        let _ = self.net.unbind(&rule);
+    }
+
+    pub fn send_udp(
+        &self,
+        remote: Endpoint,
+        local_port: u16,
+        payload: &[u8],
+    ) -> Result<(), ErrorCode> {
+        let builder = UdpHeaderBuilder::new();
+        let header = builder.build(remote, local_port, payload.len());
+        self.net.send(&header, payload)
+    }
+
+    pub fn connect_tcp(
         self: &Arc<Self>,
         remote: Endpoint,
         local_port: Option<u16>,
@@ -140,7 +231,7 @@ impl Io {
         let mut iss = [0; 4];
         crate::random::read(&mut iss)?;
 
-        let (local_port, rule) = self.bind_flow(local_port, remote)?;
+        let (local_port, rule) = self.bind_tcp_conn(local_port, remote)?;
         let conn = match TcpConn::new_active(
             self.clone(),
             wait_queue,
@@ -156,23 +247,16 @@ impl Io {
         };
 
         // Register the flow.
-        let key = FlowKey {
-            local_port,
-            remote_ip: remote.ip,
-            remote_port: remote.port,
-        };
-        let flow = Flow {
-            conn: conn.clone(),
-            rule,
-        };
-        self.flows.lock().flows.insert(key, flow);
+        self.tcp_flows
+            .lock()
+            .insert(local_port, remote, conn.clone(), rule);
 
         // Start handshake.
         conn.start_active();
         Ok(conn)
     }
 
-    pub fn add_connection(&self, conn: Arc<TcpConn>, pkt: &TcpPacketInfo) -> Result<(), ErrorCode> {
+    pub fn add_tcp_conn(&self, conn: Arc<TcpConn>, pkt: &TcpPacketInfo) -> Result<(), ErrorCode> {
         let local_port = NonZeroU16::new(pkt.local_port).ok_or(ErrorCode::InvalidArg)?;
         let remote_ip = NonZeroU32::new(pkt.remote_ip).ok_or(ErrorCode::InvalidArg)?;
         let remote_port = NonZeroU16::new(pkt.remote_port).ok_or(ErrorCode::InvalidArg)?;
@@ -186,12 +270,17 @@ impl Io {
         );
 
         self.net.bind(&rule)?;
-        let key = FlowKey::from_packet(pkt);
-        self.flows.lock().flows.insert(key, Flow { conn, rule });
+        let remote = Endpoint {
+            ip: pkt.remote_ip,
+            port: pkt.remote_port,
+        };
+        self.tcp_flows
+            .lock()
+            .insert(pkt.local_port, remote, conn, rule);
         Ok(())
     }
 
-    pub fn unbind_listener(&self, port: u16) {
+    pub fn unbind_tcp_listener(&self, port: u16) {
         let Some(local_port) = NonZeroU16::new(port) else {
             return;
         };
@@ -207,110 +296,16 @@ impl Io {
     }
 }
 
-struct Flow {
-    conn: Arc<TcpConn>,
-    rule: Rule,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-struct FlowKey {
-    local_port: u16,
-    remote_ip: u32,
-    remote_port: u16,
-}
-
-impl FlowKey {
-    fn from_packet(pkt: &TcpPacketInfo) -> Self {
-        Self {
-            local_port: pkt.local_port,
-            remote_ip: pkt.remote_ip,
-            remote_port: pkt.remote_port,
-        }
-    }
-}
-
-/// Maps flows to their state.
-struct FlowTable {
-    flows: HashMap<FlowKey, Flow>,
-}
-
-impl FlowTable {
-    fn new() -> Self {
-        Self {
-            flows: HashMap::new(),
-        }
-    }
-
-    fn lookup(&self, pkt: &TcpPacketInfo) -> Option<Arc<TcpConn>> {
-        let key = FlowKey::from_packet(pkt);
-        self.flows.get(&key).map(|flow| flow.conn.clone())
-    }
-
-    fn poll(&self, now: MonoTime) {
-        for flow in self.flows.values() {
-            flow.conn.poll(now);
-        }
-    }
-
-    // TODO: Optimize this.
-    fn pop_closed(&mut self) -> Option<Rule> {
-        let mut to_remove = None;
-        for (tuple, flow) in self.flows.iter_mut() {
-            if flow.conn.is_closed() {
-                to_remove = Some((*tuple, flow.rule));
-                break;
-            }
-        }
-
-        if let Some((tuple, rule)) = to_remove {
-            self.flows.remove(&tuple);
-            Some(rule)
-        } else {
-            None
-        }
-    }
-}
-
-/// TCP listeners.
-///
-/// FIXME: Weak references are used to GC, but we should remove the listener
-///        explicitly when it's closed, not lazily. I need some more time to
-///        come up with a cleaner solution...
-struct ListenerTable {
-    listeners: Vec<Weak<TcpSocket>>,
-}
-
-impl ListenerTable {
-    fn new() -> Self {
-        Self {
-            listeners: Vec::new(),
-        }
-    }
-
-    fn add(&mut self, listener: &Arc<TcpSocket>) {
-        self.listeners
-            .retain(|listener| listener.strong_count() > 0);
-        self.listeners.push(Arc::downgrade(listener));
-    }
-
-    fn lookup(&self, pkt: &TcpPacketInfo) -> Option<Arc<TcpSocket>> {
-        self.listeners
-            .iter()
-            .filter_map(Weak::upgrade)
-            .find(|listener| listener.matches(pkt) && listener.can_accept())
-    }
-}
-
 pub struct TcpIp {
     io: Arc<Io>,
-    listeners: SpinLock<ListenerTable>,
+    tcp_listeners: SpinLock<TcpListenerTable>,
 }
 
 impl TcpIp {
     pub fn new(net: Net) -> Arc<Self> {
         Arc::new(Self {
             io: Arc::new(Io::new(net)),
-            listeners: SpinLock::new(ListenerTable::new()),
+            tcp_listeners: SpinLock::new(TcpListenerTable::new()),
         })
     }
 
@@ -322,10 +317,14 @@ impl TcpIp {
         self.io.net.subscribe(poll)
     }
 
-    pub fn create_socket(self: &Arc<Self>) -> Result<Arc<TcpSocket>, ErrorCode> {
+    pub fn create_tcp_socket(self: &Arc<Self>) -> Result<Arc<TcpSocket>, ErrorCode> {
         let socket = TcpSocket::new(self.io.clone())?;
-        self.listeners.lock().add(&socket);
+        self.tcp_listeners.lock().add(&socket);
         Ok(socket)
+    }
+
+    pub fn create_udp_socket(self: &Arc<Self>) -> Result<Arc<UdpSocket>, ErrorCode> {
+        UdpSocket::new(self.io.clone())
     }
 
     pub fn handle_rx(&self) {
@@ -345,28 +344,49 @@ impl TcpIp {
                 Err(_) => panic!("failed to receive a network packet"),
             };
 
-            let pkt = TcpPacketInfo::parse(&header);
             let payload = &payload[..payload_len];
-
-            // Lookup the flow or listener.
-            if let Some(conn) = self.io.flows.lock().lookup(&pkt) {
-                conn.handle_rx(&pkt, payload);
-            } else if let Some(listener) = self.listeners.lock().lookup(&pkt) {
-                listener.handle_rx(&pkt, payload);
+            match header[offset_of!(Ipv4Header, protocol)] {
+                IPPROTO_TCP => self.handle_tcp_rx(&header, payload),
+                IPPROTO_UDP => self.handle_udp_rx(&header, payload),
+                _ => {}
             }
+        }
+    }
 
-            self.garbage_collect();
+    fn handle_tcp_rx(&self, header: &[u8], payload: &[u8]) {
+        let pkt = TcpPacketInfo::parse(header);
+
+        // Lookup the flow or listener.
+        if let Some(conn) = self.io.tcp_flows.lock().lookup(&pkt) {
+            conn.handle_rx(&pkt, payload);
+        } else if let Some(listener) = self.tcp_listeners.lock().lookup(&pkt) {
+            listener.handle_rx(&pkt, payload);
+        }
+
+        self.garbage_collect();
+    }
+
+    fn handle_udp_rx(&self, header: &[u8], payload: &[u8]) {
+        let pkt = UdpPacketInfo::parse(header);
+
+        let Some(payload) = payload.get(..pkt.payload_len) else {
+            return;
+        };
+
+        let rx_queue = self.io.udp_ports.lock().get(&pkt.local_port).cloned();
+        if let Some(rx_queue) = rx_queue {
+            rx_queue.handle_rx(pkt.remote, payload);
         }
     }
 
     pub fn handle_timeouts(&self, now: MonoTime) {
-        self.io.flows.lock().poll(now);
+        self.io.tcp_flows.lock().poll(now);
         self.garbage_collect();
     }
 
     fn garbage_collect(&self) {
         // TODO: This might take some time. Optimize this.
-        let mut flows = self.io.flows.lock();
+        let mut flows = self.io.tcp_flows.lock();
         while let Some(rule) = flows.pop_closed() {
             if let Err(error) = self.io.net.unbind(&rule) {
                 trace!("failed to unbind flow: {:?}", error);

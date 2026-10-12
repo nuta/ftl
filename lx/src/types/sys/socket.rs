@@ -16,6 +16,7 @@ pub const SHUT_RDWR: c_int = 2;
 
 pub const SOL_SOCKET: c_int = 1;
 pub const SO_REUSEADDR: c_int = 2;
+pub const SO_RCVTIMEO: c_int = 20;
 
 pub const MSG_DONTWAIT: c_int = 0x40;
 pub const MSG_NOSIGNAL: c_int = 0x4000;

@@ -4,6 +4,7 @@ use ftl_types::error::ErrorCode;
 use ftl_types::net::ETHTYPE_IPV4;
 use ftl_types::net::FiveTuple;
 use ftl_types::net::IPPROTO_TCP;
+use ftl_types::net::IPPROTO_UDP;
 use ftl_utils::reserve_slot::ReserveSlot;
 
 use crate::BufReader;
@@ -18,6 +19,7 @@ use crate::packet::ipv4::Ipv4Rewriter;
 use crate::packet::ipv4::NetMask;
 use crate::packet::tcp::TcpInspector;
 use crate::packet::tcp::TcpRewriter;
+use crate::packet::udp::UdpRewriter;
 
 pub struct Route {
     device: DeviceId,
@@ -124,52 +126,71 @@ impl<'a, N: RxNotify> NetMux<'a, N> {
             return Err(ErrorCode::InvalidArg);
         }
 
-        // Only TCP is supported for now.
-        // TODO: Should we overwrite instead?
-        if ipv4.ip_proto() != IPPROTO_TCP {
-            return Err(ErrorCode::InvalidArg);
-        }
-
         // Select the route from the destination in the IPv4 header.
+        let ip_proto = ipv4.ip_proto();
         let dst_ip = ipv4.dst_ip();
         let ipv4_header_len = ipv4.header_len();
         let (device_id, our_ip, next_hop_ip) =
             self.tx.lookup(dst_ip).ok_or(ErrorCode::InvalidArg)?;
 
-        // Parse the TCP header.
-        let tcp_bytes = &mut header_buf[ipv4_header_len..];
-        let tcp = match TcpInspector::new(tcp_bytes) {
-            Ok(tcp) => tcp,
-            Err(e) => {
-                ftl_driver::trace!(self.env, "invalid TCP header: {:?}", e);
+        let trans_bytes = &mut header_buf[ipv4_header_len..];
+        let (local_port, remote_port) = match ip_proto {
+            IPPROTO_TCP => {
+                // Parse the TCP header.
+                let tcp = match TcpInspector::new(trans_bytes) {
+                    Ok(tcp) => tcp,
+                    Err(e) => {
+                        ftl_driver::trace!(self.env, "invalid TCP header: {:?}", e);
+                        return Err(ErrorCode::InvalidArg);
+                    }
+                };
+                let ports = (tcp.src_port(), tcp.dst_port());
+
+                let mut tcp = match TcpRewriter::new(trans_bytes) {
+                    Ok(tcp) => tcp,
+                    Err(e) => {
+                        ftl_driver::trace!(self.env, "invalid TCP header: {:?}", e);
+                        return Err(ErrorCode::InvalidArg);
+                    }
+                };
+
+                // Update the TCP header.
+                tcp.update_checksum(our_ip, dst_ip, payload_buf.as_deref());
+                ports
+            }
+            IPPROTO_UDP => {
+                let udp_len = trans_bytes.len() + payload_len;
+                let mut udp = match UdpRewriter::new(trans_bytes) {
+                    Ok(udp) => udp,
+                    Err(e) => {
+                        ftl_driver::trace!(self.env, "invalid UDP header: {:?}", e);
+                        return Err(ErrorCode::InvalidArg);
+                    }
+                };
+
+                udp.set_len(udp_len as u16);
+                udp.update_checksum(our_ip, dst_ip, payload_buf.as_deref());
+                (udp.src_port(), udp.dst_port())
+            }
+            _ => {
+                // TODO: Should we overwrite instead?
                 return Err(ErrorCode::InvalidArg);
             }
         };
 
         let five_tuple = FiveTuple {
             eth_type: ETHTYPE_IPV4,
-            ip_proto: IPPROTO_TCP,
+            ip_proto,
             local_ip: our_ip.as_u32(),
-            local_port: tcp.src_port(),
+            local_port,
             remote_ip: dst_ip.as_u32(),
-            remote_port: tcp.dst_port(),
+            remote_port,
         };
 
         // Check if this network owns the five-tuple.
         if self.rx.find_nic_by_five_tuple(five_tuple) != Some(nic_id) {
             return Err(ErrorCode::NotAllowed);
         }
-
-        let mut tcp = match TcpRewriter::new(tcp_bytes) {
-            Ok(tcp) => tcp,
-            Err(e) => {
-                ftl_driver::trace!(self.env, "invalid TCP header: {:?}", e);
-                return Err(ErrorCode::InvalidArg);
-            }
-        };
-
-        // Update the TCP header.
-        tcp.update_checksum(our_ip, dst_ip, payload_buf.as_deref());
 
         // Update the IPv4 header.
         let mut ipv4 = match Ipv4Rewriter::new(header_buf) {
