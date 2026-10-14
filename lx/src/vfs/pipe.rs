@@ -73,8 +73,8 @@ impl Pipe {
         ))
     }
 
-    fn notify(&self) {
-        if let Err(error) = self.inner.wait_queue.notify_all() {
+    fn notify(&self, events: c_short) {
+        if let Err(error) = self.inner.wait_queue.notify(Some(events)) {
             trace!("failed to notify pipe waiters: {:?}", error);
         }
     }
@@ -106,7 +106,7 @@ impl FileLike for Pipe {
 
                 // Notify the waiters. There might be writers that are waiting
                 // for the pipe to be writable.
-                self.notify();
+                self.notify(POLLOUT);
                 return Ok(n);
             }
 
@@ -207,7 +207,7 @@ impl FileLike for Pipe {
 
         // Notify the waiters. There might be readers that are waiting
         // for the pipe to be readable.
-        self.notify();
+        self.notify(POLLIN);
 
         Ok(n)
     }
@@ -221,7 +221,7 @@ impl FileLike for Pipe {
             }
         }
 
-        self.notify();
+        self.notify(POLLIN | POLLOUT | POLLERR | POLLHUP);
     }
 
     fn poll(&self) -> Result<c_short, Errno> {

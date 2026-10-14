@@ -13,6 +13,7 @@ use ftl_utils::spinlock::SpinLock;
 use crate::open_file::CloseListener;
 use crate::open_file::OpenFile;
 use crate::types::c_int;
+use crate::types::c_short;
 use crate::types::errno::Errno;
 use crate::types::sys::epoll::EPOLLET;
 use crate::types::sys::epoll::EPOLLONESHOT;
@@ -60,7 +61,14 @@ impl Watch {
 }
 
 impl WaitListener for Watch {
-    fn notify(&self) {
+    fn notify(&self, events: Option<c_short>) {
+        if let Some(events) = events {
+            let interests = self.event.lock().events;
+            if (events as u32) & interests == 0 {
+                return;
+            }
+        }
+
         if let Some(epoll) = self.inner.upgrade() {
             epoll.mark_ready(self.fd);
         }
@@ -92,7 +100,7 @@ impl Inner {
         }
         drop(mutable);
 
-        let _ = self.wait_queue.notify_all();
+        let _ = self.wait_queue.notify(None);
     }
 
     fn detach(&self, fd: c_int) {
@@ -255,7 +263,7 @@ impl Epoll {
 
                 // Concurrent readers may want to read the fds that we've
                 // temporarily popped. Notify them to re-check the readiness.
-                if let Err(e) = self.inner.wait_queue.notify_all() {
+                if let Err(e) = self.inner.wait_queue.notify(None) {
                     trace!("Failed to notify wait queue: {:?}", e);
                 }
 

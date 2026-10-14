@@ -14,6 +14,7 @@ use super::packet::TcpFlags;
 use super::packet::TcpPacketInfo;
 use crate::net::tcpip::Io;
 use crate::types::errno::Errno;
+use crate::types::sys::poll::POLLIN;
 use crate::wait_queue::Sleep;
 use crate::wait_queue::WaitQueue;
 
@@ -79,7 +80,7 @@ impl TcpListener {
     }
 
     fn notify(&self) {
-        if let Err(error) = self.wait_queue.notify_all() {
+        if let Err(error) = self.wait_queue.notify(Some(POLLIN)) {
             trace!("failed to notify listener waiters: {:?}", error);
         }
     }

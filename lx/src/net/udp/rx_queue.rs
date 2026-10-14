@@ -5,6 +5,7 @@ use alloc::vec::Vec;
 use ftl_utils::spinlock::SpinLock;
 
 use crate::net::ipv4::Endpoint;
+use crate::types::sys::poll::POLLIN;
 use crate::wait_queue::WaitQueue;
 
 const MAX_DATAGRAMS: usize = 64;
@@ -51,7 +52,7 @@ impl RxQueue {
         });
         drop(mutable);
 
-        let _ = self.wait_queue.notify_all();
+        let _ = self.wait_queue.notify(Some(POLLIN));
     }
 
     /// Sets the remote (peer) address for the socket.

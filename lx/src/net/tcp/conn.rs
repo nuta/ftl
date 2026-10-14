@@ -138,7 +138,7 @@ impl TcpConn {
     }
 
     fn notify(&self) {
-        if let Err(error) = self.wait_queue.notify_all() {
+        if let Err(error) = self.wait_queue.notify(None) {
             trace!("failed to notify connection waiters: {:?}", error);
         }
     }

@@ -11,9 +11,10 @@ use ftl_types::time::MonoTime;
 use ftl_utils::spinlock::SpinLock;
 
 use crate::process::Process;
+use crate::types::c_short;
 
 pub trait WaitListener: Send + Sync {
-    fn notify(&self);
+    fn notify(&self, events: Option<c_short>);
 }
 
 struct Inner {
@@ -120,7 +121,11 @@ impl WaitQueue {
         listeners.push(listener);
     }
 
-    pub fn notify_all(&self) -> Result<(), ErrorCode> {
+    /// Wakes up all waiters on this queue.
+    ///
+    /// `events` is a `POLL*` bitmask of events that occurred. Specify `None`
+    /// to wake up all waiters regardless of their interests.
+    pub fn notify(&self, events: Option<c_short>) -> Result<(), ErrorCode> {
         for _ in 0..self.inner.wait_ones.load(Ordering::Relaxed) {
             self.inner.poll.notify()?;
         }
@@ -140,7 +145,7 @@ impl WaitQueue {
         // Notify the listeners.
         for listener in &listeners {
             if let Some(listener) = listener.upgrade() {
-                listener.notify();
+                listener.notify(events);
             }
         }
 

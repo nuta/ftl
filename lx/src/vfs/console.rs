@@ -46,7 +46,7 @@ impl Console {
                 Ok(0) | Err(ErrorCode::Empty) => break,
                 Ok(n) => {
                     self.pending.lock().extend_from_slice(&tmp[..n]);
-                    if let Err(e) = self.wait_queue.notify_all() {
+                    if let Err(e) = self.wait_queue.notify(Some(POLLIN)) {
                         trace!("failed to notify poll: {:?}", e);
                     }
                 }

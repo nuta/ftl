@@ -373,7 +373,7 @@ impl Process {
         // fails, exit fails and keeps this process alive.
         let parent = mutable.parent.as_ref().and_then(Weak::upgrade);
         if let Some(parent) = &parent {
-            parent.child_exit.notify_all()?;
+            parent.child_exit.notify(None)?;
         }
 
         // Mark the process as exited.
@@ -523,7 +523,7 @@ impl Process {
 
         mutable.pending_signals.insert(signal);
         drop(mutable);
-        self.signal_wait.notify_all()?;
+        self.signal_wait.notify(None)?;
         Ok(())
     }
 

@@ -34,8 +34,8 @@ impl EventFd {
         })
     }
 
-    fn notify(&self) {
-        if let Err(error) = self.wait_queue.notify_all() {
+    fn notify(&self, events: c_short) {
+        if let Err(error) = self.wait_queue.notify(Some(events)) {
             trace!("failed to notify eventfd waiters: {:?}", error);
         }
     }
@@ -86,7 +86,7 @@ impl FileLike for EventFd {
         drop(counter);
 
         // Notify the waiters.
-        self.notify();
+        self.notify(POLLOUT);
 
         // Write the result.
         buf[..size_of::<u64>()].copy_from_slice(&value.to_ne_bytes());
@@ -139,7 +139,7 @@ impl FileLike for EventFd {
         drop(counter);
 
         // Notify the waiters.
-        self.notify();
+        self.notify(POLLIN);
 
         return Ok(COUNTER_SIZE);
     }
