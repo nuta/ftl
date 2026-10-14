@@ -1,6 +1,5 @@
 use core::arch::asm;
 
-// TODO: Check if RDRAND is supported.
 fn rdrand64() -> u64 {
     loop {
         let mut value: u64;

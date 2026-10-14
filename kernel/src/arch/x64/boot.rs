@@ -1,5 +1,7 @@
 use core::arch::asm;
 use core::arch::naked_asm;
+use core::arch::x86_64::__cpuid;
+use core::arch::x86_64::__cpuid_count;
 
 use super::multiboot;
 use super::pvh;
@@ -18,6 +20,7 @@ extern "C" fn rust_boot(multiboot_magic: u32, start_info: u32) -> ! {
     println!("\x1b[?7h");
 
     info!("Booting FTL...");
+    check_cpu_features();
     enable_smep();
     enable_smap();
     enable_fsgsbase();
@@ -41,8 +44,33 @@ extern "C" fn rust_boot(multiboot_magic: u32, start_info: u32) -> ! {
     crate::boot::boot(bootinfo);
 }
 
+fn check_cpu_features() {
+    if __cpuid(0).eax < 0xd || __cpuid(0x8000_0000).eax < 0x8000_0001 {
+        panic!("CPUID leaves not supported");
+    }
+
+    let leaf1 = __cpuid(1);
+    let leaf7 = __cpuid_count(7, 0);
+    let leafd = __cpuid_count(0xd, 1);
+    let ext1 = __cpuid(0x8000_0001);
+    let features = [
+        ("xsave", leaf1.ecx & (1 << 26)),
+        ("rdrand", leaf1.ecx & (1 << 30)),
+        ("fsgsbase", leaf7.ebx & (1 << 0)),
+        ("smep", leaf7.ebx & (1 << 7)),
+        ("smap", leaf7.ebx & (1 << 20)),
+        ("xsaveopt", leafd.eax & (1 << 0)),
+        ("rdtscp", ext1.edx & (1 << 27)),
+    ];
+
+    for (name, supported) in features {
+        if supported == 0 {
+            panic!("CPU feature not supported: {name}");
+        }
+    }
+}
+
 fn enable_smep() {
-    // TODO: CPUID check
     // TODO: Merge with enable_fsgsbase?
     unsafe {
         asm!(
@@ -55,7 +83,6 @@ fn enable_smep() {
 }
 
 fn enable_smap() {
-    // TODO: CPUID check
     // TODO: Merge with enable_fsgsbase?
     unsafe {
         asm!(
@@ -68,7 +95,6 @@ fn enable_smap() {
 }
 
 fn enable_fsgsbase() {
-    // TODO: CPUID check
     unsafe {
         asm!(
             "mov rax, cr4",
