@@ -37,8 +37,8 @@ impl NetMask {
         Self(value)
     }
 
-    pub fn contains(&self, ip: Ipv4Addr) -> bool {
-        (ip.0 & self.0) == self.0
+    pub fn contains(&self, network: Ipv4Addr, ip: Ipv4Addr) -> bool {
+        (ip.0 & self.0) == (network.0 & self.0)
     }
 }
 

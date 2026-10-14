@@ -67,7 +67,7 @@ impl TxRouteTable {
 
     pub fn lookup(&self, dst_ip: Ipv4Addr) -> Option<(DeviceId, Ipv4Addr, Ipv4Addr)> {
         for route in &self.routes {
-            if route.netmask.contains(dst_ip) {
+            if route.netmask.contains(route.our_ip, dst_ip) {
                 return Some((route.device, route.our_ip, route.next_hop_ip));
             }
         }
