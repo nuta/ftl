@@ -37,6 +37,7 @@ const SYN_TIMEOUT_SECS: u64 = 1;
 const MAX_SYN_RETRIES: u32 = 5;
 const RTO_SECS: u64 = 1;
 const MAX_RTO_RETRIES: u32 = 8;
+const MAX_ZWP_BACKOFF: u32 = 6;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum State {
@@ -66,6 +67,8 @@ struct Mutable {
     syn_retries: u32,
     rto_deadline: Option<MonoTime>,
     rto_retries: u32,
+    zwp_deadline: Option<MonoTime>,
+    zwps: u32,
     error: Option<Errno>,
 }
 
@@ -120,6 +123,8 @@ impl TcpConn {
             syn_retries: 0,
             rto_deadline: None,
             rto_retries: 0,
+            zwp_deadline: None,
+            zwps: 0,
             error: None,
         };
 
@@ -190,6 +195,14 @@ impl TcpConn {
             // Retransmit the segment.
             mutable.rto_retries += 1;
             self.retransmit(&mut mutable);
+        }
+
+        // Check zero window probe timeout.
+        if mutable.state != State::Closed
+            && let Some(deadline) = mutable.zwp_deadline
+            && now.duration_since(deadline).is_some()
+        {
+            self.send_zwp(&mut mutable);
         }
 
         let Some(deadline) = mutable.closing_deadline else {
@@ -368,6 +381,21 @@ impl TcpConn {
 
     fn send_data(&self, mutable: &mut Mutable) {
         let inflight_len = mutable.snd_nxt.wrapping_sub(mutable.snd_una) as usize;
+
+        // Check if it is in a "zero window" state.
+        if mutable.snd_wnd == 0 && inflight_len == 0 && !mutable.tx_buffer.is_empty() {
+            // The peer doesn't have room for more data. Send a zero window
+            // probe to ask if it has some space now.
+            if mutable.zwp_deadline.is_none() {
+                self.reset_zwp_timer(mutable);
+            }
+
+            return;
+        }
+
+        mutable.zwp_deadline = None;
+        mutable.zwps = 0;
+
         let window_len = mutable.snd_wnd as usize;
         let sendable_len = window_len.saturating_sub(inflight_len);
         let sendable_len = min(sendable_len, MAX_SEGMENT_DATA_LEN);
@@ -423,6 +451,33 @@ impl TcpConn {
         if let Err(error) = self.send(segment) {
             trace!("failed to retransmit: {:?}", error);
         }
+    }
+
+    /// Sends "zero window probe", an empty ACK packet to ask the peer for
+    /// its latest window size.
+    ///
+    /// https://datatracker.ietf.org/doc/html/rfc9293#name-zero-window-probing
+    fn send_zwp(&self, mutable: &mut Mutable) {
+        mutable.zwps = min(mutable.zwps + 1, MAX_ZWP_BACKOFF);
+        self.reset_zwp_timer(mutable);
+
+        let segment = Segment {
+            seq: mutable.snd_nxt.wrapping_sub(1),
+            ack: mutable.rcv_nxt,
+            window_size: mutable.rx_buffer.writable_len() as u16,
+            flags: TcpFlags::ACK,
+            payload: &[],
+        };
+
+        if let Err(error) = self.send(segment) {
+            trace!("failed to send zero window probe: {:?}", error);
+        }
+    }
+
+    /// Resets the zero window probe timer.
+    fn reset_zwp_timer(&self, mutable: &mut Mutable) {
+        let timeout = Duration::from_secs(RTO_SECS << mutable.zwps);
+        mutable.zwp_deadline = Some(MonoTime::now() + timeout);
     }
 
     /// Resets the retransmission timer.
