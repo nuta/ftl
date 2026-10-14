@@ -38,7 +38,7 @@ impl RxQueue {
 
     pub fn handle_rx(&self, src: Endpoint, payload: &[u8]) {
         let mut mutable = self.mutable.lock();
-        if !matches!(mutable.peer, Some(peer) if peer == src) {
+        if matches!(mutable.peer, Some(peer) if peer != src) {
             return;
         }
 
