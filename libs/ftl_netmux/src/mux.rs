@@ -4,6 +4,7 @@ use ftl_driver::env::Env;
 use ftl_driver::net::Driver;
 use ftl_types::error::ErrorCode;
 use ftl_types::net::Rule;
+use ftl_types::time::MonoTime;
 use ftl_utils::fxhash::FxHashMap;
 
 use crate::device::Device;
@@ -79,12 +80,12 @@ impl<'a, N: RxNotify> NetMux<'a, N> {
             .subscribe(notifier)
     }
 
-    pub fn start_dhcp(&mut self, device: DeviceId) {
+    pub fn start_dhcp(&mut self, device: DeviceId, now: MonoTime) {
         let Some(device) = self.devices.get_mut(&device) else {
             return;
         };
 
-        device.start_dhcp();
+        device.start_dhcp(now);
     }
 
     /// Sends a packet to the network.

@@ -78,9 +78,9 @@ fn measure_tsc_frequency() {
     TSC_HZ.store(tsc_hz, Ordering::Relaxed);
 }
 
-pub(super) fn handle_interrupt() {
+pub(super) fn handle_interrupt(now: MonoTime) {
     // Do timekeeping job.
-    GLOBAL_TIMER.lock().tick(monotime_read());
+    GLOBAL_TIMER.lock().tick(now);
 
     // Acknowledge the interrupt.
     super::get_cpuvar().arch.local_apic.acknowledge_irq();

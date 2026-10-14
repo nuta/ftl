@@ -22,6 +22,7 @@ use super::syscall::syscall_copy_recover;
 use super::thread::Thread;
 use super::thread::XSTATE_MASK;
 use super::timer::TIMER_IRQ;
+use super::timer::monotime_read;
 use crate::address::UAddr;
 use crate::address::USlice;
 use crate::address::VAddr;
@@ -390,14 +391,15 @@ fn handle_external_interrupt(vector: u8) {
     }
 
     let irq = vector - IRQ_VECTOR_BASE;
+    let now = monotime_read();
     if irq == TIMER_IRQ {
-        super::timer::handle_interrupt();
-        crate::driver::poll(None);
+        super::timer::handle_interrupt(now);
+        crate::driver::poll(None, now);
     } else if irq == COM1_IRQ {
         crate::console::handle_interrupt();
         super::io_apic::interrupt_acknowledge(irq);
     } else {
-        crate::driver::poll(Some(irq));
+        crate::driver::poll(Some(irq), now);
         super::io_apic::interrupt_acknowledge(irq);
     }
 }

@@ -7,6 +7,7 @@ use ftl_driver::net::Notifier;
 use ftl_types::error::ErrorCode;
 use ftl_types::net::ETHTYPE_ARP;
 use ftl_types::net::ETHTYPE_IPV4;
+use ftl_types::time::MonoTime;
 use ftl_utils::spinlock::SpinLock;
 
 use crate::arp::ArpTable;
@@ -256,10 +257,10 @@ impl<'a> Device<'a> {
         }
     }
 
-    pub(crate) fn start_dhcp(&mut self) {
+    pub(crate) fn start_dhcp(&mut self, now: MonoTime) {
         let mac = *self.driver.mac_address();
-        let client = Client::new(mac);
-        if let Err(error) = client.send_discover(self.env, self) {
+        let mut client = Client::new(mac);
+        if let Err(error) = client.send_discover(self.env, self, now) {
             ftl_driver::warn!(self.env, "failed to send DHCP discover: {:?}", error);
         }
         self.dhcp = Some(client);
@@ -269,11 +270,21 @@ impl<'a> Device<'a> {
         &mut self,
         ipv4: &Ipv4Inspector<'_>,
         udp: &UdpInspector<'_>,
+        now: MonoTime,
     ) -> Option<DhcpConfig> {
         let mut client = self.dhcp.take()?;
-        let result = client.handle_rx(self.env, self, ipv4, udp);
+        let result = client.handle_rx(self.env, self, ipv4, udp, now);
         self.dhcp = Some(client);
         result
+    }
+
+    pub(crate) fn poll(&mut self, now: MonoTime) {
+        let Some(mut dhcp_client) = self.dhcp.take() else {
+            return;
+        };
+
+        dhcp_client.retransmit(self.env, self, now);
+        self.dhcp = Some(dhcp_client);
     }
 }
 

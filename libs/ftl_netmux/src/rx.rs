@@ -12,6 +12,7 @@ use ftl_types::net::FiveTuple;
 use ftl_types::net::IPPROTO_TCP;
 use ftl_types::net::IPPROTO_UDP;
 use ftl_types::net::Rule;
+use ftl_types::time::MonoTime;
 use ftl_utils::fxhash::FxHashMap;
 use ftl_utils::fxhash::FxHashSet;
 use ftl_utils::reserve_slot::ReserveSlot;
@@ -163,6 +164,7 @@ impl<'a, N: RxNotify> NetMux<'a, N> {
         buf: DmaBuf,
         headroom: usize,
         frame_len: usize,
+        now: MonoTime,
     ) {
         let buf = DmaBufWithDrop::new(self.env, buf);
 
@@ -191,7 +193,9 @@ impl<'a, N: RxNotify> NetMux<'a, N> {
         let eth_type = frame.eth_type();
         match eth_type {
             ETHTYPE_ARP => self.handle_arp(device_id, frame.payload()),
-            ETHTYPE_IPV4 => self.handle_ipv4(device_id, frame.src_mac(), buf, headroom, frame_len),
+            ETHTYPE_IPV4 => {
+                self.handle_ipv4(device_id, frame.src_mac(), buf, headroom, frame_len, now)
+            }
             _ => {
                 ftl_driver::trace!(self.env, "unsupported ethernet type: {:x}", eth_type);
             }
@@ -239,6 +243,7 @@ impl<'a, N: RxNotify> NetMux<'a, N> {
         buf: DmaBufWithDrop<'a>,
         headroom: usize,
         frame_len: usize,
+        now: MonoTime,
     ) {
         let off = headroom + ETHERNET_HEADER_LEN;
         let len = frame_len - ETHERNET_HEADER_LEN;
@@ -269,7 +274,7 @@ impl<'a, N: RxNotify> NetMux<'a, N> {
         // Forward to the upper layer, and get the routing key.
         let five_tuple = match ipv4.ip_proto() {
             IPPROTO_TCP => self.handle_tcp(&ipv4),
-            IPPROTO_UDP => self.handle_udp(device_id, &ipv4),
+            IPPROTO_UDP => self.handle_udp(device_id, &ipv4, now),
             _ => {
                 ftl_driver::trace!(self.env, "unsupported IP protocol: {:x}", ipv4.ip_proto());
                 return;
@@ -300,6 +305,7 @@ impl<'a, N: RxNotify> NetMux<'a, N> {
         &mut self,
         device_id: DeviceId,
         ipv4: &Ipv4Inspector<'_>,
+        now: MonoTime,
     ) -> Option<(FiveTuple, usize)> {
         let udp = match UdpInspector::new(ipv4.payload()) {
             Ok(udp) => udp,
@@ -315,7 +321,7 @@ impl<'a, N: RxNotify> NetMux<'a, N> {
         }
 
         if udp.src_port() == DHCP_SERVER_PORT && udp.dst_port() == DHCP_CLIENT_PORT {
-            self.handle_dhcp(device_id, ipv4, &udp);
+            self.handle_dhcp(device_id, ipv4, &udp, now);
             return None;
         }
 
@@ -336,11 +342,12 @@ impl<'a, N: RxNotify> NetMux<'a, N> {
         device_id: DeviceId,
         ipv4: &Ipv4Inspector<'_>,
         udp: &UdpInspector<'_>,
+        now: MonoTime,
     ) {
         let Some(config) = self
             .devices
             .get_mut(&device_id)
-            .and_then(|device| device.handle_dhcp_rx(ipv4, udp))
+            .and_then(|device| device.handle_dhcp_rx(ipv4, udp, now))
         else {
             return;
         };
@@ -410,7 +417,7 @@ impl<'a, N: RxNotify> NetMux<'a, N> {
         Ok(())
     }
 
-    pub fn poll(&mut self, irq: Option<u8>) {
+    pub fn poll(&mut self, irq: Option<u8>, now: MonoTime) {
         for device in self.devices.values() {
             if irq.is_none() || irq == Some(device.irq()) {
                 device.driver().handle_interrupt(self.env);
@@ -418,7 +425,11 @@ impl<'a, N: RxNotify> NetMux<'a, N> {
         }
 
         while let Some((device_id, buf, headroom, frame_len)) = self.receive(irq) {
-            self.handle_eth_frame(device_id, buf, headroom, frame_len);
+            self.handle_eth_frame(device_id, buf, headroom, frame_len, now);
+        }
+
+        for device in self.devices.values_mut() {
+            device.poll(now);
         }
     }
 

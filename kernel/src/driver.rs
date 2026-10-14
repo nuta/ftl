@@ -7,6 +7,7 @@ use ftl_arrayvec::ArrayVec;
 use ftl_driver::dma::DmaBuf;
 use ftl_driver::net::Driver;
 use ftl_netmux::PollNotifier;
+use ftl_types::time::MonoTime;
 use ftl_utils::alignment::align_up;
 use ftl_utils::cmdline::Parser;
 use ftl_utils::reserve_slot::ReserveSlot;
@@ -103,9 +104,9 @@ impl ftl_driver::env::Env for DriverEnv {
     }
 }
 
-pub fn poll(irq: Option<u8>) {
+pub fn poll(irq: Option<u8>, now: MonoTime) {
     let mut net = NET_MUX.lock();
-    net.poll(irq);
+    net.poll(irq, now);
 }
 
 #[cfg(target_arch = "x86_64")]
@@ -271,6 +272,6 @@ pub fn init(cmdline: &[u8]) {
     // Otherwise, DHCP replies may arrive too early, before unmasking IRQ.
     arch::interrupt_acquire(irq).expect("failed to enable virtio-net IRQ");
 
-    net.start_dhcp(device_id);
+    net.start_dhcp(device_id, arch::monotime_read());
     drop(net);
 }

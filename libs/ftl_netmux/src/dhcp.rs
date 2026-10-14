@@ -1,5 +1,9 @@
 use ftl_driver::env::Env;
+use ftl_driver::trace;
+use ftl_driver::warn;
 use ftl_types::error::ErrorCode;
+use ftl_types::time::Duration;
+use ftl_types::time::MonoTime;
 
 use crate::device::Device;
 use crate::packet::dhcp::DHCP_ACK;
@@ -29,6 +33,7 @@ use crate::udp;
 
 const DHCP_PACKET_LEN: usize = 300;
 const TX_ID: u32 = 0x1234_5678;
+const MAX_RETRIES: u32 = 10;
 
 pub struct DhcpConfig {
     pub address: Ipv4Addr,
@@ -41,6 +46,7 @@ enum State {
     Discovering,
     Requesting(Request),
     Bound,
+    Failed,
 }
 
 /// A request to the DHCP server.
@@ -54,6 +60,8 @@ struct Request {
 pub(crate) struct Client {
     mac: [u8; 6],
     state: State,
+    retry_at: Option<MonoTime>,
+    retries: u32,
 }
 
 impl Client {
@@ -61,7 +69,52 @@ impl Client {
         Self {
             mac,
             state: State::Discovering,
+            retry_at: None,
+            retries: 0,
         }
+    }
+
+    pub(crate) fn retransmit<'a>(&mut self, env: &'a dyn Env, device: &Device<'a>, now: MonoTime) {
+        let Some(deadline) = self.retry_at else {
+            // Nothing to retry.
+            return;
+        };
+
+        if now.duration_since(deadline).is_none() {
+            // Too early to retry.
+            return;
+        }
+
+        if self.retries == MAX_RETRIES {
+            let state_str = match self.state {
+                State::Discovering => "discovery",
+                State::Requesting(_) => "request",
+                State::Bound | State::Failed => return,
+            };
+
+            warn!(env, "DHCP {state_str} timed out");
+            self.set_state(State::Failed);
+            return;
+        }
+
+        self.retries += 1;
+        let result = match self.state {
+            State::Requesting(request) => self.send_request(env, device, request, now),
+            _ => self.send_discover(env, device, now),
+        };
+
+        if let Err(error) = result {
+            trace!(env, "failed to retransmit DHCP packet: {:?}", error);
+        }
+    }
+
+    /// Transitions to a new state.
+    fn set_state(&mut self, state: State) {
+        self.state = state;
+
+        // Reset the retry counter.
+        self.retries = 0;
+        self.retry_at = None;
     }
 
     pub(crate) fn handle_rx<'a>(
@@ -70,6 +123,7 @@ impl Client {
         device: &Device<'a>,
         ipv4: &Ipv4Inspector<'_>,
         udp: &UdpInspector<'_>,
+        now: MonoTime,
     ) -> Option<DhcpConfig> {
         let packet = match DhcpInspector::new(udp.payload()) {
             Ok(packet) => packet,
@@ -105,7 +159,7 @@ impl Client {
         }
 
         let request = self.handle_offer(&packet, ipv4.src_ip())?;
-        if let Err(error) = self.send_request(env, device, request) {
+        if let Err(error) = self.send_request(env, device, request, now) {
             ftl_driver::warn!(env, "failed to send DHCP request: {:?}", error);
         }
         None
@@ -127,7 +181,7 @@ impl Client {
             server,
         };
 
-        self.state = State::Requesting(request);
+        self.set_state(State::Requesting(request));
         Some(request)
     }
 
@@ -158,7 +212,7 @@ impl Client {
             Err(_) => return None,
         };
 
-        self.state = State::Bound;
+        self.set_state(State::Bound);
         Some(DhcpConfig {
             address: request.address,
             gateway,
@@ -167,11 +221,12 @@ impl Client {
     }
 
     pub(crate) fn send_discover<'a>(
-        &self,
+        &mut self,
         env: &'a dyn Env,
         device: &Device<'a>,
+        now: MonoTime,
     ) -> Result<(), ErrorCode> {
-        self.do_send(env, device, DHCP_DISCOVER, |packet| {
+        self.do_send(env, device, now, DHCP_DISCOVER, |packet| {
             packet.write_option(
                 OPTION_PARAM_REQUEST_LIST,
                 &[OPTION_SUBNET_MASK, OPTION_ROUTER, OPTION_SERVER_ID],
@@ -181,12 +236,13 @@ impl Client {
     }
 
     fn send_request<'a>(
-        &self,
+        &mut self,
         env: &'a dyn Env,
         device: &Device<'a>,
         req: Request,
+        now: MonoTime,
     ) -> Result<(), ErrorCode> {
-        self.do_send(env, device, DHCP_REQUEST, |packet| {
+        self.do_send(env, device, now, DHCP_REQUEST, |packet| {
             packet.write_option(OPTION_REQUESTED_IP, &req.address.as_u32().to_be_bytes())?;
             packet.write_option(OPTION_SERVER_ID, &req.server.as_u32().to_be_bytes())?;
             packet.write_option(
@@ -198,12 +254,16 @@ impl Client {
     }
 
     fn do_send<'a>(
-        &self,
+        &mut self,
         env: &'a dyn Env,
         device: &Device<'a>,
+        now: MonoTime,
         message_type: u8,
         option_writer: impl FnOnce(&mut DhcpRewriter<'_>) -> Result<(), Error>,
     ) -> Result<(), ErrorCode> {
+        let retry_after = Duration::from_millis((100 << self.retries).min(1000));
+        self.retry_at = Some(now + retry_after);
+
         let mut bytes = [0u8; DHCP_PACKET_LEN];
         let mut packet = DhcpRewriter::new(&mut bytes).unwrap();
         packet.set_op(DHCP_OP_REQUEST);
