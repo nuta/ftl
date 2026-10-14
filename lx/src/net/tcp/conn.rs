@@ -35,6 +35,8 @@ const MAX_SEGMENT_DATA_LEN: usize = 1460;
 const CLOSING_TIMEOUT: Duration = Duration::from_secs(5);
 const SYN_TIMEOUT_SECS: u64 = 1;
 const MAX_SYN_RETRIES: u32 = 5;
+const RTO_SECS: u64 = 1;
+const MAX_RTO_RETRIES: u32 = 8;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum State {
@@ -62,6 +64,8 @@ struct Mutable {
     closing_deadline: Option<MonoTime>,
     syn_deadline: Option<MonoTime>,
     syn_retries: u32,
+    rto_deadline: Option<MonoTime>,
+    rto_retries: u32,
     error: Option<Errno>,
 }
 
@@ -114,6 +118,8 @@ impl TcpConn {
             closing_deadline: None,
             syn_deadline: None,
             syn_retries: 0,
+            rto_deadline: None,
+            rto_retries: 0,
             error: None,
         };
 
@@ -167,6 +173,23 @@ impl TcpConn {
             }
 
             return;
+        }
+
+        // Check retransmission timeout.
+        if mutable.state != State::Closed
+            && let Some(deadline) = mutable.rto_deadline
+            && now.duration_since(deadline).is_some()
+        {
+            if mutable.rto_retries >= MAX_RTO_RETRIES {
+                // Too many retransmissions. Give up and destroy the
+                // connection.
+                self.destroy(mutable, Errno::ETIMEDOUT);
+                return;
+            }
+
+            // Retransmit the segment.
+            mutable.rto_retries += 1;
+            self.retransmit(&mut mutable);
         }
 
         let Some(deadline) = mutable.closing_deadline else {
@@ -324,8 +347,14 @@ impl TcpConn {
         };
 
         if let Err(error) = self.send(segment) {
+            // Log but continue anyway. We'll resend a FIN later after the
+            // retransmission timer expires.
             trace!("failed to send FIN: {:?}", error);
-            return;
+        }
+
+        // Arm a retransmission timer if it's not set.
+        if mutable.rto_deadline.is_none() {
+            self.reset_rto(mutable);
         }
 
         // Update our state.
@@ -356,12 +385,50 @@ impl TcpConn {
             payload,
         };
 
-        match self.send(segment) {
-            Ok(_) => {
-                mutable.snd_nxt = mutable.snd_nxt.wrapping_add(payload_len as u32);
-            }
-            Err(e) => trace!("failed to send data: {:?}", e),
+        if let Err(e) = self.send(segment) {
+            // Log but continue anyway. We'll resend the data later after the
+            // retransmission timer expires.
+            trace!("failed to send data: {:?}", e);
         }
+
+        mutable.snd_nxt = mutable.snd_nxt.wrapping_add(payload_len as u32);
+
+        // Arm a retransmission timer if it's not set.
+        if mutable.rto_deadline.is_none() {
+            self.reset_rto(mutable);
+        }
+    }
+
+    /// Retransmits a segment (data or FIN).
+    fn retransmit(&self, mutable: &mut Mutable) {
+        self.reset_rto(mutable);
+
+        let inflight_len = mutable.snd_nxt.wrapping_sub(mutable.snd_una) as usize;
+        let len = min(inflight_len, MAX_SEGMENT_DATA_LEN);
+        let (flags, payload) = match mutable.tx_buffer.peek(0, len) {
+            // Retransmit data.
+            Some(payload) => (TcpFlags::ACK | TcpFlags::PSH, payload),
+            // Retransmit a FIN.
+            None => (TcpFlags::FIN | TcpFlags::ACK, &[][..]),
+        };
+
+        let segment = Segment {
+            seq: mutable.snd_una,
+            ack: mutable.rcv_nxt,
+            window_size: mutable.rx_buffer.writable_len() as u16,
+            flags,
+            payload,
+        };
+
+        if let Err(error) = self.send(segment) {
+            trace!("failed to retransmit: {:?}", error);
+        }
+    }
+
+    /// Resets the retransmission timer.
+    fn reset_rto(&self, mutable: &mut Mutable) {
+        let timeout = Duration::from_secs(RTO_SECS << mutable.rto_retries);
+        mutable.rto_deadline = Some(MonoTime::now() + timeout);
     }
 
     fn flush(&self, mutable: &mut Mutable) {
@@ -398,11 +465,20 @@ impl TcpConn {
         if acked_len > 0 {
             mutable.snd_una = ack;
             mutable.tx_buffer.consume(acked_len);
+
+            // The peer has acknowledged. This means the peer is still around,
+            // so reset the retransmission timer.
+            mutable.rto_retries = 0;
+            self.reset_rto(mutable);
         }
 
         if mutable.snd_una != mutable.snd_nxt {
+            // The peer has acknowledged part of the inflight data.
             return Some(acked_len);
         }
+
+        // No more inflight data. No data to retransmit.
+        mutable.rto_deadline = None;
 
         mutable.state = match mutable.state {
             State::FinWait1 => State::FinWait2,
