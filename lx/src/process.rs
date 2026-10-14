@@ -404,9 +404,9 @@ impl Process {
         Ok(())
     }
 
-    pub fn wait(&self, pid: c_int, wnohang: bool) -> Result<Option<(PId, c_int)>, Errno> {
-        if pid != -1 && pid <= 0 {
-            return Err(Errno::EINVAL);
+    pub fn wait(&self, mut pid: c_int, wnohang: bool) -> Result<Option<(PId, c_int)>, Errno> {
+        if pid <= 0 {
+            pid = -1;
         }
 
         let mut wq = None;
