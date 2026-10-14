@@ -139,10 +139,14 @@ impl OpenFile {
 
     pub fn seek(&self, offset: off_t, whence: c_int) -> Result<off_t, Errno> {
         let offset_isize = offset.try_into().map_err(|_| Errno::EINVAL)?;
+
+        // Return ESPIPE if the file is not seekable.
+        let size = self.file.size()?;
+
         let base = match whence {
             SEEK_SET => 0,
             SEEK_CUR => self.mutable.lock().offset,
-            SEEK_END => self.file.size()?,
+            SEEK_END => size,
             _ => return Err(Errno::EINVAL),
         };
 
