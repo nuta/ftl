@@ -36,6 +36,7 @@ impl PIdTable {
         let mut pid = self.next;
         for _ in 0..self.max {
             if !self.pids.contains_key(&pid) {
+                self.next = if pid == self.max { 2 } else { pid + 1 };
                 return Ok(PId::new(pid));
             }
 
