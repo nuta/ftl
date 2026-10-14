@@ -15,6 +15,7 @@ use crate::open_file::OpenFile;
 use crate::types::c_int;
 use crate::types::errno::Errno;
 use crate::types::sys::epoll::EPOLLET;
+use crate::types::sys::epoll::EPOLLONESHOT;
 use crate::types::sys::epoll::EpollEvent;
 use crate::types::sys::poll::POLLERR;
 use crate::types::sys::poll::POLLHUP;
@@ -40,8 +41,7 @@ impl Watch {
 
         let event = *self.event.lock();
         let latest = file.poll()?;
-        // If POLLERR/POLLHUP is set, report regardless of the events mask.
-        let revents = (latest as u32) & (event.events | POLLERR as u32 | POLLHUP as u32);
+        let revents = (latest as u32) & event.events;
         if revents == 0 {
             return Ok(None);
         }
@@ -140,9 +140,13 @@ impl Inner {
 
             // In edge-triggered mode (EPOLLET), skip checking the same fd
             // again.
-            if watch.event.lock().events & EPOLLET == 0 {
+            let mut watched = watch.event.lock();
+            if watched.events & EPOLLONESHOT != 0 {
+                watched.events = 0;
+            } else if watched.events & EPOLLET == 0 {
                 still_ready_fds.push(fd);
             }
+            drop(watched);
 
             events[n] = event;
             n += 1;
@@ -176,7 +180,8 @@ impl Epoll {
         })
     }
 
-    pub fn add(&self, fd: c_int, event: EpollEvent, file: Arc<OpenFile>) -> Result<(), Errno> {
+    pub fn add(&self, fd: c_int, mut event: EpollEvent, file: Arc<OpenFile>) -> Result<(), Errno> {
+        event.events |= POLLERR as u32 | POLLHUP as u32;
         let watch = Arc::new(Watch {
             fd,
             file: Arc::downgrade(&file),
@@ -206,7 +211,8 @@ impl Epoll {
         Ok(())
     }
 
-    pub fn modify(&self, fd: c_int, event: EpollEvent) -> Result<(), Errno> {
+    pub fn modify(&self, fd: c_int, mut event: EpollEvent) -> Result<(), Errno> {
+        event.events |= POLLERR as u32 | POLLHUP as u32;
         let watch = {
             let mutable = self.inner.mutable.lock();
             mutable.watches.get(&fd).cloned()
