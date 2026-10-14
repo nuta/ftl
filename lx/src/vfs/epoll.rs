@@ -1,3 +1,4 @@
+use alloc::collections::VecDeque;
 use alloc::sync::Arc;
 use alloc::sync::Weak;
 use alloc::vec::Vec;
@@ -7,7 +8,6 @@ use ftl::time::MonoTimeExt;
 use ftl::trace;
 use ftl_types::time::Duration;
 use ftl_utils::fxhash::FxHashMap;
-use ftl_utils::fxhash::FxHashSet;
 use ftl_utils::spinlock::SpinLock;
 
 use crate::open_file::CloseListener;
@@ -75,7 +75,7 @@ impl CloseListener for Watch {
 
 struct Mutable {
     watches: FxHashMap<c_int, Arc<Watch>>,
-    ready_fds: FxHashSet<c_int>,
+    ready_fds: VecDeque<c_int>,
 }
 
 struct Inner {
@@ -86,14 +86,17 @@ struct Inner {
 impl Inner {
     /// Marks the given file descriptor as ready.
     fn mark_ready(&self, fd: c_int) {
-        self.mutable.lock().ready_fds.insert(fd);
+        let mut mutable = self.mutable.lock();
+        if !mutable.ready_fds.contains(&fd) {
+            mutable.ready_fds.push_back(fd);
+        }
+        drop(mutable);
+
         let _ = self.wait_queue.notify_all();
     }
 
     fn detach(&self, fd: c_int) {
-        let mut mutable = self.mutable.lock();
-        mutable.watches.remove(&fd);
-        mutable.ready_fds.remove(&fd);
+        self.mutable.lock().watches.remove(&fd);
     }
 
     /// Polls the watch and marks it ready only if it matches the interest mask.
@@ -113,11 +116,10 @@ impl Inner {
             // Pop a fd from the ready list.
             let (fd, watch) = {
                 let mut mutable = self.mutable.lock();
-                let Some(fd) = mutable.ready_fds.iter().next().copied() else {
+                let Some(fd) = mutable.ready_fds.pop_front() else {
                     break;
                 };
 
-                mutable.ready_fds.remove(&fd);
                 (fd, mutable.watches.get(&fd).cloned())
             };
 
@@ -146,8 +148,11 @@ impl Inner {
             n += 1;
         }
 
-        if !still_ready_fds.is_empty() {
-            self.mutable.lock().ready_fds.extend(still_ready_fds);
+        let mut mutable = self.mutable.lock();
+        for fd in still_ready_fds {
+            if !mutable.ready_fds.contains(&fd) {
+                mutable.ready_fds.push_back(fd);
+            }
         }
 
         Ok(n)
@@ -164,7 +169,7 @@ impl Epoll {
             inner: Arc::new(Inner {
                 mutable: SpinLock::new(Mutable {
                     watches: FxHashMap::new(),
-                    ready_fds: FxHashSet::new(),
+                    ready_fds: VecDeque::new(),
                 }),
                 wait_queue: WaitQueue::new()?,
             }),
@@ -217,7 +222,6 @@ impl Epoll {
     pub fn delete(&self, fd: c_int) -> Result<(), Errno> {
         let mut mutable = self.inner.mutable.lock();
         mutable.watches.remove(&fd).ok_or(Errno::ENOENT)?;
-        mutable.ready_fds.remove(&fd);
         Ok(())
     }
 
