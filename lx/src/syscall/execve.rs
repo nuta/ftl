@@ -12,7 +12,7 @@ use crate::vfs::EmbeddedFile;
 
 pub fn sys_execve(
     current: &LxThread,
-    _path: *const u8,
+    path: *const u8,
     argv: *const *const u8,
     _envp: *const *const u8,
 ) -> Result<SyscallResult, Errno> {
@@ -33,10 +33,15 @@ pub fn sys_execve(
         return Err(Errno::EINVAL);
     }
 
+    if path.is_null() {
+        return Err(Errno::EFAULT);
+    }
+    let path = unsafe { CStr::from_ptr(path.cast()) }.to_bytes();
+
     // TODO: VFS support
     let mut initfs = InitFsLoader::new(&crate::INITFS.0);
     let initfs_file = initfs
-        .find(|file| file.name == argv_vec[0].trim_prefix(b"/"))
+        .find(|file| file.name == path.trim_prefix(b"/"))
         .ok_or(Errno::ENOENT)?;
     let elf_file = Arc::new(EmbeddedFile::new(initfs_file.data));
 
