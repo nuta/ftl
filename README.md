@@ -48,7 +48,7 @@ Build and run:
 You can start a specific Linux command:
 
 ```
-./run.sh "/bin/echo Hello World"
+./run.sh "/bin/util echo Hello World"
 ```
 
 To get an ISO image to run FTL on cloud:

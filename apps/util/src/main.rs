@@ -12,6 +12,7 @@ fn main() -> ExitCode {
     let name = &args[1];
     match name.as_str() {
         "cat" => commands::cat::main(&args[2..]),
+        "echo" => commands::echo::main(&args[2..]),
         "httpd" => commands::httpd::main(&args[2..]),
         "ls" => commands::ls::main(&args[2..]),
         "nc" => commands::nc::main(&args[2..]),
