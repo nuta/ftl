@@ -5,8 +5,8 @@ cmdline=""
 if [[ $# -gt 0 ]]; then
   cmdline="ftl.lx.init=\"$1\""
 else
-  echo "run.sh: No init program specified, using default \"/bin/httpd\""
-  cmdline="ftl.lx.init=\"/bin/httpd\""
+  echo "run.sh: No init program specified, using default \"/bin/util httpd\""
+  cmdline="ftl.lx.init=\"/bin/util httpd\""
 fi
 
 ./build.sh

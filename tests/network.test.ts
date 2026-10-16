@@ -4,7 +4,7 @@ import { boot, getAvailablePort } from "./helpers/vm";
 
 test("HTTP server handles a request", async () => {
     const hostPort = await getAvailablePort();
-    using vm = await boot({ hostPort, init: "/bin/httpd" });
+    using vm = await boot({ hostPort, init: "/bin/util httpd" });
     await vm.waitForLog("HTTP server listening on port 80");
 
     const resp1 = await fetch(`http://127.0.0.1:${hostPort}`, {
