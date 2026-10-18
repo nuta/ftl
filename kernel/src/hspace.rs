@@ -249,3 +249,13 @@ pub fn sys_hspace_move(
     let new_id = current_hspace.do_move(handle_id, &dst, rights)?;
     Ok(SyscallOutput::Done(new_id.as_usize()))
 }
+
+pub fn sys_hspace_close(
+    current: &SharedRef<Thread>,
+    ctx: &SyscallRegs,
+) -> Result<SyscallOutput, ErrorCode> {
+    let handle_id = HandleId::new(ctx.a0);
+    let handle = current.hspace().remove(handle_id)?;
+    handle.close();
+    Ok(SyscallOutput::Done(0))
+}

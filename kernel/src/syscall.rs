@@ -55,7 +55,7 @@ fn do_handle_syscall() -> Resched {
         Some(Syscall::NetUnbind) => crate::net::sys_net_unbind(&thread, &regs),
         Some(Syscall::NetRecv) => crate::net::sys_net_recv(&thread, &regs),
         Some(Syscall::NetSend) => crate::net::sys_net_send(&thread, &regs),
-        Some(Syscall::HandleClose) => crate::handle::sys_handle_close(&thread, &regs),
+        Some(Syscall::HSpaceClose) => crate::hspace::sys_hspace_close(&thread, &regs),
         Some(Syscall::MonoTimeRead) => crate::timer::sys_monotime_read(&thread, &regs),
         Some(Syscall::WallTimeRead) => crate::timer::sys_walltime_read(&thread, &regs),
         Some(Syscall::RandomRead) => crate::random::sys_random_read(&thread, &regs),

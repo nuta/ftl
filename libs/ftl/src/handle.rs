@@ -19,6 +19,6 @@ impl OwnedHandle {
 
 impl Drop for OwnedHandle {
     fn drop(&mut self) {
-        let _ = syscall1(Syscall::HandleClose, self.id.as_usize());
+        let _ = syscall1(Syscall::HSpaceClose, self.id.as_usize());
     }
 }

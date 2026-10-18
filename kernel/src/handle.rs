@@ -1,13 +1,9 @@
 use core::any::Any;
 
 use ftl_types::error::ErrorCode;
-use ftl_types::handle::HandleId;
 use ftl_types::handle::HandleRight;
-use ftl_types::thread::SyscallRegs;
 
 use crate::shared_ref::SharedRef;
-use crate::syscall::SyscallOutput;
-use crate::thread::Thread;
 
 pub trait Handleable: Any + Send + Sync {
     /// Called when a handle is explicitly closed.
@@ -81,14 +77,4 @@ impl<T: Handleable> From<Handle<T>> for AnyHandle {
             rights: handle.rights,
         })
     }
-}
-
-pub fn sys_handle_close(
-    current: &SharedRef<Thread>,
-    ctx: &SyscallRegs,
-) -> Result<SyscallOutput, ErrorCode> {
-    let handle_id = HandleId::new(ctx.a0);
-    let handle = current.hspace().remove(handle_id)?;
-    handle.close();
-    Ok(SyscallOutput::Done(0))
 }

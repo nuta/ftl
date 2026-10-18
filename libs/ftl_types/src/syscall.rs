@@ -1,6 +1,6 @@
 #[repr(usize)]
 pub enum Syscall {
-    HandleClose = 0,
+    HSpaceClose = 0,
     ConsoleOpen = 1,
     ConsoleRead = 2,
     ConsoleWrite = 3,
