@@ -25,6 +25,10 @@ impl Console {
         Self { handle }
     }
 
+    pub fn into_handle(self) -> OwnedHandle {
+        self.handle
+    }
+
     pub fn open() -> Result<Self, ErrorCode> {
         let id = syscall0(Syscall::ConsoleOpen)?;
         // SAFETY: Kernel returns a valid handle.

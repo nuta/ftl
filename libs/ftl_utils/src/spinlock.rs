@@ -2,6 +2,7 @@
 use core::cell::UnsafeCell;
 use core::ops::Deref;
 use core::ops::DerefMut;
+use core::ptr;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering;
 
@@ -42,6 +43,25 @@ impl<T> SpinLock<T> {
             }
 
             core::hint::spin_loop();
+        }
+    }
+
+    /// Locks two spinlocks in a consistent order to avoid deadlock.
+    #[track_caller]
+    pub fn lock_two<'a>(
+        a: &'a SpinLock<T>,
+        b: &'a SpinLock<T>,
+    ) -> (SpinLockGuard<'a, T>, SpinLockGuard<'a, T>) {
+        assert!(!core::ptr::eq(a, b));
+
+        if ptr::from_ref(a).addr() < ptr::from_ref(b).addr() {
+            let a_guard = a.lock();
+            let b_guard = b.lock();
+            (a_guard, b_guard)
+        } else {
+            let b_guard = b.lock();
+            let a_guard = a.lock();
+            (a_guard, b_guard)
         }
     }
 }

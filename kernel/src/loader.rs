@@ -16,12 +16,13 @@ use crate::arch::USER_ADDR_END;
 use crate::boot::BootInfo;
 use crate::handle::Handle;
 use crate::hspace::HandleSpace;
+use crate::quota::Quota;
 use crate::shared_ref::SharedRef;
 use crate::thread::Thread;
 use crate::vmobject::VmObject;
 use crate::vmspace::VmSpace;
 
-fn load_elf(vmspace: &SharedRef<VmSpace>, elf_file: &[u8]) -> usize {
+fn load_elf(quota: &SharedRef<Quota>, vmspace: &SharedRef<VmSpace>, elf_file: &[u8]) -> usize {
     let elf = Elf::parse(elf_file, ftl_elf::ET_EXEC).expect("failed to parse ELF file");
 
     // Load the segments into the allocated memory.
@@ -58,7 +59,7 @@ fn load_elf(vmspace: &SharedRef<VmSpace>, elf_file: &[u8]) -> usize {
         }
 
         // Copy the file contents to the allocated memory.
-        let vmo = VmObject::new_zeroed(region_len).unwrap();
+        let vmo = VmObject::new_zeroed(quota.clone(), region_len).unwrap();
         vmo.write(0, bytes).unwrap();
 
         // Map the region to the address space.
@@ -96,9 +97,9 @@ fn write_stack(
     sp_offset
 }
 
-fn prepare_stack(vmspace: &SharedRef<VmSpace>, cmdline: &[u8]) -> usize {
+fn prepare_stack(quota: &SharedRef<Quota>, vmspace: &SharedRef<VmSpace>, cmdline: &[u8]) -> usize {
     let stack_size = 256 * 1024;
-    let vmo = VmObject::new_zeroed(stack_size).unwrap();
+    let vmo = VmObject::new_zeroed(quota.clone(), stack_size).unwrap();
 
     let stack_bottom = UAddr::new(0x40000000 - stack_size); // TODO: find an empty region in vmspace
     let sp_offset = write_stack(&vmo, stack_bottom, stack_size, cmdline);
@@ -118,15 +119,20 @@ fn prepare_stack(vmspace: &SharedRef<VmSpace>, cmdline: &[u8]) -> usize {
 pub fn load(bootinfo: &BootInfo) {
     let initrd = bootinfo.modules.get(0).expect("initrd not found");
     let elf_file = initrd.as_bytes();
-    let vmspace = VmSpace::new().and_then(SharedRef::new).unwrap();
-    let entry = load_elf(&vmspace, elf_file);
-    let sp = prepare_stack(&vmspace, bootinfo.cmdline);
+    let quota = Quota::new_root().unwrap();
+    let vmspace = VmSpace::new(quota.clone())
+        .and_then(SharedRef::new)
+        .unwrap();
+    let entry = load_elf(&quota, &vmspace, elf_file);
+    let sp = prepare_stack(&quota, &vmspace, bootinfo.cmdline);
 
     let hspace = SharedRef::new(HandleSpace::new()).unwrap();
     let hspace_handle = Handle::new(hspace.clone(), HandleRight::WRITE);
     let vmspace_handle = Handle::new(vmspace.clone(), HandleRight::READ | HandleRight::WRITE);
+    let quota_handle = Handle::new(quota.clone(), HandleRight::CHARGE);
     hspace.insert_at(HandleId::new(1), hspace_handle).unwrap();
     hspace.insert_at(HandleId::new(2), vmspace_handle).unwrap();
-    let thread = Thread::new(hspace, vmspace, 0, 0, 0).unwrap();
+    hspace.insert_at(HandleId::new(3), quota_handle).unwrap();
+    let thread = Thread::new(&quota, hspace, vmspace, 0, 0, 0).unwrap();
     thread.start(entry, sp).unwrap();
 }

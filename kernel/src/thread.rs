@@ -20,12 +20,16 @@ use ftl_utils::static_assert;
 use crate::address::UAddr;
 use crate::address::USlice;
 use crate::arch;
+use crate::arch::MIN_PAGE_SIZE;
 use crate::arch::USER_ADDR_END;
 use crate::handle::Handle;
 use crate::handle::Handleable;
 use crate::hspace::HandleSpace;
 use crate::poll::EventEmitter;
 use crate::poll::Poll;
+use crate::quota::Charge;
+use crate::quota::MemoryQuota;
+use crate::quota::Quota;
 use crate::scheduler::SCHEDULER;
 use crate::shared_ref::SharedRef;
 use crate::syscall::SyscallOutput;
@@ -59,6 +63,7 @@ pub struct Thread {
     hspace: SharedRef<HandleSpace>,
     vmspace: SharedRef<VmSpace>,
     mutable: SpinLock<Mutable>,
+    _memory_charge: Charge<MemoryQuota>,
 }
 
 /// SAFETY: The `arch` field is accessed when:
@@ -71,6 +76,7 @@ unsafe impl Sync for Thread {}
 
 impl Thread {
     pub fn new(
+        quota: &SharedRef<Quota>,
         hspace: SharedRef<HandleSpace>,
         vmspace: SharedRef<VmSpace>,
         syscall_pc: usize,
@@ -88,13 +94,17 @@ impl Thread {
             subscriptions: Vec::new(),
         };
 
+        let memory_reservation = quota.reserve::<MemoryQuota>(MIN_PAGE_SIZE)?;
         let arch_thread = arch::Thread::new(syscall_pc, fault_pc, cookie)?;
+        let mut memory_charge = Charge::new(quota.clone());
+        memory_charge.commit(memory_reservation);
         SCHEDULER.reserve_capacity()?;
         let thread = SharedRef::new(Thread {
             arch: UnsafeCell::new(arch_thread),
             hspace: hspace.clone(),
             vmspace,
             mutable: SpinLock::new(mutable),
+            _memory_charge: memory_charge,
         })?;
 
         hspace.add_thread(thread.clone())?;
@@ -293,13 +303,15 @@ pub fn sys_thread_create(
     current: &SharedRef<Thread>,
     ctx: &SyscallRegs,
 ) -> Result<SyscallOutput, ErrorCode> {
-    let hspace_id = HandleId::new(ctx.a0);
-    let vmspace_id = HandleId::new(ctx.a1);
-    let syscall_pc = ctx.a2;
-    let fault_pc = ctx.a3;
-    let cookie = ctx.a4;
+    let quota_id = HandleId::new(ctx.a0);
+    let hspace_id = HandleId::new(ctx.a1);
+    let vmspace_id = HandleId::new(ctx.a2);
+    let syscall_pc = ctx.a3;
+    let fault_pc = ctx.a4;
+    let cookie = ctx.a5;
 
     let current_hspace = current.hspace();
+    let quota = current_hspace.get::<Quota>(quota_id, HandleRight::CHARGE)?;
     let (hspace, vmspace) = current_hspace.get2(
         hspace_id,
         HandleRight::WRITE,
@@ -307,7 +319,7 @@ pub fn sys_thread_create(
         HandleRight::WRITE,
     )?;
 
-    let thread = Thread::new(hspace, vmspace, syscall_pc, fault_pc, cookie)?;
+    let thread = Thread::new(&quota, hspace, vmspace, syscall_pc, fault_pc, cookie)?;
     let rights = HandleRight::READ | HandleRight::WRITE;
     let handle = Handle::new(thread.clone(), rights);
     let id = match current_hspace.insert(handle) {

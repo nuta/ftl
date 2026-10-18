@@ -55,7 +55,14 @@ impl LxThread {
 
         // TODO: LX assumes that the cookie won't be derefernced until the
         //       thread is started. Should we document and guarantee this?
-        let inner = Thread::create(hspace, vm.vmspace(), syscall_pc, fault_pc, cookie)?;
+        let inner = Thread::create(
+            vm.quota(),
+            hspace,
+            vm.vmspace(),
+            syscall_pc,
+            fault_pc,
+            cookie,
+        )?;
 
         let thread = Arc::new_cyclic(|thread| {
             LxThread {

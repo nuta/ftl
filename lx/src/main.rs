@@ -30,6 +30,7 @@ use alloc::vec::Vec;
 use ftl::allocator;
 use ftl::hspace::HandleSpace;
 use ftl::net::Net;
+use ftl::quota::Quota;
 use ftl::vmo::Vmo;
 use ftl::vmspace::VmSpace;
 use ftl_types::handle::HandleId;
@@ -72,10 +73,11 @@ fn parse_cmdline<'a>(
 fn main(cmdline: &[u8]) {
     let root_hspace = unsafe { HandleSpace::from_handle(HandleId::new(1)) };
     let root_vmspace = unsafe { VmSpace::from_handle(HandleId::new(2)) };
+    let root_quota = unsafe { Quota::from_handle(HandleId::new(3)) };
 
     // Allocate the VMO for the heap.
     let heap_addr = align_up(&raw const _end as usize, 4096);
-    let heap = Vmo::create_zeroed(HEAP_SIZE).expect("failed to create heap VMO");
+    let heap = Vmo::create_zeroed(&root_quota, HEAP_SIZE).expect("failed to create heap VMO");
     root_vmspace
         .map(
             &heap,
@@ -110,6 +112,7 @@ fn main(cmdline: &[u8]) {
     let console = Arc::new(Console::new().expect("failed to create console"));
     let container = Container::new(
         root_hspace,
+        root_quota,
         root_vmspace,
         network.clone(),
         console.clone(),

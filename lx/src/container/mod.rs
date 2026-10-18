@@ -2,6 +2,7 @@ use alloc::sync::Arc;
 
 use ftl::hspace::HandleSpace;
 use ftl::poll::Poll;
+use ftl::quota::Quota;
 use ftl::time::MonoTime;
 use ftl::time::MonoTimeExt;
 use ftl::vmspace::VmSpace;
@@ -26,6 +27,7 @@ mod pid_table;
 pub struct Container {
     poll: Poll,
     pub hspace: HandleSpace,
+    pub quota: Arc<Quota>,
     pub root_vmspace: VmSpace,
     pub processes: SpinLock<PIdTable>,
     pub reaper: Reaper,
@@ -37,6 +39,7 @@ pub struct Container {
 impl Container {
     pub fn new(
         hspace: HandleSpace,
+        quota: Quota,
         root_vmspace: VmSpace,
         network: Arc<TcpIp>,
         console: Arc<Console>,
@@ -51,6 +54,7 @@ impl Container {
         let this = Arc::new(Self {
             poll,
             hspace,
+            quota: Arc::new(quota),
             root_vmspace,
             processes: SpinLock::new(PIdTable::new()),
             reaper: Reaper::new()?,

@@ -6,6 +6,7 @@ use core::cmp::min;
 use core::mem::MaybeUninit;
 use core::slice;
 
+use ftl::quota::Quota;
 use ftl::vmo::Vmo;
 use ftl::vmspace::VmSpace;
 use ftl_elf::Elf;
@@ -185,20 +186,22 @@ impl Mutable {
 
 /// A virtual memory space.
 pub struct Vm {
+    quota: Arc<Quota>,
     vmspace: VmSpace,
     mutable: SpinLock<Mutable>,
 }
 
 impl Vm {
     pub fn create(
+        quota: &Arc<Quota>,
         root_vmspace: &VmSpace,
         elf_file: Arc<dyn FileLike>,
         argv: &[&[u8]],
     ) -> Result<(Vm, usize, usize), Errno> {
-        let vmspace = root_vmspace.try_clone()?;
+        let vmspace = root_vmspace.try_clone(quota)?;
 
         let mut mappings = Vec::new();
-        let elf = load_elf(&vmspace, &elf_file, &mut mappings)?;
+        let elf = load_elf(quota, &vmspace, &elf_file, &mut mappings)?;
 
         // Find the end of the program segments.
         // TODO: Can we guarantee that mappings is not empty?
@@ -209,7 +212,7 @@ impl Vm {
             .unwrap_or(0);
         let brk_end = BRK_END;
 
-        let stack = Vmo::create_zeroed(STACK_SIZE)?;
+        let stack = Vmo::create_zeroed(quota, STACK_SIZE)?;
         let sp = prepare_stack(&stack, STACK_BOTTOM, STACK_SIZE, argv, &elf)?;
 
         let attrs = PageAttrs::READ | PageAttrs::WRITE;
@@ -218,6 +221,7 @@ impl Vm {
         mappings.push(mapping);
 
         let vm = Vm {
+            quota: quota.clone(),
             vmspace,
             mutable: SpinLock::new(Mutable {
                 mappings,
@@ -226,6 +230,10 @@ impl Vm {
         };
 
         Ok((vm, elf.entry, sp))
+    }
+
+    pub fn quota(&self) -> &Quota {
+        &self.quota
     }
 
     pub fn vmspace(&self) -> &VmSpace {
@@ -237,7 +245,7 @@ impl Vm {
         let attrs = attrs_from_prot(prot);
 
         // Allocate a VMO.
-        let vmo = Vmo::create_zeroed(len)?;
+        let vmo = Vmo::create_zeroed(&self.quota, len)?;
 
         // Find a space to map the new region. This must be done while holding
         // the lock to prevent other threads from picking the same address.
@@ -417,7 +425,7 @@ impl Vm {
         // Allocate pages for the new area.
         let len = current_aligned - brk.current_aligned;
         let attrs = PageAttrs::READ | PageAttrs::WRITE;
-        let Ok(vmo) = Vmo::create_zeroed(len) else {
+        let Ok(vmo) = Vmo::create_zeroed(&self.quota, len) else {
             return brk.current;
         };
 
@@ -444,13 +452,15 @@ impl Vm {
     }
 
     pub fn fork(&self, root_vmspace: &VmSpace) -> Result<Self, Errno> {
-        let vmspace = root_vmspace.try_clone()?;
+        let vmspace = root_vmspace.try_clone(&self.quota)?;
 
         let mutable = self.mutable.lock();
         let brk = mutable.brk;
         let mut mappings = Vec::with_capacity(mutable.mappings.len());
         for mapping in &mutable.mappings {
-            let new_vmo = mapping.vmo.snapshot(mapping.offset, mapping.len)?;
+            let new_vmo = mapping
+                .vmo
+                .snapshot(&self.quota, mapping.offset, mapping.len)?;
             vmspace.map(&new_vmo, mapping.start, 0, mapping.len, mapping.attrs)?;
             mappings.push(Mapping {
                 vmo: Arc::new(new_vmo),
@@ -460,6 +470,7 @@ impl Vm {
         }
 
         Ok(Self {
+            quota: self.quota.clone(),
             vmspace,
             mutable: SpinLock::new(Mutable { mappings, brk }),
         })
@@ -583,6 +594,7 @@ struct LoadedElf {
 }
 
 fn load_elf(
+    quota: &Quota,
     vmspace: &VmSpace,
     elf_file: &Arc<dyn FileLike>,
     mappings: &mut Vec<Mapping>,
@@ -633,7 +645,7 @@ fn load_elf(
 
         let attrs = attrs_from_phdr(phdr);
         if file_len > 0 {
-            let vmo = Vmo::create_user(file_len)?;
+            let vmo = Vmo::create_user(quota, file_len)?;
             vmspace.map(&vmo, region_base, 0, file_len, attrs)?;
             let mut mapping = Mapping::new(region_base, file_len, attrs, vmo);
             mapping.file = Some(BackingFile {
@@ -649,7 +661,7 @@ fn load_elf(
             // zero-filled pages by kernel, not via user page faults.
             let start = region_base + file_len;
             let size = region_len - file_len;
-            let vmo = Vmo::create_zeroed(size)?;
+            let vmo = Vmo::create_zeroed(quota, size)?;
             vmspace.map(&vmo, start, 0, size, attrs)?;
             mappings.push(Mapping::new(start, size, attrs, vmo));
         }

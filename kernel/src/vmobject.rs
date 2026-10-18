@@ -20,6 +20,10 @@ use crate::handle::Handle;
 use crate::handle::Handleable;
 use crate::memory::PAGE_ALLOCATOR;
 use crate::memory::PageType;
+use crate::quota::Charge;
+use crate::quota::MemoryQuota;
+use crate::quota::Quota;
+use crate::quota::Reservation;
 use crate::shared_ref::SharedRef;
 use crate::syscall::SyscallOutput;
 use crate::thread::Thread;
@@ -62,6 +66,7 @@ impl Drop for Page {
 
 struct Mutable {
     pages: FxHashMap<usize, SharedRef<Page>>,
+    charge: Charge<MemoryQuota>,
 }
 
 impl Mutable {
@@ -72,21 +77,31 @@ impl Mutable {
 
     /// Returns the page at the given index. If the page is not present, it
     /// is allocated on demand.
-    fn get_or_fill(&mut self, index: usize) -> Result<SharedRef<Page>, ErrorCode> {
+    fn get_or_fill(&mut self, quota: &Quota, index: usize) -> Result<SharedRef<Page>, ErrorCode> {
         if let Some(page) = self.get(index) {
             return Ok(page);
         }
 
-        // Allocate the slot.
+        let reservation = quota.reserve::<MemoryQuota>(MIN_PAGE_SIZE)?;
+        let page = Page::allocate_zeroed()?;
+        self.insert(index, page.clone(), reservation)?;
+        Ok(page)
+    }
+
+    fn insert(
+        &mut self,
+        index: usize,
+        page: SharedRef<Page>,
+        reservation: Reservation<'_, MemoryQuota>,
+    ) -> Result<(), ErrorCode> {
         let slot = self
             .pages
             .reserve_slot()
             .map_err(|_| ErrorCode::OutOfMemory)?;
 
-        // Allocate a page and insert it into the slot.
-        let page = Page::allocate_zeroed()?;
-        slot.insert(index, page.clone());
-        Ok(page)
+        slot.insert(index, page);
+        self.charge.commit(reservation);
+        Ok(())
     }
 }
 
@@ -98,30 +113,38 @@ enum Source {
 
 /// A virtually-contiguous memory region.
 pub struct VmObject {
+    quota: SharedRef<Quota>,
     source: Source,
     mutable: SpinLock<Mutable>,
     len: usize,
 }
 
 impl VmObject {
-    pub fn new_zeroed(len: usize) -> Result<SharedRef<Self>, ErrorCode> {
-        Self::new(len, Source::Zeroed)
+    pub fn new_zeroed(quota: SharedRef<Quota>, len: usize) -> Result<SharedRef<Self>, ErrorCode> {
+        Self::new(quota, len, Source::Zeroed)
     }
 
-    pub fn new_user(len: usize) -> Result<SharedRef<Self>, ErrorCode> {
-        Self::new(len, Source::User)
+    pub fn new_user(quota: SharedRef<Quota>, len: usize) -> Result<SharedRef<Self>, ErrorCode> {
+        Self::new(quota, len, Source::User)
     }
 
-    fn new(len: usize, source: Source) -> Result<SharedRef<Self>, ErrorCode> {
+    fn new(
+        quota: SharedRef<Quota>,
+        len: usize,
+        source: Source,
+    ) -> Result<SharedRef<Self>, ErrorCode> {
         if len == 0 || !is_aligned(len, MIN_PAGE_SIZE) {
             return Err(ErrorCode::NotAligned);
         }
 
+        let charge = Charge::new(quota.clone());
         SharedRef::new(Self {
+            quota,
             len,
             source,
             mutable: SpinLock::new(Mutable {
                 pages: FxHashMap::new(),
+                charge,
             }),
         })
     }
@@ -133,7 +156,7 @@ impl VmObject {
     fn get_page(&self, index: usize) -> Result<SharedRef<Page>, ErrorCode> {
         let mut mutable = self.mutable.lock();
         match self.source {
-            Source::Zeroed => mutable.get_or_fill(index),
+            Source::Zeroed => mutable.get_or_fill(&self.quota, index),
             // User VMOs are filled by the user explicitly. If the page
             // is not present, just return an error.
             Source::User => mutable.get(index).ok_or(ErrorCode::PageAbsent),
@@ -178,6 +201,8 @@ impl VmObject {
                 continue;
             }
 
+            let reservation = self.quota.reserve::<MemoryQuota>(MIN_PAGE_SIZE)?;
+
             let page = match mode {
                 SupplyMode::Copy => {
                     // Copy the buffer to a new page.
@@ -197,11 +222,7 @@ impl VmObject {
             // finds this new page, and resolves it.
             let mut mutable = self.mutable.lock();
             if !mutable.pages.contains_key(&index) {
-                mutable
-                    .pages
-                    .reserve_slot()
-                    .map_err(|_| ErrorCode::OutOfMemory)?
-                    .insert(index, page);
+                mutable.insert(index, page, reservation)?;
             }
 
             off += MIN_PAGE_SIZE;
@@ -214,7 +235,12 @@ impl VmObject {
     ///
     /// This method copies from `offset` to `offset + len` , and the newly
     /// created VMO will be `len` bytes long.
-    pub fn snapshot(&self, offset: usize, len: usize) -> Result<SharedRef<Self>, ErrorCode> {
+    pub fn snapshot(
+        &self,
+        quota: SharedRef<Quota>,
+        offset: usize,
+        len: usize,
+    ) -> Result<SharedRef<Self>, ErrorCode> {
         if !is_aligned(offset, MIN_PAGE_SIZE) || !is_aligned(len, MIN_PAGE_SIZE) {
             return Err(ErrorCode::NotAligned);
         }
@@ -225,7 +251,7 @@ impl VmObject {
         }
 
         // Allocate a new VMO.
-        let new_vmo = Self::new(len, self.source)?;
+        let new_vmo = Self::new(quota, len, self.source)?;
 
         // Copy each present page in the range.
         // FIXME: If VMO is large, this could block the kernel for a long time.
@@ -239,14 +265,9 @@ impl VmObject {
                 continue;
             }
 
-            // Allocate the slot in the new VMO.
-            let slot = new_mutable
-                .pages
-                .reserve_slot()
-                .map_err(|_| ErrorCode::OutOfMemory)?;
-
             // Copy the page.
             // TODO: Copy-on-write to share the same physical page.
+            let reservation = new_vmo.quota.reserve::<MemoryQuota>(MIN_PAGE_SIZE)?;
             let new_page = Page::allocate_dirty()?;
             let src: *const u8 = arch::paddr2vaddr(page.paddr).as_ptr();
             let dst: *mut u8 = arch::paddr2vaddr(new_page.paddr).as_mut_ptr();
@@ -256,7 +277,7 @@ impl VmObject {
             unsafe { core::ptr::copy_nonoverlapping(src, dst, MIN_PAGE_SIZE) };
 
             // Insert the new page into the new VMO.
-            slot.insert(index - start_index, new_page);
+            new_mutable.insert(index - start_index, new_page, reservation)?;
         }
 
         drop(new_mutable);
@@ -399,12 +420,15 @@ pub fn sys_vmo_create_zeroed(
     current: &SharedRef<Thread>,
     ctx: &SyscallRegs,
 ) -> Result<SyscallOutput, ErrorCode> {
-    let len = ctx.a0;
+    let quota_id = HandleId::new(ctx.a0);
+    let len = ctx.a1;
 
-    let vmo = VmObject::new_zeroed(len)?;
+    let hspace = current.hspace();
+    let quota = hspace.get::<Quota>(quota_id, HandleRight::CHARGE)?;
+    let vmo = VmObject::new_zeroed(quota, len)?;
     let rights = HandleRight::READ | HandleRight::WRITE;
     let handle = Handle::new(vmo, rights);
-    let id = current.hspace().insert(handle)?;
+    let id = hspace.insert(handle)?;
     Ok(SyscallOutput::Done(id.as_usize()))
 }
 
@@ -412,12 +436,15 @@ pub fn sys_vmo_create_user(
     current: &SharedRef<Thread>,
     ctx: &SyscallRegs,
 ) -> Result<SyscallOutput, ErrorCode> {
-    let len = ctx.a0;
+    let quota_id = HandleId::new(ctx.a0);
+    let len = ctx.a1;
 
-    let vmo = VmObject::new_user(len)?;
+    let hspace = current.hspace();
+    let quota = hspace.get::<Quota>(quota_id, HandleRight::CHARGE)?;
+    let vmo = VmObject::new_user(quota, len)?;
     let rights = HandleRight::READ | HandleRight::WRITE;
     let handle = Handle::new(vmo, rights);
-    let id = current.hspace().insert(handle)?;
+    let id = hspace.insert(handle)?;
     Ok(SyscallOutput::Done(id.as_usize()))
 }
 
@@ -474,14 +501,16 @@ pub fn sys_vmo_snapshot(
     current: &SharedRef<Thread>,
     ctx: &SyscallRegs,
 ) -> Result<SyscallOutput, ErrorCode> {
-    let id = HandleId::new(ctx.a0);
-    let offset = ctx.a1;
-    let len = ctx.a2;
+    let quota_id = HandleId::new(ctx.a0);
+    let id = HandleId::new(ctx.a1);
+    let offset = ctx.a2;
+    let len = ctx.a3;
 
     let hspace = current.hspace();
-    let vmo = hspace.get::<VmObject>(id, HandleRight::READ)?;
+    let (quota, vmo) =
+        hspace.get2::<Quota, VmObject>(quota_id, HandleRight::CHARGE, id, HandleRight::READ)?;
 
-    let new_vmo = vmo.snapshot(offset, len)?;
+    let new_vmo = vmo.snapshot(quota, offset, len)?;
     let rights = HandleRight::READ | HandleRight::WRITE;
     let handle = Handle::new(new_vmo, rights);
     let id = hspace.insert(handle)?;

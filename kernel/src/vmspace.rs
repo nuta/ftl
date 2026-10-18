@@ -16,6 +16,7 @@ use crate::arch;
 use crate::arch::MIN_PAGE_SIZE;
 use crate::handle::Handle;
 use crate::handle::Handleable;
+use crate::quota::Quota;
 use crate::shared_ref::SharedRef;
 use crate::syscall::SyscallOutput;
 use crate::thread::Thread;
@@ -88,8 +89,8 @@ pub struct VmSpace {
 }
 
 impl VmSpace {
-    pub fn new() -> Result<Self, ErrorCode> {
-        let arch = arch::VmSpace::new()?;
+    pub fn new(quota: SharedRef<Quota>) -> Result<Self, ErrorCode> {
+        let arch = arch::VmSpace::new(quota)?;
         Ok(Self {
             arch,
             mutable: SpinLock::new(Mutable {
@@ -102,8 +103,8 @@ impl VmSpace {
         self.arch.switch();
     }
 
-    pub fn clone(&self) -> Result<Self, ErrorCode> {
-        let new_vmspace = Self::new()?;
+    pub fn clone(&self, quota: SharedRef<Quota>) -> Result<Self, ErrorCode> {
+        let new_vmspace = Self::new(quota)?;
         let mutable = self.mutable.lock();
         for mapping in &mutable.mappings {
             new_vmspace.insert(mapping.clone())?;
@@ -269,11 +270,15 @@ pub fn sys_vmspace_clone(
     current: &SharedRef<Thread>,
     ctx: &SyscallRegs,
 ) -> Result<SyscallOutput, ErrorCode> {
-    let source_id = HandleId::new(ctx.a0);
-    let source = current
-        .hspace()
-        .get::<VmSpace>(source_id, HandleRight::READ | HandleRight::WRITE)?;
-    let vmspace = VmSpace::clone(&source)?;
+    let quota_id = HandleId::new(ctx.a0);
+    let source_id = HandleId::new(ctx.a1);
+    let (quota, source) = current.hspace().get2::<Quota, VmSpace>(
+        quota_id,
+        HandleRight::CHARGE,
+        source_id,
+        HandleRight::READ | HandleRight::WRITE,
+    )?;
+    let vmspace = VmSpace::clone(&source, quota)?;
     let vmspace = SharedRef::new(vmspace)?;
     let rights = HandleRight::READ | HandleRight::WRITE;
     let handle = Handle::new(vmspace, rights);
@@ -337,4 +342,20 @@ pub fn sys_vmspace_permit(
 
     vmspace.permit(uaddr, len, attrs)?;
     Ok(SyscallOutput::Done(0))
+}
+
+pub fn sys_vmspace_create(
+    current: &SharedRef<Thread>,
+    ctx: &SyscallRegs,
+) -> Result<SyscallOutput, ErrorCode> {
+    let quota_id = HandleId::new(ctx.a0);
+    let quota = current
+        .hspace()
+        .get::<Quota>(quota_id, HandleRight::CHARGE)?;
+    let vmspace = VmSpace::new(quota)?;
+    let vmspace = SharedRef::new(vmspace)?;
+    let rights = HandleRight::READ | HandleRight::WRITE;
+    let handle = Handle::new(vmspace, rights);
+    let id = current.hspace().insert(handle)?;
+    Ok(SyscallOutput::Done(id.as_usize()))
 }

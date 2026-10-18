@@ -52,6 +52,21 @@ impl AnyHandle {
         self.0.object.close();
     }
 
+    /// Updates the rights of this handle.
+    ///
+    /// The new rights must be a subset of the current rights.
+    pub fn update_rights(self, rights: HandleRight) -> Result<Self, ErrorCode> {
+        if !self.0.rights.contains(rights) {
+            // The new rights are not a subset.
+            return Err(ErrorCode::NotAllowed);
+        }
+
+        Ok(AnyHandle(Handle {
+            object: self.0.object,
+            rights,
+        }))
+    }
+
     pub fn downcast<T: Handleable>(self) -> Option<Handle<T>> {
         let object = self.0.object.downcast().ok()?;
         let rights = self.0.rights;

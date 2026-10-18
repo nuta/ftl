@@ -4,10 +4,12 @@ use ftl_types::syscall::Syscall;
 use ftl_types::vmspace::PageAttrs;
 
 use crate::arch::syscall1;
+use crate::arch::syscall2;
 use crate::arch::syscall3;
 use crate::arch::syscall4;
 use crate::arch::syscall6;
 use crate::handle::OwnedHandle;
+use crate::quota::Quota;
 use crate::vmo::Vmo;
 
 pub struct VmSpace {
@@ -20,8 +22,22 @@ impl VmSpace {
         Self { handle }
     }
 
-    pub fn try_clone(&self) -> Result<Self, ErrorCode> {
-        let id = syscall1(Syscall::VmSpaceClone, self.handle.id().as_usize())?;
+    pub fn into_handle(self) -> OwnedHandle {
+        self.handle
+    }
+
+    pub fn create(quota: &Quota) -> Result<Self, ErrorCode> {
+        let id = syscall1(Syscall::VmSpaceCreate, quota.handle().id().as_usize())?;
+        let this = unsafe { Self::from_handle(HandleId::new(id)) };
+        Ok(this)
+    }
+
+    pub fn try_clone(&self, quota: &Quota) -> Result<Self, ErrorCode> {
+        let id = syscall2(
+            Syscall::VmSpaceClone,
+            quota.handle().id().as_usize(),
+            self.handle.id().as_usize(),
+        )?;
         // SAFETY: Kernel returns a valid handle.
         let this = unsafe { Self::from_handle(HandleId::new(id)) };
         Ok(this)

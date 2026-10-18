@@ -3,11 +3,11 @@ use ftl_types::handle::HandleId;
 use ftl_types::syscall::Syscall;
 use ftl_types::vmo::SupplyMode;
 
-use crate::arch::syscall1;
-use crate::arch::syscall3;
+use crate::arch::syscall2;
 use crate::arch::syscall4;
 use crate::arch::syscall6;
 use crate::handle::OwnedHandle;
+use crate::quota::Quota;
 
 pub struct Vmo {
     handle: OwnedHandle,
@@ -19,8 +19,16 @@ impl Vmo {
         Self { handle }
     }
 
-    pub fn create_zeroed(len: usize) -> Result<Self, ErrorCode> {
-        let id = syscall1(Syscall::VmoCreateZeroed, len)?;
+    pub fn into_handle(self) -> OwnedHandle {
+        self.handle
+    }
+
+    pub fn create_zeroed(quota: &Quota, len: usize) -> Result<Self, ErrorCode> {
+        let id = syscall2(
+            Syscall::VmoCreateZeroed,
+            quota.handle().id().as_usize(),
+            len,
+        )?;
         // SAFETY: Kernel returns a valid handle.
         let this = unsafe { Self::from_handle(HandleId::new(id)) };
         Ok(this)
@@ -31,8 +39,8 @@ impl Vmo {
     /// When a thread accesses a page in the VMO for the first time, a page
     /// fault will be sent to the userspace page fault handler, which can
     /// fill the page programmatically by calling [`Self::supply`].
-    pub fn create_user(len: usize) -> Result<Self, ErrorCode> {
-        let id = syscall1(Syscall::VmoCreateUser, len)?;
+    pub fn create_user(quota: &Quota, len: usize) -> Result<Self, ErrorCode> {
+        let id = syscall2(Syscall::VmoCreateUser, quota.handle().id().as_usize(), len)?;
         // SAFETY: Kernel returns a valid handle.
         let this = unsafe { Self::from_handle(HandleId::new(id)) };
         Ok(this)
@@ -44,9 +52,10 @@ impl Vmo {
     ///
     /// The newly created VMO will be `len` bytes long, and its first byte is
     /// the same as the original VMO at `offset`.
-    pub fn snapshot(&self, offset: usize, len: usize) -> Result<Self, ErrorCode> {
-        let id = syscall3(
+    pub fn snapshot(&self, quota: &Quota, offset: usize, len: usize) -> Result<Self, ErrorCode> {
+        let id = syscall4(
             Syscall::VmoSnapshot,
+            quota.handle().id().as_usize(),
             self.handle.id().as_usize(),
             offset,
             len,

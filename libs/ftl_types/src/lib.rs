@@ -4,6 +4,7 @@ pub mod error;
 pub mod handle;
 pub mod net;
 pub mod poll;
+pub mod quota;
 pub mod syscall;
 pub mod thread;
 pub mod time;

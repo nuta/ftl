@@ -32,8 +32,10 @@ pub enum ErrorCode {
     Destroyed = -25,
     BadAccess = -26,
     BadSysretValue = -27,
+    QuotaExceeded = -28,
+    TooDeep = -29,
     // This must be the last variant.
-    BadErrorCode = -28,
+    BadErrorCode = -30,
 }
 
 impl ErrorCode {

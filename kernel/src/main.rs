@@ -24,6 +24,7 @@ mod memory;
 mod net;
 mod panic;
 mod poll;
+mod quota;
 mod random;
 mod scheduler;
 mod shared_ref;

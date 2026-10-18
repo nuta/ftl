@@ -12,6 +12,7 @@ use crate::arch::syscall6;
 use crate::handle::OwnedHandle;
 use crate::hspace::HandleSpace;
 use crate::poll::Poll;
+use crate::quota::Quota;
 use crate::vmspace::VmSpace;
 
 pub struct Thread {
@@ -24,7 +25,12 @@ impl Thread {
         Self { handle }
     }
 
+    pub fn into_handle(self) -> OwnedHandle {
+        self.handle
+    }
+
     pub fn create(
+        quota: &Quota,
         hspace: &HandleSpace,
         vmspace: &VmSpace,
         syscall_pc: usize,
@@ -33,12 +39,12 @@ impl Thread {
     ) -> Result<Self, ErrorCode> {
         let id = syscall6(
             Syscall::ThreadCreate,
+            quota.handle().id().as_usize(),
             hspace.handle().id().as_usize(),
             vmspace.handle().id().as_usize(),
             syscall_pc,
             fault_pc,
             cookie,
-            0,
         )?;
 
         // SAFETY: Kernel returns a valid handle.

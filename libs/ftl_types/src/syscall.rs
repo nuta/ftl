@@ -34,12 +34,17 @@ pub enum Syscall {
     MonoTimeRead = 31,
     WallTimeRead = 32,
     RandomRead = 33,
+    HSpaceCreate = 34,
+    QuotaLimit = 35,
+    VmSpaceCreate = 36,
+    HSpaceMove = 37,
+    QuotaCreate = 38,
     // Note: Do not forget to update Syscall::END when adding a new syscall.
 }
 
 impl Syscall {
     pub const BASE: usize = usize::MAX - 0x1000;
-    const END: usize = Self::BASE + Self::RandomRead as usize;
+    const END: usize = Self::BASE + Self::QuotaCreate as usize;
 
     pub const fn as_usize(self) -> usize {
         Self::BASE + self as usize

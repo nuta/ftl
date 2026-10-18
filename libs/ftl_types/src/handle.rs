@@ -1,6 +1,8 @@
 use core::ops::BitOr;
 use core::ops::BitOrAssign;
 
+use crate::error::ErrorCode;
+
 /// The upper 8 bits are used for encoding EventKind.
 pub const HANDLE_ID_MAX: usize = 0x00ff_ffff;
 
@@ -25,6 +27,8 @@ impl HandleRight {
     pub const NONE: Self = Self(0);
     pub const READ: Self = Self(1 << 0);
     pub const WRITE: Self = Self(1 << 1);
+    pub const CHARGE: Self = Self(1 << 2);
+    pub const ALL: Self = Self(Self::READ.0 | Self::WRITE.0 | Self::CHARGE.0);
 
     pub const fn contains(&self, other: Self) -> bool {
         self.0 & other.0 == other.0
@@ -32,6 +36,19 @@ impl HandleRight {
 
     pub const fn or(self, other: Self) -> Self {
         Self(self.0 | other.0)
+    }
+
+    pub const fn as_raw(self) -> usize {
+        self.0
+    }
+
+    pub const fn from_raw(raw: usize) -> Result<Self, ErrorCode> {
+        if raw & !Self::ALL.0 != 0 {
+            // Reject unknown bits.
+            return Err(ErrorCode::InvalidArg);
+        }
+
+        Ok(Self(raw))
     }
 }
 

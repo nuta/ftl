@@ -19,6 +19,10 @@ impl Net {
         Self { handle }
     }
 
+    pub fn into_handle(self) -> OwnedHandle {
+        self.handle
+    }
+
     pub fn create() -> Result<Self, ErrorCode> {
         let id = syscall0(Syscall::NetCreate)?;
         // SAFETY: Kernel returns a valid handle.

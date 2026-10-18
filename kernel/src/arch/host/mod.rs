@@ -11,6 +11,8 @@ use crate::address::UAddr;
 use crate::address::USlice;
 use crate::address::VAddr;
 use crate::boot::BootInfo;
+use crate::quota::Quota;
+use crate::shared_ref::SharedRef;
 
 pub const MIN_PAGE_SIZE: usize = 4096;
 pub const USER_ADDR_END: usize = 0x8000_0000;
@@ -63,7 +65,7 @@ pub fn vmspace_switch_to_kernel() {
 pub struct VmSpace {}
 
 impl VmSpace {
-    pub fn new() -> Result<Self, ErrorCode> {
+    pub fn new(_quota: SharedRef<Quota>) -> Result<Self, ErrorCode> {
         todo!()
     }
 

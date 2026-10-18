@@ -18,6 +18,10 @@ impl Poll {
         Self { handle }
     }
 
+    pub fn into_handle(self) -> OwnedHandle {
+        self.handle
+    }
+
     pub fn create() -> Result<Self, ErrorCode> {
         let id = syscall1(Syscall::PollCreate, 0)?;
         // SAFETY: Kernel returns a valid handle.

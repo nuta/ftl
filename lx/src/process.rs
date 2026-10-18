@@ -89,8 +89,8 @@ impl Process {
         elf_file: Arc<dyn FileLike>,
         argv: &[&[u8]],
     ) -> Result<Arc<Process>, Errno> {
-        let vmspace = container.root_vmspace.try_clone()?;
-        let (vm, entry, sp) = Vm::create(&vmspace, elf_file, argv)?;
+        let vmspace = container.root_vmspace.try_clone(&container.quota)?;
+        let (vm, entry, sp) = Vm::create(&container.quota, &vmspace, elf_file, argv)?;
 
         let mut fd_table = FdTable::new(1024); // TODO: make this configurable
         let tty: Arc<dyn FileLike> = Arc::new(Tty::new(console));
@@ -121,7 +121,12 @@ impl Process {
         elf_file: Arc<dyn FileLike>,
         argv: &[&[u8]],
     ) -> Result<(), Errno> {
-        let (vm, entry, sp) = Vm::create(&self.container.root_vmspace, elf_file, argv)?;
+        let (vm, entry, sp) = Vm::create(
+            &self.container.quota,
+            &self.container.root_vmspace,
+            elf_file,
+            argv,
+        )?;
         self.fd_table.lock().close_on_exec();
 
         let thread = LxThread::new(
