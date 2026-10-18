@@ -27,6 +27,7 @@ use crate::types::sys::fcntl::O_WRONLY;
 use crate::vfs::Console;
 use crate::vfs::FileLike;
 use crate::vfs::INode;
+use crate::vfs::Null;
 use crate::vfs::PathNode;
 use crate::vfs::Tty;
 use crate::vm::Vm;
@@ -85,7 +86,7 @@ pub struct Process {
 impl Process {
     pub fn new_init(
         container: Arc<Container>,
-        console: Arc<Console>,
+        console: Option<Arc<Console>>,
         elf_file: Arc<dyn FileLike>,
         argv: &[&[u8]],
     ) -> Result<Arc<Process>, Errno> {
@@ -93,7 +94,10 @@ impl Process {
         let (vm, entry, sp) = Vm::create(&container.quota, &vmspace, elf_file, argv)?;
 
         let mut fd_table = FdTable::new(1024); // TODO: make this configurable
-        let tty: Arc<dyn FileLike> = Arc::new(Tty::new(console));
+        let tty: Arc<dyn FileLike> = match console {
+            Some(console) => Arc::new(Tty::new(console)),
+            None => Arc::new(Null::new()),
+        };
         fd_table.insert_at(0, tty.clone(), O_RDONLY)?;
         fd_table.insert_at(1, tty.clone(), O_WRONLY)?;
         fd_table.insert_at(2, tty, O_WRONLY)?;

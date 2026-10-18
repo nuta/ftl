@@ -24,6 +24,7 @@ mod tty;
 
 pub use console::Console;
 pub use devfs::DevFs;
+pub use devfs::Null;
 pub use directory::DirEntry;
 pub use directory::Directory;
 pub use directory::OpenedDir;

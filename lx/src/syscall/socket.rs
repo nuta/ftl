@@ -27,11 +27,11 @@ pub fn sys_socket(
     protocol: c_int,
 ) -> Result<SyscallResult, Errno> {
     if domain != AF_INET {
-        return Err(Errno::ENOTSUP);
+        return Err(Errno::EAFNOSUPPORT);
     }
 
     let process = current.process();
-    let network = process.container().network();
+    let network = process.container().network().ok_or(Errno::EAFNOSUPPORT)?;
 
     // FIXME: support other socket types
     let socket: Arc<dyn FileLike> = match (socket_type & !SUPPORTED_FLAGS, protocol) {

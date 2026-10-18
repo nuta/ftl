@@ -37,8 +37,8 @@ pub struct Container {
     pub root_vmspace: VmSpace,
     pub processes: SpinLock<PIdTable>,
     pub reaper: Reaper,
-    network: Arc<TcpIp>,
-    console: Arc<Console>,
+    network: Option<Arc<TcpIp>>,
+    console: Option<Arc<Console>>,
     pub root_dir: Arc<PathNode>,
 }
 
@@ -47,14 +47,18 @@ impl Container {
         hspace: HandleSpace,
         quota: Quota,
         root_vmspace: VmSpace,
-        network: Arc<TcpIp>,
-        console: Arc<Console>,
+        network: Option<Arc<TcpIp>>,
+        console: Option<Arc<Console>>,
         elf_file: Arc<dyn FileLike>,
         argv: &[&[u8]],
     ) -> Result<Arc<Self>, Errno> {
         let poll = Poll::create()?;
-        network.subscribe(&poll, NETWORK_COOKIE)?;
-        console.subscribe(&poll, CONSOLE_COOKIE)?;
+        if let Some(network) = &network {
+            network.subscribe(&poll, NETWORK_COOKIE)?;
+        }
+        if let Some(console) = &console {
+            console.subscribe(&poll, CONSOLE_COOKIE)?;
+        }
 
         let root_dir = RootDir::new();
         let this = Arc::new(Self {
@@ -74,8 +78,8 @@ impl Container {
         Ok(this)
     }
 
-    pub fn network(&self) -> &Arc<TcpIp> {
-        &self.network
+    pub fn network(&self) -> Option<&Arc<TcpIp>> {
+        self.network.as_ref()
     }
 
     pub fn add_thread(&self, thread: Arc<LxThread>, entry: usize, sp: usize) -> Result<(), Errno> {
@@ -88,15 +92,15 @@ impl Container {
         loop {
             let deadline = MonoTime::now() + Duration::from_secs(1);
             match self.poll.wait_until(deadline) {
-                Ok(NETWORK_COOKIE) => {
-                    self.network.handle_rx();
-                    self.network
+                Ok(NETWORK_COOKIE) if let Some(network) = &self.network => {
+                    network.handle_rx();
+                    network
                         .subscribe(&self.poll, NETWORK_COOKIE)
                         .expect("failed to subscribe to network events");
                 }
-                Ok(CONSOLE_COOKIE) => {
-                    self.console.handle_rx();
-                    self.console
+                Ok(CONSOLE_COOKIE) if let Some(console) = &self.console => {
+                    console.handle_rx();
+                    console
                         .subscribe(&self.poll, CONSOLE_COOKIE)
                         .expect("failed to subscribe to console events");
                 }
@@ -108,7 +112,9 @@ impl Container {
                 Err(err) => panic!("poll wait failed: {:?}", err),
             }
 
-            self.network.handle_timeouts(MonoTime::now());
+            if let Some(network) = &self.network {
+                network.handle_timeouts(MonoTime::now());
+            }
         }
     }
 }

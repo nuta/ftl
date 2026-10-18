@@ -11,7 +11,15 @@ use crate::vfs::StaticDir;
 use crate::wait_queue::Sleep;
 
 /// `/dev/null`.
-struct Null;
+pub struct Null {
+    _private: (),
+}
+
+impl Null {
+    pub const fn new() -> Self {
+        Self { _private: () }
+    }
+}
 
 impl FileLike for Null {
     fn read(
@@ -123,7 +131,7 @@ pub struct DevFs {
 impl DevFs {
     pub fn new() -> StaticDir<3> {
         StaticDir::new([
-            DirEntry::new(b"null", INode::File(Arc::new(Null))),
+            DirEntry::new(b"null", INode::File(Arc::new(Null::new()))),
             DirEntry::new(b"zero", INode::File(Arc::new(Zero))),
             DirEntry::new(b"urandom", INode::File(Arc::new(URandom))),
         ])
