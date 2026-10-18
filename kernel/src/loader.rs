@@ -20,9 +20,12 @@ use crate::thread::Thread;
 use crate::vmobject::VmObject;
 use crate::vmspace::VmSpace;
 
-fn load_elf(quota: &SharedRef<Quota>, vmspace: &SharedRef<VmSpace>, elf_file: &[u8]) -> usize {
-    let elf = Elf::parse(elf_file, ftl_elf::ET_EXEC).expect("failed to parse ELF file");
-
+fn load_elf(
+    quota: &SharedRef<Quota>,
+    vmspace: &SharedRef<VmSpace>,
+    image: &SharedRef<VmObject>,
+    elf: &Elf,
+) -> usize {
     // Load the segments into the allocated memory.
     for phdr in elf.phdrs {
         if phdr.p_type != PhdrType::Load as u32 || phdr.p_memsz == 0 {
@@ -39,26 +42,51 @@ fn load_elf(quota: &SharedRef<Quota>, vmspace: &SharedRef<VmSpace>, elf_file: &[
         assert!(phdr.p_filesz <= phdr.p_memsz);
         assert!(is_aligned(phdr.p_vaddr as usize, MIN_PAGE_SIZE));
 
-        // Copy the file contents to the allocated memory.
-        let src_off = phdr.p_offset as usize;
-        let copy_len = phdr.p_filesz as usize;
+        let offset = phdr.p_offset as usize;
         let region_len = align_up(phdr.p_memsz as usize, MIN_PAGE_SIZE);
-        let bytes = &elf_file[src_off..src_off + copy_len];
-
         let attrs = PageAttrs::from_phdr_flags(phdr.p_flags);
-
-        // Copy the file contents to the allocated memory.
-        let vmo = VmObject::new_zeroed(quota.clone(), region_len).unwrap();
-        vmo.write(0, bytes).unwrap();
-
-        // Map the region to the address space.
-        let vmo = Handle::new(vmo, HandleRight::READ | HandleRight::WRITE);
-        vmspace
-            .map(vmo, UAddr::new(phdr.p_vaddr as usize), 0, region_len, attrs)
-            .unwrap();
+        let uaddr = UAddr::new(phdr.p_vaddr as usize);
+        if attrs.contains(PageAttrs::WRITE) {
+            // This segment is writeable. Create a new VMO.
+            let vmo = image.snapshot(quota.clone(), offset, region_len).unwrap();
+            let vmo = Handle::new(vmo, HandleRight::READ | HandleRight::WRITE);
+            vmspace.map(vmo, uaddr, 0, region_len, attrs).unwrap();
+        } else {
+            // This segment is read-only. Map the image VMO directly.
+            let vmo = Handle::new(image.clone(), HandleRight::READ);
+            vmspace.map(vmo, uaddr, offset, region_len, attrs).unwrap();
+        }
     }
 
     elf.ehdr.e_entry as usize
+}
+
+/// Creates a VMO containing `elf_file`.
+fn create_elf_vmo(quota: &SharedRef<Quota>, elf: &Elf, elf_file: &[u8]) -> SharedRef<VmObject> {
+    let mut file_len = 0;
+    let mut image_len = 0;
+    for phdr in elf.phdrs {
+        if phdr.p_type != PhdrType::Load as u32 {
+            continue;
+        }
+
+        let offset = phdr.p_offset as usize;
+
+        // -z separate-loadable-segments should ensure these assertions hold.
+        assert!(is_aligned(offset, MIN_PAGE_SIZE)); // file offset must be page aligned
+        assert!(offset >= image_len); // ELF segments must not overlap in the image
+
+        // Skip .bss segments.
+        if phdr.p_filesz > 0 {
+            file_len = offset + phdr.p_filesz as usize;
+        }
+        image_len = align_up(offset + phdr.p_memsz as usize, MIN_PAGE_SIZE);
+    }
+
+    // FIXME: this is very inefficient
+    let vmo = VmObject::new_zeroed(quota.clone(), image_len).unwrap();
+    vmo.write(0, &elf_file[..file_len]).unwrap();
+    vmo
 }
 
 fn write_stack(
@@ -114,7 +142,9 @@ pub fn load(bootinfo: &BootInfo) {
     let vmspace = VmSpace::new(quota.clone())
         .and_then(SharedRef::new)
         .unwrap();
-    let entry = load_elf(&quota, &vmspace, elf_file);
+    let elf = Elf::parse(elf_file, ftl_elf::ET_EXEC).expect("failed to parse ELF file");
+    let image = create_elf_vmo(&quota, &elf, elf_file);
+    let entry = load_elf(&quota, &vmspace, &image, &elf);
     let sp = prepare_stack(&quota, &vmspace, bootinfo.cmdline);
 
     let hspace = SharedRef::new(HandleSpace::new()).unwrap();
