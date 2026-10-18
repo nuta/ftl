@@ -72,6 +72,22 @@ impl Vmo {
         Ok(Self { handle })
     }
 
+    pub fn read(&self, offset: usize, buf: &mut [u8]) -> Result<(), ErrorCode> {
+        let mut read = 0;
+        while read < buf.len() {
+            let rest = &mut buf[read..];
+            read += syscall4(
+                Syscall::VmoRead,
+                self.handle.id().as_usize(),
+                offset + read,
+                rest.as_mut_ptr() as usize,
+                rest.len(),
+            )?;
+        }
+
+        Ok(())
+    }
+
     pub fn write(&self, offset: usize, buf: &[u8]) -> Result<(), ErrorCode> {
         let mut written = 0;
         while written < buf.len() {
