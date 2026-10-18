@@ -157,11 +157,7 @@ impl HandleSpace {
         Ok(())
     }
 
-    pub fn get<T: Handleable>(
-        &self,
-        id: HandleId,
-        required: HandleRight,
-    ) -> Result<SharedRef<T>, ErrorCode> {
+    pub fn get_handle<T: Handleable>(&self, id: HandleId) -> Result<Handle<T>, ErrorCode> {
         let mutable = self.mutable.lock();
         mutable
             .handles
@@ -169,8 +165,15 @@ impl HandleSpace {
             .cloned()
             .ok_or(ErrorCode::HandleNotFound)?
             .downcast::<T>()
-            .ok_or(ErrorCode::InvalidHandleType)?
-            .authorize(required)
+            .ok_or(ErrorCode::InvalidHandleType)
+    }
+
+    pub fn get<T: Handleable>(
+        &self,
+        id: HandleId,
+        required: HandleRight,
+    ) -> Result<SharedRef<T>, ErrorCode> {
+        self.get_handle::<T>(id)?.authorize(required)
     }
 
     pub fn get2<T1: Handleable, T2: Handleable>(

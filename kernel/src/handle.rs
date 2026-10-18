@@ -21,6 +21,14 @@ impl<T: Handleable + ?Sized> Handle<T> {
         Self { object, rights }
     }
 
+    pub fn object(&self) -> &SharedRef<T> {
+        &self.object
+    }
+
+    pub fn rights(&self) -> HandleRight {
+        self.rights
+    }
+
     pub fn authorize(self, required: HandleRight) -> Result<SharedRef<T>, ErrorCode> {
         if self.rights.contains(required) {
             Ok(self.object)

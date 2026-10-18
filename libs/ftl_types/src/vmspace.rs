@@ -5,6 +5,8 @@ use ftl_elf::PF_R;
 use ftl_elf::PF_W;
 use ftl_elf::PF_X;
 
+use crate::error::ErrorCode;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PageAttrs(usize);
 
@@ -15,6 +17,8 @@ impl PageAttrs {
     pub const WRITE: Self = Self(1 << 1);
     pub const EXEC: Self = Self(1 << 2);
 
+    pub const ALL: Self = Self(Self::READ.0 | Self::WRITE.0 | Self::EXEC.0);
+
     pub const fn contains(self, other: Self) -> bool {
         self.0 & other.0 == other.0
     }
@@ -23,8 +27,17 @@ impl PageAttrs {
         self.0
     }
 
-    pub const fn from_raw(raw: usize) -> Self {
-        Self(raw)
+    pub const fn from_raw(raw: usize) -> Result<Self, ErrorCode> {
+        if raw & !Self::ALL.0 != 0 {
+            // Unknown bits are set.
+            return Err(ErrorCode::InvalidPageAttrs);
+        }
+
+        Ok(Self(raw))
+    }
+
+    pub const fn from_raw_truncated(raw: usize) -> Self {
+        Self(raw & Self::ALL.0)
     }
 
     pub const fn from_phdr_flags(flags: u32) -> Self {

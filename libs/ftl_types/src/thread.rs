@@ -101,7 +101,7 @@ impl PageFaultInfo {
 
     /// The access type that caused the page fault.
     pub const fn access(self) -> PageAttrs {
-        PageAttrs::from_raw(self.0 & 0xff)
+        PageAttrs::from_raw_truncated(self.0)
     }
 
     pub const fn reason(self) -> ErrorCode {

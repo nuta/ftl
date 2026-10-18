@@ -1,4 +1,5 @@
 use alloc::vec::Vec;
+use core::ops::Range;
 
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
@@ -26,7 +27,7 @@ use crate::vmobject::VmObject;
 struct Mapping {
     start: UAddr,
     end: UAddr,
-    vmo: SharedRef<VmObject>,
+    vmo: Handle<VmObject>,
     /// The offset in the VMO.
     offset: usize,
     attrs: PageAttrs,
@@ -42,12 +43,40 @@ impl Mapping {
     }
 }
 
+fn check_vmo_attrs(allowed: HandleRight, requested: PageAttrs) -> bool {
+    if !allowed.contains(HandleRight::READ) {
+        return false;
+    }
+
+    if requested.contains(PageAttrs::WRITE) && !allowed.contains(HandleRight::WRITE) {
+        return false;
+    }
+
+    true
+}
+
 struct Mutable {
     /// The mapping sorted by the start address.
     mappings: Vec<Mapping>,
 }
 
 impl Mutable {
+    fn overlapping_range(&self, start: UAddr, end: UAddr) -> Range<usize> {
+        let first = self.mappings.partition_point(|m| m.end <= start);
+        let last = self.mappings.partition_point(|m| m.start < end);
+        first..last
+    }
+
+    fn overlapping(&self, start: UAddr, end: UAddr) -> &[Mapping] {
+        let range = self.overlapping_range(start, end);
+        &self.mappings[range]
+    }
+
+    fn overlapping_mut(&mut self, start: UAddr, end: UAddr) -> &mut [Mapping] {
+        let range = self.overlapping_range(start, end);
+        &mut self.mappings[range]
+    }
+
     /// Splits a mapping at `uaddr` into two mappings.
     ///
     /// Returns `Ok` if `uaddr` is not in any mappings.
@@ -114,25 +143,24 @@ impl VmSpace {
 
     pub fn map(
         &self,
-        vmo: SharedRef<VmObject>,
+        vmo: Handle<VmObject>,
         uaddr: UAddr,
         offset: usize,
         len: usize,
         attrs: PageAttrs,
     ) -> Result<(), ErrorCode> {
-        let allowed_attrs = PageAttrs::READ | PageAttrs::WRITE | PageAttrs::EXEC;
-        if !allowed_attrs.contains(attrs) {
-            return Err(ErrorCode::InvalidArg);
-        }
-
         if !is_aligned(offset, MIN_PAGE_SIZE) {
             return Err(ErrorCode::NotAligned);
         }
 
         let end = validate_mapping_range(uaddr, len)?;
         let vmo_end = offset.checked_add(len).ok_or(ErrorCode::OutOfBounds)?;
-        if vmo_end > vmo.len() {
+        if vmo_end > vmo.object().len() {
             return Err(ErrorCode::OutOfBounds);
+        }
+
+        if !check_vmo_attrs(vmo.rights(), attrs) {
+            return Err(ErrorCode::NotAllowed);
         }
 
         self.insert(Mapping {
@@ -188,12 +216,14 @@ impl VmSpace {
     pub fn permit(&self, uaddr: UAddr, len: usize, attrs: PageAttrs) -> Result<(), ErrorCode> {
         let end = validate_mapping_range(uaddr, len)?;
 
-        let allowed_attrs = PageAttrs::READ | PageAttrs::WRITE | PageAttrs::EXEC;
-        if !allowed_attrs.contains(attrs) {
-            return Err(ErrorCode::InvalidPageAttrs);
-        }
-
         let mut mutable = self.mutable.lock();
+
+        // Check if VMO handle rights allow the new attributes.
+        for mapping in mutable.overlapping(uaddr, end) {
+            if !check_vmo_attrs(mapping.vmo.rights(), attrs) {
+                return Err(ErrorCode::NotAllowed);
+            }
+        }
 
         // Split the mappings.
         mutable.split_at(uaddr)?;
@@ -206,12 +236,8 @@ impl VmSpace {
 
         // Update the attributes of the mappings, including the ones that are
         // inbetween `uaddr` and `end`.
-        //
-        // TODO: Can we return indices of the mappings from split_at?
-        for mapping in &mut mutable.mappings {
-            if mapping.overlaps_with(uaddr, end) {
-                mapping.attrs = attrs;
-            }
+        for mapping in mutable.overlapping_mut(uaddr, end) {
+            mapping.attrs = attrs;
         }
 
         Ok(())
@@ -235,7 +261,7 @@ impl VmSpace {
                 // Found a mapping that contains the fault address.
                 let offset = mapping.offset + (aligned_uaddr.as_usize() - mapping.start.as_usize());
                 let index = offset / MIN_PAGE_SIZE;
-                let paddr = mapping.vmo.ensure_page(index)?;
+                let paddr = mapping.vmo.object().ensure_page(index)?;
                 let len = MIN_PAGE_SIZE;
                 self.arch.map(aligned_uaddr, paddr, len, mapping.attrs)?;
                 return Ok(());
@@ -295,20 +321,11 @@ pub fn sys_vmspace_map(
     let uaddr = UAddr::new(ctx.a2);
     let offset = ctx.a3;
     let len = ctx.a4;
-    let attrs = PageAttrs::from_raw(ctx.a5);
-    let allowed_attrs = PageAttrs::READ | PageAttrs::WRITE | PageAttrs::EXEC;
-    if !allowed_attrs.contains(attrs) {
-        return Err(ErrorCode::InvalidPageAttrs);
-    }
+    let attrs = PageAttrs::from_raw(ctx.a5)?;
 
     let hspace = current.hspace();
-    let (vmspace, vmo) = hspace.get2::<VmSpace, VmObject>(
-        vmspace_id,
-        HandleRight::WRITE,
-        vmo_id,
-        HandleRight::READ | HandleRight::WRITE,
-    )?;
-
+    let vmspace = hspace.get::<VmSpace>(vmspace_id, HandleRight::WRITE)?;
+    let vmo = hspace.get_handle::<VmObject>(vmo_id)?;
     vmspace.map(vmo, uaddr, offset, len, attrs)?;
     Ok(SyscallOutput::Done(0))
 }
@@ -335,7 +352,7 @@ pub fn sys_vmspace_permit(
     let vmspace_id = HandleId::new(ctx.a0);
     let uaddr = UAddr::new(ctx.a1);
     let len = ctx.a2;
-    let attrs = PageAttrs::from_raw(ctx.a3);
+    let attrs = PageAttrs::from_raw(ctx.a3)?;
     let vmspace = current
         .hspace()
         .get::<VmSpace>(vmspace_id, HandleRight::WRITE)?;

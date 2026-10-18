@@ -52,6 +52,7 @@ fn load_elf(quota: &SharedRef<Quota>, vmspace: &SharedRef<VmSpace>, elf_file: &[
         vmo.write(0, bytes).unwrap();
 
         // Map the region to the address space.
+        let vmo = Handle::new(vmo, HandleRight::READ | HandleRight::WRITE);
         vmspace
             .map(vmo, UAddr::new(phdr.p_vaddr as usize), 0, region_len, attrs)
             .unwrap();
@@ -93,6 +94,7 @@ fn prepare_stack(quota: &SharedRef<Quota>, vmspace: &SharedRef<VmSpace>, cmdline
     let stack_bottom = UAddr::new(0x40000000 - stack_size); // TODO: find an empty region in vmspace
     let sp_offset = write_stack(&vmo, stack_bottom, stack_size, cmdline);
 
+    let vmo = Handle::new(vmo, HandleRight::READ | HandleRight::WRITE);
     vmspace
         .map(
             vmo,
