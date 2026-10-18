@@ -275,12 +275,6 @@ impl VmSpace {
     ) -> Result<(), ErrorCode> {
         let uaddr = uaddr.as_usize();
 
-        // Validate the page attributes.
-        let allowed_attrs = PageAttrs::READ | PageAttrs::WRITE | PageAttrs::EXEC;
-        if !allowed_attrs.contains(attrs) {
-            return Err(ErrorCode::InvalidPageAttrs);
-        }
-
         if !is_aligned(uaddr, MIN_PAGE_SIZE)
             || !paddr.is_aligned(MIN_PAGE_SIZE)
             || !is_aligned(len, MIN_PAGE_SIZE)
