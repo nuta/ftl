@@ -5,6 +5,7 @@ use core::sync::atomic::AtomicUsize;
 use core::sync::atomic::Ordering;
 
 use ftl::poll::Poll;
+use ftl::warn;
 use ftl_types::error::ErrorCode;
 use ftl_types::time::MonoTime;
 use ftl_utils::spinlock::SpinLock;
@@ -132,7 +133,15 @@ impl WaitQueue {
     ///
     /// `events` is a `POLL*` bitmask of events that occurred. Specify `None`
     /// to wake up all waiters regardless of their interests.
-    pub fn notify(&self, events: Option<c_short>) -> Result<(), ErrorCode> {
+    pub fn notify(&self, events: Option<c_short>) {
+        if let Err(error) = self.do_notify(events) {
+            // poll_notify may fail on OOM, but callers wouldn't recover
+            // gracefully, and would just log and ignore the error.
+            warn!("failed to notify wait queue: {:?}", error);
+        }
+    }
+
+    fn do_notify(&self, events: Option<c_short>) -> Result<(), ErrorCode> {
         for _ in 0..self.inner.wait_ones.load(Ordering::Relaxed) {
             self.inner.poll.notify(WAKE_COOKIE)?;
         }

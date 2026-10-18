@@ -2,7 +2,6 @@ use alloc::vec::Vec;
 use core::cmp::min;
 
 use ftl::poll::Poll;
-use ftl::trace;
 use ftl_types::error::ErrorCode;
 use ftl_utils::spinlock::SpinLock;
 
@@ -41,9 +40,7 @@ impl Console {
                 Ok(0) | Err(ErrorCode::Empty) => break,
                 Ok(n) => {
                     self.pending.lock().extend_from_slice(&tmp[..n]);
-                    if let Err(e) = self.wait_queue.notify(Some(POLLIN)) {
-                        trace!("failed to notify poll: {:?}", e);
-                    }
+                    self.wait_queue.notify(Some(POLLIN));
                 }
                 Err(_) => break,
             }

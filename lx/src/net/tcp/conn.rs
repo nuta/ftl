@@ -138,9 +138,7 @@ impl TcpConn {
     }
 
     fn notify(&self) {
-        if let Err(error) = self.wait_queue.notify(None) {
-            trace!("failed to notify connection waiters: {:?}", error);
-        }
+        self.wait_queue.notify(None);
     }
 
     pub fn is_closed(&self) -> bool {
@@ -646,7 +644,7 @@ impl TcpConn {
         drop(mutable);
 
         if acked_len > 0 || received_len > 0 || received_fin {
-            let _ = self.notify();
+            self.notify();
         }
     }
 

@@ -80,9 +80,7 @@ impl TcpListener {
     }
 
     fn notify(&self) {
-        if let Err(error) = self.wait_queue.notify(Some(POLLIN)) {
-            trace!("failed to notify listener waiters: {:?}", error);
-        }
+        self.wait_queue.notify(Some(POLLIN));
     }
 
     pub fn set_backlog(&self, backlog: usize) {

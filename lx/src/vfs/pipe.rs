@@ -2,7 +2,6 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::cmp::min;
 
-use ftl::trace;
 use ftl_utils::spinlock::SpinLock;
 
 use crate::types::c_short;
@@ -74,9 +73,7 @@ impl Pipe {
     }
 
     fn notify(&self, events: c_short) {
-        if let Err(error) = self.inner.wait_queue.notify(Some(events)) {
-            trace!("failed to notify pipe waiters: {:?}", error);
-        }
+        self.inner.wait_queue.notify(Some(events));
     }
 }
 

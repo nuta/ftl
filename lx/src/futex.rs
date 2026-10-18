@@ -96,7 +96,7 @@ impl FutexTable {
             .collect();
 
         for waiter in &to_wake {
-            waiter.wq.notify(None)?;
+            waiter.wq.notify(None);
         }
 
         Ok(to_wake.len())

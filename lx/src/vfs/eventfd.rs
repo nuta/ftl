@@ -1,7 +1,6 @@
 use core::mem;
 use core::mem::size_of;
 
-use ftl::trace;
 use ftl_utils::spinlock::SpinLock;
 
 use crate::types::c_short;
@@ -35,9 +34,7 @@ impl EventFd {
     }
 
     fn notify(&self, events: c_short) {
-        if let Err(error) = self.wait_queue.notify(Some(events)) {
-            trace!("failed to notify eventfd waiters: {:?}", error);
-        }
+        self.wait_queue.notify(Some(events));
     }
 }
 

@@ -5,7 +5,6 @@ use alloc::vec::Vec;
 
 use ftl::time::MonoTime;
 use ftl::time::MonoTimeExt;
-use ftl::trace;
 use ftl_types::time::Duration;
 use ftl_utils::fxhash::FxHashMap;
 use ftl_utils::spinlock::SpinLock;
@@ -100,7 +99,7 @@ impl Inner {
         }
         drop(mutable);
 
-        let _ = self.wait_queue.notify(None);
+        self.wait_queue.notify(None);
     }
 
     fn detach(&self, fd: c_int) {
@@ -263,9 +262,7 @@ impl Epoll {
 
                 // Concurrent readers may want to read the fds that we've
                 // temporarily popped. Notify them to re-check the readiness.
-                if let Err(e) = self.inner.wait_queue.notify(None) {
-                    trace!("Failed to notify wait queue: {:?}", e);
-                }
+                self.inner.wait_queue.notify(None);
 
                 return Ok(n);
             }

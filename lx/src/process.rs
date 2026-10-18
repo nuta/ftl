@@ -374,11 +374,10 @@ impl Process {
 
         let mut mutable = self.mutable.lock();
 
-        // Wake up the parent process while holding the lock. When notification
-        // fails, exit fails and keeps this process alive.
+        // Wake up the parent process while holding the lock.
         let parent = mutable.parent.as_ref().and_then(Weak::upgrade);
         if let Some(parent) = &parent {
-            parent.child_exit.notify(None)?;
+            parent.child_exit.notify(None);
         }
 
         // Mark the process as exited.
@@ -528,7 +527,7 @@ impl Process {
 
         mutable.pending_signals.insert(signal);
         drop(mutable);
-        self.signal_wait.notify(None)?;
+        self.signal_wait.notify(None);
         Ok(())
     }
 

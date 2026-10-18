@@ -52,7 +52,7 @@ impl RxQueue {
         });
         drop(mutable);
 
-        let _ = self.wait_queue.notify(Some(POLLIN));
+        self.wait_queue.notify(Some(POLLIN));
     }
 
     /// Sets the remote (peer) address for the socket.
