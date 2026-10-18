@@ -1,6 +1,5 @@
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
-use ftl_types::poll::Event;
 use ftl_types::syscall::Syscall;
 use ftl_types::time::MonoTime;
 
@@ -29,22 +28,20 @@ impl Poll {
         Ok(this)
     }
 
-    pub fn wait(&self) -> Result<Event, ErrorCode> {
-        let event = syscall1(Syscall::PollWait, self.handle.id().as_usize())?;
-        Ok(Event::from_raw(event as u32))
+    pub fn wait(&self) -> Result<usize, ErrorCode> {
+        syscall1(Syscall::PollWait, self.handle.id().as_usize())
     }
 
-    pub fn wait_until(&self, deadline: MonoTime) -> Result<Event, ErrorCode> {
-        let event = syscall2(
+    pub fn wait_until(&self, deadline: MonoTime) -> Result<usize, ErrorCode> {
+        syscall2(
             Syscall::PollWaitUntil,
             self.handle.id().as_usize(),
             &deadline as *const MonoTime as usize,
-        )?;
-        Ok(Event::from_raw(event as u32))
+        )
     }
 
-    pub fn notify(&self) -> Result<(), ErrorCode> {
-        syscall1(Syscall::PollNotify, self.handle.id().as_usize())?;
+    pub fn notify(&self, cookie: usize) -> Result<(), ErrorCode> {
+        syscall2(Syscall::PollNotify, self.handle.id().as_usize(), cookie)?;
         Ok(())
     }
 

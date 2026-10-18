@@ -6,7 +6,6 @@ use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use ftl_types::handle::HandleRight;
 use ftl_types::net::Rule;
-use ftl_types::poll::EventKind;
 use ftl_types::thread::SyscallRegs;
 use ftl_utils::spinlock::SpinLock;
 
@@ -83,11 +82,14 @@ pub fn sys_net_subscribe(
 ) -> Result<SyscallOutput, ErrorCode> {
     let network_id = HandleId::new(ctx.a0);
     let poll_id = HandleId::new(ctx.a1);
+    let cookie = ctx.a2;
+
     let hspace = current.hspace();
     let (network, poll) =
         hspace.get2::<Network, Poll>(network_id, HandleRight::READ, poll_id, HandleRight::WRITE)?;
 
-    network.subscribe(EventEmitter::new(poll, network_id))?;
+    let emitter = EventEmitter::new(poll, cookie)?;
+    network.subscribe(emitter)?;
     Ok(SyscallOutput::Done(0))
 }
 
@@ -172,7 +174,7 @@ pub static NET_MUX: SpinLock<NetMux<'static, EventEmitter>> =
 
 impl ftl_netmux::RxNotify for EventEmitter {
     fn notify(self) -> Result<(), ErrorCode> {
-        self.emit(EventKind::PollNotified)
+        self.emit()
     }
 }
 

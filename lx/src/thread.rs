@@ -95,8 +95,8 @@ impl LxThread {
         self.inner.id()
     }
 
-    pub fn subscribe(&self, poll: &Poll) -> Result<(), ErrorCode> {
-        self.inner.subscribe(poll)
+    pub fn subscribe(&self, poll: &Poll, cookie: usize) -> Result<(), ErrorCode> {
+        self.inner.subscribe(poll, cookie)
     }
 
     pub fn tid(&self) -> PId {

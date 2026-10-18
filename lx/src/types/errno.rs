@@ -57,6 +57,7 @@ impl From<ErrorCode> for Errno {
             ErrorCode::PageAbsent | ErrorCode::BadAccess => Self::EFAULT,
             ErrorCode::Unsupported => Self::ENOTSUP,
             ErrorCode::UnknownSyscall => Self::ENOSYS,
+            ErrorCode::TimedOut => Self::ETIMEDOUT,
             ErrorCode::TooManyHandles => Self::EMFILE,
             ErrorCode::HandleNotFound => Self::EBADF,
             ErrorCode::InvalidHandleId

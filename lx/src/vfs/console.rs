@@ -4,7 +4,6 @@ use core::cmp::min;
 use ftl::poll::Poll;
 use ftl::trace;
 use ftl_types::error::ErrorCode;
-use ftl_types::handle::HandleId;
 use ftl_utils::spinlock::SpinLock;
 
 use crate::types::c_short;
@@ -30,12 +29,8 @@ impl Console {
         })
     }
 
-    pub fn id(&self) -> HandleId {
-        self.device.id()
-    }
-
-    pub fn subscribe(&self, poll: &Poll) -> Result<(), ErrorCode> {
-        self.device.subscribe(poll)
+    pub fn subscribe(&self, poll: &Poll, cookie: usize) -> Result<(), ErrorCode> {
+        self.device.subscribe(poll, cookie)
     }
 
     pub fn handle_rx(&self) {

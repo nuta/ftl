@@ -3,7 +3,10 @@ use core::ops::BitOrAssign;
 
 use crate::error::ErrorCode;
 
-/// The upper 8 bits are used for encoding EventKind.
+/// The largest valid handle ID.
+///
+/// This is defined to be slightly less than `isize::MAX` to allow for some
+/// additional space for future use, like embedding few bits for flags.
 pub const HANDLE_ID_MAX: usize = 0x00ff_ffff;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

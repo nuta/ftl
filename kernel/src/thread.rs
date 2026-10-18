@@ -8,7 +8,6 @@ use core::mem::size_of;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use ftl_types::handle::HandleRight;
-use ftl_types::poll::EventKind;
 use ftl_types::thread::Regs;
 use ftl_types::thread::RegsKind;
 use ftl_types::thread::SyscallRegs;
@@ -41,7 +40,6 @@ enum State {
     Runnable,
     Blocked {
         poll: SharedRef<Poll>,
-        poll_id: HandleId,
         deadline: Option<MonoTime>,
     },
     Exited,
@@ -125,7 +123,7 @@ impl Thread {
         let mut mutable = self.mutable.lock();
         if matches!(mutable.state, State::Exited) {
             drop(mutable);
-            return emitter.emit(EventKind::ThreadExited);
+            return emitter.emit();
         }
 
         let slot = mutable
@@ -147,7 +145,6 @@ impl Thread {
     pub fn start_polling(
         self: &SharedRef<Self>,
         poll: SharedRef<Poll>,
-        poll_id: HandleId,
         deadline: Option<MonoTime>,
     ) -> Result<SyscallOutput, ErrorCode> {
         let mut mutable = self.mutable.lock();
@@ -155,14 +152,10 @@ impl Thread {
             return Err(ErrorCode::ThreadNotRunnable);
         }
 
-        match poll.try_wait(self, poll_id, deadline)? {
-            Some(output) => Ok(SyscallOutput::Done(output.as_raw())),
+        match poll.try_wait(self, deadline)? {
+            Some(cookie) => Ok(SyscallOutput::Done(cookie)),
             None => {
-                mutable.state = State::Blocked {
-                    poll,
-                    poll_id,
-                    deadline,
-                };
+                mutable.state = State::Blocked { poll, deadline };
 
                 Ok(SyscallOutput::Blocked)
             }
@@ -172,18 +165,12 @@ impl Thread {
     /// Checks if the blocked thread can be woken up, and resume if so.
     pub fn try_wake(self: &SharedRef<Self>) {
         let mut mutable = self.mutable.lock();
-        let State::Blocked {
-            ref poll,
-            poll_id,
-            deadline,
-            ..
-        } = mutable.state
-        else {
+        let State::Blocked { ref poll, deadline } = mutable.state else {
             return;
         };
 
-        let retval = match poll.try_wait(self, poll_id, deadline) {
-            Ok(Some(event)) => event.as_raw(),
+        let retval = match poll.try_wait(self, deadline) {
+            Ok(Some(cookie)) => cookie,
             Ok(None) => return,
             Err(err) => err.as_usize(),
         };
@@ -286,7 +273,7 @@ impl Handleable for Thread {
         // FIXME: This is not safe with SMP. We might need to do an IPI to a CPU
         //        that is running the thread.
         for emitter in subscriptions {
-            if let Err(err) = emitter.emit(EventKind::ThreadExited) {
+            if let Err(err) = emitter.emit() {
                 trace!("failed to notify thread termination: {:?}", err);
             }
         }
@@ -353,6 +340,7 @@ pub fn sys_thread_subscribe(
 ) -> Result<SyscallOutput, ErrorCode> {
     let thread_id = HandleId::new(ctx.a0);
     let poll_id = HandleId::new(ctx.a1);
+    let cookie = ctx.a2;
 
     let (thread, poll) = current.hspace().get2::<Thread, Poll>(
         thread_id,
@@ -361,7 +349,8 @@ pub fn sys_thread_subscribe(
         HandleRight::WRITE,
     )?;
 
-    thread.subscribe(EventEmitter::new(poll, thread_id))?;
+    let emitter = EventEmitter::new(poll, cookie)?;
+    thread.subscribe(emitter)?;
     Ok(SyscallOutput::Done(0))
 }
 

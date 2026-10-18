@@ -6,12 +6,13 @@ use core::sync::atomic::Ordering;
 
 use ftl::poll::Poll;
 use ftl_types::error::ErrorCode;
-use ftl_types::poll::EventKind;
 use ftl_types::time::MonoTime;
 use ftl_utils::spinlock::SpinLock;
 
 use crate::process::Process;
 use crate::types::c_short;
+
+const WAKE_COOKIE: usize = 0;
 
 pub trait WaitListener: Send + Sync {
     fn notify(&self, events: Option<c_short>);
@@ -59,8 +60,11 @@ impl<'a> WaitSet<'a> {
     }
 
     pub fn wait_with_deadline(&self, deadline: MonoTime) -> Result<bool, ErrorCode> {
-        let ev = self.poll.wait_until(deadline)?;
-        Ok(ev.kind() == EventKind::PollTimeout)
+        match self.poll.wait_until(deadline) {
+            Ok(_) => Ok(false),
+            Err(ErrorCode::TimedOut) => Ok(true),
+            Err(err) => Err(err),
+        }
     }
 }
 
@@ -89,8 +93,11 @@ impl<'a> WaitGuard<'a> {
     /// Returns `Ok(true)` if the deadline was reached, `Ok(false)` if the
     /// poll returned an event.
     pub fn wait_with_deadline(&self, deadline: MonoTime) -> Result<bool, ErrorCode> {
-        let ev = self.0.poll.wait_until(deadline)?;
-        Ok(ev.kind() == EventKind::PollTimeout)
+        match self.0.poll.wait_until(deadline) {
+            Ok(_) => Ok(false),
+            Err(ErrorCode::TimedOut) => Ok(true),
+            Err(err) => Err(err),
+        }
     }
 }
 
@@ -127,12 +134,12 @@ impl WaitQueue {
     /// to wake up all waiters regardless of their interests.
     pub fn notify(&self, events: Option<c_short>) -> Result<(), ErrorCode> {
         for _ in 0..self.inner.wait_ones.load(Ordering::Relaxed) {
-            self.inner.poll.notify()?;
+            self.inner.poll.notify(WAKE_COOKIE)?;
         }
 
         // Notify threads that are waiting on this queue.
         for poll in self.inner.wait_sets.lock().iter() {
-            poll.notify()?;
+            poll.notify(WAKE_COOKIE)?;
         }
 
         // Get the list of listeners that are still alive.

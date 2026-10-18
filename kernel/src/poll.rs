@@ -5,8 +5,6 @@ use core::mem::size_of;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use ftl_types::handle::HandleRight;
-use ftl_types::poll::Event;
-use ftl_types::poll::EventKind;
 use ftl_types::thread::SyscallRegs;
 use ftl_types::time::MonoTime;
 use ftl_utils::reserve_slot::ReserveSlot;
@@ -24,7 +22,7 @@ use crate::thread::Thread;
 use crate::timer::GLOBAL_TIMER;
 
 struct Mutable {
-    queue: VecDeque<Event>,
+    queue: VecDeque<Cookie>,
     waiters: VecDeque<SharedRef<Thread>>,
     destroyed: bool,
 }
@@ -45,7 +43,7 @@ impl Poll {
         }
     }
 
-    fn enqueue(&self, event: Event) -> Result<(), ErrorCode> {
+    fn enqueue(&self, cookie: Cookie) -> Result<(), ErrorCode> {
         let mut timer = GLOBAL_TIMER.lock();
         let mut mutable = self.mutable.lock();
         if mutable.destroyed {
@@ -57,7 +55,7 @@ impl Poll {
             .reserve_slot()
             .map_err(|_| ErrorCode::OutOfMemory)?;
 
-        slot.push_back(event);
+        slot.push_back(cookie);
 
         let Some(thread) = mutable.waiters.pop_front() else {
             return Ok(());
@@ -75,16 +73,15 @@ impl Poll {
             .retain(|waiter| !SharedRef::eq(waiter, thread));
     }
 
-    pub fn notify(&self, self_id: HandleId) -> Result<(), ErrorCode> {
-        self.enqueue(Event::new(EventKind::PollNotified, self_id))
+    pub fn notify(&self, cookie: usize) -> Result<(), ErrorCode> {
+        self.enqueue(Cookie::from_raw(cookie)?)
     }
 
     pub fn try_wait(
         self: &SharedRef<Self>,
         thread: &SharedRef<Thread>,
-        poll_id: HandleId,
         deadline: Option<MonoTime>,
-    ) -> Result<Option<Event>, ErrorCode> {
+    ) -> Result<Option<usize>, ErrorCode> {
         let mut timer = GLOBAL_TIMER.lock();
         let mut mutable = self.mutable.lock();
 
@@ -92,16 +89,15 @@ impl Poll {
             return Err(ErrorCode::Destroyed);
         }
 
-        if let Some(event) = mutable.queue.pop_front() {
-            return Ok(Some(event));
+        if let Some(cookie) = mutable.queue.pop_front() {
+            return Ok(Some(cookie.as_usize()));
         }
 
         if let Some(deadline) = deadline {
             // Check if the deadline has been reached.
             let now = arch::monotime_read();
             if now.duration_since(deadline).is_some() {
-                let event = Event::new(EventKind::PollTimeout, poll_id);
-                return Ok(Some(event));
+                return Err(ErrorCode::TimedOut);
             }
         }
 
@@ -135,18 +131,36 @@ impl Handleable for Poll {
     }
 }
 
+#[derive(Clone, Copy)]
+struct Cookie(usize);
+
+impl Cookie {
+    fn from_raw(raw: usize) -> Result<Self, ErrorCode> {
+        if raw > (isize::MAX as usize) {
+            return Err(ErrorCode::InvalidArg);
+        }
+
+        Ok(Self(raw))
+    }
+
+    fn as_usize(self) -> usize {
+        self.0
+    }
+}
+
 pub struct EventEmitter {
     poll: SharedRef<Poll>,
-    handle_id: HandleId,
+    cookie: Cookie,
 }
 
 impl EventEmitter {
-    pub fn new(poll: SharedRef<Poll>, handle_id: HandleId) -> Self {
-        Self { poll, handle_id }
+    pub fn new(poll: SharedRef<Poll>, cookie: usize) -> Result<Self, ErrorCode> {
+        let cookie = Cookie::from_raw(cookie)?;
+        Ok(Self { poll, cookie })
     }
 
-    pub fn emit(&self, kind: EventKind) -> Result<(), ErrorCode> {
-        self.poll.enqueue(Event::new(kind, self.handle_id))
+    pub fn emit(&self) -> Result<(), ErrorCode> {
+        self.poll.enqueue(self.cookie)
     }
 }
 
@@ -168,7 +182,7 @@ pub fn sys_poll_wait(
 
     let poll = current.hspace().get::<Poll>(handle_id, HandleRight::READ)?;
 
-    current.start_polling(poll, handle_id, None)
+    current.start_polling(poll, None)
 }
 
 pub fn sys_poll_wait_until(
@@ -183,7 +197,7 @@ pub fn sys_poll_wait_until(
     let mut deadline_buf = MaybeUninit::uninit();
     let deadline = unsafe { deadline_uslice.read_uninit(&mut deadline_buf)? };
 
-    current.start_polling(poll, handle_id, Some(*deadline))
+    current.start_polling(poll, Some(*deadline))
 }
 
 pub fn sys_poll_notify(
@@ -191,11 +205,12 @@ pub fn sys_poll_notify(
     ctx: &SyscallRegs,
 ) -> Result<SyscallOutput, ErrorCode> {
     let handle_id = HandleId::new(ctx.a0);
+    let cookie = ctx.a1;
 
     current
         .hspace()
         .get::<Poll>(handle_id, HandleRight::WRITE)?
-        .notify(handle_id)?;
+        .notify(cookie)?;
 
     Ok(SyscallOutput::Done(0))
 }

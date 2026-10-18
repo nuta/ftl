@@ -40,7 +40,7 @@ impl Reaper {
         }
 
         // Watch for the thread's exit.
-        thread.subscribe(poll)?;
+        thread.subscribe(poll, thread.id().as_usize())?;
         mutable.threads.insert(thread.id(), thread.clone());
         drop(mutable);
 

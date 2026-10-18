@@ -9,7 +9,6 @@ use ftl::poll::Poll;
 use ftl::time::MonoTime;
 use ftl::trace;
 use ftl_types::error::ErrorCode;
-use ftl_types::handle::HandleId;
 use ftl_types::net::ETHTYPE_IPV4;
 use ftl_types::net::IPPROTO_TCP;
 use ftl_types::net::IPPROTO_UDP;
@@ -309,12 +308,8 @@ impl TcpIp {
         })
     }
 
-    pub fn id(&self) -> HandleId {
-        self.io.net.id()
-    }
-
-    pub fn subscribe(&self, poll: &Poll) -> Result<(), ErrorCode> {
-        self.io.net.subscribe(poll)
+    pub fn subscribe(&self, poll: &Poll, cookie: usize) -> Result<(), ErrorCode> {
+        self.io.net.subscribe(poll, cookie)
     }
 
     pub fn create_tcp_socket(self: &Arc<Self>) -> Result<Arc<TcpSocket>, ErrorCode> {

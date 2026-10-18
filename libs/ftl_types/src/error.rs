@@ -34,8 +34,9 @@ pub enum ErrorCode {
     BadSysretValue = -27,
     QuotaExceeded = -28,
     TooDeep = -29,
+    TimedOut = -30,
     // This must be the last variant.
-    BadErrorCode = -30,
+    BadErrorCode = -31,
 }
 
 impl ErrorCode {

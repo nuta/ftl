@@ -4,7 +4,6 @@ use core::cmp::min;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use ftl_types::handle::HandleRight;
-use ftl_types::poll::EventKind;
 use ftl_types::thread::SyscallRegs;
 use ftl_utils::reserve_slot::ReserveSlot;
 use ftl_utils::ring_buffer::RingBuffer;
@@ -103,7 +102,7 @@ pub fn handle_interrupt() {
     };
 
     for subscription in subscriptions {
-        let _ = subscription.emitter.emit(EventKind::PollNotified);
+        let _ = subscription.emitter.emit();
     }
 }
 
@@ -154,6 +153,7 @@ pub fn sys_console_subscribe(
 ) -> Result<SyscallOutput, ErrorCode> {
     let console_id = HandleId::new(ctx.a0);
     let poll_id = HandleId::new(ctx.a1);
+    let cookie = ctx.a2;
 
     let (console, poll) = current.hspace().get2::<Console, Poll>(
         console_id,
@@ -162,13 +162,13 @@ pub fn sys_console_subscribe(
         HandleRight::WRITE,
     )?;
 
+    let emitter = EventEmitter::new(poll, cookie)?;
     let mut device = DEVICE.lock();
-    let emitter = EventEmitter::new(poll, console_id);
 
     // Notify immediately if there is data to read.
     if !device.buf.is_empty() {
         drop(device);
-        emitter.emit(EventKind::PollNotified)?;
+        emitter.emit()?;
         return Ok(SyscallOutput::Done(0));
     }
 

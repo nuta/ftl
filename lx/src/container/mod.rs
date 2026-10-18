@@ -6,7 +6,9 @@ use ftl::quota::Quota;
 use ftl::time::MonoTime;
 use ftl::time::MonoTimeExt;
 use ftl::vmspace::VmSpace;
-use ftl_types::poll::EventKind;
+use ftl_types::error::ErrorCode;
+use ftl_types::handle::HANDLE_ID_MAX;
+use ftl_types::handle::HandleId;
 use ftl_types::time::Duration;
 use ftl_utils::spinlock::SpinLock;
 use pid_table::PIdTable;
@@ -23,6 +25,10 @@ use crate::vfs::PathNode;
 use crate::vfs::RootDir;
 
 mod pid_table;
+
+// `cookie <= HANDLE_ID_MAX` are for threads.
+const NETWORK_COOKIE: usize = HANDLE_ID_MAX + 1;
+const CONSOLE_COOKIE: usize = HANDLE_ID_MAX + 2;
 
 pub struct Container {
     poll: Poll,
@@ -47,8 +53,8 @@ impl Container {
         argv: &[&[u8]],
     ) -> Result<Arc<Self>, Errno> {
         let poll = Poll::create()?;
-        network.subscribe(&poll)?;
-        console.subscribe(&poll)?;
+        network.subscribe(&poll, NETWORK_COOKIE)?;
+        console.subscribe(&poll, CONSOLE_COOKIE)?;
 
         let root_dir = RootDir::new();
         let this = Arc::new(Self {
@@ -81,19 +87,25 @@ impl Container {
     pub fn run(&self) -> ! {
         loop {
             let deadline = MonoTime::now() + Duration::from_secs(1);
-            let event = self.poll.wait_until(deadline).expect("poll wait failed");
-            if event.kind() == EventKind::ThreadExited {
-                self.reaper.reap_thread(event.handle_id());
-            } else if event.handle_id() == self.network.id() {
-                self.network.handle_rx();
-                self.network
-                    .subscribe(&self.poll)
-                    .expect("failed to subscribe to network events");
-            } else if event.handle_id() == self.console.id() {
-                self.console.handle_rx();
-                self.console
-                    .subscribe(&self.poll)
-                    .expect("failed to subscribe to console events");
+            match self.poll.wait_until(deadline) {
+                Ok(NETWORK_COOKIE) => {
+                    self.network.handle_rx();
+                    self.network
+                        .subscribe(&self.poll, NETWORK_COOKIE)
+                        .expect("failed to subscribe to network events");
+                }
+                Ok(CONSOLE_COOKIE) => {
+                    self.console.handle_rx();
+                    self.console
+                        .subscribe(&self.poll, CONSOLE_COOKIE)
+                        .expect("failed to subscribe to console events");
+                }
+                Ok(thread_id) if thread_id <= HANDLE_ID_MAX => {
+                    self.reaper.reap_thread(HandleId::new(thread_id))
+                }
+                Ok(cookie) => panic!("unexpected poll cookie: {:#x}", cookie),
+                Err(ErrorCode::TimedOut) => {}
+                Err(err) => panic!("poll wait failed: {:?}", err),
             }
 
             self.network.handle_timeouts(MonoTime::now());

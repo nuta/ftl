@@ -5,6 +5,7 @@ use ftl_types::syscall::Syscall;
 
 use crate::arch::syscall0;
 use crate::arch::syscall2;
+use crate::arch::syscall3;
 use crate::arch::syscall6;
 use crate::handle::OwnedHandle;
 use crate::poll::Poll;
@@ -34,11 +35,12 @@ impl Net {
         self.handle.id()
     }
 
-    pub fn subscribe(&self, poll: &Poll) -> Result<(), ErrorCode> {
-        syscall2(
+    pub fn subscribe(&self, poll: &Poll, cookie: usize) -> Result<(), ErrorCode> {
+        syscall3(
             Syscall::NetSubscribe,
             self.handle.id().as_usize(),
             poll.handle().id().as_usize(),
+            cookie,
         )?;
         Ok(())
     }

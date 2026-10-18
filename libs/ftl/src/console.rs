@@ -49,11 +49,12 @@ impl Console {
         )
     }
 
-    pub fn subscribe(&self, poll: &Poll) -> Result<(), ErrorCode> {
-        syscall2(
+    pub fn subscribe(&self, poll: &Poll, cookie: usize) -> Result<(), ErrorCode> {
+        syscall3(
             Syscall::ConsoleSubscribe,
             self.handle.id().as_usize(),
             poll.handle().id().as_usize(),
+            cookie,
         )?;
         Ok(())
     }

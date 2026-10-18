@@ -6,7 +6,6 @@ use ftl_types::thread::Regs;
 use ftl_types::thread::RegsKind;
 
 use crate::arch::syscall1;
-use crate::arch::syscall2;
 use crate::arch::syscall3;
 use crate::arch::syscall6;
 use crate::handle::OwnedHandle;
@@ -57,13 +56,14 @@ impl Thread {
         Ok(())
     }
 
-    pub fn subscribe(&self, poll: &Poll) -> Result<(), ErrorCode> {
+    pub fn subscribe(&self, poll: &Poll, cookie: usize) -> Result<(), ErrorCode> {
         let thread_id = self.handle.id();
         let poll_id = poll.handle().id();
-        syscall2(
+        syscall3(
             Syscall::ThreadSubscribe,
             thread_id.as_usize(),
             poll_id.as_usize(),
+            cookie,
         )?;
         Ok(())
     }
