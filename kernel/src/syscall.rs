@@ -59,7 +59,6 @@ fn do_handle_syscall() -> Resched {
         Some(Syscall::MonoTimeRead) => crate::timer::sys_monotime_read(&thread, &regs),
         Some(Syscall::WallTimeRead) => crate::timer::sys_walltime_read(&thread, &regs),
         Some(Syscall::RandomRead) => crate::random::sys_random_read(&thread, &regs),
-        Some(Syscall::ConsoleOpen) => crate::console::sys_console_open(&thread, &regs),
         Some(Syscall::ConsoleWrite) => crate::console::sys_console_write(&thread, &regs),
         Some(Syscall::ConsoleRead) => crate::console::sys_console_read(&thread, &regs),
         Some(Syscall::ConsoleSubscribe) => crate::console::sys_console_subscribe(&thread, &regs),

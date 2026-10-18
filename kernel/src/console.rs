@@ -11,7 +11,6 @@ use ftl_utils::spinlock::SpinLock;
 
 use crate::address::UAddr;
 use crate::address::USlice;
-use crate::handle::Handle;
 use crate::handle::Handleable;
 use crate::poll::EventEmitter;
 use crate::poll::Poll;
@@ -80,7 +79,7 @@ pub struct Console {
 }
 
 impl Console {
-    const fn new() -> Self {
+    pub fn new() -> Self {
         Self { _private: () }
     }
 }
@@ -104,16 +103,6 @@ pub fn handle_interrupt() {
     for subscription in subscriptions {
         let _ = subscription.emitter.emit();
     }
-}
-
-pub fn sys_console_open(
-    current: &SharedRef<Thread>,
-    _ctx: &SyscallRegs,
-) -> Result<SyscallOutput, ErrorCode> {
-    let console = SharedRef::new(Console::new())?;
-    let handle = Handle::new(console, HandleRight::READ | HandleRight::WRITE);
-    let handle_id = current.hspace().insert(handle)?;
-    Ok(SyscallOutput::Done(handle_id.as_usize()))
 }
 
 pub fn sys_console_write(

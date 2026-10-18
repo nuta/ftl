@@ -74,6 +74,7 @@ fn main(cmdline: &[u8]) {
     let root_hspace = unsafe { HandleSpace::from_handle(HandleId::new(1)) };
     let root_vmspace = unsafe { VmSpace::from_handle(HandleId::new(2)) };
     let root_quota = unsafe { Quota::from_handle(HandleId::new(3)) };
+    let root_console = unsafe { ftl::console::Console::from_handle(HandleId::new(4)) };
 
     // Allocate the VMO for the heap.
     let heap_addr = align_up(&raw const _end as usize, 4096);
@@ -109,7 +110,7 @@ fn main(cmdline: &[u8]) {
 
     let net = Net::create().expect("failed to create network");
     let network = net::TcpIp::new(net);
-    let console = Arc::new(Console::new().expect("failed to create console"));
+    let console = Arc::new(Console::new(root_console).expect("failed to create console"));
     let container = Container::new(
         root_hspace,
         root_quota,

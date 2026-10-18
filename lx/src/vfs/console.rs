@@ -20,9 +20,9 @@ pub struct Console {
 }
 
 impl Console {
-    pub fn new() -> Result<Self, Errno> {
+    pub fn new(device: ftl::console::Console) -> Result<Self, Errno> {
         Ok(Self {
-            device: ftl::console::Console::open()?,
+            device,
             pending: SpinLock::new(Vec::new()),
             wait_queue: WaitQueue::new()?,
         })

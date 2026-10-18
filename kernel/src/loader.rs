@@ -14,6 +14,7 @@ use crate::address::UAddr;
 use crate::arch::MIN_PAGE_SIZE;
 use crate::arch::USER_ADDR_END;
 use crate::boot::BootInfo;
+use crate::console::Console;
 use crate::handle::Handle;
 use crate::hspace::HandleSpace;
 use crate::quota::Quota;
@@ -130,9 +131,12 @@ pub fn load(bootinfo: &BootInfo) {
     let hspace_handle = Handle::new(hspace.clone(), HandleRight::WRITE);
     let vmspace_handle = Handle::new(vmspace.clone(), HandleRight::READ | HandleRight::WRITE);
     let quota_handle = Handle::new(quota.clone(), HandleRight::CHARGE);
+    let console = SharedRef::new(Console::new()).unwrap();
+    let console_handle = Handle::new(console, HandleRight::READ | HandleRight::WRITE);
     hspace.insert_at(HandleId::new(1), hspace_handle).unwrap();
     hspace.insert_at(HandleId::new(2), vmspace_handle).unwrap();
     hspace.insert_at(HandleId::new(3), quota_handle).unwrap();
+    hspace.insert_at(HandleId::new(4), console_handle).unwrap();
     let thread = Thread::new(&quota, hspace, vmspace, 0, 0, 0).unwrap();
     thread.start(entry, sp).unwrap();
 }
