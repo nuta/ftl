@@ -34,25 +34,21 @@ struct Mapping {
 }
 
 impl Mapping {
-    pub fn overlaps_with(&self, start: UAddr, end: UAddr) -> bool {
-        start < self.end && self.start < end
-    }
-
     pub fn contains(&self, uaddr: UAddr) -> bool {
         self.start <= uaddr && uaddr < self.end
     }
 }
 
-fn check_vmo_attrs(allowed: HandleRight, requested: PageAttrs) -> bool {
+fn check_vmo_attrs(allowed: HandleRight, requested: PageAttrs) -> Result<(), ErrorCode> {
     if !allowed.contains(HandleRight::READ) {
-        return false;
+        return Err(ErrorCode::NotAllowed);
     }
 
     if requested.contains(PageAttrs::WRITE) && !allowed.contains(HandleRight::WRITE) {
-        return false;
+        return Err(ErrorCode::NotAllowed);
     }
 
-    true
+    Ok(())
 }
 
 struct Mutable {
@@ -61,6 +57,21 @@ struct Mutable {
 }
 
 impl Mutable {
+    fn find_index(&self, uaddr: UAddr) -> Option<usize> {
+        let index = self.mappings.partition_point(|m| m.end <= uaddr);
+        let mapping = self.mappings.get(index)?;
+        if mapping.contains(uaddr) {
+            Some(index)
+        } else {
+            None
+        }
+    }
+
+    fn find(&self, uaddr: UAddr) -> Option<&Mapping> {
+        let index = self.find_index(uaddr)?;
+        Some(&self.mappings[index])
+    }
+
     fn overlapping_range(&self, start: UAddr, end: UAddr) -> Range<usize> {
         let first = self.mappings.partition_point(|m| m.end <= start);
         let last = self.mappings.partition_point(|m| m.start < end);
@@ -82,13 +93,15 @@ impl Mutable {
     /// Returns `Ok` if `uaddr` is not in any mappings.
     fn split_at(&mut self, uaddr: UAddr) -> Result<(), ErrorCode> {
         // Find the mapping containing uaddr.
-        let Some(index) = self.mappings.iter().position(|mapping| {
-            // Avoid "<=" intentionally to prevent creating empty mappings.
-            mapping.start < uaddr && uaddr < mapping.end
-        }) else {
+        let Some(index) = self.find_index(uaddr) else {
             // No mapping contains uaddr.
             return Ok(());
         };
+
+        if self.mappings[index].start == uaddr {
+            // Already split at uaddr.
+            return Ok(());
+        }
 
         self.mappings
             .try_reserve(1)
@@ -159,9 +172,7 @@ impl VmSpace {
             return Err(ErrorCode::OutOfBounds);
         }
 
-        if !check_vmo_attrs(vmo.rights(), attrs) {
-            return Err(ErrorCode::NotAllowed);
-        }
+        check_vmo_attrs(vmo.rights(), attrs)?;
 
         self.insert(Mapping {
             start: uaddr,
@@ -174,11 +185,7 @@ impl VmSpace {
 
     fn insert(&self, mapping: Mapping) -> Result<(), ErrorCode> {
         let mut mutable = self.mutable.lock();
-        if mutable
-            .mappings
-            .iter()
-            .any(|m| m.overlaps_with(mapping.start, mapping.end))
-        {
+        if !mutable.overlapping(mapping.start, mapping.end).is_empty() {
             return Err(ErrorCode::AlreadyMapped);
         }
 
@@ -207,9 +214,8 @@ impl VmSpace {
 
         // Remove the mapping. This decrements page reference counters and may
         // free the pages.
-        mutable
-            .mappings
-            .retain(|mapping| !mapping.overlaps_with(uaddr, end));
+        let range = mutable.overlapping_range(uaddr, end);
+        mutable.mappings.drain(range);
         Ok(())
     }
 
@@ -220,9 +226,7 @@ impl VmSpace {
 
         // Check if VMO handle rights allow the new attributes.
         for mapping in mutable.overlapping(uaddr, end) {
-            if !check_vmo_attrs(mapping.vmo.rights(), attrs) {
-                return Err(ErrorCode::NotAllowed);
-            }
+            check_vmo_attrs(mapping.vmo.rights(), attrs)?;
         }
 
         // Split the mappings.
@@ -251,24 +255,22 @@ impl VmSpace {
     ) -> Result<(), ErrorCode> {
         let aligned_uaddr = UAddr::new(align_down(fault_addr.as_usize(), MIN_PAGE_SIZE));
         let mutable = self.mutable.lock();
-        for mapping in &mutable.mappings {
-            if mapping.contains(aligned_uaddr) {
-                if !mapping.attrs.contains(info.access()) {
-                    // The page fault was caused by an invalid access.
-                    return Err(ErrorCode::BadAccess);
-                }
+        let Some(mapping) = mutable.find(aligned_uaddr) else {
+            return Err(ErrorCode::BadAccess);
+        };
 
-                // Found a mapping that contains the fault address.
-                let offset = mapping.offset + (aligned_uaddr.as_usize() - mapping.start.as_usize());
-                let index = offset / MIN_PAGE_SIZE;
-                let paddr = mapping.vmo.object().ensure_page(index)?;
-                let len = MIN_PAGE_SIZE;
-                self.arch.map(aligned_uaddr, paddr, len, mapping.attrs)?;
-                return Ok(());
-            }
+        if !mapping.attrs.contains(info.access()) {
+            // The page fault was caused by an invalid access.
+            return Err(ErrorCode::BadAccess);
         }
 
-        Err(ErrorCode::BadAccess)
+        // Found a mapping that contains the fault address.
+        let offset = mapping.offset + (aligned_uaddr.as_usize() - mapping.start.as_usize());
+        let index = offset / MIN_PAGE_SIZE;
+        let paddr = mapping.vmo.object().ensure_page(index)?;
+        let len = MIN_PAGE_SIZE;
+        self.arch.map(aligned_uaddr, paddr, len, mapping.attrs)?;
+        Ok(())
     }
 }
 
