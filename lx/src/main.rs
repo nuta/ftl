@@ -71,9 +71,9 @@ fn parse_cmdline<'a>(
 
 #[unsafe(no_mangle)]
 fn main(cmdline: &[u8]) {
-    let root_hspace = unsafe { HandleSpace::from_handle(HandleId::new(1)) };
-    let root_vmspace = unsafe { VmSpace::from_handle(HandleId::new(2)) };
-    let root_quota = unsafe { Quota::from_handle(HandleId::new(3)) };
+    let root_vmspace = unsafe { VmSpace::from_handle(HandleId::new(1)) };
+    let root_quota = unsafe { Quota::from_handle(HandleId::new(2)) };
+    let root_hspace = unsafe { HandleSpace::from_handle(HandleId::new(4)) };
 
     // Allocate the VMO for the heap.
     let heap_addr = align_up(&raw const _end as usize, 4096);
@@ -121,7 +121,7 @@ fn main(cmdline: &[u8]) {
         Some(b"none") => None,
         Some(value) => panic!("unknown ftl.lx.console: {:?}", value),
         None => {
-            let device = unsafe { ftl::console::Console::from_handle(HandleId::new(4)) };
+            let device = unsafe { ftl::console::Console::from_handle(HandleId::new(5)) };
             Some(Arc::new(
                 Console::new(device).expect("failed to create console"),
             ))
