@@ -1,7 +1,10 @@
+use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
+use ftl_types::handle::HandleRight;
 use ftl_types::syscall::Syscall;
 
 use crate::arch::syscall1;
+use crate::arch::syscall2;
 
 pub struct OwnedHandle {
     id: HandleId,
@@ -14,6 +17,15 @@ impl OwnedHandle {
 
     pub const fn id(&self) -> HandleId {
         self.id
+    }
+
+    pub fn duplicate(&self, rights: HandleRight) -> Result<Self, ErrorCode> {
+        let id = syscall2(
+            Syscall::HSpaceDuplicate,
+            self.id.as_usize(),
+            rights.as_raw(),
+        )?;
+        Ok(Self::new(HandleId::new(id)))
     }
 }
 

@@ -67,6 +67,7 @@ fn do_handle_syscall() -> Resched {
         Some(Syscall::VmSpaceCreate) => crate::vmspace::sys_vmspace_create(&thread, &regs),
         Some(Syscall::HSpaceMove) => crate::hspace::sys_hspace_move(&thread, &regs),
         Some(Syscall::QuotaCreate) => crate::quota::sys_quota_create(&thread, &regs),
+        Some(Syscall::HSpaceDuplicate) => crate::hspace::sys_hspace_duplicate(&thread, &regs),
         None => Err(ErrorCode::UnknownSyscall),
     };
 

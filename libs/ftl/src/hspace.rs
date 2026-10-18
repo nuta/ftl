@@ -47,6 +47,11 @@ impl HandleSpace {
         Ok(HandleId::new(id))
     }
 
+    pub fn duplicate(&self, rights: HandleRight) -> Result<Self, ErrorCode> {
+        let handle = self.handle.duplicate(rights)?;
+        Ok(Self { handle })
+    }
+
     pub(crate) const fn handle(&self) -> &OwnedHandle {
         &self.handle
     }

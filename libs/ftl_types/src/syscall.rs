@@ -38,12 +38,13 @@ pub enum Syscall {
     VmSpaceCreate = 35,
     HSpaceMove = 36,
     QuotaCreate = 37,
+    HSpaceDuplicate = 38,
     // Note: Do not forget to update Syscall::END when adding a new syscall.
 }
 
 impl Syscall {
     pub const BASE: usize = usize::MAX - 0x1000;
-    const END: usize = Self::BASE + Self::QuotaCreate as usize;
+    const END: usize = Self::BASE + Self::HSpaceDuplicate as usize;
 
     pub const fn as_usize(self) -> usize {
         Self::BASE + self as usize

@@ -101,6 +101,20 @@ impl HandleSpace {
         Ok(new_id)
     }
 
+    pub fn duplicate(&self, id: HandleId, rights: HandleRight) -> Result<HandleId, ErrorCode> {
+        let mut mutable = self.mutable.lock();
+        let handle = mutable
+            .handles
+            .get(&id.as_usize())
+            .cloned()
+            .ok_or(ErrorCode::HandleNotFound)?
+            .update_rights(rights)?;
+
+        let new_id = Self::find_free_id(&mutable)?;
+        self.do_insert(&mut mutable, new_id, handle)?;
+        Ok(new_id)
+    }
+
     fn find_free_id(mutable: &Mutable) -> Result<HandleId, ErrorCode> {
         for raw_id in 1..=NUM_HANDLES_MAX {
             if !mutable.handles.contains_key(&raw_id) {
@@ -247,6 +261,17 @@ pub fn sys_hspace_move(
     let current_hspace = current.hspace();
     let dst = current_hspace.get::<HandleSpace>(dst_id, HandleRight::WRITE)?;
     let new_id = current_hspace.do_move(handle_id, &dst, rights)?;
+    Ok(SyscallOutput::Done(new_id.as_usize()))
+}
+
+pub fn sys_hspace_duplicate(
+    current: &SharedRef<Thread>,
+    ctx: &SyscallRegs,
+) -> Result<SyscallOutput, ErrorCode> {
+    let handle_id = HandleId::new(ctx.a0);
+    let rights = HandleRight::from_raw(ctx.a1)?;
+
+    let new_id = current.hspace().duplicate(handle_id, rights)?;
     Ok(SyscallOutput::Done(new_id.as_usize()))
 }
 

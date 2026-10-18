@@ -1,5 +1,6 @@
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
+use ftl_types::handle::HandleRight;
 use ftl_types::syscall::Syscall;
 use ftl_types::vmo::SupplyMode;
 
@@ -64,6 +65,11 @@ impl Vmo {
         // SAFETY: Kernel returns a valid handle.
         let this = unsafe { Self::from_handle(HandleId::new(id)) };
         Ok(this)
+    }
+
+    pub fn duplicate(&self, rights: HandleRight) -> Result<Self, ErrorCode> {
+        let handle = self.handle.duplicate(rights)?;
+        Ok(Self { handle })
     }
 
     pub fn write(&self, offset: usize, buf: &[u8]) -> Result<(), ErrorCode> {
