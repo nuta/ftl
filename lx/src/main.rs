@@ -23,6 +23,7 @@ mod types;
 mod vfs;
 mod vm;
 mod wait_queue;
+mod zone;
 
 use alloc::sync::Arc;
 use alloc::vec::Vec;
@@ -73,6 +74,7 @@ fn parse_cmdline<'a>(
 fn main(cmdline: &[u8]) {
     let root_vmspace = unsafe { VmSpace::from_handle(HandleId::new(1)) };
     let root_quota = unsafe { Quota::from_handle(HandleId::new(2)) };
+    let image = unsafe { Vmo::from_handle(HandleId::new(3)) };
     let root_hspace = unsafe { HandleSpace::from_handle(HandleId::new(4)) };
 
     // Allocate the VMO for the heap.
@@ -132,6 +134,7 @@ fn main(cmdline: &[u8]) {
         root_hspace,
         root_quota,
         root_vmspace,
+        image,
         network,
         console,
         elf_file,

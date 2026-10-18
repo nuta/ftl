@@ -5,6 +5,7 @@ use ftl::poll::Poll;
 use ftl::quota::Quota;
 use ftl::time::MonoTime;
 use ftl::time::MonoTimeExt;
+use ftl::vmo::Vmo;
 use ftl::vmspace::VmSpace;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HANDLE_ID_MAX;
@@ -47,6 +48,7 @@ impl Container {
         hspace: HandleSpace,
         quota: Quota,
         root_vmspace: VmSpace,
+        image: Vmo,
         network: Option<Arc<TcpIp>>,
         console: Option<Arc<Console>>,
         elf_file: Arc<dyn FileLike>,
@@ -60,11 +62,12 @@ impl Container {
             console.subscribe(&poll, CONSOLE_COOKIE)?;
         }
 
-        let root_dir = RootDir::new();
+        let quota = Arc::new(quota);
+        let root_dir = RootDir::new(quota.clone(), image);
         let this = Arc::new(Self {
             poll,
             hspace,
-            quota: Arc::new(quota),
+            quota,
             root_vmspace,
             processes: SpinLock::new(PIdTable::new()),
             reaper: Reaper::new()?,

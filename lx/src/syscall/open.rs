@@ -27,7 +27,13 @@ pub fn sys_open(current: &LxThread, path: *const u8, flags: c_int) -> Result<Sys
 
     let file = match pnode.inode() {
         INode::File(_) if flags & O_DIRECTORY != 0 => return Err(Errno::ENOTDIR),
-        INode::File(file) => file.clone(),
+        INode::File(file) => {
+            match file.open() {
+                Ok(Some(opened)) => opened,
+                Ok(None) => file.clone(),
+                Err(errno) => return Err(errno),
+            }
+        }
         INode::Dir(_) if flags & (O_WRONLY | O_RDWR) != 0 => {
             // Directories are not writeable.
             return Err(Errno::EISDIR);

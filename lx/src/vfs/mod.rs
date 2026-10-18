@@ -16,6 +16,7 @@ mod embedded_file;
 mod epoll;
 mod eventfd;
 mod inode;
+mod lxfs;
 mod path;
 mod pipe;
 mod procfs;
@@ -33,6 +34,7 @@ pub use embedded_file::EmbeddedFile;
 pub use epoll::Epoll;
 pub use eventfd::EventFd;
 pub use inode::INode;
+pub use lxfs::LxFs;
 pub use path::PathNode;
 pub use pipe::Pipe;
 pub use procfs::ProcFs;
@@ -72,6 +74,11 @@ impl<'a> IoVecSlice<'a> {
 }
 
 pub trait FileLike: Send + Sync {
+    /// Returns `Some(file)` for files that have per-open-file states.
+    fn open(&self) -> Result<Option<Arc<dyn FileLike>>, Errno> {
+        Ok(None)
+    }
+
     fn bind(&self, addr: SockAddr) -> Result<(), Errno> {
         let _ = addr;
         Err(Errno::ENOTSUP)
