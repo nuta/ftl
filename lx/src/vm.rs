@@ -10,9 +10,6 @@ use ftl::quota::Quota;
 use ftl::vmo::Vmo;
 use ftl::vmspace::VmSpace;
 use ftl_elf::Elf;
-use ftl_elf::PF_R;
-use ftl_elf::PF_W;
-use ftl_elf::PF_X;
 use ftl_elf::PhdrType;
 use ftl_types::error::ErrorCode;
 use ftl_types::thread::PageFaultInfo;
@@ -543,23 +540,6 @@ fn attrs_from_prot(prot: c_int) -> PageAttrs {
     attrs
 }
 
-fn attrs_from_phdr(phdr: &ftl_elf::Phdr) -> PageAttrs {
-    let mut attrs = PageAttrs::EMPTY;
-    if phdr.p_flags & PF_X != 0 {
-        attrs |= PageAttrs::EXEC;
-    }
-
-    if phdr.p_flags & PF_W != 0 {
-        attrs |= PageAttrs::WRITE;
-    }
-
-    if phdr.p_flags & PF_R != 0 {
-        attrs |= PageAttrs::READ;
-    }
-
-    attrs
-}
-
 fn read_exact(file: &dyn FileLike, mut offset: usize, buf: &mut [u8]) -> Result<(), Errno> {
     let mut total = 0;
     while total < buf.len() {
@@ -643,7 +623,7 @@ fn load_elf(
             return Err(Errno::ENOEXEC);
         }
 
-        let attrs = attrs_from_phdr(phdr);
+        let attrs = PageAttrs::from_phdr_flags(phdr.p_flags);
         if file_len > 0 {
             let vmo = Vmo::create_user(quota, file_len)?;
             vmspace.map(&vmo, region_base, 0, file_len, attrs)?;

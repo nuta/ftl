@@ -1,7 +1,4 @@
 use ftl_elf::Elf;
-use ftl_elf::PF_R;
-use ftl_elf::PF_W;
-use ftl_elf::PF_X;
 use ftl_elf::PhdrType;
 use ftl_types::handle::HandleId;
 use ftl_types::handle::HandleRight;
@@ -48,16 +45,7 @@ fn load_elf(quota: &SharedRef<Quota>, vmspace: &SharedRef<VmSpace>, elf_file: &[
         let region_len = align_up(phdr.p_memsz as usize, MIN_PAGE_SIZE);
         let bytes = &elf_file[src_off..src_off + copy_len];
 
-        let mut attrs = PageAttrs::EMPTY;
-        if phdr.p_flags & PF_X != 0 {
-            attrs |= PageAttrs::EXEC;
-        }
-        if phdr.p_flags & PF_W != 0 {
-            attrs |= PageAttrs::WRITE;
-        }
-        if phdr.p_flags & PF_R != 0 {
-            attrs |= PageAttrs::READ;
-        }
+        let attrs = PageAttrs::from_phdr_flags(phdr.p_flags);
 
         // Copy the file contents to the allocated memory.
         let vmo = VmObject::new_zeroed(quota.clone(), region_len).unwrap();

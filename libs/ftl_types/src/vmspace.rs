@@ -1,6 +1,10 @@
 use core::ops::BitOr;
 use core::ops::BitOrAssign;
 
+use ftl_elf::PF_R;
+use ftl_elf::PF_W;
+use ftl_elf::PF_X;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PageAttrs(usize);
 
@@ -21,6 +25,20 @@ impl PageAttrs {
 
     pub const fn from_raw(raw: usize) -> Self {
         Self(raw)
+    }
+
+    pub const fn from_phdr_flags(flags: u32) -> Self {
+        let mut attrs = Self::EMPTY;
+        if flags & PF_R != 0 {
+            attrs.0 |= Self::READ.0;
+        }
+        if flags & PF_W != 0 {
+            attrs.0 |= Self::WRITE.0;
+        }
+        if flags & PF_X != 0 {
+            attrs.0 |= Self::EXEC.0;
+        }
+        attrs
     }
 }
 
