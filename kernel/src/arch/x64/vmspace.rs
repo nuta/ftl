@@ -63,7 +63,7 @@ impl Pte {
     const fn new(paddr: PAddr, flags: u64) -> Self {
         debug_assert!(paddr.is_aligned(4096));
 
-        Self(paddr.as_u64() | flags)
+        Self(paddr.as_usize() as u64 | flags)
     }
 
     const fn is_present(self) -> bool {
@@ -210,7 +210,7 @@ impl Drop for VmSpace {
             // one before freeing the space.
             let pml4_vaddr = VAddr::new(&raw const BOOT_PML4 as usize);
             let pml4_paddr = vaddr2paddr(pml4_vaddr);
-            write_cr3(pml4_paddr.as_u64());
+            write_cr3(pml4_paddr.as_usize() as u64);
         }
 
         unsafe { free_table(PAddr::new(self.cr3 as usize), 4) };
@@ -234,7 +234,7 @@ unsafe fn free_table(paddr: PAddr, level: usize) {
 
 pub fn vmspace_switch_to_kernel() {
     let vaddr = VAddr::new(&raw const BOOT_PML4 as usize);
-    write_cr3(vaddr2paddr(vaddr).as_u64());
+    write_cr3(vaddr2paddr(vaddr).as_usize() as u64);
 }
 
 impl VmSpace {
@@ -250,7 +250,7 @@ impl VmSpace {
         pml4.0[256] = Pte::new(pdpt_paddr, PTE_V | PTE_W);
 
         Ok(Self {
-            cr3: pml4_paddr.as_u64(),
+            cr3: pml4_paddr.as_usize() as u64,
             mutable: SpinLock::new(Mutable {
                 pml4: pml4_vaddr,
                 charge,

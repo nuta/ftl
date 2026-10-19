@@ -2,6 +2,7 @@ use core::convert::Infallible;
 
 use ftl_arrayvec::ArrayVec;
 use ftl_types::error::ErrorCode;
+use ftl_types::thread::PageFaultInfo;
 use ftl_types::thread::RegsKind;
 use ftl_types::thread::SyscallRegs;
 use ftl_types::vmspace::PageAttrs;
@@ -136,8 +137,28 @@ pub fn set_cpuvar(_cpu_id: usize, _cpuvar: crate::cpuvar::CpuVar) {
     todo!()
 }
 
-pub fn semihosting_exit() -> ! {
-    todo!()
+#[unsafe(no_mangle)]
+pub fn host_handle_syscall() -> ! {
+    crate::syscall::handle_syscall()
+}
+
+#[unsafe(no_mangle)]
+pub fn host_handle_timer_interrupt() {
+    let now = monotime_read();
+    crate::timer::GLOBAL_TIMER.lock().tick(now);
+    crate::driver::poll(None, now);
+}
+
+#[unsafe(no_mangle)]
+pub fn host_handle_interrupt(irq: u8) {
+    crate::console::handle_interrupt();
+    crate::driver::poll(Some(irq), monotime_read());
+}
+
+#[unsafe(no_mangle)]
+pub fn host_handle_page_fault(fault_addr: UAddr, info: PageFaultInfo) -> Result<(), ErrorCode> {
+    let thread = get_cpuvar().current_thread.thread();
+    thread.vmspace().handle_page_fault(fault_addr, info)
 }
 
 #[unsafe(no_mangle)]

@@ -14,6 +14,7 @@ mod panic;
 pub mod poll;
 pub mod quota;
 pub mod random;
+#[cfg(target_os = "none")]
 mod start;
 pub mod thread;
 pub mod time;
