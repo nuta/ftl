@@ -4,10 +4,11 @@ pub const UNLIMITED: usize = usize::MAX;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Resource {
     Memory = 0,
+    CpuTime = 1,
 }
 
 impl Resource {
-    pub const COUNT: usize = 1;
+    pub const COUNT: usize = 2;
 
     pub const fn from_usize(value: usize) -> Option<Self> {
         if value >= Self::COUNT {

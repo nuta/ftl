@@ -43,5 +43,5 @@ pub fn boot(mut bootinfo: BootInfo) -> ! {
     crate::driver::init(bootinfo.cmdline);
     crate::loader::load(&bootinfo);
     trace!("kernel is ready");
-    crate::scheduler::return_to_user(Resched::Block);
+    crate::scheduler::return_to_user(Resched::Init);
 }

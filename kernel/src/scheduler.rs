@@ -1,9 +1,11 @@
 use alloc::collections::vec_deque::VecDeque;
 
 use ftl_types::error::ErrorCode;
+use ftl_types::time::MonoTime;
 use ftl_utils::spinlock::SpinLock;
 
 use crate::arch;
+use crate::quota::CpuTimeQuota;
 use crate::shared_ref::SharedRef;
 use crate::thread::Thread;
 
@@ -59,8 +61,18 @@ impl Scheduler {
     }
 
     /// Picks the next thread to run.
-    pub fn pop(&self) -> Option<SharedRef<Thread>> {
-        self.mutable.lock().run_queue.pop_front()
+    pub fn pop(&self, now: MonoTime) -> Option<SharedRef<Thread>> {
+        let mut m = self.mutable.lock();
+
+        // Iterate over the queue and find the first truely runnable one.
+        for i in 0..m.run_queue.len() {
+            let thread = &m.run_queue[i];
+            if !thread.quota().is_exhausted::<CpuTimeQuota>(now) {
+                return m.run_queue.remove(i);
+            }
+        }
+
+        None
     }
 
     /// Pushes a runnable thread to the runqueue.
@@ -73,6 +85,8 @@ impl Scheduler {
 
 /// Why context switching (`return_to_user`) happens.
 pub enum Resched {
+    /// The first context switch in this CPU.
+    Init,
     /// The current thread can continue running, but the kernel decided to
     /// preempt and schedule a new thread to run.
     Preempt,
@@ -90,13 +104,23 @@ pub fn return_to_user(resched: Resched) -> ! {
     let cpuvar = arch::get_cpuvar();
     let current = &cpuvar.current_thread;
 
-    // Requeue the current thread to the runqueue if it is runnable.
-    if matches!(resched, Resched::Preempt) {
+    let mut now = arch::monotime_read();
+    if !matches!(resched, Resched::Init) {
         let thread = current.thread();
+        let switched_at = cpuvar.switched_at.get();
+
+        // SAFETY: `switched_at` was set by this CPU before entering the
+        //         thread.
+        let elapsed = now.duration_since(switched_at).unwrap();
+
+        // Charge the CPU time.
+        thread.quota().charge_periodic::<CpuTimeQuota>(now, elapsed);
+
+        // Requeue the current thread to the runqueue if it is runnable.
+        //
         // The thread might have been terminated by a different CPU. Check
         // the latest state.
-        if thread.is_runnable() {
-            // The current thread is runnable. Push it back to the scheduler.
+        if matches!(resched, Resched::Preempt) && thread.is_runnable() {
             SCHEDULER.push_back(thread);
         }
     }
@@ -104,10 +128,11 @@ pub fn return_to_user(resched: Resched) -> ! {
     loop {
         // Find the next thread to switch to.
         let next = loop {
-            let Some(thread) = SCHEDULER.pop() else {
+            let Some(thread) = SCHEDULER.pop(now) else {
                 // No threads to run. Enter the idle loop.
                 arch::vmspace_switch_to_kernel();
                 arch::idle();
+                now = arch::monotime_read();
                 continue;
             };
 
@@ -122,6 +147,7 @@ pub fn return_to_user(resched: Resched) -> ! {
         };
 
         // Jump into the next thread. This function does not return on success.
+        cpuvar.switched_at.set(now);
         let Err(err) = current.enter(next);
 
         // Failed to enter the thread due to its invalid state. Terminate it.

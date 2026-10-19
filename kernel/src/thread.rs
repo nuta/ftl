@@ -61,6 +61,7 @@ pub struct Thread {
     hspace: SharedRef<HandleSpace>,
     vmspace: SharedRef<VmSpace>,
     mutable: SpinLock<Mutable>,
+    quota: SharedRef<Quota>,
     _memory_charge: Charge<MemoryQuota>,
 }
 
@@ -102,6 +103,7 @@ impl Thread {
             hspace: hspace.clone(),
             vmspace,
             mutable: SpinLock::new(mutable),
+            quota: quota.clone(),
             _memory_charge: memory_charge,
         })?;
 
@@ -117,6 +119,10 @@ impl Thread {
         // TODO: Avoid locking the spin lock.
         let mutable = self.mutable.lock();
         matches!(mutable.state, State::Runnable)
+    }
+
+    pub fn quota(&self) -> &SharedRef<Quota> {
+        &self.quota
     }
 
     pub fn subscribe(&self, emitter: EventEmitter) -> Result<(), ErrorCode> {

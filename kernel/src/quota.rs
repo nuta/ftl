@@ -1,6 +1,4 @@
 use core::marker::PhantomData;
-use core::sync::atomic::AtomicUsize;
-use core::sync::atomic::Ordering;
 
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
@@ -8,6 +6,9 @@ use ftl_types::handle::HandleRight;
 use ftl_types::quota::Resource;
 use ftl_types::quota::UNLIMITED;
 use ftl_types::thread::SyscallRegs;
+use ftl_types::time::Duration;
+use ftl_types::time::MonoTime;
+use ftl_utils::spinlock::SpinLock;
 
 use crate::handle::Handle;
 use crate::handle::Handleable;
@@ -17,59 +18,124 @@ use crate::thread::Thread;
 
 const MAX_DEPTH: usize = 4;
 
-pub trait ResourceKind {
-    const RESOURCE: Resource;
+pub trait Gauge {
+    fn entry(quota: &Quota) -> &SpinLock<GaugeEntry>;
 }
 
 pub struct MemoryQuota;
 
-impl ResourceKind for MemoryQuota {
-    const RESOURCE: Resource = Resource::Memory;
+impl Gauge for MemoryQuota {
+    fn entry(quota: &Quota) -> &SpinLock<GaugeEntry> {
+        &quota.memory
+    }
 }
 
-struct Entry {
-    usage: AtomicUsize,
-    limit: AtomicUsize,
+pub trait Periodic {
+    const PERIOD: Duration;
+
+    fn entry(quota: &Quota) -> &SpinLock<PeriodicEntry>;
 }
 
-impl Entry {
+pub struct CpuTimeQuota;
+
+impl Periodic for CpuTimeQuota {
+    const PERIOD: Duration = Duration::from_millis(100);
+
+    fn entry(quota: &Quota) -> &SpinLock<PeriodicEntry> {
+        &quota.cpu_time
+    }
+}
+
+pub struct GaugeEntry {
+    usage: usize,
+    limit: usize,
+}
+
+impl GaugeEntry {
+    const fn new(limit: usize) -> Self {
+        Self { usage: 0, limit }
+    }
+
+    fn try_charge(&mut self, amount: usize) -> bool {
+        let Some(new_usage) = self.usage.checked_add(amount) else {
+            return false;
+        };
+
+        if new_usage > self.limit {
+            return false;
+        }
+
+        self.usage = new_usage;
+        true
+    }
+
+    fn set_limit(&mut self, limit: usize) {
+        self.limit = limit;
+    }
+
+    fn uncharge(&mut self, amount: usize) {
+        debug_assert!(self.usage >= amount, "quota usage underflow");
+        self.usage -= amount;
+    }
+}
+
+pub struct PeriodicEntry {
+    period: u64,
+    usage: u64,
+    limit: usize,
+}
+
+impl PeriodicEntry {
     const fn new(limit: usize) -> Self {
         Self {
-            usage: AtomicUsize::new(0),
-            limit: AtomicUsize::new(limit),
+            period: 0,
+            usage: 0,
+            limit,
         }
     }
 
-    fn try_charge(&self, amount: usize) -> bool {
-        let limit = self.limit.load(Ordering::Relaxed);
-        let result = self
-            .usage
-            .try_update(Ordering::Relaxed, Ordering::Relaxed, |usage| {
-                let new_usage = usage.checked_add(amount)?;
-                if new_usage > limit {
-                    return None;
-                }
-
-                Some(new_usage)
-            });
-
-        result.is_ok()
+    fn is_unlimited(&self) -> bool {
+        self.limit == UNLIMITED
     }
 
-    fn limit(&self, limit: usize) {
-        self.limit.store(limit, Ordering::Relaxed);
+    fn charge(&mut self, current_period: u64, elapsed: Duration) {
+        if self.is_unlimited() {
+            return;
+        }
+
+        // Reset the usage to 0 if the period has changed.
+        if current_period > self.period {
+            self.period = current_period;
+            self.usage = 0;
+        }
+
+        self.usage = self.usage.saturating_add(elapsed.as_nanos());
     }
 
-    fn uncharge(&self, amount: usize) {
-        let prev = self.usage.fetch_sub(amount, Ordering::Relaxed);
-        debug_assert!(prev >= amount, "quota usage underflow");
+    fn is_exhausted(&self, current_period: u64) -> bool {
+        if self.is_unlimited() {
+            return false;
+        }
+
+        let usage = if self.period < current_period {
+            0
+        } else {
+            self.usage
+        };
+
+        usage >= self.limit as u64
+    }
+
+    fn set_limit(&mut self, limit: usize) {
+        self.limit = limit;
     }
 }
 
 pub struct Quota {
     parent: Option<SharedRef<Quota>>,
     depth: usize,
-    quotas: [Entry; Resource::COUNT],
+    memory: SpinLock<GaugeEntry>,
+    cpu_time: SpinLock<PeriodicEntry>,
 }
 
 impl Quota {
@@ -90,49 +156,45 @@ impl Quota {
         Self {
             parent,
             depth,
-            quotas: core::array::from_fn(|_| Entry::new(limit)),
+            memory: SpinLock::new(GaugeEntry::new(limit)),
+            cpu_time: SpinLock::new(PeriodicEntry::new(limit)),
         }
     }
 
-    fn try_charge(&self, resource: Resource, amount: usize) -> Result<(), ErrorCode> {
-        // Traverse the quota tree and charge the resource from the each level.
-        let mut current = Some(self);
-        while let Some(quota) = current {
-            if quota.quotas[resource as usize].try_charge(amount) {
-                // Successfully charged. Move to the parent.
-                current = quota.parent.as_deref();
-                continue;
-            }
+    fn ancestors(&self) -> impl Iterator<Item = &Quota> {
+        core::iter::successors(Some(self), |quota| quota.parent.as_deref())
+    }
 
-            // Failed to charge. Revert the changes we've made so far.
-            let mut current = Some(self);
-            while let Some(charged) = current {
-                if core::ptr::eq(charged, quota) {
-                    // Reached the level we've failed to charge.
-                    break;
+    fn try_charge<R: Gauge>(&self, amount: usize) -> Result<(), ErrorCode> {
+        // Traverse the quota tree and charge the resource from the each level.
+        for quota in self.ancestors() {
+            if !R::entry(quota).lock().try_charge(amount) {
+                // Failed to charge. Revert the changes we've made so far.
+                for charged in self.ancestors() {
+                    if core::ptr::eq(charged, quota) {
+                        // Reached the level we've failed to charge.
+                        break;
+                    }
+
+                    R::entry(charged).lock().uncharge(amount);
                 }
 
-                charged.quotas[resource as usize].uncharge(amount);
-                current = charged.parent.as_deref();
+                return Err(ErrorCode::QuotaExceeded);
             }
-
-            return Err(ErrorCode::QuotaExceeded);
         }
 
         Ok(())
     }
 
-    fn uncharge(&self, resource: Resource, amount: usize) {
+    fn uncharge<R: Gauge>(&self, amount: usize) {
         // Traverse the quota tree and uncharge the resource from the each level.
-        let mut current = Some(self);
-        while let Some(quota) = current {
-            quota.quotas[resource as usize].uncharge(amount);
-            current = quota.parent.as_deref();
+        for quota in self.ancestors() {
+            R::entry(quota).lock().uncharge(amount);
         }
     }
 
-    pub fn reserve<R: ResourceKind>(&self, amount: usize) -> Result<Reservation<'_, R>, ErrorCode> {
-        self.try_charge(R::RESOURCE, amount)?;
+    pub fn reserve<R: Gauge>(&self, amount: usize) -> Result<Reservation<'_, R>, ErrorCode> {
+        self.try_charge::<R>(amount)?;
         Ok(Reservation {
             quota: self,
             amount,
@@ -140,21 +202,41 @@ impl Quota {
         })
     }
 
+    pub fn charge_periodic<R: Periodic>(&self, now: MonoTime, elapsed: Duration) {
+        let current_period = now.as_nanos() / R::PERIOD.as_nanos();
+
+        // Traverse the quota tree and charge the resource from the each level.
+        for quota in self.ancestors() {
+            R::entry(quota).lock().charge(current_period, elapsed);
+        }
+    }
+
+    pub fn is_exhausted<R: Periodic>(&self, now: MonoTime) -> bool {
+        let current_period = now.as_nanos() / R::PERIOD.as_nanos();
+
+        // Traverse the quota tree and check if any level has used up the resource.
+        self.ancestors()
+            .any(|quota| R::entry(quota).lock().is_exhausted(current_period))
+    }
+
     /// Updates the limit for a resource.
     pub fn limit(&self, resource: Resource, limit: usize) {
-        self.quotas[resource as usize].limit(limit);
+        match resource {
+            Resource::Memory => self.memory.lock().set_limit(limit),
+            Resource::CpuTime => self.cpu_time.lock().set_limit(limit),
+        }
     }
 }
 
 impl Handleable for Quota {}
 
-pub struct Charge<R: ResourceKind> {
+pub struct Charge<R: Gauge> {
     quota: SharedRef<Quota>,
     amount: usize,
     _resource: PhantomData<R>,
 }
 
-impl<R: ResourceKind> Charge<R> {
+impl<R: Gauge> Charge<R> {
     pub fn new(quota: SharedRef<Quota>) -> Self {
         Self {
             quota,
@@ -184,21 +266,21 @@ impl<R: ResourceKind> Charge<R> {
     }
 }
 
-impl<R: ResourceKind> Drop for Charge<R> {
+impl<R: Gauge> Drop for Charge<R> {
     fn drop(&mut self) {
-        self.quota.uncharge(R::RESOURCE, self.amount);
+        self.quota.uncharge::<R>(self.amount);
     }
 }
 
-pub struct Reservation<'a, R: ResourceKind> {
+pub struct Reservation<'a, R: Gauge> {
     quota: &'a Quota,
     amount: usize,
     _resource: PhantomData<R>,
 }
 
-impl<R: ResourceKind> Drop for Reservation<'_, R> {
+impl<R: Gauge> Drop for Reservation<'_, R> {
     fn drop(&mut self) {
-        self.quota.uncharge(R::RESOURCE, self.amount);
+        self.quota.uncharge::<R>(self.amount);
     }
 }
 

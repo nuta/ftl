@@ -119,6 +119,7 @@ impl Zone {
 
         let quota = Quota::create(parent_quota)?;
         quota.limit(Resource::Memory, UNLIMITED)?;
+        quota.limit(Resource::CpuTime, UNLIMITED)?;
 
         let hspace = HandleSpace::create()?;
         let vmspace = VmSpace::create(&quota)?;
