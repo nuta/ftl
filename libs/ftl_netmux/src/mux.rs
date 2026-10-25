@@ -3,134 +3,60 @@ use alloc::boxed::Box;
 use ftl_driver::env::Env;
 use ftl_driver::net::Driver;
 use ftl_types::error::ErrorCode;
-use ftl_types::net::Rule;
 use ftl_types::time::MonoTime;
-use ftl_utils::fxhash::FxHashMap;
 
 use crate::device::Device;
-use crate::device::DeviceId;
 use crate::device::PollNotifier;
-use crate::device::Tx;
-use crate::nic::BufReader;
-use crate::nic::BufWriter;
-use crate::nic::NicId;
-use crate::rx::RxRouteTable;
-use crate::tx::TxRouteTable;
+use crate::packet::ipv4::Ipv4Addr;
+use crate::packet::ipv4::NetMask;
 
 pub trait RxNotify: Send + 'static {
     fn notify(self) -> Result<(), ErrorCode>;
 }
 
-pub struct NetMux<'a, N: RxNotify> {
-    pub(crate) env: &'a dyn Env,
-    next_device_id: u64,
-    pub(crate) rx_buffer_size: usize,
-    pub(crate) devices: FxHashMap<DeviceId, Device<'a>>,
-    pub(crate) rx: RxRouteTable<'a, N>,
-    pub(crate) tx: TxRouteTable,
+#[derive(Clone, Copy)]
+pub(crate) struct ExternalIpConfig {
+    pub(crate) address: Ipv4Addr,
+    pub(crate) netmask: NetMask,
+    pub(crate) gateway: Ipv4Addr,
 }
 
-impl<'a, N: RxNotify> NetMux<'a, N> {
-    pub const fn new(env: &'a dyn Env, rx_buffer_size: usize) -> Self {
-        Self {
-            env,
-            next_device_id: 0,
-            rx_buffer_size,
-            devices: FxHashMap::new(),
-            rx: RxRouteTable::new(),
-            tx: TxRouteTable::new(),
+impl ExternalIpConfig {
+    pub(crate) fn next_hop(&self, dst: Ipv4Addr) -> Ipv4Addr {
+        if self.netmask != NetMask::new(0) && self.netmask.contains(self.address, dst) {
+            dst
+        } else {
+            self.gateway
         }
     }
+}
 
-    pub fn add_device(
-        &mut self,
+pub struct PhysicalState<'a> {
+    pub(crate) env: &'a dyn Env,
+    pub(crate) rx_buffer_size: usize,
+    pub(crate) device: Device<'a>,
+    pub(crate) external: Option<ExternalIpConfig>,
+}
+
+impl<'a> PhysicalState<'a> {
+    pub fn new(
+        env: &'a dyn Env,
+        rx_buffer_size: usize,
         driver: Box<dyn Driver<Notifier = PollNotifier>>,
         irq: u8,
-    ) -> Result<DeviceId, ErrorCode> {
-        self.devices
-            .try_reserve(1)
-            .map_err(|_| ErrorCode::OutOfMemory)?;
-
-        let id = self.alloc_device_id()?;
-        self.provide_rx_buffers(self.env, &*driver, 64);
-        self.devices.insert(id, Device::new(self.env, driver, irq));
-        Ok(id)
-    }
-
-    pub fn create_nic(&mut self) -> Result<NicId, ErrorCode> {
-        self.rx.add_nic()
-    }
-
-    pub fn remove_nic(&mut self, nic: NicId) {
-        let _nic = self.rx.remove_nic(nic);
-    }
-
-    pub fn bind(&mut self, nic: NicId, rule: Rule) -> Result<(), ErrorCode> {
-        self.rx.bind(nic, rule)
-    }
-
-    pub fn unbind(&mut self, nic: NicId, rule: &Rule) -> Result<(), ErrorCode> {
-        self.rx.unbind(nic, rule)
-    }
-
-    pub fn subscribe(&mut self, nic: NicId, notifier: N) -> Result<(), ErrorCode> {
-        self.rx
-            .get_nic(nic)
-            .ok_or(ErrorCode::NotFound)?
-            .subscribe(notifier)
-    }
-
-    pub fn start_dhcp(&mut self, device: DeviceId, now: MonoTime) {
-        let Some(device) = self.devices.get_mut(&device) else {
-            return;
+    ) -> Self {
+        let this = Self {
+            env,
+            rx_buffer_size,
+            device: Device::new(env, driver, irq),
+            external: None,
         };
 
-        device.start_dhcp(now);
+        this.provide_rx_buffers(env, this.device.driver(), 64);
+        this
     }
 
-    /// Sends a packet to the network.
-    pub fn send(
-        &mut self,
-        nic: NicId,
-        header: &mut dyn BufReader,
-        payload: Option<&mut dyn BufReader>,
-    ) -> Result<(), ErrorCode> {
-        let payload_len = if let Some(payload) = payload.as_ref() {
-            payload.len()
-        } else {
-            0
-        };
-
-        let mut tx = Tx::alloc(self.env, header.len(), payload_len)?;
-        let (device_id, our_ip, next_hop_ip) = self.prepare_tx(nic, &mut tx, header, payload)?;
-
-        // Send the packet through the route's next hop.
-        let Some(device) = self.devices.get(&device_id) else {
-            return Err(ErrorCode::NotFound);
-        };
-
-        device.send_ipv4(our_ip, next_hop_ip, tx)
-    }
-
-    pub fn recv(
-        &mut self,
-        nic: NicId,
-        header: &mut dyn BufWriter,
-        payload: &mut dyn BufWriter,
-    ) -> Result<usize, ErrorCode> {
-        let nic = self.rx.get_nic(nic).ok_or(ErrorCode::NotFound)?;
-        nic.recv(header, payload)
-    }
-
-    fn alloc_device_id(&mut self) -> Result<DeviceId, ErrorCode> {
-        for _ in 0..64 {
-            self.next_device_id = self.next_device_id.wrapping_add(1);
-            let id = DeviceId::new(self.next_device_id);
-            if !self.devices.contains_key(&id) {
-                return Ok(id);
-            }
-        }
-
-        Err(ErrorCode::OutOfBounds)
+    pub fn start_dhcp(&mut self, now: MonoTime) {
+        self.device.start_dhcp(now);
     }
 }

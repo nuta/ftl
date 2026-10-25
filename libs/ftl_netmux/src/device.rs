@@ -122,15 +122,6 @@ impl Drop for Tx<'_> {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-pub struct DeviceId(u64);
-
-impl DeviceId {
-    pub const fn new(id: u64) -> Self {
-        Self(id)
-    }
-}
-
 pub struct Device<'a> {
     env: &'a dyn Env,
     driver: Box<dyn Driver<Notifier = PollNotifier>>,

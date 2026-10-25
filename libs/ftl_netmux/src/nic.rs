@@ -1,28 +1,42 @@
+use alloc::boxed::Box;
 use alloc::collections::VecDeque;
+use alloc::sync::Arc;
+use alloc::sync::Weak;
+use alloc::vec::Vec;
 
 use ftl_driver::dma::DmaBuf;
 use ftl_driver::dma::DmaBufWithDrop;
 use ftl_driver::env::Env;
+use ftl_driver::net::Driver;
 use ftl_types::error::ErrorCode;
+use ftl_types::time::MonoTime;
 use ftl_utils::reserve_slot::ReserveSlot;
 use ftl_utils::spinlock::SpinLock;
 
+use crate::device::PollNotifier;
+use crate::mux::PhysicalState;
 use crate::mux::RxNotify;
 
 const MAX_RX_QUEUE_DEPTH: usize = 128;
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-pub struct NicId(u32);
+struct Route<N> {
+    port_start: u32,
+    len: u32,
+    dst: Weak<Nic<N>>,
+}
 
-impl NicId {
-    pub(crate) fn new(id: u32) -> Self {
-        Self(id)
+fn overlaps<N>(routes: &[Route<N>], port_start: u32, len: u32) -> bool {
+    for route in routes {
+        if port_start < route.port_start + route.len && route.port_start < port_start + len {
+            return true;
+        }
     }
+    false
 }
 
 /// A received packet.
-pub(crate) struct RxPacket<'a> {
-    buf: DmaBufWithDrop<'a>,
+struct RxPacket {
+    buf: DmaBufWithDrop<'static>,
     /// The offset of the IP header in the packet. This is also the length of
     /// the device's header, Ethernet header, and some headroom in `buf`.
     packet_offset: usize,
@@ -32,40 +46,125 @@ pub(crate) struct RxPacket<'a> {
     header_len: usize,
 }
 
-impl<'a> RxPacket<'a> {
-    pub(crate) fn new(
-        env: &'a dyn Env,
-        buf: DmaBuf,
-        packet_offset: usize,
-        packet_len: usize,
-        header_len: usize,
-    ) -> Self {
-        Self {
-            buf: DmaBufWithDrop::new(env, buf),
-            packet_offset,
-            packet_len,
-            header_len,
-        }
-    }
-}
-
-struct Mutable<'a, N> {
-    rx_queue: VecDeque<RxPacket<'a>>,
+struct Mutable<N> {
+    rx_queue: VecDeque<RxPacket>,
     emitters: VecDeque<N>,
 }
 
-pub struct Nic<'a, N> {
-    mutable: SpinLock<Mutable<'a, N>>,
+pub struct Nic<N> {
+    pub(crate) env: &'static dyn Env,
+    routes: SpinLock<Vec<Route<N>>>,
+    mutable: SpinLock<Mutable<N>>,
+    pub(crate) physical: Option<SpinLock<PhysicalState<'static>>>,
 }
 
-impl<'a, N: RxNotify> Nic<'a, N> {
-    pub fn new() -> Self {
+impl<N: RxNotify> Nic<N> {
+    fn new(env: &'static dyn Env, physical: Option<PhysicalState<'static>>) -> Self {
+        let physical = match physical {
+            Some(physical) => Some(SpinLock::new(physical)),
+            None => None,
+        };
+
         Self {
+            env,
+            routes: SpinLock::new(Vec::new()),
             mutable: SpinLock::new(Mutable {
                 rx_queue: VecDeque::new(),
                 emitters: VecDeque::new(),
             }),
+            physical,
         }
+    }
+
+    pub fn new_virtual(env: &'static dyn Env) -> Self {
+        Self::new(env, None)
+    }
+
+    pub fn new_physical(
+        env: &'static dyn Env,
+        rx_buffer_size: usize,
+        driver: Box<dyn Driver<Notifier = PollNotifier>>,
+        irq: u8,
+    ) -> Self {
+        let physical = PhysicalState::new(env, rx_buffer_size, driver, irq);
+        Self::new(env, Some(physical))
+    }
+
+    pub fn start_dhcp(&self, now: MonoTime) {
+        if let Some(physical) = &self.physical {
+            physical.lock().start_dhcp(now);
+        }
+    }
+
+    pub fn poll(&self, irq: Option<u8>, now: MonoTime) {
+        if let Some(physical) = &self.physical {
+            physical.lock().poll(self, irq, now);
+        }
+    }
+
+    pub fn bind(&self, port_start: u16, len: u16, dst: &Arc<Nic<N>>) -> Result<u16, ErrorCode> {
+        let len = len as u32;
+        if len == 0 {
+            return Err(ErrorCode::InvalidArg);
+        }
+
+        let mut routes = self.routes.lock();
+        routes.retain(|route| route.dst.strong_count() > 0);
+
+        let mut port_start = port_start as u32;
+        if port_start == 0 {
+            let mut start = 1024;
+            while start + len <= 65536 && overlaps(&routes, start, len) {
+                start += len;
+            }
+            port_start = start;
+        }
+
+        if port_start + len > 65536 {
+            return Err(ErrorCode::OutOfBounds);
+        }
+
+        if overlaps(&routes, port_start, len) {
+            return Err(ErrorCode::AlreadyExists);
+        }
+
+        routes
+            .try_reserve(1)
+            .map_err(|_| ErrorCode::OutOfMemory)?;
+        routes.push(Route {
+            port_start,
+            len,
+            dst: Arc::downgrade(dst),
+        });
+        Ok(port_start as u16)
+    }
+
+    pub fn unbind(&self, port_start: u16, len: u16) -> Result<(), ErrorCode> {
+        let mut routes = self.routes.lock();
+        for i in 0..routes.len() {
+            if routes[i].port_start == port_start as u32 && routes[i].len == len as u32 {
+                routes.remove(i);
+                return Ok(());
+            }
+        }
+        Err(ErrorCode::NotFound)
+    }
+
+    pub(crate) fn lookup(&self, port: u16) -> Option<Arc<Nic<N>>> {
+        let port = port as u32;
+        for route in self.routes.lock().iter() {
+            if route.port_start <= port && port < route.port_start + route.len {
+                return route.dst.upgrade();
+            }
+        }
+        None
+    }
+
+    pub(crate) fn routes_back_to(&self, port: u16, nic: &Nic<N>) -> bool {
+        let Some(dst) = self.lookup(port) else {
+            return false;
+        };
+        core::ptr::eq(Arc::as_ptr(&dst), nic)
     }
 
     pub fn subscribe(&self, notifier: N) -> Result<(), ErrorCode> {
@@ -86,7 +185,20 @@ impl<'a, N: RxNotify> Nic<'a, N> {
     }
 
     /// Receives a packet from the driver.
-    pub fn receive(&self, rx: RxPacket<'a>) {
+    pub(crate) fn receive(
+        &self,
+        buf: DmaBuf,
+        packet_offset: usize,
+        packet_len: usize,
+        header_len: usize,
+    ) {
+        let rx = RxPacket {
+            buf: DmaBufWithDrop::new(self.env, buf),
+            packet_offset,
+            packet_len,
+            header_len,
+        };
+
         let mut mutable = self.mutable.lock();
         if mutable.rx_queue.len() >= MAX_RX_QUEUE_DEPTH {
             // Our RX queue is full. Drop the packet.

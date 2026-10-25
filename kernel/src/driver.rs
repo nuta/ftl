@@ -1,5 +1,6 @@
 use alloc::boxed::Box;
 use alloc::collections::VecDeque;
+use alloc::sync::Arc;
 use core::fmt;
 use core::str;
 
@@ -23,7 +24,8 @@ use crate::arch::MIN_PAGE_SIZE;
 use crate::arch::paddr2vaddr;
 use crate::memory::PAGE_ALLOCATOR;
 use crate::memory::PageType;
-use crate::net::NET_MUX;
+use crate::net::PNIC;
+use crate::net::RX_BUFFER_SIZE;
 
 static DMA_FREE_LIST: SpinLock<VecDeque<DmaBuf>> = SpinLock::new(VecDeque::new());
 const DMA_FREE_LIST_MAX: usize = 16;
@@ -105,8 +107,10 @@ impl ftl_driver::env::Env for DriverEnv {
 }
 
 pub fn poll(irq: Option<u8>, now: MonoTime) {
-    let mut net = NET_MUX.lock();
-    net.poll(irq, now);
+    let pnic = PNIC.lock().clone();
+    if let Some(pnic) = pnic {
+        pnic.poll(irq, now);
+    }
 }
 
 #[cfg(target_arch = "x86_64")]
@@ -263,15 +267,17 @@ pub fn init(cmdline: &[u8]) {
     }
 
     let (driver, irq) = init_net_driver(devices.as_slice());
-    let mut net = NET_MUX.lock();
-    let device_id = net
-        .add_device(driver, irq)
-        .expect("failed to add network device");
+    let pnic = Arc::new(ftl_netmux::Nic::new_physical(
+        &DRIVER_ENV,
+        RX_BUFFER_SIZE,
+        driver,
+        irq,
+    ));
+    *PNIC.lock() = Some(pnic.clone());
 
     // Enable the virtio-net IRQ. This must done before starting DHCP.
     // Otherwise, DHCP replies may arrive too early, before unmasking IRQ.
     arch::interrupt_acquire(irq).expect("failed to enable virtio-net IRQ");
 
-    net.start_dhcp(device_id, arch::monotime_read());
-    drop(net);
+    pnic.start_dhcp(arch::monotime_read());
 }

@@ -30,7 +30,7 @@ use alloc::vec::Vec;
 
 use ftl::allocator;
 use ftl::hspace::HandleSpace;
-use ftl::net::Net;
+use ftl::net::Nic;
 use ftl::quota::Quota;
 use ftl::vmo::Vmo;
 use ftl::vmspace::VmSpace;
@@ -111,10 +111,31 @@ fn main(cmdline: &[u8]) {
 
     let network = match parse_cmdline(cmdline, b"ftl.lx.net").expect("failed to parse cmdline") {
         Some(b"none") => None,
+        Some(b"uplink") => {
+            let ports = parse_cmdline(cmdline, b"ftl.lx.ports")
+                .expect("failed to parse cmdline")
+                .expect("ftl.lx.ports not found in cmdline");
+            let ports = core::str::from_utf8(ports).expect("invalid ftl.lx.ports");
+            let (port_start, port_len) = ports.split_once(':').expect("invalid ftl.lx.ports");
+            let port_start = port_start.parse().expect("invalid ftl.lx.ports");
+            let port_len = port_len.parse().expect("invalid ftl.lx.ports");
+            let nic = unsafe { Nic::from_handle(HandleId::new(5)) };
+            Some(net::TcpIp::new(nic, None, port_start, port_len))
+        }
         Some(value) => panic!("unknown ftl.lx.net: {:?}", value),
         None => {
-            let net = Net::create().expect("failed to create network");
-            Some(net::TcpIp::new(net))
+            let pnic = unsafe { Nic::from_handle(HandleId::new(6)) };
+            let nic = Nic::create_virtual().expect("failed to create NIC");
+            pnic.bind(net::INIT_PORT_START, net::INIT_PORT_LEN, &nic)
+                .expect("failed to bind ports");
+            nic.bind(1, u16::MAX, &pnic)
+                .expect("failed to bind ports");
+            Some(net::TcpIp::new(
+                nic,
+                Some(pnic),
+                net::INIT_PORT_START,
+                net::INIT_PORT_LEN,
+            ))
         }
     };
 

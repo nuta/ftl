@@ -5,26 +5,17 @@ use ftl_driver::info;
 use ftl_driver::net::Driver;
 use ftl_driver::net::Error;
 use ftl_driver::warn;
-use ftl_types::error::ErrorCode;
 use ftl_types::net::ETHTYPE_ARP;
 use ftl_types::net::ETHTYPE_IPV4;
-use ftl_types::net::FiveTuple;
 use ftl_types::net::IPPROTO_TCP;
 use ftl_types::net::IPPROTO_UDP;
-use ftl_types::net::Rule;
 use ftl_types::time::MonoTime;
-use ftl_utils::fxhash::FxHashMap;
-use ftl_utils::fxhash::FxHashSet;
-use ftl_utils::reserve_slot::ReserveSlot;
 
-use crate::NetMux;
 use crate::PollNotifier;
-use crate::device::DeviceId;
-use crate::dhcp::DhcpConfig;
+use crate::mux::ExternalIpConfig;
+use crate::mux::PhysicalState;
 use crate::mux::RxNotify;
 use crate::nic::Nic;
-use crate::nic::NicId;
-use crate::nic::RxPacket;
 use crate::packet::arp::ARP_OP_REQUEST;
 use crate::packet::arp::ArpInspector;
 use crate::packet::dhcp::DHCP_CLIENT_PORT;
@@ -32,135 +23,14 @@ use crate::packet::dhcp::DHCP_SERVER_PORT;
 use crate::packet::ethernet::ETHERNET_HEADER_LEN;
 use crate::packet::ethernet::EthernetInspector;
 use crate::packet::ipv4::Ipv4Inspector;
-use crate::packet::ipv4::NetMask;
 use crate::packet::tcp::TcpInspector;
 use crate::packet::udp::UDP_HEADER_LEN;
 use crate::packet::udp::UdpInspector;
-use crate::tx::Route;
 
-struct PortBinding {
-    nic_id: NicId,
-    rules: FxHashSet<Rule>,
-}
-
-pub struct RxRouteTable<'a, N> {
-    next_nic_id: u32,
-    nics: FxHashMap<NicId, Nic<'a, N>>,
-    bindings: FxHashMap<u16, PortBinding>,
-}
-
-impl<'a, N: RxNotify> RxRouteTable<'a, N> {
-    pub const fn new() -> Self {
-        Self {
-            next_nic_id: 0,
-            nics: FxHashMap::new(),
-            bindings: FxHashMap::new(),
-        }
-    }
-
-    fn alloc_nic_id(&mut self) -> Result<NicId, ErrorCode> {
-        for _ in 0..64 {
-            self.next_nic_id = self.next_nic_id.wrapping_add(1);
-            let id = NicId::new(self.next_nic_id);
-            if !self.nics.contains_key(&id) {
-                return Ok(id);
-            }
-        }
-
-        Err(ErrorCode::OutOfBounds)
-    }
-
-    pub fn add_nic(&mut self) -> Result<NicId, ErrorCode> {
-        self.nics
-            .try_reserve(1)
-            .map_err(|_| ErrorCode::OutOfMemory)?;
-
-        let id = self.alloc_nic_id()?;
-        self.nics.insert(id, Nic::new());
-        Ok(id)
-    }
-
-    pub fn get_nic(&self, id: NicId) -> Option<&Nic<'a, N>> {
-        self.nics.get(&id)
-    }
-
-    pub fn remove_nic(&mut self, id: NicId) -> Option<Nic<'a, N>> {
-        self.bindings.retain(|_, binding| binding.nic_id != id);
-        self.nics.remove(&id)
-    }
-
-    pub fn bind(&mut self, nic_id: NicId, rule: Rule) -> Result<(), ErrorCode> {
-        let local_port = rule.local_port().ok_or(ErrorCode::InvalidArg)?.get();
-        if !self.nics.contains_key(&nic_id) {
-            return Err(ErrorCode::NotFound);
-        }
-
-        if let Some(binding) = self.bindings.get_mut(&local_port) {
-            if binding.nic_id != nic_id {
-                // The port is bound to a different network.
-                return Err(ErrorCode::AlreadyExists);
-            }
-
-            // Reject if the same rule already exists.
-            if binding.rules.contains(&rule) {
-                return Err(ErrorCode::AlreadyExists);
-            }
-
-            // Add the rule to the binding.
-            binding
-                .rules
-                .reserve_slot()
-                .map_err(|_| ErrorCode::OutOfMemory)?
-                .insert(rule);
-            return Ok(());
-        }
-
-        // Create a new binding for the port.
-        let mut rules = FxHashSet::new();
-        rules
-            .reserve_slot()
-            .map_err(|_| ErrorCode::OutOfMemory)?
-            .insert(rule);
-
-        self.bindings
-            .reserve_slot()
-            .map_err(|_| ErrorCode::OutOfMemory)?
-            .insert(local_port, PortBinding { nic_id, rules });
-        Ok(())
-    }
-
-    pub fn unbind(&mut self, nic_id: NicId, rule: &Rule) -> Result<(), ErrorCode> {
-        let port = rule.local_port().ok_or(ErrorCode::InvalidArg)?.get();
-        let binding = self.bindings.get_mut(&port).ok_or(ErrorCode::NotFound)?;
-        if binding.nic_id != nic_id {
-            return Err(ErrorCode::NotFound);
-        }
-
-        if !binding.rules.remove(rule) {
-            return Err(ErrorCode::NotFound);
-        }
-
-        if binding.rules.is_empty() {
-            self.bindings.remove(&port);
-        }
-        Ok(())
-    }
-
-    pub fn find_nic_by_five_tuple(&self, five_tuple: FiveTuple) -> Option<NicId> {
-        let binding = self.bindings.get(&five_tuple.local_port)?;
-        for rule in five_tuple.matchers() {
-            if binding.rules.contains(&rule) {
-                return Some(binding.nic_id);
-            }
-        }
-        None
-    }
-}
-
-impl<'a, N: RxNotify> NetMux<'a, N> {
-    fn handle_eth_frame(
+impl<'a> PhysicalState<'a> {
+    fn handle_eth_frame<N: RxNotify>(
         &mut self,
-        device_id: DeviceId,
+        pnic: &Nic<N>,
         buf: DmaBuf,
         headroom: usize,
         frame_len: usize,
@@ -192,9 +62,9 @@ impl<'a, N: RxNotify> NetMux<'a, N> {
         // Forward to the upper layer.
         let eth_type = frame.eth_type();
         match eth_type {
-            ETHTYPE_ARP => self.handle_arp(device_id, frame.payload()),
+            ETHTYPE_ARP => self.handle_arp(frame.payload()),
             ETHTYPE_IPV4 => {
-                self.handle_ipv4(device_id, frame.src_mac(), buf, headroom, frame_len, now)
+                self.handle_ipv4(pnic, frame.src_mac(), buf, headroom, frame_len, now)
             }
             _ => {
                 ftl_driver::trace!(self.env, "unsupported ethernet type: {:x}", eth_type);
@@ -202,7 +72,7 @@ impl<'a, N: RxNotify> NetMux<'a, N> {
         }
     }
 
-    fn handle_arp(&self, device_id: DeviceId, packet: &[u8]) {
+    fn handle_arp(&self, packet: &[u8]) {
         let arp = match ArpInspector::new(packet) {
             Ok(arp) => arp,
             Err(e) => {
@@ -215,30 +85,27 @@ impl<'a, N: RxNotify> NetMux<'a, N> {
         let src_ip = arp.src_ip();
 
         // Learn the sender's MAC address.
-        let Some(device) = self.devices.get(&device_id) else {
-            return;
-        };
-        device.learn_arp(src_ip, src_mac);
+        self.device.learn_arp(src_ip, src_mac);
 
         // Reply to the ARP request if it is for one of our route addresses.
         if arp.op() != ARP_OP_REQUEST {
             return;
         }
 
-        // Look up the route to send the ARP reply to.
-        let Some((device_id, our_ip)) = self.tx.lookup_exact(arp.dst_ip()) else {
+        let Some(external) = self.external else {
             return;
         };
+        if arp.dst_ip() != external.address {
+            return;
+        }
 
-        let Some(device) = self.devices.get(&device_id) else {
-            return;
-        };
-        device.send_arp_reply(src_mac, src_ip, our_ip);
+        self.device
+            .send_arp_reply(src_mac, src_ip, external.address);
     }
 
-    fn handle_ipv4(
+    fn handle_ipv4<N: RxNotify>(
         &mut self,
-        device_id: DeviceId,
+        pnic: &Nic<N>,
         src_mac: [u8; 6],
         buf: DmaBufWithDrop<'a>,
         headroom: usize,
@@ -264,17 +131,12 @@ impl<'a, N: RxNotify> NetMux<'a, N> {
             return;
         }
 
-        {
-            let Some(device) = self.devices.get(&device_id) else {
-                return;
-            };
-            device.learn_arp(ipv4.src_ip(), src_mac);
-        }
+        self.device.learn_arp(ipv4.src_ip(), src_mac);
 
         // Forward to the upper layer, and get the routing key.
-        let five_tuple = match ipv4.ip_proto() {
+        let ports = match ipv4.ip_proto() {
             IPPROTO_TCP => self.handle_tcp(&ipv4),
-            IPPROTO_UDP => self.handle_udp(device_id, &ipv4, now),
+            IPPROTO_UDP => self.handle_udp(&ipv4, now),
             _ => {
                 ftl_driver::trace!(self.env, "unsupported IP protocol: {:x}", ipv4.ip_proto());
                 return;
@@ -282,31 +144,35 @@ impl<'a, N: RxNotify> NetMux<'a, N> {
         };
 
         // Find the NIC to forward the packet to.
-        let Some((five_tuple, trans_header_len)) = five_tuple else {
+        let Some((local_port, remote_port, trans_header_len)) = ports else {
             return;
         };
-        let Some(nic_id) = self.rx.find_nic_by_five_tuple(five_tuple) else {
+        let Some(external) = self.external else {
             return;
         };
-        let Some(nic) = self.rx.get_nic(nic_id) else {
+        if ipv4.dst_ip() != external.address {
+            return;
+        }
+        let Some(nic) = pnic.lookup(local_port) else {
             return;
         };
+        if !nic.routes_back_to(remote_port, pnic) {
+            return;
+        }
 
         // Build a RX packet.
         let total_len = ipv4.total_len();
         let header_len = ipv4.header_len() + trans_header_len;
 
         // Forward the packet to the NIC.
-        let packet = RxPacket::new(self.env, buf.take(), off, total_len, header_len);
-        nic.receive(packet);
+        nic.receive(buf.take(), off, total_len, header_len);
     }
 
     fn handle_udp(
         &mut self,
-        device_id: DeviceId,
         ipv4: &Ipv4Inspector<'_>,
         now: MonoTime,
-    ) -> Option<(FiveTuple, usize)> {
+    ) -> Option<(u16, u16, usize)> {
         let udp = match UdpInspector::new(ipv4.payload()) {
             Ok(udp) => udp,
             Err(e) => {
@@ -321,41 +187,28 @@ impl<'a, N: RxNotify> NetMux<'a, N> {
         }
 
         if udp.src_port() == DHCP_SERVER_PORT && udp.dst_port() == DHCP_CLIENT_PORT {
-            self.handle_dhcp(device_id, ipv4, &udp, now);
+            self.handle_dhcp(ipv4, &udp, now);
             return None;
         }
 
-        let five_tuple = FiveTuple {
-            eth_type: ETHTYPE_IPV4,
-            ip_proto: IPPROTO_UDP,
-            local_ip: ipv4.dst_ip().as_u32(),
-            local_port: udp.dst_port(),
-            remote_ip: ipv4.src_ip().as_u32(),
-            remote_port: udp.src_port(),
-        };
-
-        Some((five_tuple, UDP_HEADER_LEN))
+        Some((udp.dst_port(), udp.src_port(), UDP_HEADER_LEN))
     }
 
     fn handle_dhcp(
         &mut self,
-        device_id: DeviceId,
         ipv4: &Ipv4Inspector<'_>,
         udp: &UdpInspector<'_>,
         now: MonoTime,
     ) {
-        let Some(config) = self
-            .devices
-            .get_mut(&device_id)
-            .and_then(|device| device.handle_dhcp_rx(ipv4, udp, now))
-        else {
+        let Some(config) = self.device.handle_dhcp_rx(ipv4, udp, now) else {
             return;
         };
 
-        if let Err(error) = self.add_dhcp_route(device_id, &config) {
-            warn!(self.env, "failed to add DHCP route: {:?}", error);
-            return;
-        }
+        self.external = Some(ExternalIpConfig {
+            address: config.address,
+            netmask: config.netmask,
+            gateway: config.gateway,
+        });
 
         // TODO: Move this to kernel crate.
         info!(
@@ -367,7 +220,7 @@ impl<'a, N: RxNotify> NetMux<'a, N> {
         );
     }
 
-    fn handle_tcp(&self, ipv4: &Ipv4Inspector<'_>) -> Option<(FiveTuple, usize)> {
+    fn handle_tcp(&self, ipv4: &Ipv4Inspector<'_>) -> Option<(u16, u16, usize)> {
         // Parse the TCP header.
         let tcp = match TcpInspector::new(ipv4.payload()) {
             Ok(tcp) => tcp,
@@ -383,75 +236,37 @@ impl<'a, N: RxNotify> NetMux<'a, N> {
             return None;
         }
 
-        // Build the 5-tuple to look up the network.
-        let local_ip = ipv4.dst_ip();
-        let local_port = tcp.dst_port();
-        let remote_ip = ipv4.src_ip();
-        let remote_port = tcp.src_port();
-        let five_tuple = FiveTuple {
-            eth_type: ETHTYPE_IPV4,
-            ip_proto: IPPROTO_TCP,
-            local_ip: local_ip.as_u32(),
-            local_port,
-            remote_ip: remote_ip.as_u32(),
-            remote_port,
-        };
-
-        Some((five_tuple, tcp.header_len()))
+        Some((tcp.dst_port(), tcp.src_port(), tcp.header_len()))
     }
 
-    fn add_dhcp_route(
-        &mut self,
-        device_id: DeviceId,
-        config: &DhcpConfig,
-    ) -> Result<(), ErrorCode> {
-        let route = Route::new(
-            device_id,
-            config.address,
-            NetMask::new(0),
-            config.gateway,
-            config.gateway,
-        );
+    pub fn poll<N: RxNotify>(&mut self, pnic: &Nic<N>, irq: Option<u8>, now: MonoTime) {
+        if irq.is_some() && irq != Some(self.device.irq()) {
+            return;
+        }
 
-        self.tx.add_route(route)?;
-        Ok(())
+        self.device.driver().handle_interrupt(self.env);
+        while let Some((buf, headroom, frame_len)) = self.receive() {
+            self.handle_eth_frame(pnic, buf, headroom, frame_len, now);
+        }
+
+        self.device.poll(now);
     }
 
-    pub fn poll(&mut self, irq: Option<u8>, now: MonoTime) {
-        for device in self.devices.values() {
-            if irq.is_none() || irq == Some(device.irq()) {
-                device.driver().handle_interrupt(self.env);
-            }
-        }
-
-        while let Some((device_id, buf, headroom, frame_len)) = self.receive(irq) {
-            self.handle_eth_frame(device_id, buf, headroom, frame_len, now);
-        }
-
-        for device in self.devices.values_mut() {
-            device.poll(now);
-        }
-    }
-
-    fn receive(&self, irq: Option<u8>) -> Option<(DeviceId, DmaBuf, usize, usize)> {
-        for (id, device) in self.devices.iter() {
-            if irq.is_none() || irq == Some(device.irq()) {
-                let driver = device.driver();
-                match driver.try_receive(self.env) {
-                    Ok((buf, headroom, frame_len)) => {
-                        self.provide_rx_buffers(self.env, driver, 1);
-                        return Some((*id, buf, headroom, frame_len));
-                    }
-                    Err(Error::RxEmpty) => {}
-                    Err(error) => {
-                        warn!(self.env, "failed to receive packet: {:?}", error);
-                        self.provide_rx_buffers(self.env, driver, 1);
-                    }
+    fn receive(&self) -> Option<(DmaBuf, usize, usize)> {
+        loop {
+            let driver = self.device.driver();
+            match driver.try_receive(self.env) {
+                Ok((buf, headroom, frame_len)) => {
+                    self.provide_rx_buffers(self.env, driver, 1);
+                    return Some((buf, headroom, frame_len));
+                }
+                Err(Error::RxEmpty) => return None,
+                Err(error) => {
+                    warn!(self.env, "failed to receive packet: {:?}", error);
+                    self.provide_rx_buffers(self.env, driver, 1);
                 }
             }
         }
-
-        None
     }
 
     pub(crate) fn provide_rx_buffers(

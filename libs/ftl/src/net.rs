@@ -1,20 +1,19 @@
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
-use ftl_types::net::Rule;
 use ftl_types::syscall::Syscall;
 
 use crate::arch::syscall0;
-use crate::arch::syscall2;
 use crate::arch::syscall3;
+use crate::arch::syscall4;
 use crate::arch::syscall6;
 use crate::handle::OwnedHandle;
 use crate::poll::Poll;
 
-pub struct Net {
+pub struct Nic {
     handle: OwnedHandle,
 }
 
-impl Net {
+impl Nic {
     pub unsafe fn from_handle(id: HandleId) -> Self {
         let handle = OwnedHandle::new(id);
         Self { handle }
@@ -24,8 +23,8 @@ impl Net {
         self.handle
     }
 
-    pub fn create() -> Result<Self, ErrorCode> {
-        let id = syscall0(Syscall::NetCreate)?;
+    pub fn create_virtual() -> Result<Self, ErrorCode> {
+        let id = syscall0(Syscall::NicCreateVirtual)?;
         // SAFETY: Kernel returns a valid handle.
         let this = unsafe { Self::from_handle(HandleId::new(id)) };
         Ok(this)
@@ -37,7 +36,7 @@ impl Net {
 
     pub fn subscribe(&self, poll: &Poll, cookie: usize) -> Result<(), ErrorCode> {
         syscall3(
-            Syscall::NetSubscribe,
+            Syscall::NicSubscribe,
             self.handle.id().as_usize(),
             poll.handle().id().as_usize(),
             cookie,
@@ -45,27 +44,30 @@ impl Net {
         Ok(())
     }
 
-    pub fn bind(&self, rule: &Rule) -> Result<(), ErrorCode> {
-        syscall2(
-            Syscall::NetBind,
+    pub fn bind(&self, port_start: u16, len: u16, dst: &Nic) -> Result<u16, ErrorCode> {
+        let port_start = syscall4(
+            Syscall::NicBind,
             self.handle.id().as_usize(),
-            rule as *const Rule as usize,
+            port_start as usize,
+            len as usize,
+            dst.handle.id().as_usize(),
         )?;
-        Ok(())
+        Ok(port_start as u16)
     }
 
-    pub fn unbind(&self, rule: &Rule) -> Result<(), ErrorCode> {
-        syscall2(
-            Syscall::NetUnbind,
+    pub fn unbind(&self, port_start: u16, len: u16) -> Result<(), ErrorCode> {
+        syscall3(
+            Syscall::NicUnbind,
             self.handle.id().as_usize(),
-            rule as *const Rule as usize,
+            port_start as usize,
+            len as usize,
         )?;
         Ok(())
     }
 
     pub fn recv(&self, header: &mut [u8], payload: &mut [u8]) -> Result<usize, ErrorCode> {
         syscall6(
-            Syscall::NetRecv,
+            Syscall::NicRecv,
             self.handle.id().as_usize(),
             0,
             header.as_mut_ptr() as usize,
@@ -77,7 +79,7 @@ impl Net {
 
     pub fn send(&self, header: &[u8], payload: &[u8]) -> Result<(), ErrorCode> {
         syscall6(
-            Syscall::NetSend,
+            Syscall::NicSend,
             self.handle.id().as_usize(),
             0,
             header.as_ptr() as usize,

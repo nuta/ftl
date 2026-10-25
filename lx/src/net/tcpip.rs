@@ -1,18 +1,14 @@
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::mem::offset_of;
-use core::num::NonZeroU16;
-use core::num::NonZeroU32;
 
-use ftl::net::Net;
+use ftl::net::Nic;
 use ftl::poll::Poll;
 use ftl::time::MonoTime;
 use ftl::trace;
 use ftl_types::error::ErrorCode;
-use ftl_types::net::ETHTYPE_IPV4;
 use ftl_types::net::IPPROTO_TCP;
 use ftl_types::net::IPPROTO_UDP;
-use ftl_types::net::Rule;
 use ftl_utils::spinlock::SpinLock;
 use hashbrown::HashMap;
 
@@ -34,8 +30,9 @@ use crate::wait_queue::WaitQueue;
 
 const RX_HEADER_LEN: usize = 128;
 const RX_PAYLOAD_LEN: usize = 2048;
-const EPHEMERAL_PORT_MIN: u16 = 49152;
-const EPHEMERAL_PORT_MAX: u16 = 65535;
+pub const INIT_PORT_START: u16 = 49152;
+pub const INIT_PORT_LEN: u16 = 16384;
+pub const ZONE_PORT_LEN: u16 = 1024;
 
 fn alloc_buf(len: usize) -> Result<Vec<u8>, ErrorCode> {
     let mut buf = Vec::new();
@@ -46,24 +43,83 @@ fn alloc_buf(len: usize) -> Result<Vec<u8>, ErrorCode> {
 }
 
 pub struct TcpIp {
-    net: Net,
+    nic: Nic,
+    pnic: Option<Nic>,
+    port_start: u16,
+    port_len: u16,
+    ports: SpinLock<HashMap<u16, usize>>,
     tcp_flows: SpinLock<TcpFlows>,
     tcp_listeners: SpinLock<HashMap<u16, Arc<TcpListener>>>,
     udp_ports: SpinLock<HashMap<u16, Arc<RxQueue>>>,
 }
 
 impl TcpIp {
-    pub fn new(net: Net) -> Arc<Self> {
+    pub fn new(nic: Nic, pnic: Option<Nic>, port_start: u16, port_len: u16) -> Arc<Self> {
         Arc::new(Self {
-            net,
+            nic,
+            pnic,
+            port_start,
+            port_len,
+            ports: SpinLock::new(HashMap::new()),
             tcp_flows: SpinLock::new(TcpFlows::new()),
             tcp_listeners: SpinLock::new(HashMap::new()),
             udp_ports: SpinLock::new(HashMap::new()),
         })
     }
 
+    pub fn create_uplink(&self, port_len: u16) -> Result<(Nic, u16), ErrorCode> {
+        let Some(pnic) = &self.pnic else {
+            return Err(ErrorCode::NotAllowed);
+        };
+
+        let nic = Nic::create_virtual()?;
+        let port_start = pnic.bind(0, port_len, &nic)?;
+        nic.bind(1, u16::MAX, pnic)?;
+        Ok((nic, port_start))
+    }
+
     pub fn subscribe(&self, poll: &Poll, cookie: usize) -> Result<(), ErrorCode> {
-        self.net.subscribe(poll, cookie)
+        self.nic.subscribe(poll, cookie)
+    }
+
+    fn owns_port(&self, port: u16) -> bool {
+        let start = self.port_start as u32;
+        let port = port as u32;
+        start <= port && port < start + self.port_len as u32
+    }
+
+    fn acquire_port(&self, port: u16) -> Result<(), ErrorCode> {
+        if port == 0 {
+            return Err(ErrorCode::InvalidArg);
+        }
+
+        let mut ports = self.ports.lock();
+        let count = ports.get(&port).copied().unwrap_or(0);
+        if count == 0 && !self.owns_port(port) {
+            let Some(pnic) = &self.pnic else {
+                return Err(ErrorCode::NotAllowed);
+            };
+            pnic.bind(port, 1, &self.nic)?;
+        }
+
+        ports.insert(port, count + 1);
+        Ok(())
+    }
+
+    fn release_port(&self, port: u16) {
+        let mut ports = self.ports.lock();
+        let count = ports.get(&port).copied().unwrap_or(0);
+        if count > 1 {
+            ports.insert(port, count - 1);
+            return;
+        }
+
+        ports.remove(&port);
+        if !self.owns_port(port) {
+            if let Some(pnic) = &self.pnic {
+                let _ = pnic.unbind(port, 1);
+            }
+        }
     }
 
     pub fn create_tcp_socket(self: &Arc<Self>) -> Result<Arc<TcpSocket>, ErrorCode> {
@@ -81,7 +137,7 @@ impl TcpIp {
         segment: Segment,
     ) -> Result<(), ErrorCode> {
         let header = HeaderBuilder::new().build(remote, local_port, &segment);
-        self.net.send(&header, segment.payload)
+        self.nic.send(&header, segment.payload)
     }
 
     pub fn bind_tcp_listener(
@@ -89,46 +145,31 @@ impl TcpIp {
         port: u16,
         listener: Arc<TcpListener>,
     ) -> Result<(), ErrorCode> {
-        let local_port = NonZeroU16::new(port).ok_or(ErrorCode::InvalidArg)?;
-        let rule = Rule::new(
-            ETHTYPE_IPV4,
-            IPPROTO_TCP,
-            None,
-            Some(local_port),
-            None,
-            None,
-        );
-        self.net.bind(&rule)?;
-        self.tcp_listeners.lock().insert(port, listener);
+        let mut listeners = self.tcp_listeners.lock();
+        if listeners.contains_key(&port) {
+            return Err(ErrorCode::AlreadyExists);
+        }
+
+        self.acquire_port(port)?;
+        listeners.insert(port, listener);
         Ok(())
     }
 
-    fn bind_tcp_conn(
-        &self,
-        local_port: Option<u16>,
-        remote: Endpoint,
-    ) -> Result<(u16, Rule), Errno> {
-        let remote_ip = NonZeroU32::new(remote.ip).ok_or(Errno::EINVAL)?;
-        let remote_port = NonZeroU16::new(remote.port).ok_or(Errno::EINVAL)?;
-
-        let local_port = match local_port {
-            Some(0) | None => None,
-            Some(port) => NonZeroU16::new(port),
-        };
+    fn bind_tcp_conn(&self, local_port: Option<u16>, remote: Endpoint) -> Result<u16, Errno> {
+        if remote.ip == 0 || remote.port == 0 {
+            return Err(Errno::EINVAL);
+        }
 
         // Bind to a specific port.
-        if let Some(local_port) = local_port {
-            let rule = Rule::new(
-                ETHTYPE_IPV4,
-                IPPROTO_TCP,
-                None,
-                Some(local_port),
-                Some(remote_ip),
-                Some(remote_port),
-            );
+        if let Some(port) = local_port
+            && port != 0
+        {
+            if self.tcp_flows.lock().contains(port, remote) {
+                return Err(Errno::EADDRINUSE);
+            }
 
-            return match self.net.bind(&rule) {
-                Ok(()) => Ok((local_port.get(), rule)),
+            return match self.acquire_port(port) {
+                Ok(()) => Ok(port),
                 Err(ErrorCode::AlreadyExists) => Err(Errno::EADDRINUSE),
                 Err(error) => Err(error.into()),
             };
@@ -137,27 +178,14 @@ impl TcpIp {
         // Start scanning from a random port.
         let mut seed = [0; 2];
         crate::random::read(&mut seed)?;
-        let num_ports = EPHEMERAL_PORT_MAX - EPHEMERAL_PORT_MIN + 1;
+        let num_ports = self.port_len;
         let start = u16::from_ne_bytes(seed) % num_ports;
 
-        // TODO: Add a system call to assign an ephemeral port.
         for i in 0..num_ports {
-            let port = EPHEMERAL_PORT_MIN + (start + i) % num_ports;
-            let rule = Rule::new(
-                ETHTYPE_IPV4,
-                IPPROTO_TCP,
-                None, // Kernel chooses the local IP
-                NonZeroU16::new(port),
-                Some(remote_ip),
-                Some(remote_port),
-            );
-
-            match self.net.bind(&rule) {
-                Ok(()) => return Ok((port, rule)),
-                Err(ErrorCode::AlreadyExists) => {
-                    // The port is already in use. Try the next one.
-                }
-                Err(error) => return Err(error.into()),
+            let port = self.port_start + (start + i) % num_ports;
+            if !self.tcp_flows.lock().contains(port, remote) {
+                self.acquire_port(port)?;
+                return Ok(port);
             }
         }
 
@@ -165,51 +193,31 @@ impl TcpIp {
     }
 
     pub fn bind_udp(&self, local_port: Option<u16>, rx_queue: Arc<RxQueue>) -> Result<u16, Errno> {
-        let local_port = match local_port {
-            Some(0) | None => None,
-            Some(port) => NonZeroU16::new(port),
-        };
-
-        if let Some(local_port) = local_port {
-            let rule = Rule::new(
-                ETHTYPE_IPV4,
-                IPPROTO_UDP,
-                None,
-                Some(local_port),
-                None,
-                None,
-            );
-
-            match self.net.bind(&rule) {
-                Ok(()) => {
-                    self.udp_ports.lock().insert(local_port.get(), rx_queue);
-                    return Ok(local_port.get());
-                }
-                Err(ErrorCode::AlreadyExists) => return Err(Errno::EADDRINUSE),
-                Err(error) => return Err(error.into()),
+        let mut udp_ports = self.udp_ports.lock();
+        if let Some(port) = local_port
+            && port != 0
+        {
+            if udp_ports.contains_key(&port) {
+                return Err(Errno::EADDRINUSE);
             }
+
+            return match self.acquire_port(port) {
+                Ok(()) => {
+                    udp_ports.insert(port, rx_queue);
+                    Ok(port)
+                }
+                Err(ErrorCode::AlreadyExists) => Err(Errno::EADDRINUSE),
+                Err(error) => Err(error.into()),
+            };
         }
 
         // Assign an ephemeral port.
-        for port in EPHEMERAL_PORT_MIN..=EPHEMERAL_PORT_MAX {
-            let rule = Rule::new(
-                ETHTYPE_IPV4,
-                IPPROTO_UDP,
-                None,
-                NonZeroU16::new(port),
-                None,
-                None,
-            );
-
-            match self.net.bind(&rule) {
-                Ok(()) => {
-                    self.udp_ports.lock().insert(port, rx_queue);
-                    return Ok(port);
-                }
-                Err(ErrorCode::AlreadyExists) => {
-                    // The port is already in use. Try the next one.
-                }
-                Err(error) => return Err(error.into()),
+        for i in 0..self.port_len {
+            let port = self.port_start + i;
+            if !udp_ports.contains_key(&port) {
+                self.acquire_port(port)?;
+                udp_ports.insert(port, rx_queue);
+                return Ok(port);
             }
         }
 
@@ -217,17 +225,9 @@ impl TcpIp {
     }
 
     pub fn unbind_udp(&self, port: u16) {
-        self.udp_ports.lock().remove(&port);
-        let rule = Rule::new(
-            ETHTYPE_IPV4,
-            IPPROTO_UDP,
-            None,
-            NonZeroU16::new(port),
-            None,
-            None,
-        );
-
-        let _ = self.net.unbind(&rule);
+        if self.udp_ports.lock().remove(&port).is_some() {
+            self.release_port(port);
+        }
     }
 
     pub fn send_udp(
@@ -238,7 +238,7 @@ impl TcpIp {
     ) -> Result<(), ErrorCode> {
         let builder = UdpHeaderBuilder::new();
         let header = builder.build(remote, local_port, payload.len());
-        self.net.send(&header, payload)
+        self.nic.send(&header, payload)
     }
 
     pub fn connect_tcp(
@@ -250,7 +250,7 @@ impl TcpIp {
         let mut iss = [0; 4];
         crate::random::read(&mut iss)?;
 
-        let (local_port, rule) = self.bind_tcp_conn(local_port, remote)?;
+        let local_port = self.bind_tcp_conn(local_port, remote)?;
         let conn = match TcpConn::new_active(
             self.clone(),
             wait_queue,
@@ -260,7 +260,7 @@ impl TcpIp {
         ) {
             Ok(conn) => conn,
             Err(error) => {
-                let _ = self.net.unbind(&rule);
+                self.release_port(local_port);
                 return Err(error.into());
             }
         };
@@ -268,7 +268,7 @@ impl TcpIp {
         // Register the flow.
         self.tcp_flows
             .lock()
-            .insert(local_port, remote, conn.clone(), rule);
+            .insert(local_port, remote, conn.clone());
 
         // Start handshake.
         conn.start_active();
@@ -276,43 +276,25 @@ impl TcpIp {
     }
 
     pub fn add_tcp_conn(&self, conn: Arc<TcpConn>, pkt: &TcpPacketInfo) -> Result<(), ErrorCode> {
-        let local_port = NonZeroU16::new(pkt.local_port).ok_or(ErrorCode::InvalidArg)?;
-        let remote_ip = NonZeroU32::new(pkt.remote_ip).ok_or(ErrorCode::InvalidArg)?;
-        let remote_port = NonZeroU16::new(pkt.remote_port).ok_or(ErrorCode::InvalidArg)?;
-        let rule = Rule::new(
-            ETHTYPE_IPV4,
-            IPPROTO_TCP,
-            None,
-            Some(local_port),
-            Some(remote_ip),
-            Some(remote_port),
-        );
-
-        self.net.bind(&rule)?;
         let remote = Endpoint {
             ip: pkt.remote_ip,
             port: pkt.remote_port,
         };
-        self.tcp_flows
-            .lock()
-            .insert(pkt.local_port, remote, conn, rule);
+
+        let mut flows = self.tcp_flows.lock();
+        if flows.contains(pkt.local_port, remote) {
+            return Err(ErrorCode::AlreadyExists);
+        }
+
+        self.acquire_port(pkt.local_port)?;
+        flows.insert(pkt.local_port, remote, conn);
         Ok(())
     }
 
     pub fn unbind_tcp_listener(&self, port: u16) {
-        self.tcp_listeners.lock().remove(&port);
-        let Some(local_port) = NonZeroU16::new(port) else {
-            return;
-        };
-        let rule = Rule::new(
-            ETHTYPE_IPV4,
-            IPPROTO_TCP,
-            None,
-            Some(local_port),
-            None,
-            None,
-        );
-        let _ = self.net.unbind(&rule);
+        if self.tcp_listeners.lock().remove(&port).is_some() {
+            self.release_port(port);
+        }
     }
 
     pub fn handle_rx(&self) {
@@ -326,7 +308,7 @@ impl TcpIp {
         };
 
         loop {
-            let payload_len = match self.net.recv(&mut header, &mut payload) {
+            let payload_len = match self.nic.recv(&mut header, &mut payload) {
                 Ok(len) => len,
                 Err(error) if error == ErrorCode::Empty => return,
                 Err(_) => panic!("failed to receive a network packet"),
@@ -379,10 +361,8 @@ impl TcpIp {
     fn garbage_collect(&self) {
         // TODO: This might take some time. Optimize this.
         let mut flows = self.tcp_flows.lock();
-        while let Some(rule) = flows.pop_closed() {
-            if let Err(error) = self.net.unbind(&rule) {
-                trace!("failed to unbind flow: {:?}", error);
-            }
+        while let Some(port) = flows.pop_closed() {
+            self.release_port(port);
         }
     }
 }

@@ -5,6 +5,7 @@ use ftl::quota::Quota;
 use ftl::vmo::Vmo;
 use ftl_utils::spinlock::SpinLock;
 
+use crate::net::TcpIp;
 use crate::types::c_short;
 use crate::types::errno::Errno;
 use crate::types::sys::poll::POLLOUT;
@@ -17,6 +18,7 @@ use crate::zone::spec::SpecParser;
 struct Globals {
     quota: Arc<Quota>,
     image: Vmo,
+    network: Option<Arc<TcpIp>>,
     zones: SpinLock<Vec<Zone>>,
 }
 
@@ -25,11 +27,12 @@ pub struct Fork {
 }
 
 impl Fork {
-    pub fn new(quota: Arc<Quota>, image: Vmo) -> Self {
+    pub fn new(quota: Arc<Quota>, image: Vmo, network: Option<Arc<TcpIp>>) -> Self {
         Self {
             globals: Arc::new(Globals {
                 quota,
                 image,
+                network,
                 zones: SpinLock::new(Vec::new()),
             }),
         }
@@ -75,7 +78,12 @@ impl FileLike for ForkBuilder {
                 *state = State::Done;
 
                 // Start a new zone.
-                let zone = Zone::spawn(&self.globals.quota, &self.globals.image, &spec)?;
+                let zone = Zone::spawn(
+                    &self.globals.quota,
+                    &self.globals.image,
+                    self.globals.network.as_ref(),
+                    &spec,
+                )?;
                 self.globals.zones.lock().push(zone);
                 Ok(buf.len())
             }

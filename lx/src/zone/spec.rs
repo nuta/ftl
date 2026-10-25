@@ -8,6 +8,7 @@ const LINE_LEN_MAX: usize = 4096;
 #[derive(Clone, Copy)]
 pub enum NetSpec {
     None,
+    Uplink,
 }
 
 /// A zone spec. What you write to `/lx/zone/fork`.
@@ -63,6 +64,7 @@ impl SpecParser {
             b"net" => {
                 let net = match value {
                     b"none" => NetSpec::None,
+                    b"uplink" => NetSpec::Uplink,
                     _ => return Err(Errno::EINVAL),
                 };
 

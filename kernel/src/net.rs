@@ -1,11 +1,8 @@
-use core::mem::MaybeUninit;
-use core::mem::size_of;
+use alloc::sync::Arc;
 
-use ftl_netmux::NetMux;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use ftl_types::handle::HandleRight;
-use ftl_types::net::Rule;
 use ftl_types::thread::SyscallRegs;
 use ftl_utils::spinlock::SpinLock;
 
@@ -21,133 +18,99 @@ use crate::syscall::SyscallOutput;
 use crate::thread::Thread;
 
 const MAX_TX_PACKET_LEN: usize = 16 * 1024; // 16 KiB
-const RX_BUFFER_SIZE: usize = 2048;
+pub const RX_BUFFER_SIZE: usize = 2048;
 
-pub struct Network {
-    nic_id: ftl_netmux::NicId,
+pub static PNIC: SpinLock<Option<Arc<ftl_netmux::Nic<EventEmitter>>>> = SpinLock::new(None);
+
+pub struct Nic {
+    inner: Arc<ftl_netmux::Nic<EventEmitter>>,
 }
 
-impl Network {
-    pub fn new() -> Result<Self, ErrorCode> {
-        let nic_id = NET_MUX.lock().create_nic()?;
-        Ok(Self { nic_id })
-    }
-
-    pub fn subscribe(&self, emitter: EventEmitter) -> Result<(), ErrorCode> {
-        NET_MUX.lock().subscribe(self.nic_id, emitter)
-    }
-
-    pub fn bind(&self, rule: Rule) -> Result<(), ErrorCode> {
-        NET_MUX.lock().bind(self.nic_id, rule)
-    }
-
-    pub fn unbind(&self, rule: &Rule) -> Result<(), ErrorCode> {
-        NET_MUX.lock().unbind(self.nic_id, rule)
-    }
-
-    pub fn send(&self, mut header: USlice, mut payload: USlice) -> Result<(), ErrorCode> {
-        NET_MUX
-            .lock()
-            .send(self.nic_id, &mut header, Some(&mut payload))
-    }
-
-    pub fn recv(&self, mut header: USlice, mut payload: USlice) -> Result<usize, ErrorCode> {
-        NET_MUX.lock().recv(self.nic_id, &mut header, &mut payload)
+impl Nic {
+    pub fn new(inner: Arc<ftl_netmux::Nic<EventEmitter>>) -> Self {
+        Self { inner }
     }
 }
 
-impl Drop for Network {
-    fn drop(&mut self) {
-        NET_MUX.lock().remove_nic(self.nic_id);
-    }
-}
+impl Handleable for Nic {}
 
-impl Handleable for Network {}
-
-pub fn sys_net_create(
+pub fn sys_nic_create_virtual(
     current: &SharedRef<Thread>,
     _ctx: &SyscallRegs,
 ) -> Result<SyscallOutput, ErrorCode> {
-    let network = Network::new()?;
-    let network = SharedRef::new(network)?;
-    let handle = Handle::new(network.clone(), HandleRight::READ | HandleRight::WRITE);
+    let nic = Arc::new(ftl_netmux::Nic::new_virtual(&DRIVER_ENV));
+    let nic = SharedRef::new(Nic::new(nic))?;
+    let handle = Handle::new(nic, HandleRight::READ | HandleRight::WRITE);
     let handle_id = current.hspace().insert(handle)?;
 
     Ok(SyscallOutput::Done(handle_id.as_usize()))
 }
 
-pub fn sys_net_subscribe(
+pub fn sys_nic_subscribe(
     current: &SharedRef<Thread>,
     ctx: &SyscallRegs,
 ) -> Result<SyscallOutput, ErrorCode> {
-    let network_id = HandleId::new(ctx.a0);
+    let nic_id = HandleId::new(ctx.a0);
     let poll_id = HandleId::new(ctx.a1);
     let cookie = ctx.a2;
 
     let hspace = current.hspace();
-    let (network, poll) =
-        hspace.get2::<Network, Poll>(network_id, HandleRight::READ, poll_id, HandleRight::WRITE)?;
+    let (nic, poll) =
+        hspace.get2::<Nic, Poll>(nic_id, HandleRight::READ, poll_id, HandleRight::WRITE)?;
 
     let emitter = EventEmitter::new(poll, cookie)?;
-    network.subscribe(emitter)?;
+    nic.inner.subscribe(emitter)?;
     Ok(SyscallOutput::Done(0))
 }
 
-pub fn sys_net_bind(
+pub fn sys_nic_bind(
     current: &SharedRef<Thread>,
     ctx: &SyscallRegs,
 ) -> Result<SyscallOutput, ErrorCode> {
-    let network_id = HandleId::new(ctx.a0);
-    let rule_uslice = USlice::new(UAddr::new(ctx.a1), size_of::<Rule>())?;
-    let mut rule_buf = MaybeUninit::<Rule>::uninit();
-    let rule = unsafe { rule_uslice.read_uninit(&mut rule_buf)? };
+    let nic_id = HandleId::new(ctx.a0);
+    let port_start = u16::try_from(ctx.a1).map_err(|_| ErrorCode::InvalidArg)?;
+    let len = u16::try_from(ctx.a2).map_err(|_| ErrorCode::InvalidArg)?;
+    let dst_id = HandleId::new(ctx.a3);
 
-    let network = current
-        .hspace()
-        .get::<Network>(network_id, HandleRight::WRITE)?;
+    let hspace = current.hspace();
+    let (nic, dst) =
+        hspace.get2::<Nic, Nic>(nic_id, HandleRight::WRITE, dst_id, HandleRight::WRITE)?;
 
-    network.bind(*rule)?;
+    let port_start = nic.inner.bind(port_start, len, &dst.inner)?;
+    Ok(SyscallOutput::Done(port_start as usize))
+}
+
+pub fn sys_nic_unbind(
+    current: &SharedRef<Thread>,
+    ctx: &SyscallRegs,
+) -> Result<SyscallOutput, ErrorCode> {
+    let nic_id = HandleId::new(ctx.a0);
+    let port_start = u16::try_from(ctx.a1).map_err(|_| ErrorCode::InvalidArg)?;
+    let len = u16::try_from(ctx.a2).map_err(|_| ErrorCode::InvalidArg)?;
+
+    let nic = current.hspace().get::<Nic>(nic_id, HandleRight::WRITE)?;
+    nic.inner.unbind(port_start, len)?;
     Ok(SyscallOutput::Done(0))
 }
 
-pub fn sys_net_unbind(
+pub fn sys_nic_recv(
     current: &SharedRef<Thread>,
     ctx: &SyscallRegs,
 ) -> Result<SyscallOutput, ErrorCode> {
-    let network_id = HandleId::new(ctx.a0);
-    let rule_uslice = USlice::new(UAddr::new(ctx.a1), size_of::<Rule>())?;
-    let mut _buf = MaybeUninit::<Rule>::uninit();
-    let rule = unsafe { rule_uslice.read_uninit(&mut _buf)? };
+    let nic_id = HandleId::new(ctx.a0);
+    let mut header = USlice::new(UAddr::new(ctx.a2), ctx.a3)?;
+    let mut payload = USlice::new(UAddr::new(ctx.a4), ctx.a5)?;
 
-    let network = current
-        .hspace()
-        .get::<Network>(network_id, HandleRight::WRITE)?;
-
-    network.unbind(rule)?;
-    Ok(SyscallOutput::Done(0))
-}
-
-pub fn sys_net_recv(
-    current: &SharedRef<Thread>,
-    ctx: &SyscallRegs,
-) -> Result<SyscallOutput, ErrorCode> {
-    let network_id = HandleId::new(ctx.a0);
-    let header = USlice::new(UAddr::new(ctx.a2), ctx.a3)?;
-    let payload = USlice::new(UAddr::new(ctx.a4), ctx.a5)?;
-
-    let network = current
-        .hspace()
-        .get::<Network>(network_id, HandleRight::READ)?;
-
-    let payload_len = network.recv(header, payload)?;
+    let nic = current.hspace().get::<Nic>(nic_id, HandleRight::READ)?;
+    let payload_len = nic.inner.recv(&mut header, &mut payload)?;
     Ok(SyscallOutput::Done(payload_len))
 }
 
-pub fn sys_net_send(
+pub fn sys_nic_send(
     current: &SharedRef<Thread>,
     ctx: &SyscallRegs,
 ) -> Result<SyscallOutput, ErrorCode> {
-    let network_id = HandleId::new(ctx.a0);
+    let nic_id = HandleId::new(ctx.a0);
     let header_len = ctx.a3;
     let payload_len = ctx.a5;
 
@@ -159,18 +122,12 @@ pub fn sys_net_send(
         return Err(ErrorCode::PacketTooLong);
     }
 
-    let header = USlice::new(UAddr::new(ctx.a2), header_len)?;
-    let payload = USlice::new(UAddr::new(ctx.a4), payload_len)?;
-    let network = current
-        .hspace()
-        .get::<Network>(network_id, HandleRight::WRITE)?;
-
-    network.send(header, payload)?;
+    let mut header = USlice::new(UAddr::new(ctx.a2), header_len)?;
+    let mut payload = USlice::new(UAddr::new(ctx.a4), payload_len)?;
+    let nic = current.hspace().get::<Nic>(nic_id, HandleRight::WRITE)?;
+    nic.inner.send(&mut header, Some(&mut payload))?;
     Ok(SyscallOutput::Done(0))
 }
-
-pub static NET_MUX: SpinLock<NetMux<'static, EventEmitter>> =
-    SpinLock::new(NetMux::new(&DRIVER_ENV, RX_BUFFER_SIZE));
 
 impl ftl_netmux::RxNotify for EventEmitter {
     fn notify(self) -> Result<(), ErrorCode> {

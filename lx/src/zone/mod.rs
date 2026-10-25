@@ -1,6 +1,8 @@
 mod fork;
 mod spec;
 
+use alloc::format;
+use alloc::sync::Arc;
 use alloc::vec;
 use alloc::vec::Vec;
 
@@ -21,6 +23,8 @@ use ftl_types::vmspace::PageAttrs;
 use ftl_utils::alignment::align_down;
 use ftl_utils::alignment::align_up;
 
+use crate::net::TcpIp;
+use crate::net::ZONE_PORT_LEN;
 use crate::types::errno::Errno;
 use crate::vm::PAGE_SIZE;
 use crate::zone::spec::NetSpec;
@@ -107,15 +111,29 @@ pub struct Zone {
 }
 
 impl Zone {
-    pub fn spawn(parent_quota: &Quota, image: &Vmo, spec: &Spec) -> Result<Zone, Errno> {
+    pub fn spawn(
+        parent_quota: &Quota,
+        image: &Vmo,
+        network: Option<&Arc<TcpIp>>,
+        spec: &Spec,
+    ) -> Result<Zone, Errno> {
         let mut cmdline = Vec::new();
-        cmdline.extend_from_slice(b"ftl.lx.console=none ftl.lx.net=none ftl.lx.init=");
-        cmdline.extend_from_slice(&spec.init);
-
-        if !matches!(spec.net, NetSpec::None) {
-            // TODO:
-            return Err(Errno::EINVAL);
+        cmdline.extend_from_slice(b"ftl.lx.console=none ");
+        let mut uplink = None;
+        match spec.net {
+            NetSpec::None => cmdline.extend_from_slice(b"ftl.lx.net=none "),
+            NetSpec::Uplink => {
+                let Some(network) = network else {
+                    return Err(Errno::EINVAL);
+                };
+                let (nic, port_start) = network.create_uplink(ZONE_PORT_LEN)?;
+                let net = format!("ftl.lx.net=uplink ftl.lx.ports={port_start}:{ZONE_PORT_LEN} ");
+                cmdline.extend_from_slice(net.as_bytes());
+                uplink = Some(nic);
+            }
         }
+        cmdline.extend_from_slice(b"ftl.lx.init=");
+        cmdline.extend_from_slice(&spec.init);
 
         let quota = Quota::create(parent_quota)?;
         quota.limit(Resource::Memory, UNLIMITED)?;
@@ -138,6 +156,14 @@ impl Zone {
         move_handle_to(&hspace, quota.into_handle(), HandleRight::CHARGE, 2)?;
         move_handle_to(&hspace, child_image.into_handle(), HandleRight::READ, 3)?;
         move_handle_to(&hspace, child_hspace.into_handle(), HandleRight::WRITE, 4)?;
+        if let Some(nic) = uplink {
+            move_handle_to(
+                &hspace,
+                nic.into_handle(),
+                HandleRight::READ | HandleRight::WRITE,
+                5,
+            )?;
+        }
 
         thread.start(entry, sp)?;
         Ok(Zone {

@@ -1,17 +1,11 @@
 use alloc::sync::Arc;
 
 use ftl::time::MonoTime;
-use ftl_types::net::Rule;
 use hashbrown::HashMap;
 
 use super::conn::TcpConn;
 use super::packet::TcpPacketInfo;
 use crate::net::ipv4::Endpoint;
-
-struct TcpFlow {
-    conn: Arc<TcpConn>,
-    rule: Rule,
-}
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 struct TcpFlowKey {
@@ -32,7 +26,7 @@ impl TcpFlowKey {
 
 /// Maps TCP flows to their state.
 pub struct TcpFlows {
-    flows: HashMap<TcpFlowKey, TcpFlow>,
+    flows: HashMap<TcpFlowKey, Arc<TcpConn>>,
 }
 
 impl TcpFlows {
@@ -42,41 +36,47 @@ impl TcpFlows {
         }
     }
 
-    pub fn insert(&mut self, local_port: u16, remote: Endpoint, conn: Arc<TcpConn>, rule: Rule) {
+    pub fn insert(&mut self, local_port: u16, remote: Endpoint, conn: Arc<TcpConn>) {
         let key = TcpFlowKey {
             local_port,
             remote_ip: remote.ip,
             remote_port: remote.port,
         };
-        self.flows.insert(key, TcpFlow { conn, rule });
+        self.flows.insert(key, conn);
+    }
+
+    pub fn contains(&self, local_port: u16, remote: Endpoint) -> bool {
+        let key = TcpFlowKey {
+            local_port,
+            remote_ip: remote.ip,
+            remote_port: remote.port,
+        };
+        self.flows.contains_key(&key)
     }
 
     pub fn lookup(&self, pkt: &TcpPacketInfo) -> Option<Arc<TcpConn>> {
         let key = TcpFlowKey::from_packet(pkt);
-        self.flows.get(&key).map(|flow| flow.conn.clone())
+        self.flows.get(&key).cloned()
     }
 
     pub fn poll(&self, now: MonoTime) {
-        for flow in self.flows.values() {
-            flow.conn.poll(now);
+        for conn in self.flows.values() {
+            conn.poll(now);
         }
     }
 
     // TODO: Optimize this.
-    pub fn pop_closed(&mut self) -> Option<Rule> {
+    pub fn pop_closed(&mut self) -> Option<u16> {
         let mut to_remove = None;
-        for (tuple, flow) in self.flows.iter_mut() {
-            if flow.conn.is_closed() {
-                to_remove = Some((*tuple, flow.rule));
+        for (key, conn) in self.flows.iter() {
+            if conn.is_closed() {
+                to_remove = Some(*key);
                 break;
             }
         }
 
-        if let Some((tuple, rule)) = to_remove {
-            self.flows.remove(&tuple);
-            Some(rule)
-        } else {
-            None
-        }
+        let key = to_remove?;
+        self.flows.remove(&key);
+        Some(key.local_port)
     }
 }
