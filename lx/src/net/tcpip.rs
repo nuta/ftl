@@ -1,6 +1,7 @@
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::mem::offset_of;
+use core::num::NonZeroU16;
 
 use ftl::net::Nic;
 use ftl::poll::Poll;
@@ -88,11 +89,8 @@ impl TcpIp {
         start <= port && port < start + self.port_len as u32
     }
 
-    fn acquire_port(&self, port: u16) -> Result<(), ErrorCode> {
-        if port == 0 {
-            return Err(ErrorCode::InvalidArg);
-        }
-
+    fn acquire_port(&self, port: NonZeroU16) -> Result<(), ErrorCode> {
+        let port = port.get();
         let mut ports = self.ports.lock();
         let count = ports.get(&port).copied().unwrap_or(0);
         if count == 0 && !self.owns_port(port) {
@@ -145,12 +143,16 @@ impl TcpIp {
         port: u16,
         listener: Arc<TcpListener>,
     ) -> Result<(), ErrorCode> {
+        let Some(nonzero_port) = NonZeroU16::new(port) else {
+            return Err(ErrorCode::InvalidArg);
+        };
+
         let mut listeners = self.tcp_listeners.lock();
         if listeners.contains_key(&port) {
             return Err(ErrorCode::AlreadyExists);
         }
 
-        self.acquire_port(port)?;
+        self.acquire_port(nonzero_port)?;
         listeners.insert(port, listener);
         Ok(())
     }
@@ -162,14 +164,14 @@ impl TcpIp {
 
         // Bind to a specific port.
         if let Some(port) = local_port
-            && port != 0
+            && let Some(port) = NonZeroU16::new(port)
         {
-            if self.tcp_flows.lock().contains(port, remote) {
+            if self.tcp_flows.lock().contains(port.get(), remote) {
                 return Err(Errno::EADDRINUSE);
             }
 
             return match self.acquire_port(port) {
-                Ok(()) => Ok(port),
+                Ok(()) => Ok(port.get()),
                 Err(ErrorCode::AlreadyExists) => Err(Errno::EADDRINUSE),
                 Err(error) => Err(error.into()),
             };
@@ -182,10 +184,12 @@ impl TcpIp {
         let start = u16::from_ne_bytes(seed) % num_ports;
 
         for i in 0..num_ports {
-            let port = self.port_start + (start + i) % num_ports;
-            if !self.tcp_flows.lock().contains(port, remote) {
+            let Some(port) = NonZeroU16::new(self.port_start + (start + i) % num_ports) else {
+                continue;
+            };
+            if !self.tcp_flows.lock().contains(port.get(), remote) {
                 self.acquire_port(port)?;
-                return Ok(port);
+                return Ok(port.get());
             }
         }
 
@@ -195,16 +199,16 @@ impl TcpIp {
     pub fn bind_udp(&self, local_port: Option<u16>, rx_queue: Arc<RxQueue>) -> Result<u16, Errno> {
         let mut udp_ports = self.udp_ports.lock();
         if let Some(port) = local_port
-            && port != 0
+            && let Some(port) = NonZeroU16::new(port)
         {
-            if udp_ports.contains_key(&port) {
+            if udp_ports.contains_key(&port.get()) {
                 return Err(Errno::EADDRINUSE);
             }
 
             return match self.acquire_port(port) {
                 Ok(()) => {
-                    udp_ports.insert(port, rx_queue);
-                    Ok(port)
+                    udp_ports.insert(port.get(), rx_queue);
+                    Ok(port.get())
                 }
                 Err(ErrorCode::AlreadyExists) => Err(Errno::EADDRINUSE),
                 Err(error) => Err(error.into()),
@@ -213,11 +217,13 @@ impl TcpIp {
 
         // Assign an ephemeral port.
         for i in 0..self.port_len {
-            let port = self.port_start + i;
-            if !udp_ports.contains_key(&port) {
+            let Some(port) = NonZeroU16::new(self.port_start + i) else {
+                continue;
+            };
+            if !udp_ports.contains_key(&port.get()) {
                 self.acquire_port(port)?;
-                udp_ports.insert(port, rx_queue);
-                return Ok(port);
+                udp_ports.insert(port.get(), rx_queue);
+                return Ok(port.get());
             }
         }
 
@@ -281,12 +287,16 @@ impl TcpIp {
             port: pkt.remote_port,
         };
 
+        let Some(local_port) = NonZeroU16::new(pkt.local_port) else {
+            return Err(ErrorCode::InvalidArg);
+        };
+
         let mut flows = self.tcp_flows.lock();
         if flows.contains(pkt.local_port, remote) {
             return Err(ErrorCode::AlreadyExists);
         }
 
-        self.acquire_port(pkt.local_port)?;
+        self.acquire_port(local_port)?;
         flows.insert(pkt.local_port, remote, conn);
         Ok(())
     }
