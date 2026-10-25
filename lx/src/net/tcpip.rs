@@ -70,17 +70,17 @@ struct Mutable {
 
 pub struct TcpIp {
     nic: Nic,
-    pnic: Option<Nic>,
+    uplink: Option<Nic>,
     port_start: u16,
     port_len: u16,
     mutable: SpinLock<Mutable>,
 }
 
 impl TcpIp {
-    pub fn new(nic: Nic, pnic: Option<Nic>, port_start: u16, port_len: u16) -> Arc<Self> {
+    pub fn new(nic: Nic, uplink: Option<Nic>, port_start: u16, port_len: u16) -> Arc<Self> {
         Arc::new(Self {
             nic,
-            pnic,
+            uplink,
             port_start,
             port_len,
             mutable: SpinLock::new(Mutable {
@@ -93,11 +93,11 @@ impl TcpIp {
     }
 
     pub fn create_uplink(&self, port_len: u16) -> Result<(Nic, u16), ErrorCode> {
-        let Some(pnic) = &self.pnic else {
+        let Some(uplink) = &self.uplink else {
             return Err(ErrorCode::NotAllowed);
         };
 
-        create_uplink(pnic, 0, port_len)
+        create_uplink(uplink, 0, port_len)
     }
 
     pub fn subscribe(&self, poll: &Poll, cookie: usize) -> Result<(), ErrorCode> {
@@ -118,10 +118,11 @@ impl TcpIp {
 
         let count = mutable.granted_ports.get(&port).copied().unwrap_or(0);
         if count == 0 {
-            let Some(pnic) = &self.pnic else {
+            let Some(uplink) = &self.uplink else {
                 return Err(ErrorCode::NotAllowed);
             };
-            pnic.bind(port, 1, &self.nic)?;
+
+            uplink.bind(port, 1, &self.nic)?;
         }
 
         mutable.granted_ports.insert(port, count + 1);
@@ -140,8 +141,8 @@ impl TcpIp {
         }
 
         mutable.granted_ports.remove(&port);
-        if let Some(pnic) = &self.pnic {
-            let _ = pnic.unbind(port, 1);
+        if let Some(uplink) = &self.uplink {
+            let _ = uplink.unbind(port, 1);
         }
     }
 
