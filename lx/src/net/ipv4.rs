@@ -16,7 +16,7 @@ pub struct Ipv4Header {
 
 pub const IPV4_HEADER_LEN: usize = size_of::<Ipv4Header>();
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Endpoint {
     pub ip: u32,
     pub port: u16,

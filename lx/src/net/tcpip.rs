@@ -18,7 +18,6 @@ use super::ipv4::Ipv4Header;
 use super::tcp::HeaderBuilder;
 use super::tcp::Segment;
 use super::tcp::TcpConn;
-use super::tcp::TcpFlows;
 use super::tcp::TcpListener;
 use super::tcp::TcpPacketInfo;
 use super::tcp::TcpSocket;
@@ -43,15 +42,31 @@ fn alloc_buf(len: usize) -> Result<Vec<u8>, ErrorCode> {
     Ok(buf)
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+struct TcpConnKey {
+    local_port: u16,
+    remote: Endpoint,
+}
+
+impl TcpConnKey {
+    fn new(local_port: u16, remote: Endpoint) -> Self {
+        Self { local_port, remote }
+    }
+}
+
+struct Mutable {
+    ports: HashMap<u16, usize>,
+    tcp_conns: HashMap<TcpConnKey, Arc<TcpConn>>,
+    tcp_listeners: HashMap<u16, Arc<TcpListener>>,
+    udp_ports: HashMap<u16, Arc<RxQueue>>,
+}
+
 pub struct TcpIp {
     nic: Nic,
     pnic: Option<Nic>,
     port_start: u16,
     port_len: u16,
-    ports: SpinLock<HashMap<u16, usize>>,
-    tcp_flows: SpinLock<TcpFlows>,
-    tcp_listeners: SpinLock<HashMap<u16, Arc<TcpListener>>>,
-    udp_ports: SpinLock<HashMap<u16, Arc<RxQueue>>>,
+    mutable: SpinLock<Mutable>,
 }
 
 impl TcpIp {
@@ -61,10 +76,12 @@ impl TcpIp {
             pnic,
             port_start,
             port_len,
-            ports: SpinLock::new(HashMap::new()),
-            tcp_flows: SpinLock::new(TcpFlows::new()),
-            tcp_listeners: SpinLock::new(HashMap::new()),
-            udp_ports: SpinLock::new(HashMap::new()),
+            mutable: SpinLock::new(Mutable {
+                ports: HashMap::new(),
+                tcp_conns: HashMap::new(),
+                tcp_listeners: HashMap::new(),
+                udp_ports: HashMap::new(),
+            }),
         })
     }
 
@@ -89,9 +106,9 @@ impl TcpIp {
         start <= port && port < start + self.port_len as u32
     }
 
-    fn acquire_port(&self, port: NonZeroU16) -> Result<(), ErrorCode> {
+    fn acquire_port(&self, mutable: &mut Mutable, port: NonZeroU16) -> Result<(), ErrorCode> {
         let port = port.get();
-        let mut ports = self.ports.lock();
+        let ports = &mut mutable.ports;
         let count = ports.get(&port).copied().unwrap_or(0);
         if count == 0 && !self.owns_port(port) {
             let Some(pnic) = &self.pnic else {
@@ -104,8 +121,8 @@ impl TcpIp {
         Ok(())
     }
 
-    fn release_port(&self, port: u16) {
-        let mut ports = self.ports.lock();
+    fn release_port(&self, mutable: &mut Mutable, port: u16) {
+        let ports = &mut mutable.ports;
         let count = ports.get(&port).copied().unwrap_or(0);
         if count > 1 {
             ports.insert(port, count - 1);
@@ -147,17 +164,22 @@ impl TcpIp {
             return Err(ErrorCode::InvalidArg);
         };
 
-        let mut listeners = self.tcp_listeners.lock();
-        if listeners.contains_key(&port) {
+        let mut mutable = self.mutable.lock();
+        if mutable.tcp_listeners.contains_key(&port) {
             return Err(ErrorCode::AlreadyExists);
         }
 
-        self.acquire_port(nonzero_port)?;
-        listeners.insert(port, listener);
+        self.acquire_port(&mut mutable, nonzero_port)?;
+        mutable.tcp_listeners.insert(port, listener);
         Ok(())
     }
 
-    fn bind_tcp_conn(&self, local_port: Option<u16>, remote: Endpoint) -> Result<u16, Errno> {
+    fn bind_tcp_conn(
+        &self,
+        mutable: &mut Mutable,
+        local_port: Option<u16>,
+        remote: Endpoint,
+    ) -> Result<u16, Errno> {
         if remote.ip == 0 || remote.port == 0 {
             return Err(Errno::EINVAL);
         }
@@ -166,11 +188,14 @@ impl TcpIp {
         if let Some(port) = local_port
             && let Some(port) = NonZeroU16::new(port)
         {
-            if self.tcp_flows.lock().contains(port.get(), remote) {
+            if mutable
+                .tcp_conns
+                .contains_key(&TcpConnKey::new(port.get(), remote))
+            {
                 return Err(Errno::EADDRINUSE);
             }
 
-            return match self.acquire_port(port) {
+            return match self.acquire_port(mutable, port) {
                 Ok(()) => Ok(port.get()),
                 Err(ErrorCode::AlreadyExists) => Err(Errno::EADDRINUSE),
                 Err(error) => Err(error.into()),
@@ -187,8 +212,11 @@ impl TcpIp {
             let Some(port) = NonZeroU16::new(self.port_start + (start + i) % num_ports) else {
                 continue;
             };
-            if !self.tcp_flows.lock().contains(port.get(), remote) {
-                self.acquire_port(port)?;
+            if !mutable
+                .tcp_conns
+                .contains_key(&TcpConnKey::new(port.get(), remote))
+            {
+                self.acquire_port(mutable, port)?;
                 return Ok(port.get());
             }
         }
@@ -197,17 +225,17 @@ impl TcpIp {
     }
 
     pub fn bind_udp(&self, local_port: Option<u16>, rx_queue: Arc<RxQueue>) -> Result<u16, Errno> {
-        let mut udp_ports = self.udp_ports.lock();
+        let mut mutable = self.mutable.lock();
         if let Some(port) = local_port
             && let Some(port) = NonZeroU16::new(port)
         {
-            if udp_ports.contains_key(&port.get()) {
+            if mutable.udp_ports.contains_key(&port.get()) {
                 return Err(Errno::EADDRINUSE);
             }
 
-            return match self.acquire_port(port) {
+            return match self.acquire_port(&mut mutable, port) {
                 Ok(()) => {
-                    udp_ports.insert(port.get(), rx_queue);
+                    mutable.udp_ports.insert(port.get(), rx_queue);
                     Ok(port.get())
                 }
                 Err(ErrorCode::AlreadyExists) => Err(Errno::EADDRINUSE),
@@ -220,9 +248,9 @@ impl TcpIp {
             let Some(port) = NonZeroU16::new(self.port_start + i) else {
                 continue;
             };
-            if !udp_ports.contains_key(&port.get()) {
-                self.acquire_port(port)?;
-                udp_ports.insert(port.get(), rx_queue);
+            if !mutable.udp_ports.contains_key(&port.get()) {
+                self.acquire_port(&mut mutable, port)?;
+                mutable.udp_ports.insert(port.get(), rx_queue);
                 return Ok(port.get());
             }
         }
@@ -231,8 +259,9 @@ impl TcpIp {
     }
 
     pub fn unbind_udp(&self, port: u16) {
-        if self.udp_ports.lock().remove(&port).is_some() {
-            self.release_port(port);
+        let mut mutable = self.mutable.lock();
+        if mutable.udp_ports.remove(&port).is_some() {
+            self.release_port(&mut mutable, port);
         }
     }
 
@@ -256,7 +285,8 @@ impl TcpIp {
         let mut iss = [0; 4];
         crate::random::read(&mut iss)?;
 
-        let local_port = self.bind_tcp_conn(local_port, remote)?;
+        let mut mutable = self.mutable.lock();
+        let local_port = self.bind_tcp_conn(&mut mutable, local_port, remote)?;
         let conn = match TcpConn::new_active(
             self.clone(),
             wait_queue,
@@ -266,15 +296,16 @@ impl TcpIp {
         ) {
             Ok(conn) => conn,
             Err(error) => {
-                self.release_port(local_port);
+                self.release_port(&mut mutable, local_port);
                 return Err(error.into());
             }
         };
 
         // Register the flow.
-        self.tcp_flows
-            .lock()
-            .insert(local_port, remote, conn.clone());
+        mutable
+            .tcp_conns
+            .insert(TcpConnKey::new(local_port, remote), conn.clone());
+        drop(mutable);
 
         // Start handshake.
         conn.start_active();
@@ -291,19 +322,25 @@ impl TcpIp {
             return Err(ErrorCode::InvalidArg);
         };
 
-        let mut flows = self.tcp_flows.lock();
-        if flows.contains(pkt.local_port, remote) {
+        let mut mutable = self.mutable.lock();
+        if mutable
+            .tcp_conns
+            .contains_key(&TcpConnKey::new(pkt.local_port, remote))
+        {
             return Err(ErrorCode::AlreadyExists);
         }
 
-        self.acquire_port(local_port)?;
-        flows.insert(pkt.local_port, remote, conn);
+        self.acquire_port(&mut mutable, local_port)?;
+        mutable
+            .tcp_conns
+            .insert(TcpConnKey::new(pkt.local_port, remote), conn);
         Ok(())
     }
 
     pub fn unbind_tcp_listener(&self, port: u16) {
-        if self.tcp_listeners.lock().remove(&port).is_some() {
-            self.release_port(port);
+        let mut mutable = self.mutable.lock();
+        if mutable.tcp_listeners.remove(&port).is_some() {
+            self.release_port(&mut mutable, port);
         }
     }
 
@@ -337,14 +374,23 @@ impl TcpIp {
         let pkt = TcpPacketInfo::parse(header);
 
         // Lookup the flow or listener.
-        let conn = self.tcp_flows.lock().lookup(&pkt);
+        let remote = Endpoint {
+            ip: pkt.remote_ip,
+            port: pkt.remote_port,
+        };
+
+        let mutable = self.mutable.lock();
+        let conn = mutable
+            .tcp_conns
+            .get(&TcpConnKey::new(pkt.local_port, remote))
+            .cloned();
+        let listener = mutable.tcp_listeners.get(&pkt.local_port).cloned();
+        drop(mutable);
+
         if let Some(conn) = conn {
             conn.handle_rx(&pkt, payload);
-        } else {
-            let listener = self.tcp_listeners.lock().get(&pkt.local_port).cloned();
-            if let Some(listener) = listener {
-                listener.handle_rx(&pkt, payload);
-            }
+        } else if let Some(listener) = listener {
+            listener.handle_rx(&pkt, payload);
         }
 
         self.garbage_collect();
@@ -357,22 +403,35 @@ impl TcpIp {
             return;
         };
 
-        let rx_queue = self.udp_ports.lock().get(&pkt.local_port).cloned();
+        let rx_queue = self.mutable.lock().udp_ports.get(&pkt.local_port).cloned();
         if let Some(rx_queue) = rx_queue {
             rx_queue.handle_rx(pkt.remote, payload);
         }
     }
 
     pub fn handle_timeouts(&self, now: MonoTime) {
-        self.tcp_flows.lock().poll(now);
+        for conn in self.mutable.lock().tcp_conns.values() {
+            conn.poll(now);
+        }
+
         self.garbage_collect();
     }
 
     fn garbage_collect(&self) {
         // TODO: This might take some time. Optimize this.
-        let mut flows = self.tcp_flows.lock();
-        while let Some(port) = flows.pop_closed() {
-            self.release_port(port);
+        let mut mutable = self.mutable.lock();
+        let mut closed = Vec::new();
+        mutable.tcp_conns.retain(|key, conn| {
+            if conn.is_closed() {
+                closed.push(key.local_port);
+                false
+            } else {
+                true
+            }
+        });
+
+        for port in closed {
+            self.release_port(&mut mutable, port);
         }
     }
 }
