@@ -125,10 +125,8 @@ fn main(cmdline: &[u8]) {
         Some(value) => panic!("unknown ftl.lx.net: {:?}", value),
         None => {
             let pnic = unsafe { Nic::from_handle(HandleId::new(6)) };
-            let nic = Nic::create_virtual().expect("failed to create NIC");
-            pnic.bind(net::INIT_PORT_START, net::INIT_PORT_LEN, &nic)
-                .expect("failed to bind ports");
-            nic.bind(1, u16::MAX, &pnic).expect("failed to bind ports");
+            let (nic, _) = net::create_uplink(&pnic, net::INIT_PORT_START, net::INIT_PORT_LEN)
+                .expect("failed to create uplink");
             Some(net::TcpIp::new(
                 nic,
                 Some(pnic),
