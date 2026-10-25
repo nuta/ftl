@@ -124,20 +124,24 @@ impl<N: RxNotify> Nic<N> {
 
         let trans_bytes = &mut header_buf[ipv4_header_len..];
         let (local_port, remote_port) = match ip_proto {
-            IPPROTO_TCP => match TcpInspector::new(trans_bytes) {
-                Ok(tcp) => (tcp.src_port(), tcp.dst_port()),
-                Err(e) => {
-                    ftl_driver::trace!(self.env, "invalid TCP header: {:?}", e);
-                    return Err(ErrorCode::InvalidArg);
+            IPPROTO_TCP => {
+                match TcpInspector::new(trans_bytes) {
+                    Ok(tcp) => (tcp.src_port(), tcp.dst_port()),
+                    Err(e) => {
+                        ftl_driver::trace!(self.env, "invalid TCP header: {:?}", e);
+                        return Err(ErrorCode::InvalidArg);
+                    }
                 }
-            },
-            IPPROTO_UDP => match UdpRewriter::new(trans_bytes) {
-                Ok(udp) => (udp.src_port(), udp.dst_port()),
-                Err(e) => {
-                    ftl_driver::trace!(self.env, "invalid UDP header: {:?}", e);
-                    return Err(ErrorCode::InvalidArg);
+            }
+            IPPROTO_UDP => {
+                match UdpRewriter::new(trans_bytes) {
+                    Ok(udp) => (udp.src_port(), udp.dst_port()),
+                    Err(e) => {
+                        ftl_driver::trace!(self.env, "invalid UDP header: {:?}", e);
+                        return Err(ErrorCode::InvalidArg);
+                    }
                 }
-            },
+            }
             _ => {
                 // TODO: Should we overwrite instead?
                 return Err(ErrorCode::InvalidArg);
@@ -162,7 +166,7 @@ impl<N: RxNotify> Nic<N> {
             };
 
             let our_ip = external.address;
-            let next_hop_ip = external.next_hop(dst_ip);
+            let next_hop_ip = external.next_hop_ip(dst_ip);
 
             src_ip = our_ip;
             if dst_ip == our_ip {

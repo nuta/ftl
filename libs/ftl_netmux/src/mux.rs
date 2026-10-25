@@ -22,8 +22,8 @@ pub(crate) struct ExternalIpConfig {
 }
 
 impl ExternalIpConfig {
-    pub(crate) fn next_hop(&self, dst: Ipv4Addr) -> Ipv4Addr {
-        if self.netmask != NetMask::new(0) && self.netmask.contains(self.address, dst) {
+    pub(crate) fn next_hop_ip(&self, dst: Ipv4Addr) -> Ipv4Addr {
+        if self.netmask.contains(self.address, dst) {
             dst
         } else {
             self.gateway
