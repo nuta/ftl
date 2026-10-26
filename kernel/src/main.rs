@@ -21,7 +21,7 @@ mod handle;
 mod hspace;
 mod loader;
 mod memory;
-mod net;
+mod nic;
 mod panic;
 mod poll;
 mod quota;

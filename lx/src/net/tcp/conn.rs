@@ -15,6 +15,7 @@ use super::packet::Endpoint;
 use super::packet::Segment;
 use super::packet::TcpFlags;
 use super::packet::TcpPacketInfo;
+use crate::net::tcpip::BindGuard;
 use crate::net::tcpip::TcpIp;
 use crate::types::c_int;
 use crate::types::c_short;
@@ -76,7 +77,7 @@ pub struct TcpConn {
     tcpip: Arc<TcpIp>,
     wait_queue: Arc<WaitQueue>,
     remote: Endpoint,
-    local_port: u16,
+    bind_guard: Arc<BindGuard>,
     mutable: SpinLock<Mutable>,
 }
 
@@ -84,13 +85,19 @@ impl TcpConn {
     pub fn new_established(
         tcpip: Arc<TcpIp>,
         remote: Endpoint,
-        local_port: u16,
         local_iss: u32,
         remote_rcv_nxt: u32,
         remote_rcv_wnd: u16,
+        bind_guard: Arc<BindGuard>,
     ) -> Result<Arc<Self>, ErrorCode> {
         let wq = WaitQueue::new()?;
-        let conn = Self::new_active(tcpip, Arc::new(wq), remote, local_port, local_iss)?;
+        let conn = Self::new_active(
+            tcpip,
+            Arc::new(wq),
+            remote,
+            local_iss,
+            bind_guard,
+        )?;
         let mut mutable = conn.mutable.lock();
         mutable.state = State::Established;
         mutable.snd_una = mutable.snd_nxt;
@@ -104,8 +111,8 @@ impl TcpConn {
         tcpip: Arc<TcpIp>,
         wait_queue: Arc<WaitQueue>,
         remote: Endpoint,
-        local_port: u16,
         local_iss: u32,
+        bind_guard: Arc<BindGuard>,
     ) -> Result<Arc<Self>, ErrorCode> {
         let mutable = Mutable {
             state: State::SynSent,
@@ -132,7 +139,7 @@ impl TcpConn {
             tcpip,
             wait_queue,
             remote,
-            local_port,
+            bind_guard,
             mutable: SpinLock::new(mutable),
         }))
     }
@@ -149,7 +156,19 @@ impl TcpConn {
         self.mutable.lock().state == State::SynSent
     }
 
+    fn remove_if_closed(&self) {
+        if self.is_closed() {
+            self.tcpip
+                .remove_tcp_conn(self.bind_guard.port(), self.remote, self);
+        }
+    }
+
     pub fn poll(&self, now: MonoTime) {
+        self.do_poll(now);
+        self.remove_if_closed();
+    }
+
+    fn do_poll(&self, now: MonoTime) {
         let mut mutable = self.mutable.lock();
 
         // Active open connections.
@@ -221,7 +240,7 @@ impl TcpConn {
     /// Send a segment.
     fn send(&self, segment: Segment) -> Result<(), Errno> {
         self.tcpip
-            .send_tcp_segment(self.remote, self.local_port, segment)
+            .send_tcp_segment(self.remote, self.bind_guard.port(), segment)
             .map_err(Errno::from)
     }
 
@@ -563,6 +582,11 @@ impl TcpConn {
     }
 
     pub fn handle_rx(&self, pkt: &TcpPacketInfo, payload: &[u8]) {
+        self.do_handle_rx(pkt, payload);
+        self.remove_if_closed();
+    }
+
+    fn do_handle_rx(&self, pkt: &TcpPacketInfo, payload: &[u8]) {
         let flags = TcpFlags::from_u8(pkt.flags);
         let mut mutable = self.mutable.lock();
         if mutable.state == State::SynSent {

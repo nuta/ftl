@@ -30,7 +30,7 @@ use alloc::vec::Vec;
 
 use ftl::allocator;
 use ftl::hspace::HandleSpace;
-use ftl::net::Net;
+use ftl::net::Nic;
 use ftl::quota::Quota;
 use ftl::vmo::Vmo;
 use ftl::vmspace::VmSpace;
@@ -109,12 +109,36 @@ fn main(cmdline: &[u8]) {
         .expect("init not found in initfs");
     let elf_file = Arc::new(EmbeddedFile::new(initfs_file.data));
 
-    let network = match parse_cmdline(cmdline, b"ftl.lx.net").expect("failed to parse cmdline") {
-        Some(b"none") => None,
-        Some(value) => panic!("unknown ftl.lx.net: {:?}", value),
-        None => {
-            let net = Net::create().expect("failed to create network");
-            Some(net::TcpIp::new(net))
+    let net = parse_cmdline(cmdline, b"ftl.lx.net").expect("failed to parse cmdline");
+    let nic_id = parse_cmdline(cmdline, b"ftl.lx.nic").expect("failed to parse cmdline");
+    let network = match (net, nic_id) {
+        (Some(b"none"), _) => None,
+        (Some(value), _) => panic!("unknown ftl.lx.net: {:?}", value),
+        (None, Some(nic_id)) => {
+            // This is a zone LX.
+            let nic_id = core::str::from_utf8(nic_id).expect("invalid ftl.lx.nic");
+            let nic_id = nic_id.parse().expect("invalid ftl.lx.nic");
+            let ports = parse_cmdline(cmdline, b"ftl.lx.ports")
+                .expect("failed to parse cmdline")
+                .expect("ftl.lx.ports not found in cmdline");
+            let ports = core::str::from_utf8(ports).expect("invalid ftl.lx.ports");
+            let (port_min, port_max) = ports.split_once('-').expect("invalid ftl.lx.ports");
+            let port_min = port_min.parse().expect("invalid ftl.lx.ports");
+            let port_max = port_max.parse().expect("invalid ftl.lx.ports");
+            let nic = unsafe { Nic::from_handle(HandleId::new(nic_id)) };
+            Some(net::TcpIp::new(nic, None, port_min, port_max))
+        }
+        (None, None) => {
+            // Instantiate a NIC for the init LX.
+            let pnic = unsafe { Nic::from_handle(HandleId::new(6)) };
+            let nic = net::create_init_nic(&pnic, net::INIT_PORT_MIN, net::INIT_PORT_MAX)
+                .expect("failed to create init NIC");
+            Some(net::TcpIp::new(
+                nic,
+                Some(Arc::new(pnic)),
+                net::INIT_PORT_MIN,
+                net::INIT_PORT_MAX,
+            ))
         }
     };
 

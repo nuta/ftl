@@ -1,6 +1,8 @@
 mod fork;
 mod spec;
 
+use alloc::format;
+use alloc::sync::Arc;
 use alloc::vec;
 use alloc::vec::Vec;
 
@@ -21,9 +23,10 @@ use ftl_types::vmspace::PageAttrs;
 use ftl_utils::alignment::align_down;
 use ftl_utils::alignment::align_up;
 
+use crate::net::TcpIp;
+use crate::net::ZONE_PORT_LEN;
 use crate::types::errno::Errno;
 use crate::vm::PAGE_SIZE;
-use crate::zone::spec::NetSpec;
 use crate::zone::spec::Spec;
 
 // FIXME: Remove these hard-coded parameters.
@@ -84,6 +87,8 @@ fn prepare_stack(quota: &Quota, vmspace: &VmSpace, cmdline: &[u8]) -> Result<usi
     Ok(stack_bottom + sp_offset)
 }
 
+const NIC_HANDLE_ID: usize = 5;
+
 fn move_handle_to(
     hspace: &HandleSpace,
     handle: OwnedHandle,
@@ -107,15 +112,28 @@ pub struct Zone {
 }
 
 impl Zone {
-    pub fn spawn(parent_quota: &Quota, image: &Vmo, spec: &Spec) -> Result<Zone, Errno> {
+    pub fn spawn(
+        parent_quota: &Quota,
+        image: &Vmo,
+        network: Option<&Arc<TcpIp>>,
+        spec: &Spec,
+    ) -> Result<Zone, Errno> {
         let mut cmdline = Vec::new();
-        cmdline.extend_from_slice(b"ftl.lx.console=none ftl.lx.net=none ftl.lx.init=");
-        cmdline.extend_from_slice(&spec.init);
+        cmdline.extend_from_slice(b"ftl.lx.console=none ");
 
-        if !matches!(spec.net, NetSpec::None) {
-            // TODO:
-            return Err(Errno::EINVAL);
+        let mut zone_nic = None;
+        if spec.net {
+            let Some(network) = network else {
+                return Err(Errno::EINVAL);
+            };
+            let (nic, port_min, port_max) = network.create_parent_nic(ZONE_PORT_LEN)?;
+            let net = format!("ftl.lx.nic={NIC_HANDLE_ID} ftl.lx.ports={port_min}-{port_max} ");
+            cmdline.extend_from_slice(net.as_bytes());
+            zone_nic = Some(nic);
         }
+
+        cmdline.extend_from_slice(b"ftl.lx.init=");
+        cmdline.extend_from_slice(&spec.init);
 
         let quota = Quota::create(parent_quota)?;
         quota.limit(Resource::Memory, UNLIMITED)?;
@@ -138,6 +156,14 @@ impl Zone {
         move_handle_to(&hspace, quota.into_handle(), HandleRight::CHARGE, 2)?;
         move_handle_to(&hspace, child_image.into_handle(), HandleRight::READ, 3)?;
         move_handle_to(&hspace, child_hspace.into_handle(), HandleRight::WRITE, 4)?;
+        if let Some(nic) = zone_nic {
+            move_handle_to(
+                &hspace,
+                nic.into_handle(),
+                HandleRight::READ | HandleRight::WRITE,
+                NIC_HANDLE_ID,
+            )?;
+        }
 
         thread.start(entry, sp)?;
         Ok(Zone {

@@ -5,20 +5,15 @@ use crate::types::errno::Errno;
 
 const LINE_LEN_MAX: usize = 4096;
 
-#[derive(Clone, Copy)]
-pub enum NetSpec {
-    None,
-}
-
 /// A zone spec. What you write to `/lx/zone/fork`.
 pub struct Spec {
-    pub net: NetSpec,
+    pub net: bool,
     pub init: Vec<u8>,
 }
 
 /// A parser for zone specs.
 pub struct SpecParser {
-    net: Option<NetSpec>,
+    net: bool,
     init: Option<Vec<u8>>,
     line: Vec<u8>,
 }
@@ -26,7 +21,7 @@ pub struct SpecParser {
 impl SpecParser {
     pub const fn new() -> Self {
         Self {
-            net: None,
+            net: false,
             init: None,
             line: Vec::new(),
         }
@@ -61,12 +56,11 @@ impl SpecParser {
 
         match key {
             b"net" => {
-                let net = match value {
-                    b"none" => NetSpec::None,
-                    _ => return Err(Errno::EINVAL),
-                };
+                if !value.is_empty() {
+                    return Err(Errno::EINVAL);
+                }
 
-                if self.net.replace(net).is_some() {
+                if mem::replace(&mut self.net, true) {
                     // Multiple net specs are not allowed.
                     return Err(Errno::EINVAL);
                 }
@@ -90,9 +84,11 @@ impl SpecParser {
                     return Err(Errno::EINVAL);
                 }
 
-                let net = self.net.ok_or(Errno::EINVAL)?;
                 let init = self.init.take().ok_or(Errno::EINVAL)?;
-                Ok(Some(Spec { net, init }))
+                Ok(Some(Spec {
+                    net: self.net,
+                    init,
+                }))
             }
             _ => Err(Errno::EINVAL),
         }

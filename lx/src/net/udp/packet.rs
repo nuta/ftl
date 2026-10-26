@@ -1,7 +1,7 @@
 use core::mem::offset_of;
 use core::mem::size_of;
 
-use ftl_types::net::IPPROTO_UDP;
+use ftl_types::nic::IP_PROTO_UDP;
 
 use crate::endian::read_u16_be;
 use crate::endian::read_u32_be;
@@ -73,7 +73,7 @@ impl HeaderBuilder {
         let total_len = IPV4_HEADER_LEN + UDP_HEADER_LEN + payload_len;
         self.write_u8(offset_of!(Ipv4Header, version_ihl), 0x45);
         self.write_u8(offset_of!(Ipv4Header, ttl), 64);
-        self.write_u8(offset_of!(Ipv4Header, protocol), IPPROTO_UDP);
+        self.write_u8(offset_of!(Ipv4Header, protocol), IP_PROTO_UDP);
         self.write_u16(offset_of!(Ipv4Header, total_len), total_len as u16);
         self.write_u16(offset_of!(Ipv4Header, flags_and_frag), 0x4000);
         self.write_u32(offset_of!(Ipv4Header, src_ip), 0);

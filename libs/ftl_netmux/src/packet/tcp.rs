@@ -1,7 +1,7 @@
 use core::mem::offset_of;
 use core::mem::size_of;
 
-use ftl_types::net::IPPROTO_TCP;
+use ftl_types::nic::IP_PROTO_TCP;
 
 use super::checksum::Checksum;
 use super::helper::read_u16;
@@ -53,14 +53,14 @@ impl<'a> TcpInspector<'a> {
     }
 
     pub fn validate(&self, ipv4: &Ipv4Inspector<'_>) -> Result<(), Error> {
-        if ipv4.ip_proto() != IPPROTO_TCP {
+        if ipv4.ip_proto() != IP_PROTO_TCP {
             return Err(Error::NotTcp);
         }
 
         let mut checksum = Checksum::new();
         checksum.add_ipv4(ipv4.src_ip());
         checksum.add_ipv4(ipv4.dst_ip());
-        checksum.add_u16(IPPROTO_TCP as u16);
+        checksum.add_u16(IP_PROTO_TCP as u16);
         checksum.add_u16(self.buf.len() as u16);
         checksum.add_bytes(self.buf);
         if checksum.finish() != 0 {
@@ -108,7 +108,7 @@ impl<'a> TcpRewriter<'a> {
         let mut checksum = Checksum::new();
         checksum.add_ipv4(src_ip);
         checksum.add_ipv4(dst_ip);
-        checksum.add_u16(IPPROTO_TCP as u16);
+        checksum.add_u16(IP_PROTO_TCP as u16);
         checksum.add_u16((self.buf.len() + payload_len) as u16);
         checksum.add_bytes(self.buf);
 

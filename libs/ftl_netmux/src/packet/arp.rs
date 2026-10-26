@@ -1,7 +1,7 @@
 use core::mem::offset_of;
 use core::mem::size_of;
 
-use ftl_types::net::ETHTYPE_IPV4;
+use ftl_types::nic::ETHTYPE_IPV4;
 
 use super::helper::read_array;
 use super::helper::read_u16;

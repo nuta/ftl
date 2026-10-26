@@ -3,7 +3,7 @@ use core::mem::size_of;
 use core::ops::BitOr;
 use core::ops::BitOrAssign;
 
-use ftl_types::net::IPPROTO_TCP;
+use ftl_types::nic::IP_PROTO_TCP;
 
 use crate::endian::read_u16_be;
 use crate::endian::read_u32_be;
@@ -144,7 +144,7 @@ impl HeaderBuilder {
         let total_len = IPV4_HEADER_LEN + TCP_HEADER_LEN + segment.payload.len();
         self.write_u8(offset_of!(Ipv4Header, version_ihl), 0x45);
         self.write_u8(offset_of!(Ipv4Header, ttl), 64);
-        self.write_u8(offset_of!(Ipv4Header, protocol), IPPROTO_TCP);
+        self.write_u8(offset_of!(Ipv4Header, protocol), IP_PROTO_TCP);
         self.write_u16(offset_of!(Ipv4Header, total_len), total_len as u16);
         self.write_u16(offset_of!(Ipv4Header, flags_and_frag), 0x4000);
         self.write_u32(offset_of!(Ipv4Header, src_ip), 0); // Kernel fills this

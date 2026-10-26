@@ -1,11 +1,14 @@
 use alloc::sync::Arc;
 
 use ftl_types::error::ErrorCode;
+use ftl_types::nic::PROTO_IPV4;
+use ftl_types::nic::PROTO_TCP;
 use ftl_utils::spinlock::SpinLock;
 
 use super::conn::TcpConn;
 use super::listener::TcpListener;
 use super::packet::Endpoint;
+use crate::net::tcpip::BindGuard;
 use crate::net::tcpip::TcpIp;
 use crate::types::c_int;
 use crate::types::c_short;
@@ -19,7 +22,7 @@ use crate::wait_queue::Sleep;
 use crate::wait_queue::WaitQueue;
 
 enum State {
-    Init { local_port: Option<u16> },
+    Init { bind_guard: Option<Arc<BindGuard>> },
     Listener(Arc<TcpListener>),
     Conn(Arc<TcpConn>),
 }
@@ -36,7 +39,7 @@ impl TcpSocket {
         Ok(Arc::new(Self {
             tcpip,
             wait_queue,
-            state: SpinLock::new(State::Init { local_port: None }),
+            state: SpinLock::new(State::Init { bind_guard: None }),
         }))
     }
 
@@ -57,16 +60,25 @@ impl TcpSocket {
     /// `bind(2)` implementation.
     pub fn do_bind(&self, port: u16) -> Result<(), Errno> {
         let mut state = self.state.lock();
-        let State::Init { local_port } = &mut *state else {
+        let State::Init { bind_guard } = &mut *state else {
             return Err(Errno::EINVAL);
         };
 
-        if local_port.is_some() {
+        if bind_guard.is_some() {
             // The socket is already bound to a port.
             return Err(Errno::EINVAL);
         }
 
-        *local_port = Some(port);
+        if port == 0 {
+            return Ok(());
+        }
+
+        if self.tcpip.has_tcp_listener(port) {
+            // FIXME: Reserve the port, not just checking if it's in use.
+            return Err(Errno::EADDRINUSE);
+        }
+
+        *bind_guard = Some(self.tcpip.bind_port(PROTO_IPV4 | PROTO_TCP, port)?);
         Ok(())
     }
 
@@ -78,13 +90,15 @@ impl TcpSocket {
 
         let mut state = self.state.lock();
         match &mut *state {
-            State::Init {
-                local_port: Some(local_port),
-            } => {
+            State::Init { bind_guard } => {
+                let bind_guard = match bind_guard {
+                    Some(bind_guard) => bind_guard.clone(),
+                    None => self.tcpip.alloc_tcp_port()?,
+                };
                 let listener = TcpListener::new(
                     self.tcpip.clone(),
                     self.wait_queue.clone(),
-                    *local_port,
+                    bind_guard,
                     backlog as usize,
                 )?;
                 *state = State::Listener(listener);
@@ -94,7 +108,7 @@ impl TcpSocket {
                 listener.set_backlog(backlog as usize);
             }
             _ => {
-                // The socket is not bound to a port, or is connected.
+                // The socket is connected.
                 return Err(Errno::EINVAL);
             }
         }
@@ -112,10 +126,10 @@ impl TcpSocket {
         let conn = {
             let mut state = self.state.lock();
             match &*state {
-                State::Init { local_port } => {
+                State::Init { bind_guard } => {
                     // Start a handshake.
                     let wq = self.wait_queue.clone();
-                    let conn = self.tcpip.connect_tcp(remote, *local_port, wq)?;
+                    let conn = self.tcpip.connect_tcp(remote, bind_guard.clone(), wq)?;
                     *state = State::Conn(conn.clone());
                     conn
                 }

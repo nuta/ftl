@@ -10,6 +10,7 @@ use ftl_utils::spinlock::SpinLock;
 
 use super::rx_queue::RxQueue;
 use crate::net::ipv4::Endpoint;
+use crate::net::tcpip::BindGuard;
 use crate::net::tcpip::TcpIp;
 use crate::types::c_int;
 use crate::types::c_short;
@@ -28,7 +29,7 @@ use crate::wait_queue::WaitQueue;
 const MAX_PAYLOAD_LEN: usize = 1500 - 20 - 8;
 
 struct Mutable {
-    local_port: Option<u16>,
+    bind_guard: Option<Arc<BindGuard>>,
     recv_timeout: Option<Duration>,
 }
 
@@ -47,7 +48,7 @@ impl UdpSocket {
             rx_queue: Arc::new(RxQueue::new(wait_queue.clone())),
             wait_queue,
             mutable: SpinLock::new(Mutable {
-                local_port: None,
+                bind_guard: None,
                 recv_timeout: None,
             }),
         }))
@@ -55,12 +56,12 @@ impl UdpSocket {
 
     fn do_bind(&self, port: u16) -> Result<(), Errno> {
         let mut mutable = self.mutable.lock();
-        if mutable.local_port.is_some() {
+        if mutable.bind_guard.is_some() {
             return Err(Errno::EINVAL);
         }
 
-        let port = self.tcpip.bind_udp(Some(port), self.rx_queue.clone())?;
-        mutable.local_port = Some(port);
+        let bind_guard = self.tcpip.bind_udp(Some(port), self.rx_queue.clone())?;
+        mutable.bind_guard = Some(bind_guard);
         Ok(())
     }
 
@@ -70,12 +71,13 @@ impl UdpSocket {
     /// kernel assigns an ephemeral port.
     fn ensure_bound(&self) -> Result<u16, Errno> {
         let mut mutable = self.mutable.lock();
-        if let Some(port) = mutable.local_port {
-            return Ok(port);
+        if let Some(bind_guard) = &mutable.bind_guard {
+            return Ok(bind_guard.port());
         }
 
-        let port = self.tcpip.bind_udp(None, self.rx_queue.clone())?;
-        mutable.local_port = Some(port);
+        let bind_guard = self.tcpip.bind_udp(None, self.rx_queue.clone())?;
+        let port = bind_guard.port();
+        mutable.bind_guard = Some(bind_guard);
         Ok(port)
     }
 
@@ -225,8 +227,8 @@ impl FileLike for UdpSocket {
     }
 
     fn close(&self) {
-        if let Some(port) = self.mutable.lock().local_port.take() {
-            self.tcpip.unbind_udp(port);
+        if let Some(bind_guard) = self.mutable.lock().bind_guard.take() {
+            self.tcpip.unbind_udp(bind_guard.port());
         }
     }
 

@@ -5,8 +5,8 @@ use ftl_driver::env::Env;
 use ftl_driver::net::Driver;
 use ftl_driver::net::Notifier;
 use ftl_types::error::ErrorCode;
-use ftl_types::net::ETHTYPE_ARP;
-use ftl_types::net::ETHTYPE_IPV4;
+use ftl_types::nic::ETHTYPE_ARP;
+use ftl_types::nic::ETHTYPE_IPV4;
 use ftl_types::time::MonoTime;
 use ftl_utils::spinlock::SpinLock;
 
@@ -65,6 +65,11 @@ impl<'a> Tx<'a> {
         })
     }
 
+    pub fn into_bufs(mut self) -> (DmaBuf, usize, Option<DmaBuf>) {
+        let header_buf = self.header_buf.take().unwrap();
+        (header_buf, HEADROOM_TOTAL, self.payload_buf.take())
+    }
+
     pub fn header_bytes(&mut self) -> &mut [u8] {
         &mut self.header_buf.as_mut().unwrap().as_mut_slice()[HEADROOM_TOTAL..]
     }
@@ -119,15 +124,6 @@ impl Drop for Tx<'_> {
         if let Some(buf) = self.payload_buf.take() {
             self.env.free_dma(buf);
         }
-    }
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-pub struct DeviceId(u64);
-
-impl DeviceId {
-    pub const fn new(id: u64) -> Self {
-        Self(id)
     }
 }
 

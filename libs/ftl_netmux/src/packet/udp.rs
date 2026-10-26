@@ -1,7 +1,7 @@
 use core::mem::offset_of;
 use core::mem::size_of;
 
-use ftl_types::net::IPPROTO_UDP;
+use ftl_types::nic::IP_PROTO_UDP;
 
 use super::checksum::Checksum;
 use super::helper::read_u16;
@@ -47,7 +47,7 @@ impl<'a> UdpInspector<'a> {
     }
 
     pub fn validate(&self, ipv4: &Ipv4Inspector<'_>) -> Result<(), Error> {
-        if ipv4.ip_proto() != IPPROTO_UDP {
+        if ipv4.ip_proto() != IP_PROTO_UDP {
             return Err(Error::NotUdp);
         }
 
@@ -59,7 +59,7 @@ impl<'a> UdpInspector<'a> {
         let mut checksum = Checksum::new();
         checksum.add_ipv4(ipv4.src_ip());
         checksum.add_ipv4(ipv4.dst_ip());
-        checksum.add_u16(IPPROTO_UDP as u16);
+        checksum.add_u16(IP_PROTO_UDP as u16);
         checksum.add_u16(self.len as u16);
         checksum.add_bytes(&self.buf[..self.len]);
         if checksum.finish() != 0 {
@@ -134,7 +134,7 @@ impl<'a> UdpRewriter<'a> {
         let mut checksum = Checksum::new();
         checksum.add_ipv4(src_ip);
         checksum.add_ipv4(dst_ip);
-        checksum.add_u16(IPPROTO_UDP as u16);
+        checksum.add_u16(IP_PROTO_UDP as u16);
         checksum.add_u16((self.buf.len() + payload_len) as u16);
         checksum.add_bytes(self.buf);
 

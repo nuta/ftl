@@ -207,9 +207,8 @@ impl Client {
         };
 
         let netmask = match pkt.ipv4_option(OPTION_SUBNET_MASK) {
-            Ok(Some(netmask)) => NetMask::new(netmask.as_u32()),
-            Ok(None) => NetMask::new(0),
-            Err(_) => return None,
+            Ok(Some(netmask)) if netmask.as_u32() != 0 => NetMask::new(netmask.as_u32()),
+            _ => return None,
         };
 
         self.set_state(State::Bound);

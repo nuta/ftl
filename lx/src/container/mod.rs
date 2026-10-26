@@ -63,7 +63,7 @@ impl Container {
         }
 
         let quota = Arc::new(quota);
-        let root_dir = RootDir::new(quota.clone(), image);
+        let root_dir = RootDir::new(quota.clone(), image, network.clone());
         let this = Arc::new(Self {
             poll,
             hspace,

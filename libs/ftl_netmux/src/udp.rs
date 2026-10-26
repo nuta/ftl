@@ -1,6 +1,6 @@
 use ftl_driver::env::Env;
 use ftl_types::error::ErrorCode;
-use ftl_types::net::IPPROTO_UDP;
+use ftl_types::nic::IP_PROTO_UDP;
 
 use crate::device::Device;
 use crate::device::Tx;
@@ -40,7 +40,7 @@ pub fn send_broadcast<'a>(
     ipv4.set_identification(0);
     ipv4.set_flags_and_fragment_offset(0);
     ipv4.set_ttl(64);
-    ipv4.set_ip_proto(IPPROTO_UDP);
+    ipv4.set_ip_proto(IP_PROTO_UDP);
     ipv4.set_src_ip(IPV4_UNSPECIFIED);
     ipv4.set_dst_ip(IPV4_BROADCAST);
     ipv4.update_checksum();

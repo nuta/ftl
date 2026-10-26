@@ -21,6 +21,7 @@ impl Errno {
     pub const EBUSY: Self = Self(16);
     pub const EEXIST: Self = Self(17);
     pub const ENOMEM: Self = Self(12);
+    pub const EACCES: Self = Self(13);
     pub const EMFILE: Self = Self(24);
     pub const ENOTDIR: Self = Self(20);
     pub const EISDIR: Self = Self(21);

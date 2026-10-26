@@ -12,6 +12,7 @@ use super::packet::Endpoint;
 use super::packet::Segment;
 use super::packet::TcpFlags;
 use super::packet::TcpPacketInfo;
+use crate::net::tcpip::BindGuard;
 use crate::net::tcpip::TcpIp;
 use crate::types::errno::Errno;
 use crate::types::sys::poll::POLLIN;
@@ -49,7 +50,7 @@ impl Mutable {
 pub struct TcpListener {
     tcpip: Arc<TcpIp>,
     wait_queue: Arc<WaitQueue>,
-    local_port: u16,
+    bind_guard: Arc<BindGuard>,
     mutable: SpinLock<Mutable>,
 }
 
@@ -57,13 +58,14 @@ impl TcpListener {
     pub fn new(
         tcpip: Arc<TcpIp>,
         wait_queue: Arc<WaitQueue>,
-        local_port: u16,
+        bind_guard: Arc<BindGuard>,
         backlog: usize,
     ) -> Result<Arc<Self>, Errno> {
+        let local_port = bind_guard.port();
         let listener = Arc::new(Self {
             tcpip: tcpip.clone(),
             wait_queue,
-            local_port,
+            bind_guard,
             mutable: SpinLock::new(Mutable {
                 backlog,
                 inflights: Vec::new(),
@@ -71,7 +73,7 @@ impl TcpListener {
             }),
         });
 
-        match tcpip.bind_tcp_listener(local_port, listener.clone()) {
+        match tcpip.add_tcp_listener(local_port, listener.clone()) {
             Ok(()) => Ok(listener),
             Err(ErrorCode::AlreadyExists) => Err(Errno::EADDRINUSE),
             Err(error) => Err(error.into()),
@@ -125,7 +127,7 @@ impl TcpListener {
 
         if let Err(err) = self
             .tcpip
-            .send_tcp_segment(handshake.remote, self.local_port, segment)
+            .send_tcp_segment(handshake.remote, self.bind_guard.port(), segment)
         {
             trace!("failed to send SYN-ACK packet: {:?}", err);
         }
@@ -223,10 +225,10 @@ impl TcpListener {
         let conn = match TcpConn::new_established(
             self.tcpip.clone(),
             handshake.remote,
-            self.local_port,
             handshake.local_iss,
             handshake.remote_rcv_nxt,
             handshake.remote_rcv_wnd,
+            self.bind_guard.clone(),
         ) {
             Ok(conn) => conn,
             Err(error) => {
@@ -279,6 +281,6 @@ impl TcpListener {
         }
 
         // Unbind the listening port.
-        self.tcpip.unbind_tcp_listener(self.local_port);
+        self.tcpip.unbind_tcp_listener(self.bind_guard.port());
     }
 }

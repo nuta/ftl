@@ -1,99 +1,97 @@
-use alloc::vec::Vec;
+use alloc::sync::Arc;
 
 use ftl_types::error::ErrorCode;
-use ftl_types::net::ETHTYPE_IPV4;
-use ftl_types::net::FiveTuple;
-use ftl_types::net::IPPROTO_TCP;
-use ftl_types::net::IPPROTO_UDP;
-use ftl_utils::reserve_slot::ReserveSlot;
+use ftl_types::nic::IP_PROTO_TCP;
+use ftl_types::nic::IP_PROTO_UDP;
+use ftl_types::nic::PROTO_IPV4;
+use ftl_types::nic::PROTO_TCP;
+use ftl_types::nic::PROTO_UDP;
 
 use crate::BufReader;
-use crate::NetMux;
-use crate::NicId;
 use crate::RxNotify;
-use crate::device::DeviceId;
 use crate::device::Tx;
+use crate::nic::Nic;
 use crate::packet::ipv4::Ipv4Addr;
 use crate::packet::ipv4::Ipv4Inspector;
 use crate::packet::ipv4::Ipv4Rewriter;
-use crate::packet::ipv4::NetMask;
 use crate::packet::tcp::TcpInspector;
 use crate::packet::tcp::TcpRewriter;
+use crate::packet::udp::UDP_HEADER_LEN;
 use crate::packet::udp::UdpRewriter;
 
-pub struct Route {
-    device: DeviceId,
-    our_ip: Ipv4Addr,
-    netmask: NetMask,
-    #[allow(dead_code)]
-    gateway_ip: Ipv4Addr,
-    next_hop_ip: Ipv4Addr,
-}
+const MAX_HEADER_LEN: usize = 128; // IPv4 header + TCP/UDP header
+const MAX_PAYLOAD_LEN: usize = 2048;
 
-impl Route {
-    pub fn new(
-        device: DeviceId,
+/// The destination of a packet.
+enum Via<N> {
+    /// To an external network, via a physical NIC such as virtio-net.
+    External {
+        nic: Arc<Nic<N>>,
         our_ip: Ipv4Addr,
-        netmask: NetMask,
-        gateway_ip: Ipv4Addr,
         next_hop_ip: Ipv4Addr,
-    ) -> Self {
-        Self {
-            device,
-            our_ip,
-            netmask,
-            gateway_ip,
-            next_hop_ip,
-        }
-    }
+    },
+    /// To a local virtual NIC.
+    Local(Arc<Nic<N>>),
 }
 
-pub struct TxRouteTable {
-    routes: Vec<Route>,
-}
-
-impl TxRouteTable {
-    pub const fn new() -> Self {
-        Self { routes: Vec::new() }
-    }
-
-    pub fn add_route(&mut self, route: Route) -> Result<(), ErrorCode> {
-        self.routes
-            .reserve_slot()
-            .map_err(|_| ErrorCode::OutOfMemory)?
-            .push(route);
-        Ok(())
-    }
-
-    pub fn lookup(&self, dst_ip: Ipv4Addr) -> Option<(DeviceId, Ipv4Addr, Ipv4Addr)> {
-        for route in &self.routes {
-            if route.netmask.contains(route.our_ip, dst_ip) {
-                return Some((route.device, route.our_ip, route.next_hop_ip));
-            }
-        }
-
-        None
-    }
-
-    pub fn lookup_exact(&self, dst_ip: Ipv4Addr) -> Option<(DeviceId, Ipv4Addr)> {
-        for route in &self.routes {
-            if route.our_ip == dst_ip {
-                return Some((route.device, route.our_ip));
-            }
-        }
-
-        None
-    }
-}
-
-impl<'a, N: RxNotify> NetMux<'a, N> {
-    pub(crate) fn prepare_tx(
+impl<N: RxNotify> Nic<N> {
+    /// Sends a packet to the network.
+    pub fn send(
         &self,
-        nic_id: NicId,
-        tx: &mut Tx<'a>,
         header: &mut dyn BufReader,
         payload: Option<&mut dyn BufReader>,
-    ) -> Result<(DeviceId, Ipv4Addr, Ipv4Addr), ErrorCode> {
+    ) -> Result<(), ErrorCode> {
+        let payload_len = if let Some(payload) = payload.as_ref() {
+            payload.len()
+        } else {
+            0
+        };
+
+        if header.len() > MAX_HEADER_LEN {
+            return Err(ErrorCode::PacketTooLong);
+        }
+
+        if payload_len > MAX_PAYLOAD_LEN {
+            return Err(ErrorCode::PacketTooLong);
+        }
+
+        let header_len = header.len();
+        let mut tx = Tx::alloc(self.env, header_len, payload_len)?;
+
+        match self.prepare_tx(&mut tx, header, payload)? {
+            Via::External {
+                nic: pnic,
+                our_ip,
+                next_hop_ip,
+            } => {
+                let Some(physical) = &pnic.physical else {
+                    return Err(ErrorCode::NotFound);
+                };
+
+                // Send the packet through the route's next hop.
+                physical.lock().device.send_ipv4(our_ip, next_hop_ip, tx)
+            }
+            Via::Local(dst) => {
+                // Send the packet to the vNIC directly.
+                let (header_buf, header_offset, payload_buf) = tx.into_bufs();
+                dst.receive(
+                    header_buf,
+                    header_offset,
+                    header_len + payload_len,
+                    header_len,
+                    payload_buf,
+                );
+                Ok(())
+            }
+        }
+    }
+
+    fn prepare_tx(
+        &self,
+        tx: &mut Tx<'static>,
+        header: &mut dyn BufReader,
+        payload: Option<&mut dyn BufReader>,
+    ) -> Result<Via<N>, ErrorCode> {
         let (header_buf, mut payload_buf) = tx.header_and_payload_bytes();
 
         // Read the header from the user buffer.
@@ -126,51 +124,40 @@ impl<'a, N: RxNotify> NetMux<'a, N> {
             return Err(ErrorCode::InvalidArg);
         }
 
-        // Select the route from the destination in the IPv4 header.
         let ip_proto = ipv4.ip_proto();
+        let src_ip = ipv4.src_ip();
         let dst_ip = ipv4.dst_ip();
         let ipv4_header_len = ipv4.header_len();
-        let (device_id, our_ip, next_hop_ip) =
-            self.tx.lookup(dst_ip).ok_or(ErrorCode::InvalidArg)?;
 
         let trans_bytes = &mut header_buf[ipv4_header_len..];
-        let (local_port, remote_port) = match ip_proto {
-            IPPROTO_TCP => {
-                // Parse the TCP header.
-                let tcp = match TcpInspector::new(trans_bytes) {
-                    Ok(tcp) => tcp,
+        let (local_port, remote_port, protocols, trans_header_len) = match ip_proto {
+            IP_PROTO_TCP => {
+                match TcpInspector::new(trans_bytes) {
+                    Ok(tcp) => (
+                        tcp.src_port(),
+                        tcp.dst_port(),
+                        PROTO_IPV4 | PROTO_TCP,
+                        tcp.header_len(),
+                    ),
                     Err(e) => {
                         ftl_driver::trace!(self.env, "invalid TCP header: {:?}", e);
                         return Err(ErrorCode::InvalidArg);
                     }
-                };
-                let ports = (tcp.src_port(), tcp.dst_port());
-
-                let mut tcp = match TcpRewriter::new(trans_bytes) {
-                    Ok(tcp) => tcp,
-                    Err(e) => {
-                        ftl_driver::trace!(self.env, "invalid TCP header: {:?}", e);
-                        return Err(ErrorCode::InvalidArg);
-                    }
-                };
-
-                // Update the TCP header.
-                tcp.update_checksum(our_ip, dst_ip, payload_buf.as_deref());
-                ports
+                }
             }
-            IPPROTO_UDP => {
-                let udp_len = trans_bytes.len() + payload_len;
-                let mut udp = match UdpRewriter::new(trans_bytes) {
-                    Ok(udp) => udp,
+            IP_PROTO_UDP => {
+                match UdpRewriter::new(trans_bytes) {
+                    Ok(udp) => (
+                        udp.src_port(),
+                        udp.dst_port(),
+                        PROTO_IPV4 | PROTO_UDP,
+                        UDP_HEADER_LEN,
+                    ),
                     Err(e) => {
                         ftl_driver::trace!(self.env, "invalid UDP header: {:?}", e);
                         return Err(ErrorCode::InvalidArg);
                     }
-                };
-
-                udp.set_len(udp_len as u16);
-                udp.update_checksum(our_ip, dst_ip, payload_buf.as_deref());
-                (udp.src_port(), udp.dst_port())
+                }
             }
             _ => {
                 // TODO: Should we overwrite instead?
@@ -178,18 +165,75 @@ impl<'a, N: RxNotify> NetMux<'a, N> {
             }
         };
 
-        let five_tuple = FiveTuple {
-            eth_type: ETHTYPE_IPV4,
-            ip_proto,
-            local_ip: our_ip.as_u32(),
-            local_port,
-            remote_ip: dst_ip.as_u32(),
-            remote_port,
+        if header_buf.len() != ipv4_header_len + trans_header_len {
+            return Err(ErrorCode::InvalidArg);
+        }
+
+        let (dst_nic, route_src_ip) = self
+            .lookup_route(protocols, dst_ip, remote_port)
+            .ok_or(ErrorCode::NotAllowed)?;
+
+        // Overwrite the source IP address if the route specifies one.
+        let mut src_ip = route_src_ip.unwrap_or(src_ip);
+
+        // Where should we send the packet?
+        let via = if let Some(physical) = &dst_nic.physical {
+            let (our_ip, next_hop_ip) = {
+                let physical = physical.lock();
+                let Some(external) = physical.external else {
+                    return Err(ErrorCode::InvalidArg);
+                };
+
+                let our_ip = external.address;
+                let next_hop_ip = external.next_hop_ip(dst_ip);
+                (our_ip, next_hop_ip)
+            };
+
+            if dst_ip == our_ip {
+                // Reject packets destined to our own IP address. Otherwise,
+                // containers may access each other's public endpoints by
+                // default (not via explicit vNIC routes).
+                return Err(ErrorCode::NotAllowed);
+            }
+
+            src_ip = our_ip;
+            Via::External {
+                nic: dst_nic.clone(),
+                our_ip,
+                next_hop_ip,
+            }
+        } else {
+            Via::Local(dst_nic.clone())
         };
 
-        // Check if this network owns the five-tuple.
-        if self.rx.find_nic_by_five_tuple(five_tuple) != Some(nic_id) {
+        if !self.has_route_back(&dst_nic, protocols, src_ip, local_port) {
             return Err(ErrorCode::NotAllowed);
+        }
+
+        let trans_bytes = &mut header_buf[ipv4_header_len..];
+        if ip_proto == IP_PROTO_TCP {
+            let mut tcp = match TcpRewriter::new(trans_bytes) {
+                Ok(tcp) => tcp,
+                Err(e) => {
+                    ftl_driver::trace!(self.env, "invalid TCP header: {:?}", e);
+                    return Err(ErrorCode::InvalidArg);
+                }
+            };
+
+            // Update the TCP header.
+            tcp.update_checksum(src_ip, dst_ip, payload_buf.as_deref());
+        } else {
+            let udp_len = trans_bytes.len() + payload_len;
+            let mut udp = match UdpRewriter::new(trans_bytes) {
+                Ok(udp) => udp,
+                Err(e) => {
+                    ftl_driver::trace!(self.env, "invalid UDP header: {:?}", e);
+                    return Err(ErrorCode::InvalidArg);
+                }
+            };
+
+            udp.set_len(udp_len as u16);
+            udp.update_checksum(src_ip, dst_ip, payload_buf.as_deref());
         }
 
         // Update the IPv4 header.
@@ -200,9 +244,9 @@ impl<'a, N: RxNotify> NetMux<'a, N> {
                 return Err(ErrorCode::InvalidArg);
             }
         };
-        ipv4.set_src_ip(our_ip);
+        ipv4.set_src_ip(src_ip);
         ipv4.update_checksum();
 
-        Ok((device_id, our_ip, next_hop_ip))
+        Ok(via)
     }
 }

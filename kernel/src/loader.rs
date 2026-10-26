@@ -14,6 +14,8 @@ use crate::boot::BootInfo;
 use crate::console::Console;
 use crate::handle::Handle;
 use crate::hspace::HandleSpace;
+use crate::nic::GLOBAL_NIC;
+use crate::nic::Nic;
 use crate::quota::Quota;
 use crate::shared_ref::SharedRef;
 use crate::thread::Thread;
@@ -159,6 +161,12 @@ pub fn load(bootinfo: &BootInfo) {
     hspace.insert_at(HandleId::new(3), image_handle).unwrap();
     hspace.insert_at(HandleId::new(4), hspace_handle).unwrap();
     hspace.insert_at(HandleId::new(5), console_handle).unwrap();
+    let pnic = GLOBAL_NIC.lock().clone();
+    if let Some(pnic) = pnic {
+        let pnic = SharedRef::new(Nic::new(pnic)).unwrap();
+        let pnic_handle = Handle::new(pnic, HandleRight::READ | HandleRight::WRITE);
+        hspace.insert_at(HandleId::new(6), pnic_handle).unwrap();
+    }
     let thread = Thread::new(&quota, hspace, vmspace, 0, 0, 0).unwrap();
     thread.start(entry, sp).unwrap();
 }
