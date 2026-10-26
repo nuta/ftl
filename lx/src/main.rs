@@ -27,6 +27,8 @@ mod zone;
 
 use alloc::sync::Arc;
 use alloc::vec::Vec;
+use core::net::SocketAddrV4;
+use core::str;
 
 use ftl::allocator;
 use ftl::hspace::HandleSpace;
@@ -42,6 +44,7 @@ use crate::container::Container;
 use crate::initfs::InitFsLoader;
 use crate::vfs::Console;
 use crate::vfs::EmbeddedFile;
+use crate::vfs::FileLike;
 
 #[repr(C, align(8))]
 struct Aligned<const N: usize>([u8; N]);
@@ -70,6 +73,25 @@ fn parse_cmdline<'a>(
     Ok(None)
 }
 
+fn unescape(value: &[u8]) -> Vec<u8> {
+    let mut unescaped = Vec::with_capacity(value.len());
+    let mut bytes = value.iter();
+    while let Some(&b) = bytes.next() {
+        if b != b'\\' {
+            unescaped.push(b);
+            continue;
+        }
+
+        match bytes.next() {
+            Some(b'n') => unescaped.push(b'\n'),
+            Some(b'\\') => unescaped.push(b'\\'),
+            _ => panic!("invalid escape in ftl.lx.arg"),
+        }
+    }
+
+    unescaped
+}
+
 #[unsafe(no_mangle)]
 fn main(cmdline: &[u8]) {
     let root_vmspace = unsafe { VmSpace::from_handle(HandleId::new(1)) };
@@ -96,9 +118,18 @@ fn main(cmdline: &[u8]) {
     let init = parse_cmdline(cmdline, b"ftl.lx.init")
         .expect("failed to parse cmdline")
         .expect("ftl.lx.init not found in cmdline");
+    let mut args = Vec::new();
+    for param in ftl_utils::cmdline::Parser::new(cmdline) {
+        let param = param.expect("failed to parse cmdline");
+        if param.key == b"ftl.lx.arg" {
+            args.push(unescape(param.value));
+        }
+    }
+
     let argv: Vec<&[u8]> = init
         .split(|b| b.is_ascii_whitespace())
         .filter(|arg| !arg.is_empty())
+        .chain(args.iter().map(Vec::as_slice))
         .collect();
     assert!(!argv.is_empty(), "ftl.lx.init must not be empty");
 
@@ -112,34 +143,51 @@ fn main(cmdline: &[u8]) {
     let net = parse_cmdline(cmdline, b"ftl.lx.net").expect("failed to parse cmdline");
     let nic_id = parse_cmdline(cmdline, b"ftl.lx.nic").expect("failed to parse cmdline");
     let network = match (net, nic_id) {
-        (Some(b"none"), _) => None,
         (Some(value), _) => panic!("unknown ftl.lx.net: {:?}", value),
         (None, Some(nic_id)) => {
             // This is a zone LX.
-            let nic_id = core::str::from_utf8(nic_id).expect("invalid ftl.lx.nic");
+
+            // Parse "ftl.lx.nic".
+            let nic_id = str::from_utf8(nic_id).expect("invalid ftl.lx.nic");
             let nic_id = nic_id.parse().expect("invalid ftl.lx.nic");
-            let ports = parse_cmdline(cmdline, b"ftl.lx.ports")
+
+            // Parse "ftl.lx.ports".
+            let ports_bytes = parse_cmdline(cmdline, b"ftl.lx.ports")
                 .expect("failed to parse cmdline")
                 .expect("ftl.lx.ports not found in cmdline");
-            let ports = core::str::from_utf8(ports).expect("invalid ftl.lx.ports");
+            let ports = str::from_utf8(ports_bytes).expect("invalid ftl.lx.ports");
             let (port_min, port_max) = ports.split_once('-').expect("invalid ftl.lx.ports");
             let port_min = port_min.parse().expect("invalid ftl.lx.ports");
             let port_max = port_max.parse().expect("invalid ftl.lx.ports");
+
             let nic = unsafe { Nic::from_handle(HandleId::new(nic_id)) };
-            Some(net::TcpIp::new(nic, None, port_min, port_max))
+            net::TcpIp::new(nic, None, port_min, port_max)
         }
         (None, None) => {
             // Instantiate a NIC for the init LX.
             let pnic = unsafe { Nic::from_handle(HandleId::new(6)) };
             let nic = net::create_init_nic(&pnic, net::INIT_PORT_MIN, net::INIT_PORT_MAX)
                 .expect("failed to create init NIC");
-            Some(net::TcpIp::new(
+
+            net::TcpIp::new(
                 nic,
                 Some(Arc::new(pnic)),
                 net::INIT_PORT_MIN,
                 net::INIT_PORT_MAX,
-            ))
+            )
         }
+    };
+
+    let stdio = match parse_cmdline(cmdline, b"ftl.lx.stdio").expect("failed to parse cmdline") {
+        Some(addr) => {
+            let addr = core::str::from_utf8(addr).expect("invalid ftl.lx.stdio");
+            let addr: SocketAddrV4 = addr.parse().expect("invalid ftl.lx.stdio");
+            let conn = network
+                .connect_tcp_to(addr)
+                .expect("failed to connect stdio");
+            Some(conn as Arc<dyn FileLike>)
+        }
+        None => None,
     };
 
     let console = match parse_cmdline(cmdline, b"ftl.lx.console").expect("failed to parse cmdline")
@@ -161,6 +209,7 @@ fn main(cmdline: &[u8]) {
         image,
         network,
         console,
+        stdio,
         elf_file,
         &argv,
     )

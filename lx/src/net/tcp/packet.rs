@@ -73,6 +73,7 @@ pub struct Segment<'a> {
 
 pub struct TcpPacketInfo {
     pub remote_ip: u32,
+    pub local_ip: u32,
     pub remote_port: u16,
     pub local_port: u16,
     pub seq: u32,
@@ -89,6 +90,7 @@ impl TcpPacketInfo {
         let version_ihl = header[offset_of!(Ipv4Header, version_ihl)];
         let ip_header_len = (version_ihl & 0x0f) as usize * 4;
         let remote_ip = read_u32_be(header, offset_of!(Ipv4Header, src_ip));
+        let local_ip = read_u32_be(header, offset_of!(Ipv4Header, dst_ip));
         let total_len = read_u16_be(header, offset_of!(Ipv4Header, total_len)) as usize;
 
         // Parser TCP header.
@@ -104,6 +106,7 @@ impl TcpPacketInfo {
         let payload_len = (total_len - (ip_header_len + tcp_header_len)) as u16;
         TcpPacketInfo {
             remote_ip,
+            local_ip,
             remote_port,
             local_port,
             seq,

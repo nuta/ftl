@@ -17,6 +17,7 @@ fn main() -> ExitCode {
         "ls" => commands::ls::main(&args[2..]),
         "nc" => commands::nc::main(&args[2..]),
         "pwd" => commands::pwd::main(&args[2..]),
+        "zone" => commands::zone::main(&args[2..]),
         "" => {
             eprintln!("usage: util <command> [args...]");
             ExitCode::FAILURE

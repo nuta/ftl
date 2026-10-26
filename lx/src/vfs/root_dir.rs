@@ -15,7 +15,7 @@ use crate::vfs::StaticDir;
 pub struct RootDir;
 
 impl RootDir {
-    pub fn new(quota: Arc<Quota>, image: Vmo, network: Option<Arc<TcpIp>>) -> INode {
+    pub fn new(quota: Arc<Quota>, image: Vmo, network: Arc<TcpIp>) -> INode {
         // TODO: Support dynamic mount points
         INode::Dir(Arc::new(StaticDir::new([
             DirEntry::new(b"dev", INode::Dir(Arc::new(DevFs::new()))),

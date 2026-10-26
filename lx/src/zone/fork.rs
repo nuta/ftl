@@ -1,5 +1,6 @@
 use alloc::sync::Arc;
 use alloc::vec::Vec;
+use core::net::Ipv4Addr;
 
 use ftl::quota::Quota;
 use ftl::vmo::Vmo;
@@ -14,11 +15,26 @@ use crate::wait_queue::Sleep;
 use crate::zone::Zone;
 use crate::zone::spec::SpecParser;
 
+const CHILD_IP_START: Ipv4Addr = Ipv4Addr::new(10, 77, 0, 2);
+const CHILD_IP_END: Ipv4Addr = Ipv4Addr::new(10, 77, 255, 254);
+
+fn alloc_child_ip(zones: &[Zone]) -> Result<Ipv4Addr, Errno> {
+    for bits in CHILD_IP_START.to_bits()..=CHILD_IP_END.to_bits() {
+        let ip = Ipv4Addr::from_bits(bits);
+        if zones.iter().all(|zone| zone.ip() != ip) {
+            // No zone is using this IP.
+            return Ok(ip);
+        }
+    }
+
+    Err(Errno::EADDRNOTAVAIL)
+}
+
 /// The global state of the zone system.
 struct Globals {
     quota: Arc<Quota>,
     image: Vmo,
-    network: Option<Arc<TcpIp>>,
+    network: Arc<TcpIp>,
     zones: SpinLock<Vec<Zone>>,
 }
 
@@ -27,7 +43,7 @@ pub struct Fork {
 }
 
 impl Fork {
-    pub fn new(quota: Arc<Quota>, image: Vmo, network: Option<Arc<TcpIp>>) -> Self {
+    pub fn new(quota: Arc<Quota>, image: Vmo, network: Arc<TcpIp>) -> Self {
         Self {
             globals: Arc::new(Globals {
                 quota,
@@ -78,13 +94,17 @@ impl FileLike for ForkBuilder {
                 *state = State::Done;
 
                 // Start a new zone.
+                let mut zones = self.globals.zones.lock();
+                let child_ip = alloc_child_ip(&zones)?;
                 let zone = Zone::spawn(
                     &self.globals.quota,
                     &self.globals.image,
-                    self.globals.network.as_ref(),
+                    &self.globals.network,
                     &spec,
+                    child_ip,
                 )?;
-                self.globals.zones.lock().push(zone);
+
+                zones.push(zone);
                 Ok(buf.len())
             }
             Err(err) => {

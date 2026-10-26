@@ -84,6 +84,10 @@ impl TcpListener {
         self.wait_queue.notify(Some(POLLIN));
     }
 
+    pub fn accepts(&self, ip: u32) -> bool {
+        self.bind_guard.accepts(ip)
+    }
+
     pub fn set_backlog(&self, backlog: usize) {
         self.mutable.lock().backlog = backlog;
     }

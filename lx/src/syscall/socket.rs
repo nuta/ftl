@@ -31,7 +31,7 @@ pub fn sys_socket(
     }
 
     let process = current.process();
-    let network = process.container().network().ok_or(Errno::EAFNOSUPPORT)?;
+    let network = process.container().network();
 
     // FIXME: support other socket types
     let socket: Arc<dyn FileLike> = match (socket_type & !SUPPORTED_FLAGS, protocol) {

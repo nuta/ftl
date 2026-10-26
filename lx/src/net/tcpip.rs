@@ -1,6 +1,8 @@
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::mem::offset_of;
+use core::net::Ipv4Addr;
+use core::net::SocketAddrV4;
 
 use ftl::net::Nic;
 use ftl::poll::Poll;
@@ -89,6 +91,7 @@ impl TcpConnKey {
 }
 
 pub struct BindGuard {
+    ip: Ipv4Addr,
     pnic: Option<Arc<Nic>>,
     rule: RouteRule,
 }
@@ -96,6 +99,10 @@ pub struct BindGuard {
 impl BindGuard {
     pub fn port(&self) -> u16 {
         self.rule.port_min
+    }
+
+    pub fn accepts(&self, ip: u32) -> bool {
+        self.ip.is_unspecified() || self.ip.to_bits() == ip
     }
 }
 
@@ -163,6 +170,37 @@ impl TcpIp {
         Err(ErrorCode::OutOfBounds)
     }
 
+    pub fn setup_zone_nic(
+        &self,
+        nic: &Nic,
+        host_addr: SocketAddrV4,
+        child_ip: Ipv4Addr,
+    ) -> Result<(), ErrorCode> {
+        // Route: child -> ours.
+        let peer_rule = RouteRule {
+            protocols: PROTO_ANY,
+            prefix_len: 32,
+            port_min: host_addr.port(),
+            port_max: host_addr.port(),
+            ip: host_addr.ip().to_bits(),
+            src_ip: child_ip.to_bits(),
+        };
+        nic.bind(&peer_rule, &self.nic)?;
+
+        // Route: ours -> child.
+        let our_rule = RouteRule {
+            protocols: PROTO_ANY,
+            prefix_len: 32,
+            port_min: 1,
+            port_max: u16::MAX,
+            ip: child_ip.to_bits(),
+            src_ip: host_addr.ip().to_bits(),
+        };
+        self.nic.bind(&our_rule, nic)?;
+
+        Ok(())
+    }
+
     pub fn subscribe(&self, poll: &Poll, cookie: usize) -> Result<(), ErrorCode> {
         self.nic.subscribe(poll, cookie)
     }
@@ -171,10 +209,19 @@ impl TcpIp {
         self.port_min <= port && port <= self.port_max
     }
 
-    pub fn bind_port(&self, protocols: u8, port: u16) -> Result<Arc<BindGuard>, Errno> {
+    pub fn bind_port(
+        &self,
+        protocols: u8,
+        ip: Ipv4Addr,
+        port: u16,
+    ) -> Result<Arc<BindGuard>, Errno> {
         let rule = RouteRule::new(protocols, port, port);
-        if self.owns_port(port) {
-            return Ok(Arc::new(BindGuard { pnic: None, rule }));
+        if !ip.is_unspecified() || self.owns_port(port) {
+            return Ok(Arc::new(BindGuard {
+                ip,
+                pnic: None,
+                rule,
+            }));
         }
 
         let Some(pnic) = &self.pnic else {
@@ -187,6 +234,7 @@ impl TcpIp {
             Err(error) => return Err(error.into()),
         }
         Ok(Arc::new(BindGuard {
+            ip,
             pnic: Some(pnic.clone()),
             rule,
         }))
@@ -228,6 +276,7 @@ impl TcpIp {
         &self,
         mutable: &mut Mutable,
         protocols: u8,
+        ip: Ipv4Addr,
         in_use: impl Fn(&Mutable, u16) -> bool,
     ) -> Result<Arc<BindGuard>, Errno> {
         let num_ports = self.port_max - self.port_min + 1;
@@ -236,16 +285,16 @@ impl TcpIp {
             let port = self.port_min + (start + i) % num_ports;
             if !in_use(mutable, port) {
                 mutable.last_alloced_port = port;
-                return self.bind_port(protocols, port);
+                return self.bind_port(protocols, ip, port);
             }
         }
 
         Err(Errno::EADDRNOTAVAIL)
     }
 
-    pub fn alloc_tcp_port(&self) -> Result<Arc<BindGuard>, Errno> {
+    pub fn alloc_tcp_port(&self, ip: Ipv4Addr) -> Result<Arc<BindGuard>, Errno> {
         let mut mutable = self.mutable.lock();
-        self.alloc_port(&mut mutable, PROTO_IPV4 | PROTO_TCP, |mutable, port| {
+        self.alloc_port(&mut mutable, PROTO_IPV4 | PROTO_TCP, ip, |mutable, port| {
             mutable.tcp_listeners.contains_key(&port)
         })
     }
@@ -262,12 +311,15 @@ impl TcpIp {
                     return Err(Errno::EADDRINUSE);
                 }
 
-                self.bind_port(PROTO_IPV4 | PROTO_UDP, port)?
+                self.bind_port(PROTO_IPV4 | PROTO_UDP, Ipv4Addr::UNSPECIFIED, port)?
             }
             _ => {
-                self.alloc_port(&mut mutable, PROTO_IPV4 | PROTO_UDP, |mutable, port| {
-                    mutable.udp_ports.contains_key(&port)
-                })?
+                self.alloc_port(
+                    &mut mutable,
+                    PROTO_IPV4 | PROTO_UDP,
+                    Ipv4Addr::UNSPECIFIED,
+                    |mutable, port| mutable.udp_ports.contains_key(&port),
+                )?
             }
         };
         mutable.udp_ports.insert(bind_guard.port(), rx_queue);
@@ -313,11 +365,16 @@ impl TcpIp {
                 bind_guard
             }
             None => {
-                self.alloc_port(&mut mutable, PROTO_IPV4 | PROTO_TCP, |mutable, port| {
-                    mutable
-                        .tcp_conns
-                        .contains_key(&TcpConnKey::new(port, remote))
-                })?
+                self.alloc_port(
+                    &mut mutable,
+                    PROTO_IPV4 | PROTO_TCP,
+                    Ipv4Addr::UNSPECIFIED,
+                    |mutable, port| {
+                        mutable
+                            .tcp_conns
+                            .contains_key(&TcpConnKey::new(port, remote))
+                    },
+                )?
             }
         };
 
@@ -339,6 +396,15 @@ impl TcpIp {
         // Start handshake.
         conn.start_active();
         Ok(conn)
+    }
+
+    pub fn connect_tcp_to(self: &Arc<Self>, addr: SocketAddrV4) -> Result<Arc<TcpConn>, Errno> {
+        let remote = Endpoint {
+            ip: addr.ip().to_bits(),
+            port: addr.port(),
+        };
+        let wait_queue = Arc::new(WaitQueue::new()?);
+        self.connect_tcp(remote, None, wait_queue)
     }
 
     pub fn add_tcp_conn(&self, conn: Arc<TcpConn>, pkt: &TcpPacketInfo) -> Result<(), ErrorCode> {
@@ -419,7 +485,11 @@ impl TcpIp {
             .tcp_conns
             .get(&TcpConnKey::new(pkt.local_port, remote))
             .cloned();
-        let listener = mutable.tcp_listeners.get(&pkt.local_port).cloned();
+        let listener = mutable
+            .tcp_listeners
+            .get(&pkt.local_port)
+            .filter(|listener| listener.accepts(pkt.local_ip))
+            .cloned();
         drop(mutable);
 
         if let Some(conn) = conn {

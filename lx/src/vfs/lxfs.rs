@@ -14,7 +14,7 @@ pub struct LxFs {
 }
 
 impl LxFs {
-    pub fn new(quota: Arc<Quota>, image: Vmo, network: Option<Arc<TcpIp>>) -> StaticDir<1> {
+    pub fn new(quota: Arc<Quota>, image: Vmo, network: Arc<TcpIp>) -> StaticDir<1> {
         let fork_dir = StaticDir::new([DirEntry::new(
             b"fork",
             INode::File(Arc::new(Fork::new(quota, image, network))),

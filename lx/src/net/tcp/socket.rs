@@ -1,4 +1,5 @@
 use alloc::sync::Arc;
+use core::net::Ipv4Addr;
 
 use ftl_types::error::ErrorCode;
 use ftl_types::nic::PROTO_IPV4;
@@ -22,7 +23,10 @@ use crate::wait_queue::Sleep;
 use crate::wait_queue::WaitQueue;
 
 enum State {
-    Init { bind_guard: Option<Arc<BindGuard>> },
+    Init {
+        local_ip: Ipv4Addr,
+        bind_guard: Option<Arc<BindGuard>>,
+    },
     Listener(Arc<TcpListener>),
     Conn(Arc<TcpConn>),
 }
@@ -39,7 +43,10 @@ impl TcpSocket {
         Ok(Arc::new(Self {
             tcpip,
             wait_queue,
-            state: SpinLock::new(State::Init { bind_guard: None }),
+            state: SpinLock::new(State::Init {
+                local_ip: Ipv4Addr::UNSPECIFIED,
+                bind_guard: None,
+            }),
         }))
     }
 
@@ -58,9 +65,13 @@ impl TcpSocket {
     }
 
     /// `bind(2)` implementation.
-    pub fn do_bind(&self, port: u16) -> Result<(), Errno> {
+    pub fn do_bind(&self, ip: Ipv4Addr, port: u16) -> Result<(), Errno> {
         let mut state = self.state.lock();
-        let State::Init { bind_guard } = &mut *state else {
+        let State::Init {
+            local_ip,
+            bind_guard,
+        } = &mut *state
+        else {
             return Err(Errno::EINVAL);
         };
 
@@ -69,6 +80,7 @@ impl TcpSocket {
             return Err(Errno::EINVAL);
         }
 
+        *local_ip = ip;
         if port == 0 {
             return Ok(());
         }
@@ -78,7 +90,7 @@ impl TcpSocket {
             return Err(Errno::EADDRINUSE);
         }
 
-        *bind_guard = Some(self.tcpip.bind_port(PROTO_IPV4 | PROTO_TCP, port)?);
+        *bind_guard = Some(self.tcpip.bind_port(PROTO_IPV4 | PROTO_TCP, ip, port)?);
         Ok(())
     }
 
@@ -90,10 +102,13 @@ impl TcpSocket {
 
         let mut state = self.state.lock();
         match &mut *state {
-            State::Init { bind_guard } => {
+            State::Init {
+                local_ip,
+                bind_guard,
+            } => {
                 let bind_guard = match bind_guard {
                     Some(bind_guard) => bind_guard.clone(),
-                    None => self.tcpip.alloc_tcp_port()?,
+                    None => self.tcpip.alloc_tcp_port(*local_ip)?,
                 };
                 let listener = TcpListener::new(
                     self.tcpip.clone(),
@@ -126,7 +141,7 @@ impl TcpSocket {
         let conn = {
             let mut state = self.state.lock();
             match &*state {
-                State::Init { bind_guard } => {
+                State::Init { bind_guard, .. } => {
                     // Start a handshake.
                     let wq = self.wait_queue.clone();
                     let conn = self.tcpip.connect_tcp(remote, bind_guard.clone(), wq)?;
@@ -151,10 +166,7 @@ impl TcpSocket {
 impl FileLike for TcpSocket {
     fn bind(&self, addr: SockAddr) -> Result<(), Errno> {
         match addr {
-            SockAddr::Inet { ip, port } => {
-                let _ = ip; // TODO: support binding to specific IP address
-                self.do_bind(port)
-            }
+            SockAddr::Inet { ip, port } => self.do_bind(Ipv4Addr::from_bits(ip), port),
         }
     }
 

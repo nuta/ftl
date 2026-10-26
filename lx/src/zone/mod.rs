@@ -5,10 +5,12 @@ use alloc::format;
 use alloc::sync::Arc;
 use alloc::vec;
 use alloc::vec::Vec;
+use core::net::Ipv4Addr;
 
 pub use fork::Fork;
 use ftl::handle::OwnedHandle;
 use ftl::hspace::HandleSpace;
+use ftl::net::Nic;
 use ftl::quota::Quota;
 use ftl::thread::Thread;
 use ftl::vmo::Vmo;
@@ -23,6 +25,8 @@ use ftl_types::vmspace::PageAttrs;
 use ftl_utils::alignment::align_down;
 use ftl_utils::alignment::align_up;
 
+use crate::net::INIT_PORT_MAX;
+use crate::net::INIT_PORT_MIN;
 use crate::net::TcpIp;
 use crate::net::ZONE_PORT_LEN;
 use crate::types::errno::Errno;
@@ -107,29 +111,44 @@ fn move_handle_to(
 }
 
 pub struct Zone {
+    ip: Ipv4Addr,
     _hspace: HandleSpace,
     _thread: Thread,
 }
 
 impl Zone {
+    pub fn ip(&self) -> Ipv4Addr {
+        self.ip
+    }
+
     pub fn spawn(
         parent_quota: &Quota,
         image: &Vmo,
-        network: Option<&Arc<TcpIp>>,
+        network: &Arc<TcpIp>,
         spec: &Spec,
+        child_ip: Ipv4Addr,
     ) -> Result<Zone, Errno> {
         let mut cmdline = Vec::new();
         cmdline.extend_from_slice(b"ftl.lx.console=none ");
 
-        let mut zone_nic = None;
-        if spec.net {
-            let Some(network) = network else {
-                return Err(Errno::EINVAL);
-            };
-            let (nic, port_min, port_max) = network.create_parent_nic(ZONE_PORT_LEN)?;
-            let net = format!("ftl.lx.nic={NIC_HANDLE_ID} ftl.lx.ports={port_min}-{port_max} ");
-            cmdline.extend_from_slice(net.as_bytes());
-            zone_nic = Some(nic);
+        let (nic, port_min, port_max) = if spec.net {
+            network.create_parent_nic(ZONE_PORT_LEN)?
+        } else {
+            (Nic::create_virtual()?, INIT_PORT_MIN, INIT_PORT_MAX)
+        };
+        let net = format!("ftl.lx.nic={NIC_HANDLE_ID} ftl.lx.ports={port_min}-{port_max} ");
+        cmdline.extend_from_slice(net.as_bytes());
+
+        if let Some(addr) = spec.stdio {
+            network.setup_zone_nic(&nic, addr, child_ip)?;
+            let stdio = format!("ftl.lx.stdio={addr} ");
+            cmdline.extend_from_slice(stdio.as_bytes());
+        }
+
+        for arg in &spec.args {
+            cmdline.extend_from_slice(b"ftl.lx.arg=\"");
+            cmdline.extend_from_slice(arg);
+            cmdline.extend_from_slice(b"\" ");
         }
 
         cmdline.extend_from_slice(b"ftl.lx.init=");
@@ -156,17 +175,16 @@ impl Zone {
         move_handle_to(&hspace, quota.into_handle(), HandleRight::CHARGE, 2)?;
         move_handle_to(&hspace, child_image.into_handle(), HandleRight::READ, 3)?;
         move_handle_to(&hspace, child_hspace.into_handle(), HandleRight::WRITE, 4)?;
-        if let Some(nic) = zone_nic {
-            move_handle_to(
-                &hspace,
-                nic.into_handle(),
-                HandleRight::READ | HandleRight::WRITE,
-                NIC_HANDLE_ID,
-            )?;
-        }
+        move_handle_to(
+            &hspace,
+            nic.into_handle(),
+            HandleRight::READ | HandleRight::WRITE,
+            NIC_HANDLE_ID,
+        )?;
 
         thread.start(entry, sp)?;
         Ok(Zone {
+            ip: child_ip,
             _hspace: hspace,
             _thread: thread,
         })

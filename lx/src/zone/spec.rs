@@ -1,5 +1,6 @@
 use alloc::vec::Vec;
 use core::mem;
+use core::net::SocketAddrV4;
 
 use crate::types::errno::Errno;
 
@@ -8,13 +9,17 @@ const LINE_LEN_MAX: usize = 4096;
 /// A zone spec. What you write to `/lx/zone/fork`.
 pub struct Spec {
     pub net: bool,
+    pub stdio: Option<SocketAddrV4>,
     pub init: Vec<u8>,
+    pub args: Vec<Vec<u8>>,
 }
 
 /// A parser for zone specs.
 pub struct SpecParser {
     net: bool,
+    stdio: Option<SocketAddrV4>,
     init: Option<Vec<u8>>,
+    args: Vec<Vec<u8>>,
     line: Vec<u8>,
 }
 
@@ -22,7 +27,9 @@ impl SpecParser {
     pub const fn new() -> Self {
         Self {
             net: false,
+            stdio: None,
             init: None,
+            args: Vec::new(),
             line: Vec::new(),
         }
     }
@@ -67,6 +74,17 @@ impl SpecParser {
 
                 Ok(None)
             }
+            b"stdio" => {
+                let addr = str::from_utf8(value).map_err(|_| Errno::EINVAL)?;
+                let addr: SocketAddrV4 = addr.parse().map_err(|_| Errno::EINVAL)?;
+
+                if self.stdio.replace(addr).is_some() {
+                    // Multiple stdio specs are not allowed.
+                    return Err(Errno::EINVAL);
+                }
+
+                Ok(None)
+            }
             b"init" => {
                 if value.is_empty() || !value.iter().all(|b| b.is_ascii_graphic()) {
                     return Err(Errno::EINVAL);
@@ -79,6 +97,23 @@ impl SpecParser {
 
                 Ok(None)
             }
+            b"arg" => {
+                let mut bytes = value.iter();
+                while let Some(&b) = bytes.next() {
+                    let valid = match b {
+                        b'\\' => matches!(bytes.next(), Some(b'n' | b'\\')),
+                        b'"' => false,
+                        _ => b == b' ' || b.is_ascii_graphic(),
+                    };
+
+                    if !valid {
+                        return Err(Errno::EINVAL);
+                    }
+                }
+
+                self.args.push(value.to_vec());
+                Ok(None)
+            }
             b"exec" => {
                 if !value.is_empty() {
                     return Err(Errno::EINVAL);
@@ -87,7 +122,9 @@ impl SpecParser {
                 let init = self.init.take().ok_or(Errno::EINVAL)?;
                 Ok(Some(Spec {
                     net: self.net,
+                    stdio: self.stdio.take(),
                     init,
+                    args: mem::take(&mut self.args),
                 }))
             }
             _ => Err(Errno::EINVAL),
