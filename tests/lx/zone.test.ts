@@ -8,4 +8,10 @@ describe("zone", () => {
         using vm = await boot({ hostPort, init: "/bin/util zone /bin/util echo hello from zone" });
         await vm.waitForLog("[zone:stdout] hello from zone");
     }, 5000);
+
+    test("stderr", async () => {
+        const hostPort = await getAvailablePort();
+        using vm = await boot({ hostPort, init: "/bin/util zone /bin/util cat /nonexistent" });
+        await vm.waitForLog("[zone:stderr] cat: /nonexistent:");
+    }, 5000);
 });

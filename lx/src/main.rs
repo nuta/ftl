@@ -45,6 +45,9 @@ use crate::initfs::InitFsLoader;
 use crate::vfs::Console;
 use crate::vfs::EmbeddedFile;
 use crate::vfs::FileLike;
+use crate::zone::FrameKind;
+use crate::zone::StdioConn;
+use crate::zone::StdioStream;
 
 #[repr(C, align(8))]
 struct Aligned<const N: usize>([u8; N]);
@@ -185,7 +188,11 @@ fn main(cmdline: &[u8]) {
             let conn = network
                 .connect_tcp_to(addr)
                 .expect("failed to connect stdio");
-            Some(conn as Arc<dyn FileLike>)
+            let conn = Arc::new(StdioConn::new(conn));
+            let stdout: Arc<dyn FileLike> =
+                Arc::new(StdioStream::new(conn.clone(), FrameKind::Stdout));
+            let stderr: Arc<dyn FileLike> = Arc::new(StdioStream::new(conn, FrameKind::Stderr));
+            Some((stdout, stderr))
         }
         None => None,
     };

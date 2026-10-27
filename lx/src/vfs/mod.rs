@@ -1,4 +1,5 @@
 use alloc::sync::Arc;
+use core::cmp::min;
 use core::slice;
 
 use crate::types;
@@ -70,6 +71,22 @@ impl<'a> IoVecSlice<'a> {
             .map(|iovec| unsafe {
                 slice::from_raw_parts(iovec.iov_base as *const u8, iovec.iov_len)
             })
+    }
+
+    pub fn copy_to(&self, mut dst: &mut [u8]) -> usize {
+        let mut total_len = 0;
+        for src in self.buffers() {
+            if dst.is_empty() {
+                break;
+            }
+
+            let (chunk, rest) = dst.split_at_mut(min(src.len(), dst.len()));
+            chunk.copy_from_slice(&src[..chunk.len()]);
+            total_len += chunk.len();
+            dst = rest;
+        }
+
+        total_len
     }
 }
 

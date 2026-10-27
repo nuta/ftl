@@ -51,7 +51,7 @@ impl Container {
         image: Vmo,
         network: Arc<TcpIp>,
         console: Option<Arc<Console>>,
-        stdio: Option<Arc<dyn FileLike>>,
+        stdio: Option<(Arc<dyn FileLike>, Arc<dyn FileLike>)>,
         elf_file: Arc<dyn FileLike>,
         argv: &[&[u8]],
     ) -> Result<Arc<Self>, Errno> {

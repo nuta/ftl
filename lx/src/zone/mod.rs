@@ -1,5 +1,6 @@
 mod fork;
 mod spec;
+mod stdio;
 
 use alloc::format;
 use alloc::sync::Arc;
@@ -24,6 +25,9 @@ use ftl_types::quota::UNLIMITED;
 use ftl_types::vmspace::PageAttrs;
 use ftl_utils::alignment::align_down;
 use ftl_utils::alignment::align_up;
+pub use stdio::FrameKind;
+pub use stdio::StdioConn;
+pub use stdio::StdioStream;
 
 use crate::net::INIT_PORT_MAX;
 use crate::net::INIT_PORT_MIN;

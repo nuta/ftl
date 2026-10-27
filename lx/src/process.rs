@@ -87,7 +87,7 @@ impl Process {
     pub fn new_init(
         container: Arc<Container>,
         console: Option<Arc<Console>>,
-        stdio: Option<Arc<dyn FileLike>>,
+        stdio: Option<(Arc<dyn FileLike>, Arc<dyn FileLike>)>,
         elf_file: Arc<dyn FileLike>,
         argv: &[&[u8]],
     ) -> Result<Arc<Process>, Errno> {
@@ -99,10 +99,10 @@ impl Process {
             Some(console) => Arc::new(Tty::new(console)),
             None => Arc::new(Null::new()),
         };
-        let stdio = stdio.unwrap_or_else(|| tty.clone());
+        let (stdout, stderr) = stdio.unwrap_or_else(|| (tty.clone(), tty.clone()));
         fd_table.insert_at(0, tty, O_RDONLY)?;
-        fd_table.insert_at(1, stdio.clone(), O_WRONLY)?;
-        fd_table.insert_at(2, stdio, O_WRONLY)?;
+        fd_table.insert_at(1, stdout, O_WRONLY)?;
+        fd_table.insert_at(2, stderr, O_WRONLY)?;
 
         let cwd = container.root_dir.clone();
         let process = Self::new(

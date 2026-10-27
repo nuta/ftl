@@ -28,6 +28,7 @@ use crate::types::sys::socket::SHUT_RDWR;
 use crate::types::sys::socket::SHUT_WR;
 use crate::types::sys::socket::SockAddr;
 use crate::vfs::FileLike;
+use crate::vfs::IoVecSlice;
 use crate::wait_queue::Sleep;
 use crate::wait_queue::WaitQueue;
 
@@ -91,13 +92,7 @@ impl TcpConn {
         bind_guard: Arc<BindGuard>,
     ) -> Result<Arc<Self>, ErrorCode> {
         let wq = WaitQueue::new()?;
-        let conn = Self::new_active(
-            tcpip,
-            Arc::new(wq),
-            remote,
-            local_iss,
-            bind_guard,
-        )?;
+        let conn = Self::new_active(tcpip, Arc::new(wq), remote, local_iss, bind_guard)?;
         let mut mutable = conn.mutable.lock();
         mutable.state = State::Established;
         mutable.snd_una = mutable.snd_nxt;
@@ -747,6 +742,80 @@ impl TcpConn {
             if mutable.eof || mutable.state == State::Closed {
                 // RX buffer is empty, and the connection is closed.
                 return Ok(0);
+            }
+
+            if nonblocking {
+                return Err(Errno::EAGAIN);
+            }
+
+            if sleep_guard.is_interrupted() {
+                return Err(Errno::EINTR);
+            }
+
+            drop(mutable);
+            sleep_guard.wait()?;
+        }
+    }
+
+    pub const ATOMIC_WRITE_MAX: usize = TCP_BUFFER_SIZE;
+
+    /// Writes `header || iovecs[..iovecs_len]` bytes atomically.
+    ///
+    /// This method blocks while the TX buffer is full.
+    pub fn write_atomic(
+        &self,
+        header: &[u8],
+        iovecs: &IoVecSlice,
+        iovecs_len: usize,
+        nonblocking: bool,
+        sleep: Sleep<'_>,
+    ) -> Result<(), Errno> {
+        if iovecs_len > iovecs.total_len() {
+            return Err(Errno::EINVAL);
+        }
+
+        let total_len = header.len() + iovecs_len;
+        if total_len > Self::ATOMIC_WRITE_MAX {
+            return Err(Errno::EMSGSIZE);
+        }
+
+        let sleep_guard = sleep.guard(&self.wait_queue)?;
+        loop {
+            let mut mutable = self.mutable.lock();
+            if let Some(error) = mutable.error.take() {
+                return Err(error);
+            }
+
+            if mutable.write_closed {
+                return Err(Errno::EPIPE);
+            }
+
+            if mutable.state != State::SynSent {
+                if mutable.state != State::Established && mutable.state != State::CloseWait {
+                    return Err(Errno::EPIPE);
+                }
+
+                if mutable.tx_buffer.writable_len() >= total_len {
+                    // The connection is still writable and has enough space
+                    // to write the entire frame. Write into the TX buffer.
+                    mutable.tx_buffer.write_with(total_len, |buf| {
+                        // Split the TX buffer into header/payload parts.
+                        let (header_buf, payload_buf) = buf.split_at_mut(header.len());
+
+                        // Copy the header to the TX buffer.
+                        let mut written_len = 0;
+                        header_buf.copy_from_slice(header);
+                        written_len += header.len();
+
+                        // Copy the payload to the TX buffer.
+                        written_len += iovecs.copy_to(payload_buf);
+
+                        written_len
+                    })?;
+
+                    self.flush(&mut mutable);
+                    return Ok(());
+                }
             }
 
             if nonblocking {
