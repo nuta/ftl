@@ -1,8 +1,12 @@
 # Changelog
 
-## 0.0.1 (Sep 15, 2026)
+## 0.2.0 (Oct 28, 2026)
 
-The first release. Hello world!
+- LX: Zone, our Linux container/FreeBSD jail like isolated environment.
+- LX: Virtual file system system calls (e.g. `getdents64(2)`) and better epoll.
+- Virtual NIC API for more flexible networking.
+- kernel: Userspace page fault handling (`userfaultfd(2)`-like feature).
+- kernel: CPU time and user memory quota.
 
 ## 0.1.0 (Oct 3, 2026)
 
@@ -13,3 +17,7 @@ The first release. Hello world!
 - Anonymous memory pages are now allocated lazily.
 - Blocking Linux system calls are now interruptible by signals.
 - x86-64 SMEP/SMAP support.
+
+## 0.0.1 (Sep 15, 2026)
+
+The first release. Hello world!
