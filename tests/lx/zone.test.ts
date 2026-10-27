@@ -14,4 +14,10 @@ describe("zone", () => {
         using vm = await boot({ hostPort, init: "/bin/util zone /bin/util cat /nonexistent" });
         await vm.waitForLog("[zone:stderr] cat: /nonexistent:");
     }, 5000);
+
+    test("exit status", async () => {
+        const hostPort = await getAvailablePort();
+        using vm = await boot({ hostPort, init: "/bin/util zone /bin/util exit 42" });
+        await vm.waitForLog("[zone:exit] status 42");
+    }, 5000);
 });

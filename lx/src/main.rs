@@ -42,6 +42,7 @@ use ftl_utils::alignment::align_up;
 
 use crate::container::Container;
 use crate::initfs::InitFsLoader;
+use crate::types::errno::Errno;
 use crate::vfs::Console;
 use crate::vfs::EmbeddedFile;
 use crate::vfs::FileLike;
@@ -181,21 +182,23 @@ fn main(cmdline: &[u8]) {
         }
     };
 
-    let stdio = match parse_cmdline(cmdline, b"ftl.lx.stdio").expect("failed to parse cmdline") {
-        Some(addr) => {
-            let addr = core::str::from_utf8(addr).expect("invalid ftl.lx.stdio");
-            let addr: SocketAddrV4 = addr.parse().expect("invalid ftl.lx.stdio");
-            let conn = network
-                .connect_tcp_to(addr)
-                .expect("failed to connect stdio");
-            let conn = Arc::new(StdioConn::new(conn));
-            let stdout: Arc<dyn FileLike> =
-                Arc::new(StdioStream::new(conn.clone(), FrameKind::Stdout));
-            let stderr: Arc<dyn FileLike> = Arc::new(StdioStream::new(conn, FrameKind::Stderr));
-            Some((stdout, stderr))
-        }
-        None => None,
-    };
+    let (stdio_conn, stdio) =
+        match parse_cmdline(cmdline, b"ftl.lx.stdio").expect("failed to parse cmdline") {
+            Some(addr) => {
+                let addr = core::str::from_utf8(addr).expect("invalid ftl.lx.stdio");
+                let addr: SocketAddrV4 = addr.parse().expect("invalid ftl.lx.stdio");
+                let conn = network
+                    .connect_tcp_to(addr)
+                    .expect("failed to connect stdio");
+                let conn = Arc::new(StdioConn::new(conn));
+                let stdout: Arc<dyn FileLike> =
+                    Arc::new(StdioStream::new(conn.clone(), FrameKind::Stdout));
+                let stderr: Arc<dyn FileLike> =
+                    Arc::new(StdioStream::new(conn.clone(), FrameKind::Stderr));
+                (Some(conn), Some((stdout, stderr)))
+            }
+            None => (None, None),
+        };
 
     let console = match parse_cmdline(cmdline, b"ftl.lx.console").expect("failed to parse cmdline")
     {
@@ -222,5 +225,39 @@ fn main(cmdline: &[u8]) {
     )
     .expect("failed to start LX");
 
-    container.run();
+    // Keep LX running until the init process exits.
+    let status = loop {
+        container.handle_events();
+        if let Some(status) = container.init_exit_status() {
+            break status;
+        }
+    };
+
+    ftl::trace!("init process exited with status {}", status);
+
+    // The init process has exited. Report the exit status over the stdio conn.
+    let Some(conn) = stdio_conn else {
+        panic!("init process exited with status {}", status);
+    };
+
+    // Send the exit status over the stdio connection.
+    while conn.send_exit(status) == Err(Errno::EAGAIN) {
+        container.handle_events();
+    }
+
+    // Wait for the host to close the connection, so that they can close
+    // the connection gracefully.
+    //
+    // TODO: Implement SO_LINGER and drop this loop.
+    while !conn.is_peer_closed() {
+        container.handle_events();
+    }
+
+    // Initiate a connection close.
+    conn.close();
+
+    // Keep LX running until the host LX destroys this thread.
+    loop {
+        container.handle_events();
+    }
 }

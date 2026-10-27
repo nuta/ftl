@@ -129,9 +129,9 @@ impl TcpListener {
             payload: &[],
         };
 
-        if let Err(err) = self
-            .tcpip
-            .send_tcp_segment(handshake.remote, self.bind_guard.port(), segment)
+        if let Err(err) =
+            self.tcpip
+                .send_tcp_segment(handshake.remote, self.bind_guard.port(), segment)
         {
             trace!("failed to send SYN-ACK packet: {:?}", err);
         }

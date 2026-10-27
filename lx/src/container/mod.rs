@@ -19,6 +19,7 @@ use crate::process::PId;
 use crate::process::Process;
 use crate::reaper::Reaper;
 use crate::thread::LxThread;
+use crate::types::c_int;
 use crate::types::errno::Errno;
 use crate::vfs::Console;
 use crate::vfs::FileLike;
@@ -41,6 +42,7 @@ pub struct Container {
     network: Arc<TcpIp>,
     console: Option<Arc<Console>>,
     pub root_dir: Arc<PathNode>,
+    init_exit_status: SpinLock<Option<c_int>>,
 }
 
 impl Container {
@@ -75,6 +77,7 @@ impl Container {
             network,
             console: console.clone(),
             root_dir: PathNode::root_dir(root_dir),
+            init_exit_status: SpinLock::new(None),
         });
 
         let init_process = Process::new_init(this.clone(), console, stdio, elf_file, argv)?;
@@ -92,31 +95,37 @@ impl Container {
         Ok(())
     }
 
-    pub fn run(&self) -> ! {
-        loop {
-            let deadline = MonoTime::now() + Duration::from_secs(1);
-            match self.poll.wait_until(deadline) {
-                Ok(NETWORK_COOKIE) => {
-                    self.network.handle_rx();
-                    self.network
-                        .subscribe(&self.poll, NETWORK_COOKIE)
-                        .expect("failed to subscribe to network events");
-                }
-                Ok(CONSOLE_COOKIE) if let Some(console) = &self.console => {
-                    console.handle_rx();
-                    console
-                        .subscribe(&self.poll, CONSOLE_COOKIE)
-                        .expect("failed to subscribe to console events");
-                }
-                Ok(thread_id) if thread_id <= HANDLE_ID_MAX => {
-                    self.reaper.reap_thread(HandleId::new(thread_id))
-                }
-                Ok(cookie) => panic!("unexpected poll cookie: {:#x}", cookie),
-                Err(ErrorCode::TimedOut) => {}
-                Err(err) => panic!("poll wait failed: {:?}", err),
-            }
+    pub fn set_init_exit_status(&self, status: c_int) {
+        self.init_exit_status.lock().get_or_insert(status);
+    }
 
-            self.network.handle_timeouts(MonoTime::now());
+    pub fn init_exit_status(&self) -> Option<c_int> {
+        *self.init_exit_status.lock()
+    }
+
+    pub fn handle_events(&self) {
+        let deadline = MonoTime::now() + Duration::from_secs(1);
+        match self.poll.wait_until(deadline) {
+            Ok(NETWORK_COOKIE) => {
+                self.network.handle_rx();
+                self.network
+                    .subscribe(&self.poll, NETWORK_COOKIE)
+                    .expect("failed to subscribe to network events");
+            }
+            Ok(CONSOLE_COOKIE) if let Some(console) = &self.console => {
+                console.handle_rx();
+                console
+                    .subscribe(&self.poll, CONSOLE_COOKIE)
+                    .expect("failed to subscribe to console events");
+            }
+            Ok(thread_id) if thread_id <= HANDLE_ID_MAX => {
+                self.reaper.reap_thread(HandleId::new(thread_id))
+            }
+            Ok(cookie) => panic!("unexpected poll cookie: {:#x}", cookie),
+            Err(ErrorCode::TimedOut) => {}
+            Err(err) => panic!("poll wait failed: {:?}", err),
         }
+
+        self.network.handle_timeouts(MonoTime::now());
     }
 }

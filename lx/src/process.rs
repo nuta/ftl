@@ -375,7 +375,7 @@ impl Process {
     // TODO: Should we make this method infallible?
     pub fn exit(&self, status: c_int) -> Result<(), Errno> {
         if self.tgid == PId::new(1) {
-            panic!("init process exited with status {}", status);
+            self.container.set_init_exit_status(status);
         }
 
         let mut mutable = self.mutable.lock();

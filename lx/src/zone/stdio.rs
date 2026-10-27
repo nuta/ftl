@@ -2,6 +2,7 @@ use alloc::sync::Arc;
 use core::cmp::min;
 
 use crate::net::TcpConn;
+use crate::types::c_int;
 use crate::types::c_short;
 use crate::types::errno::Errno;
 use crate::types::sys::poll::POLLOUT;
@@ -17,6 +18,7 @@ const FRAME_PAYLOAD_MAX: usize = 2048;
 pub enum FrameKind {
     Stdout = 1,
     Stderr = 2,
+    Exit = 3,
 }
 
 pub struct StdioConn(Arc<TcpConn>);
@@ -24,6 +26,23 @@ pub struct StdioConn(Arc<TcpConn>);
 impl StdioConn {
     pub fn new(conn: Arc<TcpConn>) -> Self {
         Self(conn)
+    }
+
+    pub fn send_exit(&self, status: c_int) -> Result<(), Errno> {
+        let [status0, status1] = (status as u16).to_le_bytes();
+        let header = [FrameKind::Exit as u8, status0, status1];
+        let empty: [IoVec; 0] = [];
+        let iovecs = IoVecSlice::new(empty.as_ptr(), 0);
+        self.0
+            .write_atomic(&header, &iovecs, 0, true, Sleep::Uninterruptible)
+    }
+
+    pub fn close(&self) {
+        self.0.close();
+    }
+
+    pub fn is_peer_closed(&self) -> bool {
+        self.0.is_peer_closed()
     }
 }
 

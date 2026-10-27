@@ -115,16 +115,11 @@ fn move_handle_to(
 }
 
 pub struct Zone {
-    ip: Ipv4Addr,
     _hspace: HandleSpace,
     _thread: Thread,
 }
 
 impl Zone {
-    pub fn ip(&self) -> Ipv4Addr {
-        self.ip
-    }
-
     pub fn spawn(
         parent_quota: &Quota,
         image: &Vmo,
@@ -188,7 +183,6 @@ impl Zone {
 
         thread.start(entry, sp)?;
         Ok(Zone {
-            ip: child_ip,
             _hspace: hspace,
             _thread: thread,
         })

@@ -18,16 +18,54 @@ use crate::zone::spec::SpecParser;
 const CHILD_IP_START: Ipv4Addr = Ipv4Addr::new(10, 77, 0, 2);
 const CHILD_IP_END: Ipv4Addr = Ipv4Addr::new(10, 77, 255, 254);
 
-fn alloc_child_ip(zones: &[Zone]) -> Result<Ipv4Addr, Errno> {
-    for bits in CHILD_IP_START.to_bits()..=CHILD_IP_END.to_bits() {
-        let ip = Ipv4Addr::from_bits(bits);
-        if zones.iter().all(|zone| zone.ip() != ip) {
-            // No zone is using this IP.
-            return Ok(ip);
-        }
+struct ChildIpAllocator {
+    used_ips: SpinLock<Vec<Ipv4Addr>>,
+}
+
+impl ChildIpAllocator {
+    fn new() -> Arc<Self> {
+        Arc::new(Self {
+            used_ips: SpinLock::new(Vec::new()),
+        })
     }
 
-    Err(Errno::EADDRNOTAVAIL)
+    fn alloc(self: &Arc<Self>) -> Result<ChildIp, Errno> {
+        let mut used_ips = self.used_ips.lock();
+        for bits in CHILD_IP_START.to_bits()..=CHILD_IP_END.to_bits() {
+            let ip = Ipv4Addr::from_bits(bits);
+            if !used_ips.contains(&ip) {
+                // No zone is using this IP.
+                used_ips.push(ip);
+                return Ok(ChildIp {
+                    allocator: self.clone(),
+                    ip,
+                });
+            }
+        }
+
+        Err(Errno::EADDRNOTAVAIL)
+    }
+
+    fn free(&self, ip: Ipv4Addr) {
+        self.used_ips.lock().retain(|used| *used != ip);
+    }
+}
+
+struct ChildIp {
+    allocator: Arc<ChildIpAllocator>,
+    ip: Ipv4Addr,
+}
+
+impl ChildIp {
+    fn ip(&self) -> Ipv4Addr {
+        self.ip
+    }
+}
+
+impl Drop for ChildIp {
+    fn drop(&mut self) {
+        self.allocator.free(self.ip);
+    }
 }
 
 /// The global state of the zone system.
@@ -35,7 +73,7 @@ struct Globals {
     quota: Arc<Quota>,
     image: Vmo,
     network: Arc<TcpIp>,
-    zones: SpinLock<Vec<Zone>>,
+    child_ips: Arc<ChildIpAllocator>,
 }
 
 pub struct Fork {
@@ -49,7 +87,7 @@ impl Fork {
                 quota,
                 image,
                 network,
-                zones: SpinLock::new(Vec::new()),
+                child_ips: ChildIpAllocator::new(),
             }),
         }
     }
@@ -66,6 +104,7 @@ impl FileLike for Fork {
 
 enum State {
     Parse(SpecParser),
+    Running { _zone: Zone, _child_ip: ChildIp },
     Done,
 }
 
@@ -94,17 +133,19 @@ impl FileLike for ForkBuilder {
                 *state = State::Done;
 
                 // Start a new zone.
-                let mut zones = self.globals.zones.lock();
-                let child_ip = alloc_child_ip(&zones)?;
+                let child_ip = self.globals.child_ips.alloc()?;
                 let zone = Zone::spawn(
                     &self.globals.quota,
                     &self.globals.image,
                     &self.globals.network,
                     &spec,
-                    child_ip,
+                    child_ip.ip(),
                 )?;
 
-                zones.push(zone);
+                *state = State::Running {
+                    _zone: zone,
+                    _child_ip: child_ip,
+                };
                 Ok(buf.len())
             }
             Err(err) => {
