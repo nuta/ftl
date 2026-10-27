@@ -155,6 +155,10 @@ pub trait FileLike: Send + Sync {
         Err(Errno::ENOTSUP)
     }
 
+    fn linger(&self, _sleep: Sleep<'_>) -> Result<(), Errno> {
+        Ok(())
+    }
+
     fn close(&self) {}
 
     fn shutdown(&self, _how: c_int) -> Result<(), Errno> {

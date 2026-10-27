@@ -23,9 +23,12 @@ use crate::types::errno::Errno;
 use crate::types::sys::poll::POLLERR;
 use crate::types::sys::poll::POLLIN;
 use crate::types::sys::poll::POLLOUT;
+use crate::types::sys::socket::Linger;
 use crate::types::sys::socket::SHUT_RD;
 use crate::types::sys::socket::SHUT_RDWR;
 use crate::types::sys::socket::SHUT_WR;
+use crate::types::sys::socket::SO_LINGER;
+use crate::types::sys::socket::SOL_SOCKET;
 use crate::types::sys::socket::SockAddr;
 use crate::vfs::FileLike;
 use crate::vfs::IoVecSlice;
@@ -64,6 +67,7 @@ struct Mutable {
     tx_buffer: TcpBuffer,
     rx_buffer: TcpBuffer,
     peer_closed: bool,
+    linger: Option<Duration>,
     closing_deadline: Option<MonoTime>,
     syn_deadline: Option<MonoTime>,
     syn_retries: u32,
@@ -120,6 +124,7 @@ impl TcpConn {
             tx_buffer: TcpBuffer::new()?,
             rx_buffer: TcpBuffer::new()?,
             peer_closed: false,
+            linger: None,
             closing_deadline: None,
             syn_deadline: None,
             syn_retries: 0,
@@ -145,15 +150,6 @@ impl TcpConn {
 
     pub fn is_closed(&self) -> bool {
         self.mutable.lock().state == State::Closed
-    }
-
-    /// Returns `true` if the peer has (half) closed the connection.
-    ///
-    /// This means once you finish reading the remaining RX buffer, you'll see
-    /// EOF. You may still send data to the peer until you start closing the
-    /// connection.
-    pub fn is_peer_closed(&self) -> bool {
-        self.mutable.lock().peer_closed
     }
 
     pub fn is_connecting(&self) -> bool {
@@ -930,6 +926,62 @@ impl FileLike for TcpConn {
             ip: self.remote.ip,
             port: self.remote.port,
         })
+    }
+
+    fn setsockopt(
+        &self,
+        level: c_int,
+        optname: c_int,
+        optval: *const u8,
+        optlen: usize,
+    ) -> Result<(), Errno> {
+        match (level, optname) {
+            (SOL_SOCKET, SO_LINGER) => {
+                let linger = Linger::parse(optval, optlen)?;
+                let mut mutable = self.mutable.lock();
+
+                if linger.l_onoff == 0 {
+                    mutable.linger = None;
+                    return Ok(());
+                }
+
+                if linger.l_linger <= 0 {
+                    return Err(Errno::ENOTSUP);
+                }
+
+                mutable.linger = Some(Duration::from_secs(linger.l_linger as u64));
+                Ok(())
+            }
+            _ => Err(Errno::ENOTSUP),
+        }
+    }
+
+    fn linger(&self, sleep: Sleep<'_>) -> Result<(), Errno> {
+        let Some(timeout) = self.mutable.lock().linger else {
+            return Ok(());
+        };
+
+        self.do_close();
+
+        let deadline = MonoTime::now() + timeout;
+        let sleep_guard = sleep.guard(&self.wait_queue)?;
+        loop {
+            let mutable = self.mutable.lock();
+
+            // Is the connection closed?
+            if matches!(mutable.state, State::FinWait2 | State::Closed) {
+                return Ok(());
+            }
+
+            if sleep_guard.is_interrupted() {
+                return Err(Errno::EINTR);
+            }
+
+            drop(mutable);
+            if sleep_guard.wait_until(deadline)? {
+                return Ok(());
+            }
+        }
     }
 
     fn close(&self) {

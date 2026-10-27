@@ -4,9 +4,9 @@ use std::io::ErrorKind;
 use std::io::Read;
 use std::io::Write;
 use std::net::Ipv4Addr;
-use std::net::Shutdown;
 use std::net::TcpListener;
 use std::process::ExitCode;
+use std::time::Duration;
 
 const LOCAL_IP: Ipv4Addr = Ipv4Addr::new(10, 77, 0, 1);
 const STDIO_PORT: u16 = 5000;
@@ -89,10 +89,11 @@ fn run(init: &str, args: &[String]) -> std::io::Result<u8> {
         buf.drain(..offset);
     };
 
-    stream.shutdown(Shutdown::Write)?;
-
-    // Drain remaining data from the stream.
-    std::io::copy(&mut stream, &mut std::io::sink())?;
+    // Close the connection and wait for the zone to acknowledge our FIN.
+    // Othsewise, this LX will try sending FIN to close the connection
+    // gracefully.
+    stream.set_linger(Some(Duration::from_secs(5)))?;
+    drop(stream);
 
     if !stdout.is_empty() {
         let line = String::from_utf8_lossy(&stdout);

@@ -16,6 +16,7 @@ pub const SHUT_RDWR: c_int = 2;
 
 pub const SOL_SOCKET: c_int = 1;
 pub const SO_REUSEADDR: c_int = 2;
+pub const SO_LINGER: c_int = 13;
 pub const SO_RCVTIMEO: c_int = 20;
 
 pub const MSG_DONTWAIT: c_int = 0x40;
@@ -36,6 +37,23 @@ pub struct SockAddrIn {
     sin_port: u16,
     sin_addr: InAddr,
     sin_zero: [u8; 8],
+}
+
+#[derive(Clone, Copy)]
+#[repr(C)]
+pub struct Linger {
+    pub l_onoff: c_int,
+    pub l_linger: c_int,
+}
+
+impl Linger {
+    pub fn parse(optval: *const u8, optlen: usize) -> Result<Self, Errno> {
+        if optval.is_null() || optlen < size_of::<Linger>() {
+            return Err(Errno::EINVAL);
+        }
+
+        Ok(unsafe { optval.cast::<Linger>().read_unaligned() })
+    }
 }
 
 pub enum SockAddr {

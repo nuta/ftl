@@ -40,10 +40,6 @@ impl StdioConn {
     pub fn close(&self) {
         self.0.close();
     }
-
-    pub fn is_peer_closed(&self) -> bool {
-        self.0.is_peer_closed()
-    }
 }
 
 impl Drop for StdioConn {

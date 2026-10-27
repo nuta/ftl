@@ -15,6 +15,7 @@ use crate::types::c_int;
 use crate::types::c_short;
 use crate::types::errno::Errno;
 use crate::types::sys::poll::POLLIN;
+use crate::types::sys::socket::SO_LINGER;
 use crate::types::sys::socket::SO_REUSEADDR;
 use crate::types::sys::socket::SOL_SOCKET;
 use crate::types::sys::socket::SockAddr;
@@ -186,13 +187,17 @@ impl FileLike for TcpSocket {
         &self,
         level: c_int,
         optname: c_int,
-        _optval: *const u8,
-        _optlen: usize,
+        optval: *const u8,
+        optlen: usize,
     ) -> Result<(), Errno> {
         match (level, optname) {
             (SOL_SOCKET, SO_REUSEADDR) => {
                 // TODO: Implement SO_REUSEADDR
                 Ok(())
+            }
+            (SOL_SOCKET, SO_LINGER) => {
+                let conn = self.as_conn()?;
+                conn.setsockopt(level, optname, optval, optlen)
             }
             _ => Err(Errno::ENOTSUP),
         }
@@ -218,6 +223,15 @@ impl FileLike for TcpSocket {
 
     fn peer_addr(&self) -> Result<SockAddr, Errno> {
         self.as_conn()?.peer_addr()
+    }
+
+    fn linger(&self, sleep: Sleep<'_>) -> Result<(), Errno> {
+        let conn = match &*self.state.lock() {
+            State::Conn(conn) => conn.clone(),
+            _ => return Ok(()),
+        };
+
+        conn.linger(sleep)
     }
 
     fn close(&self) {

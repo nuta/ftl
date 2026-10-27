@@ -1,3 +1,5 @@
+#![feature(tcp_linger)]
+
 use std::process::ExitCode;
 
 mod commands;

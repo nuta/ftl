@@ -245,14 +245,6 @@ fn main(cmdline: &[u8]) {
         container.handle_events();
     }
 
-    // Wait for the host to close the connection, so that they can close
-    // the connection gracefully.
-    //
-    // TODO: Implement SO_LINGER and drop this loop.
-    while !conn.is_peer_closed() {
-        container.handle_events();
-    }
-
     // Initiate a connection close.
     conn.close();
 
