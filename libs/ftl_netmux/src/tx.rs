@@ -133,12 +133,14 @@ impl<N: RxNotify> Nic<N> {
         let (local_port, remote_port, protocols, trans_header_len) = match ip_proto {
             IP_PROTO_TCP => {
                 match TcpInspector::new(trans_bytes) {
-                    Ok(tcp) => (
-                        tcp.src_port(),
-                        tcp.dst_port(),
-                        PROTO_IPV4 | PROTO_TCP,
-                        tcp.header_len(),
-                    ),
+                    Ok(tcp) => {
+                        (
+                            tcp.src_port(),
+                            tcp.dst_port(),
+                            PROTO_IPV4 | PROTO_TCP,
+                            tcp.header_len(),
+                        )
+                    }
                     Err(e) => {
                         ftl_driver::trace!(self.env, "invalid TCP header: {:?}", e);
                         return Err(ErrorCode::InvalidArg);
@@ -147,12 +149,14 @@ impl<N: RxNotify> Nic<N> {
             }
             IP_PROTO_UDP => {
                 match UdpRewriter::new(trans_bytes) {
-                    Ok(udp) => (
-                        udp.src_port(),
-                        udp.dst_port(),
-                        PROTO_IPV4 | PROTO_UDP,
-                        UDP_HEADER_LEN,
-                    ),
+                    Ok(udp) => {
+                        (
+                            udp.src_port(),
+                            udp.dst_port(),
+                            PROTO_IPV4 | PROTO_UDP,
+                            UDP_HEADER_LEN,
+                        )
+                    }
                     Err(e) => {
                         ftl_driver::trace!(self.env, "invalid UDP header: {:?}", e);
                         return Err(ErrorCode::InvalidArg);
