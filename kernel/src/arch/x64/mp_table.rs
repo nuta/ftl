@@ -4,7 +4,6 @@
 
 use core::ops::Range;
 
-use super::timer::TIMER_IRQ;
 use crate::address::PAddr;
 
 /// The MP floating pointer table.
@@ -78,21 +77,7 @@ pub struct ProcessorEntry {
 }
 
 const ENTRY_TYPE_PROCESSOR: u8 = 0;
-const ENTRY_TYPE_BUS: u8 = 1;
 const ENTRY_TYPE_IO_APIC: u8 = 2;
-const ENTRY_TYPE_IO_INT_ASSIGN: u8 = 3;
-
-/// The bus entry.
-#[derive(Debug)]
-#[repr(C, packed)]
-pub struct BusEntry {
-    /// The entry type (`1` for bus entry).
-    entry_type: u8,
-    /// The bus ID.
-    bus_id: u8,
-    /// The bus type.
-    bus_string: [u8; 6],
-}
 
 /// The I/O APIC entry.
 #[derive(Debug)]
@@ -108,26 +93,6 @@ pub struct IoApicEntry {
     io_apic_flags: u8,
     /// The I/O APIC physical address.
     io_apic_address: u32,
-}
-
-/// The I/O interrupt assignment entry.
-#[derive(Debug)]
-#[repr(C, packed)]
-pub struct IoInterruptAssignmentEntry {
-    /// The entry type (`3` for I/O interrupt assignment entry).
-    entry_type: u8,
-    /// The interrupt type. 0 for an interrupt. 1 for an NMI.
-    interrupt_type: u8,
-    /// The flags that we don't care about.
-    flag: u16,
-    /// The source bus ID.
-    source_bus_id: u8,
-    /// The source bus IRQ.
-    source_bus_irq: u8,
-    /// The destination I/O APIC's ID.
-    dest_io_apic_id: u8,
-    /// The destination pin in the I/O APIC.
-    dest_io_apic_intin: u8,
 }
 
 unsafe fn paddr2ptr<T>(paddr: usize) -> &'static T {
@@ -162,9 +127,7 @@ fn find_mpfp_table() -> Option<&'static MpPointerTable> {
 
 enum MpTableEntry<'a> {
     Processor(&'a ProcessorEntry),
-    Bus(&'a BusEntry),
     IoApic(&'a IoApicEntry),
-    IoInterruptAssignment(&'a IoInterruptAssignmentEntry),
     Unknown,
 }
 
@@ -210,17 +173,9 @@ impl<'a> Iterator for MpTableIter<'a> {
                 let entry = unsafe { paddr2ptr::<ProcessorEntry>(self.entry_addr) };
                 (MpTableEntry::Processor(entry), 20)
             }
-            ENTRY_TYPE_BUS => {
-                let entry = unsafe { paddr2ptr::<BusEntry>(self.entry_addr) };
-                (MpTableEntry::Bus(entry), 8)
-            }
             ENTRY_TYPE_IO_APIC => {
                 let entry = unsafe { paddr2ptr::<IoApicEntry>(self.entry_addr) };
                 (MpTableEntry::IoApic(entry), 8)
-            }
-            ENTRY_TYPE_IO_INT_ASSIGN => {
-                let entry = unsafe { paddr2ptr::<IoInterruptAssignmentEntry>(self.entry_addr) };
-                (MpTableEntry::IoInterruptAssignment(entry), 8)
             }
             _ => {
                 // trace!("unknown entry type: {}", type_byte);
@@ -245,48 +200,16 @@ pub fn init() {
         }
     }
 
-    // Find the ISA bus and I/O APIC.
-    let mut isa_bus = None;
+    // Find the I/O APIC.
     let mut ioapic = None;
     for entry in iter.clone() {
-        match entry {
-            MpTableEntry::Bus(entry) => {
-                if entry.bus_string.as_slice() == b"ISA   " {
-                    assert!(isa_bus.is_none(), "multiple ISA buses found");
-                    isa_bus = Some(entry);
-                }
-            }
-            MpTableEntry::IoApic(entry) => {
-                assert!(ioapic.is_none(), "multiple I/O APICs found");
-                ioapic = Some(entry);
-            }
-            _ => {}
+        if let MpTableEntry::IoApic(entry) = entry {
+            assert!(ioapic.is_none(), "multiple I/O APICs found");
+            ioapic = Some(entry);
         }
     }
 
-    let isa_bus = isa_bus.expect("ISA bus not found");
     let ioapic = ioapic.expect("I/O APIC not found");
-
-    // Locate the interrupt mapping for PIT (timer).
-    let mut timer_int_mapping = None;
-    for entry in iter.clone() {
-        if let MpTableEntry::IoInterruptAssignment(entry) = entry
-            && entry.source_bus_id == isa_bus.bus_id
-            && entry.source_bus_irq == 0
-        {
-            assert!(timer_int_mapping.is_none(), "multiple timer IRQs found");
-            timer_int_mapping = Some(entry);
-        }
-    }
-
-    let timer_int_mapping = timer_int_mapping.expect("timer IRQ not found");
-    assert_eq!(timer_int_mapping.dest_io_apic_id, ioapic.io_apic_id);
-
     let ioapic_address = PAddr::new(ioapic.io_apic_address as usize);
     super::io_apic::init(ioapic_address);
-    super::io_apic::use_ioapic(|ioapic| {
-        ioapic
-            .enable_irq_at(timer_int_mapping.dest_io_apic_intin, TIMER_IRQ)
-            .unwrap();
-    });
 }

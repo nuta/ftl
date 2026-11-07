@@ -17,7 +17,7 @@ use crate::timer::GLOBAL_TIMER;
 pub(super) const TIMER_IRQ: u8 = 0;
 
 /// The timer frequency in Hz. 1000 Hz = interrupt every 1ms.
-const TIMER_HZ: u64 = 1000;
+pub(super) const TIMER_HZ: u64 = 1000;
 
 const PIT_CH0_DATA: u16 = 0x40;
 const PIT_COMMAND: u16 = 0x43;
@@ -29,7 +29,6 @@ const PIT_STATUS_OUTPUT: u8 = 1 << 7;
 // A well-known fixed frequency.
 const PIT_HZ: u64 = 1_193_182;
 
-const DIVISOR: u16 = (PIT_HZ / TIMER_HZ) as u16;
 const CALIBRATION_DURATION: Duration = Duration::from_millis(10);
 
 static TSC_HZ: AtomicU64 = AtomicU64::new(0);
@@ -107,11 +106,4 @@ fn read_wall_clock() {
 pub(super) fn init() {
     measure_tsc_frequency();
     read_wall_clock();
-
-    unsafe {
-        let cmd = (0b11 << 4/* lobyte/hibyte */) | (0b010 << 1/* rate generator */);
-        out8(PIT_COMMAND, cmd);
-        out8(PIT_CH0_DATA, (DIVISOR & 0xff) as u8);
-        out8(PIT_CH0_DATA, (DIVISOR >> 8) as u8);
-    }
 }

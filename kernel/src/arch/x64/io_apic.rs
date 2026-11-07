@@ -72,12 +72,6 @@ impl IoApic {
     }
 }
 
-pub(super) fn use_ioapic(f: impl FnOnce(&mut IoApic)) {
-    let mut lock = IOAPIC.lock();
-    let ioapic = lock.as_mut().expect("I/O APIC is not initialized");
-    f(ioapic);
-}
-
 pub fn init(base: PAddr) {
     let mut lock = IOAPIC.lock();
     if lock.is_some() {
