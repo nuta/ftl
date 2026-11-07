@@ -413,34 +413,39 @@ impl TcpConn {
         mutable.zwp_deadline = None;
         mutable.zwps = 0;
 
-        let window_len = mutable.snd_wnd as usize;
-        let sendable_len = window_len.saturating_sub(inflight_len);
-        let sendable_len = min(sendable_len, MAX_SEGMENT_DATA_LEN);
-        let Some(payload) = mutable.tx_buffer.peek(inflight_len, sendable_len) else {
-            return;
-        };
+        // Send segments as many as possible. Break the loop until it reaches
+        // the peer's window size, or send all pending TX data.
+        loop {
+            let inflight_len = mutable.snd_nxt.wrapping_sub(mutable.snd_una) as usize;
+            let window_len = mutable.snd_wnd as usize;
+            let sendable_len = window_len.saturating_sub(inflight_len);
+            let sendable_len = min(sendable_len, MAX_SEGMENT_DATA_LEN);
+            let Some(payload) = mutable.tx_buffer.peek(inflight_len, sendable_len) else {
+                break;
+            };
 
-        let window_size = mutable.rx_buffer.writable_len() as u16;
-        let payload_len = payload.len();
-        let segment = Segment {
-            seq: mutable.snd_nxt,
-            ack: mutable.rcv_nxt,
-            window_size,
-            flags: TcpFlags::ACK | TcpFlags::PSH,
-            payload,
-        };
+            let window_size = mutable.rx_buffer.writable_len() as u16;
+            let payload_len = payload.len();
+            let segment = Segment {
+                seq: mutable.snd_nxt,
+                ack: mutable.rcv_nxt,
+                window_size,
+                flags: TcpFlags::ACK | TcpFlags::PSH,
+                payload,
+            };
 
-        if let Err(e) = self.send(segment) {
-            // Log but continue anyway. We'll resend the data later after the
-            // retransmission timer expires.
-            trace!("failed to send data: {:?}", e);
-        }
+            if let Err(e) = self.send(segment) {
+                // Log but continue anyway. We'll resend the data later after the
+                // retransmission timer expires.
+                trace!("failed to send data: {:?}", e);
+            }
 
-        mutable.snd_nxt = mutable.snd_nxt.wrapping_add(payload_len as u32);
+            mutable.snd_nxt = mutable.snd_nxt.wrapping_add(payload_len as u32);
 
-        // Arm a retransmission timer if it's not set.
-        if mutable.rto_deadline.is_none() {
-            self.reset_rto(mutable);
+            // Arm a retransmission timer if it's not set.
+            if mutable.rto_deadline.is_none() {
+                self.reset_rto(mutable);
+            }
         }
     }
 
