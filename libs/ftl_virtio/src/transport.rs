@@ -17,6 +17,7 @@ pub enum Error {
     QueueInUse,
     TooHighPAddr,
     AllocFailed,
+    FeaturesNotAccepted,
 }
 
 pub struct IsrStatus(pub(crate) u8);
@@ -32,7 +33,9 @@ pub trait VirtioTransport: Send + Sync {
 
     fn read_device_features(&self, env: &dyn Env) -> u32;
 
-    fn write_guest_features(&self, env: &dyn Env, guest_features: u32);
+    fn write_guest_features(&self, env: &dyn Env, guest_features: u32) -> Result<(), Error>;
+
+    fn is_modern(&self) -> bool;
 
     fn driver_ok(&self, env: &dyn Env);
 

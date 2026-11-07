@@ -53,12 +53,17 @@ impl VirtioTransport for VirtioPci {
         unsafe { env.in32(self.iobase + PCI_IOPORT_DEVICE_FEATURES) }
     }
 
-    fn write_guest_features(&self, env: &dyn Env, guest_features: u32) {
+    fn write_guest_features(&self, env: &dyn Env, guest_features: u32) -> Result<(), Error> {
         // 5. The subset of Device Feature Bits understood by the driver is
         //    written to the device.
         unsafe {
             env.out32(self.iobase + PCI_IOPORT_GUEST_FEATURES, guest_features);
         }
+        Ok(())
+    }
+
+    fn is_modern(&self) -> bool {
+        false
     }
 
     fn driver_ok(&self, env: &dyn Env) {

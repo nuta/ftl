@@ -20,18 +20,25 @@ const VIRTIO_NET_F_MAC: u32 = 1 << 5;
 #[derive(Debug)]
 pub enum InitError {
     MacNotAvailable,
+    FeaturesNotAccepted(ftl_virtio::Error),
     TxVqSetup(ftl_virtio::Error),
     RxVqSetup(ftl_virtio::Error),
 }
 
 #[repr(C, packed)]
-struct VirtioNetHdr {
+struct VirtioNetHdrLegacy {
     flags: u8,
     gso_type: u8,
     hdr_len: u16,
     gso_size: u16,
     csum_start: u16,
     csum_offset: u16,
+}
+
+#[repr(C, packed)]
+struct VirtioNetHdrModern {
+    hdr: VirtioNetHdrLegacy,
+    num_buffers: u16,
 }
 
 struct TxData {
@@ -52,6 +59,7 @@ struct Mutable<N: Notifier> {
 
 pub struct VirtioNet<T: VirtioTransport, N: Notifier> {
     mac: [u8; 6],
+    header_size: usize,
     transport: T,
     mutable: SpinLock<Mutable<N>>,
 }
@@ -66,7 +74,15 @@ impl<T: VirtioTransport, N: Notifier> VirtioNet<T, N> {
             return Err(InitError::MacNotAvailable);
         }
         let guest_features = device_features & VIRTIO_NET_F_MAC;
-        transport.write_guest_features(env, guest_features);
+        transport
+            .write_guest_features(env, guest_features)
+            .map_err(InitError::FeaturesNotAccepted)?;
+
+        let header_size = if transport.is_modern() {
+            size_of::<VirtioNetHdrModern>()
+        } else {
+            size_of::<VirtioNetHdrLegacy>()
+        };
 
         let mac = [
             transport.read_device_config8(env, 0),
@@ -100,6 +116,7 @@ impl<T: VirtioTransport, N: Notifier> VirtioNet<T, N> {
 
         Ok(Self {
             mac,
+            header_size,
             transport,
             mutable: SpinLock::new(Mutable {
                 txq,
@@ -126,7 +143,7 @@ impl<T: VirtioTransport, N: Notifier> Driver for VirtioNet<T, N> {
         payload_buf: Option<DmaBuf>,
     ) -> Result<(), (DmaBuf, Option<DmaBuf>, Error)> {
         // We need some space to prepend the Virtio-net header.
-        if headroom < size_of::<VirtioNetHdr>() {
+        if headroom < self.header_size {
             return Err((header_buf, payload_buf, Error::HeadroomTooSmall));
         }
 
@@ -137,7 +154,7 @@ impl<T: VirtioTransport, N: Notifier> Driver for VirtioNet<T, N> {
         let mut mutable = self.mutable.lock();
 
         // Fill the virtio-net header with zeros.
-        let header_offset = headroom - size_of::<VirtioNetHdr>();
+        let header_offset = headroom - self.header_size;
         header_buf.as_mut_slice()[header_offset..headroom].fill(0);
 
         // Prepare a descriptor chain for virtio-net.
@@ -204,12 +221,11 @@ impl<T: VirtioTransport, N: Notifier> Driver for VirtioNet<T, N> {
             return Err(Error::BadDevice);
         }
 
-        let header_size = size_of::<VirtioNetHdr>();
-        let Some(payload_len) = total_len.checked_sub(header_size) else {
+        let Some(payload_len) = total_len.checked_sub(self.header_size) else {
             return Err(Error::BadDevice);
         };
 
-        Ok((buf.take(), header_size, payload_len))
+        Ok((buf.take(), self.header_size, payload_len))
     }
 
     fn subscribe_tx(&self, notifier: Self::Notifier) -> Result<(), Error> {

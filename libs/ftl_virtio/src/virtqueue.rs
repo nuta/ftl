@@ -130,6 +130,18 @@ impl<C> VirtQueue<C> {
         self.queue_index
     }
 
+    pub(crate) fn desc_paddr(&self) -> u64 {
+        self.dmabuf.paddr() as u64
+    }
+
+    pub(crate) fn avail_paddr(&self) -> u64 {
+        (self.dmabuf.paddr() + self.avail_offset) as u64
+    }
+
+    pub(crate) fn used_paddr(&self) -> u64 {
+        (self.dmabuf.paddr() + self.used_offset) as u64
+    }
+
     pub fn can_push(&self) -> bool {
         !self.free_indices.is_empty()
     }
