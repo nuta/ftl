@@ -194,8 +194,15 @@ fn parse_mmio_cmdline(value: &[u8]) -> (PAddr, usize, u8) {
     let (size_str, rest) = value.split_once('@').unwrap();
     let (base_str, irq_str) = rest.split_once(':').unwrap();
 
-    // Parse them as integers.
-    let size = size_str.parse::<usize>().unwrap();
+    // Parse the size. It can be suffixed with K/M.
+    let size = if let Some(kib) = size_str.strip_suffix('K') {
+        kib.parse::<usize>().unwrap() * 1024
+    } else if let Some(mib) = size_str.strip_suffix('M') {
+        mib.parse::<usize>().unwrap() * 1024 * 1024
+    } else {
+        size_str.parse::<usize>().unwrap()
+    };
+
     let base = usize::from_str_radix(base_str.strip_prefix("0x").unwrap(), 16).unwrap();
     let base = PAddr::new(base);
     let irq = irq_str.parse::<u8>().unwrap();
