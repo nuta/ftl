@@ -1,6 +1,7 @@
 #![cfg(target_arch = "x86_64")]
 use ftl_driver::env::Env;
 
+pub use crate::transport::DeviceType;
 use crate::transport::Error;
 use crate::transport::IsrStatus;
 use crate::transport::VirtioTransport;
@@ -20,15 +21,6 @@ const PCI_IOPORT_CONFIG: u16 = 20;
 const STATUS_ACKNOWLEDGE: u8 = 1;
 const STATUS_DRIVER: u8 = 2;
 const STATUS_DRIVER_OK: u8 = 4;
-
-/// The type of virtio device to probe for.
-///
-/// The value must match the Subsystem Device ID of the device type.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(u16)]
-pub enum DeviceType {
-    Network = 1,
-}
 
 pub struct VirtioPci {
     iobase: u16,

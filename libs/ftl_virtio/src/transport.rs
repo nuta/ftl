@@ -2,6 +2,15 @@ use ftl_driver::env::Env;
 
 use crate::virtqueue::VirtQueue;
 
+/// The type of virtio device to probe for.
+///
+/// The value is the device ID defined in <https://docs.oasis-open.org/virtio/virtio/v1.4/cs01/virtio-v1.4-cs01.html#x1-2690005>.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u16)]
+pub enum DeviceType {
+    Network = 1,
+}
+
 #[derive(Debug)]
 pub enum Error {
     BadQueueSize(u32),

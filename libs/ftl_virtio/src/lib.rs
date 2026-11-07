@@ -19,6 +19,7 @@ pub mod virtqueue;
 #[cfg(target_arch = "x86_64")]
 pub mod virtio_pci;
 
+pub use transport::DeviceType;
 pub use transport::Error;
 pub use transport::IsrStatus;
 pub use transport::VirtioTransport;

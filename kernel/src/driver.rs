@@ -13,6 +13,7 @@ use ftl_utils::alignment::align_up;
 use ftl_utils::cmdline::Parser;
 use ftl_utils::reserve_slot::ReserveSlot;
 use ftl_utils::spinlock::SpinLock;
+use ftl_virtio::DeviceType;
 use ftl_virtio::VirtioMmio;
 #[cfg(target_arch = "x86_64")]
 use ftl_virtio::VirtioPci;
@@ -142,15 +143,21 @@ fn init_virtio_net_over_mmio(
     base: PAddr,
     size: usize,
     irq: u8,
-) -> (Box<dyn Driver<Notifier = PollNotifier>>, u8) {
+) -> Option<(Box<dyn Driver<Notifier = PollNotifier>>, u8)> {
     assert!(size >= 0x200, "virtio-mmio region too small: {size:#x}");
 
     let mmio_base = paddr2vaddr(base).as_usize();
     let transport = unsafe { VirtioMmio::new(mmio_base) }.expect("failed to probe virtio-mmio");
+    let device_id = transport.device_id();
+    if device_id != DeviceType::Network as u32 {
+        trace!("skipping virtio-mmio device at {base}: device_id={device_id}");
+        return None;
+    }
+
     let driver = VirtioNet::<VirtioMmio, PollNotifier>::init(&DRIVER_ENV, transport)
         .expect("failed to initialize virtio-net");
 
-    (Box::new(driver), irq)
+    Some((Box::new(driver), irq))
 }
 
 enum FoundDevice {
@@ -166,7 +173,6 @@ enum FoundDevice {
 #[cfg(target_arch = "x86_64")]
 fn probe_pci(devices: &mut ArrayVec<FoundDevice, 8>) {
     use ftl_driver::pci::find_virtio_device;
-    use ftl_virtio::virtio_pci::DeviceType;
 
     let Some(pci_device) = find_virtio_device(&DRIVER_ENV, DeviceType::Network as u16) else {
         return;
@@ -240,14 +246,16 @@ fn discover_devices(cmdline: &[u8]) -> ArrayVec<FoundDevice, 8> {
 }
 
 fn init_net_driver(devices: &[FoundDevice]) -> (Box<dyn Driver<Notifier = PollNotifier>>, u8) {
-    if let Some(device) = devices.iter().next() {
+    for device in devices {
         match device {
             #[cfg(target_arch = "x86_64")]
             FoundDevice::VirtioNetOverPci(pci_device) => {
                 return init_virtio_net_over_pci(pci_device);
             }
             FoundDevice::VirtioMmio { base, size, irq } => {
-                return init_virtio_net_over_mmio(*base, *size, *irq);
+                if let Some(driver) = init_virtio_net_over_mmio(*base, *size, *irq) {
+                    return driver;
+                }
             }
         }
     }
@@ -268,7 +276,7 @@ pub fn init(cmdline: &[u8]) {
                 );
             }
             FoundDevice::VirtioMmio { base, .. } => {
-                trace!("  virtio-net over MMIO: base={base:}");
+                trace!("  virtio over MMIO: base={base:}");
             }
         }
     }
