@@ -59,4 +59,12 @@ impl<'a> PhysicalState<'a> {
     pub fn start_dhcp(&mut self, now: MonoTime) {
         self.device.start_dhcp(now);
     }
+
+    pub fn set_static_ip(&mut self, address: Ipv4Addr, gateway: Ipv4Addr, netmask: NetMask) {
+        self.external = Some(ExternalIpConfig {
+            address,
+            netmask,
+            gateway,
+        });
+    }
 }

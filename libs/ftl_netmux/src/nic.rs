@@ -15,6 +15,7 @@ use ftl_utils::spinlock::SpinLock;
 
 use crate::device::PollNotifier;
 use crate::packet::ipv4::Ipv4Addr;
+use crate::packet::ipv4::NetMask;
 use crate::physical::PhysicalState;
 use crate::physical::RxNotify;
 use crate::route::RouteTable;
@@ -81,6 +82,12 @@ impl<N: RxNotify> Nic<N> {
     pub fn start_dhcp(&self, now: MonoTime) {
         if let Some(physical) = &self.physical {
             physical.lock().start_dhcp(now);
+        }
+    }
+
+    pub fn set_static_ip(&self, address: Ipv4Addr, gateway: Ipv4Addr, netmask: NetMask) {
+        if let Some(physical) = &self.physical {
+            physical.lock().set_static_ip(address, gateway, netmask);
         }
     }
 

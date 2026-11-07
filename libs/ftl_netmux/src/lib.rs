@@ -17,4 +17,6 @@ pub use crate::device::PollNotifier;
 pub use crate::nic::BufReader;
 pub use crate::nic::BufWriter;
 pub use crate::nic::Nic;
+pub use crate::packet::ipv4::Ipv4Addr;
+pub use crate::packet::ipv4::NetMask;
 pub use crate::physical::RxNotify;

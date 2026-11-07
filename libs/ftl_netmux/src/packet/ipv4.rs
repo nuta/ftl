@@ -1,6 +1,7 @@
 use core::fmt;
 use core::mem::offset_of;
 use core::mem::size_of;
+use core::str::FromStr;
 
 use super::checksum::Checksum;
 use super::helper::read_u16;
@@ -19,6 +20,15 @@ impl Ipv4Addr {
 
     pub const fn as_u32(self) -> u32 {
         self.0
+    }
+}
+
+impl FromStr for Ipv4Addr {
+    type Err = core::net::AddrParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let addr: core::net::Ipv4Addr = s.parse()?;
+        Ok(Self(addr.to_bits()))
     }
 }
 

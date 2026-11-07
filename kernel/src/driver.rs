@@ -7,6 +7,8 @@ use core::str;
 use ftl_arrayvec::ArrayVec;
 use ftl_driver::dma::DmaBuf;
 use ftl_driver::net::Driver;
+use ftl_netmux::Ipv4Addr;
+use ftl_netmux::NetMask;
 use ftl_netmux::PollNotifier;
 use ftl_types::time::MonoTime;
 use ftl_utils::alignment::align_up;
@@ -216,6 +218,61 @@ fn parse_mmio_cmdline(value: &[u8]) -> (PAddr, usize, u8) {
     (base, size, irq)
 }
 
+struct CmdlineIp {
+    address: Ipv4Addr,
+    gateway: Ipv4Addr,
+    netmask: NetMask,
+}
+
+impl CmdlineIp {
+    /// Parses `ip=<client-ip>:<server-ip>:<gw-ip>:<netmask>:<hostname>:<device>:<autoconf>`.
+    fn parse(value: &[u8]) -> Option<Self> {
+        let value = str::from_utf8(value).expect("invalid ip= in cmdline");
+        let mut fields = value.split(':');
+        let client_ip = fields.next().unwrap_or("");
+        let _server = fields.next();
+        let gateway_ip = fields.next().unwrap_or("");
+        let netmask = fields.next().unwrap_or("");
+        let _hostname = fields.next();
+        let _device = fields.next();
+        let autoconf = fields.next().unwrap_or("");
+
+        if !matches!(autoconf, "off" | "none") {
+            return None;
+        }
+
+        let Ok(address) = client_ip.parse::<Ipv4Addr>() else {
+            return None;
+        };
+
+        let gateway = if gateway_ip.is_empty() {
+            Ipv4Addr::new(0)
+        } else {
+            gateway_ip.parse().expect("invalid gateway in ip=")
+        };
+
+        let netmask: Ipv4Addr = netmask.parse().expect("invalid netmask in ip=");
+        let netmask = NetMask::new(netmask.as_u32());
+        Some(CmdlineIp {
+            address,
+            gateway,
+            netmask,
+        })
+    }
+}
+
+fn get_ip_from_cmdline(cmdline: &[u8]) -> Option<CmdlineIp> {
+    let parser = Parser::new(cmdline);
+    for param in parser {
+        let param = param.expect("failed to parse cmdline");
+        if param.key == b"ip" {
+            return CmdlineIp::parse(param.value);
+        }
+    }
+
+    None
+}
+
 fn probe_cmdline(devices: &mut ArrayVec<FoundDevice, 8>, cmdline: &[u8]) {
     let parser = Parser::new(cmdline);
     for param in parser {
@@ -294,5 +351,14 @@ pub fn init(cmdline: &[u8]) {
     // Otherwise, DHCP replies may arrive too early, before unmasking IRQ.
     arch::interrupt_acquire(irq).expect("failed to enable virtio-net IRQ");
 
-    pnic.start_dhcp(arch::monotime_read());
+    match get_ip_from_cmdline(cmdline) {
+        Some(ip) => {
+            info!(
+                "IP configured from cmdline: address {}, gateway {}, netmask {}",
+                ip.address, ip.gateway, ip.netmask
+            );
+            pnic.set_static_ip(ip.address, ip.gateway, ip.netmask);
+        }
+        None => pnic.start_dhcp(arch::monotime_read()),
+    }
 }
