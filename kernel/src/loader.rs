@@ -22,6 +22,14 @@ use crate::thread::Thread;
 use crate::vmobject::VmObject;
 use crate::vmspace::VmSpace;
 
+#[cfg(feature = "embed_lx_elf")]
+#[repr(C, align(8))]
+struct Aligned<const N: usize>([u8; N]);
+
+#[cfg(feature = "embed_lx_elf")]
+static LX_ELF: Aligned<{ include_bytes!("../../lx.elf").len() }> =
+    Aligned(*include_bytes!("../../lx.elf"));
+
 fn load_elf(
     quota: &SharedRef<Quota>,
     vmspace: &SharedRef<VmSpace>,
@@ -138,8 +146,10 @@ fn prepare_stack(quota: &SharedRef<Quota>, vmspace: &SharedRef<VmSpace>, cmdline
 }
 
 pub fn load(bootinfo: &BootInfo) {
-    let initrd = bootinfo.modules.get(0).expect("initrd not found");
-    let elf_file = initrd.as_bytes();
+    #[cfg(feature = "embed_lx_elf")]
+    let elf_file = &LX_ELF.0;
+    #[cfg(not(feature = "embed_lx_elf"))]
+    let elf_file = bootinfo.modules.get(0).expect("initrd not found").as_bytes();
     let quota = Quota::new_root().unwrap();
     let vmspace = VmSpace::new(quota.clone())
         .and_then(SharedRef::new)

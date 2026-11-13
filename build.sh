@@ -58,12 +58,19 @@ build_os() {
   cargo "${cargo_command}" "${CARGOFLAGS[@]}" --target libs/ftl/src/arch/$ARCH/user.json \
     --manifest-path lx/Cargo.toml
 
+  if [[ "$cargo_command" != "check" ]]; then
+    cp target/user/$target/lx lx.elf
+  fi
+
+  if [[ -n "${EMBED_LX_ELF:-}" ]]; then
+    CARGOFLAGS+=(--features embed_lx_elf)
+  fi
+
   # Build kernel.
   cargo "${cargo_command}" "${CARGOFLAGS[@]}" --target kernel/src/arch/$ARCH/kernel.json \
     --manifest-path kernel/Cargo.toml
 
   if [[ "$cargo_command" != "check" ]]; then
-    cp target/user/$target/lx lx.elf
     cp target/kernel/$target/kernel ftl.elf
   fi
 }

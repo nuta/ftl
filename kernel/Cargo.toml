@@ -20,3 +20,6 @@ ftl_virtio = { workspace = true }
 ftl_netmux = { workspace = true }
 virtio_net = { workspace = true }
 hashbrown = { workspace = true }
+
+[features]
+embed_lx_elf = []

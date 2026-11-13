@@ -19,6 +19,7 @@ pub struct Module {
 }
 
 impl Module {
+    #[allow(unused)]
     pub fn as_bytes(&self) -> &[u8] {
         let start: *const u8 = arch::paddr2vaddr(self.start).as_ptr();
         let end: *const u8 = arch::paddr2vaddr(self.end).as_ptr();
