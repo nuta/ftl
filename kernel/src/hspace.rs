@@ -19,6 +19,7 @@ use crate::syscall::SyscallOutput;
 use crate::thread::Thread;
 
 const NUM_HANDLES_MAX: usize = 1024;
+const MAX_DEPTH: usize = 4;
 
 static_assert!(NUM_HANDLES_MAX <= HANDLE_ID_MAX);
 
@@ -30,12 +31,14 @@ struct Mutable {
 
 /// A handle space.
 pub struct HandleSpace {
+    depth: usize,
     mutable: SpinLock<Mutable>,
 }
 
 impl HandleSpace {
-    pub fn new() -> Self {
+    pub fn new(depth: usize) -> Self {
         Self {
+            depth,
             mutable: SpinLock::new(Mutable {
                 destroyed: false,
                 threads: Vec::new(),
@@ -92,6 +95,13 @@ impl HandleSpace {
             .get(&id.as_usize())
             .cloned()
             .ok_or(ErrorCode::HandleNotFound)?;
+
+        if let Some(hspace) = handle.downcast_ref::<HandleSpace>() {
+            // A hspace can only be moved into itself.
+            if !core::ptr::eq(hspace, dst) {
+                return Err(ErrorCode::NotAllowed);
+            }
+        }
 
         let handle = handle.update_rights(rights)?;
 
@@ -241,7 +251,11 @@ pub fn sys_hspace_create(
     _ctx: &SyscallRegs,
 ) -> Result<SyscallOutput, ErrorCode> {
     let current_hspace = current.hspace();
-    let new_hspace = SharedRef::new(HandleSpace::new())?;
+    if current_hspace.depth >= MAX_DEPTH {
+        return Err(ErrorCode::TooDeep);
+    }
+
+    let new_hspace = SharedRef::new(HandleSpace::new(current_hspace.depth + 1))?;
     let handle = Handle::new(new_hspace.clone(), HandleRight::WRITE);
     let id = match current_hspace.insert(handle) {
         Ok(id) => id,

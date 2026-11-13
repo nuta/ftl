@@ -71,6 +71,10 @@ impl AnyHandle {
         }))
     }
 
+    pub fn downcast_ref<T: Handleable>(&self) -> Option<&T> {
+        <dyn Any>::downcast_ref::<T>(&*self.0.object)
+    }
+
     pub fn downcast<T: Handleable>(self) -> Option<Handle<T>> {
         let object = self.0.object.downcast().ok()?;
         let rights = self.0.rights;

@@ -159,7 +159,7 @@ pub fn load(bootinfo: &BootInfo) {
     let entry = load_elf(&quota, &vmspace, &image, &elf);
     let sp = prepare_stack(&quota, &vmspace, &bootinfo.cmdline);
 
-    let hspace = SharedRef::new(HandleSpace::new()).unwrap();
+    let hspace = SharedRef::new(HandleSpace::new(0)).unwrap();
     let vmspace_handle = Handle::new(vmspace.clone(), HandleRight::READ | HandleRight::WRITE);
     let quota_handle = Handle::new(quota.clone(), HandleRight::CHARGE);
     let image_handle = Handle::new(image, HandleRight::READ);
