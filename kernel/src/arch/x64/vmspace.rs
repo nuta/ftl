@@ -3,6 +3,7 @@ use core::ops::Range;
 
 use ftl_types::error::ErrorCode;
 use ftl_types::vmspace::PageAttrs;
+use ftl_utils::alignment::align_down;
 use ftl_utils::alignment::is_aligned;
 use ftl_utils::spinlock::SpinLock;
 
@@ -139,14 +140,29 @@ fn get_next_table(table: &mut Table, index: usize) -> Result<&mut Table, ErrorCo
     Ok(paddr_to_table_mut(entry.paddr()))
 }
 
-fn unmap_page(pml4: &mut Table, uaddr: usize) -> Result<(), ErrorCode> {
-    let pdpt = get_next_table(pml4, pml4_index(uaddr))?;
-    let pdt = get_next_table(pdpt, pdpt_index(uaddr))?;
-    let pt = get_next_table(pdt, pdt_index(uaddr))?;
+/// Returns the offset to the next page to unmap.
+fn unmap_page(pml4: &mut Table, uaddr: usize) -> Result<usize, ErrorCode> {
+    let pdpt = match get_next_table(pml4, pml4_index(uaddr)) {
+        Ok(table) => table,
+        Err(ErrorCode::NotFound) => return Ok(1 << 39),
+        Err(err) => return Err(err),
+    };
+
+    let pdt = match get_next_table(pdpt, pdpt_index(uaddr)) {
+        Ok(table) => table,
+        Err(ErrorCode::NotFound) => return Ok(1 << 30),
+        Err(err) => return Err(err),
+    };
+
+    let pt = match get_next_table(pdt, pdt_index(uaddr)) {
+        Ok(table) => table,
+        Err(ErrorCode::NotFound) => return Ok(1 << 21),
+        Err(err) => return Err(err),
+    };
 
     let entry = &mut pt.0[pt_index(uaddr)];
     if !entry.is_present() {
-        return Err(ErrorCode::NotFound);
+        return Ok(MIN_PAGE_SIZE);
     }
 
     if entry.is_huge() {
@@ -159,7 +175,7 @@ fn unmap_page(pml4: &mut Table, uaddr: usize) -> Result<(), ErrorCode> {
         asm!("invlpg [{}]", in(reg) uaddr, options(nostack, preserves_flags));
     }
 
-    Ok(())
+    Ok(MIN_PAGE_SIZE)
 }
 
 const fn pml4_index(vaddr: usize) -> usize {
@@ -324,13 +340,8 @@ impl VmSpace {
 
         let mut addr = start;
         while addr < end {
-            match unmap_page(pml4, addr) {
-                // Ignore missing pages. It happens only if the VMO exist due
-                // to lazy mapping.
-                Ok(()) | Err(ErrorCode::NotFound) => {}
-                Err(e) => return Err(e),
-            }
-            addr += MIN_PAGE_SIZE;
+            let size = unmap_page(pml4, addr)?;
+            addr = align_down(addr, size) + size;
         }
 
         Ok(())
