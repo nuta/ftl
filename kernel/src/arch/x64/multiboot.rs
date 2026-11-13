@@ -2,6 +2,7 @@
 //!
 //! <https://www.gnu.org/software/grub/manual/multiboot2/multiboot.html#Boot-information-format>
 
+use alloc::borrow::Cow;
 use core::arch::global_asm;
 use core::mem::size_of;
 use core::slice;
@@ -184,7 +185,7 @@ pub(super) fn parse_multiboot2_info(info_addr: PAddr) -> BootInfo {
     }
 
     BootInfo {
-        cmdline,
+        cmdline: Cow::Borrowed(cmdline),
         free_rams,
         modules,
         reserved_regions,

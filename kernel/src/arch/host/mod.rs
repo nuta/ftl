@@ -1,3 +1,4 @@
+use alloc::borrow::Cow;
 use core::convert::Infallible;
 
 use ftl_arrayvec::ArrayVec;
@@ -164,7 +165,7 @@ pub fn host_handle_page_fault(fault_addr: UAddr, info: PageFaultInfo) -> Result<
 #[unsafe(no_mangle)]
 pub fn main() -> ! {
     crate::boot::boot(BootInfo {
-        cmdline: b"",
+        cmdline: Cow::Borrowed(b""),
         free_rams: ArrayVec::new(),
         modules: ArrayVec::new(),
         reserved_regions: ArrayVec::new(),

@@ -1,5 +1,6 @@
 //! PVH boot protocol.
 
+use alloc::borrow::Cow;
 use core::slice;
 
 use ftl_arrayvec::ArrayVec;
@@ -130,7 +131,7 @@ pub fn parse_start_info(start_info: PAddr) -> BootInfo {
         .unwrap();
 
     BootInfo {
-        cmdline,
+        cmdline: Cow::Borrowed(cmdline),
         free_rams,
         modules,
         reserved_regions,

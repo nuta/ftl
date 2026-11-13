@@ -157,7 +157,7 @@ pub fn load(bootinfo: &BootInfo) {
     let elf = Elf::parse(elf_file, ftl_elf::ET_EXEC).expect("failed to parse ELF file");
     let image = create_elf_vmo(&quota, &elf, elf_file);
     let entry = load_elf(&quota, &vmspace, &image, &elf);
-    let sp = prepare_stack(&quota, &vmspace, bootinfo.cmdline);
+    let sp = prepare_stack(&quota, &vmspace, &bootinfo.cmdline);
 
     let hspace = SharedRef::new(HandleSpace::new()).unwrap();
     let vmspace_handle = Handle::new(vmspace.clone(), HandleRight::READ | HandleRight::WRITE);
