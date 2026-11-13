@@ -11,6 +11,7 @@ use ftl_types::time::WallTime;
 
 use super::ioport::in8;
 use super::ioport::out8;
+use super::kvmclock;
 use super::rtc;
 use crate::timer::GLOBAL_TIMER;
 
@@ -34,7 +35,7 @@ const CALIBRATION_DURATION: Duration = Duration::from_millis(10);
 static TSC_HZ: AtomicU64 = AtomicU64::new(0);
 static UNIX_TIME_BASE_NS: AtomicU64 = AtomicU64::new(0);
 
-fn read_tsc() -> u64 {
+pub(super) fn read_tsc() -> u64 {
     let low: u32;
     let high: u32;
     unsafe {
@@ -86,8 +87,13 @@ pub(super) fn handle_interrupt(now: MonoTime) {
 }
 
 pub fn monotime_read() -> MonoTime {
-    let hz = TSC_HZ.load(Ordering::Relaxed);
-    let nanos = (read_tsc() as u128 * 1_000_000_000 / hz as u128) as u64;
+    let nanos = if kvmclock::is_enabled() {
+        kvmclock::system_time_read()
+    } else {
+        let hz = TSC_HZ.load(Ordering::Relaxed);
+        (read_tsc() as u128 * 1_000_000_000 / hz as u128) as u64
+    };
+
     MonoTime::from_nanos(nanos)
 }
 
@@ -98,12 +104,19 @@ pub fn walltime_read() -> WallTime {
 }
 
 fn read_wall_clock() {
-    let now = rtc::read().expect("invalid CMOS RTC date");
+    let now = if kvmclock::is_enabled() {
+        kvmclock::walltime_read()
+    } else {
+        rtc::read().expect("invalid CMOS RTC date")
+    };
     let offset = now.as_nanos().wrapping_sub(monotime_read().as_nanos());
     UNIX_TIME_BASE_NS.store(offset, Ordering::Relaxed);
 }
 
 pub(super) fn init() {
-    measure_tsc_frequency();
+    if !kvmclock::init() {
+        measure_tsc_frequency();
+    }
+
     read_wall_clock();
 }

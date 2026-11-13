@@ -6,6 +6,7 @@ mod idle;
 mod idt;
 mod io_apic;
 mod ioport;
+mod kvmclock;
 mod local_apic;
 mod mp_table;
 mod msr;
