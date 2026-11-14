@@ -58,7 +58,7 @@ pub fn boot(mut bootinfo: BootInfo) -> ! {
 
     // crate::loader copies the modules into VMOs. We can reuse the regions as
     // free memory.
-    for module in &bootinfo.modules {
+    for module in bootinfo.modules.drain() {
         crate::memory::PAGE_ALLOCATOR.add_region(module.start, module.end);
     }
 

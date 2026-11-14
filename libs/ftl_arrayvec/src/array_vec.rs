@@ -107,6 +107,16 @@ impl<T, const N: usize> ArrayVec<T, N> {
         self.len = 0;
     }
 
+    pub fn drain(&mut self) -> Drain<'_, T> {
+        let end = self.len;
+        self.len = 0;
+        Drain {
+            elems: &mut self.elems[..end],
+            start: 0,
+            end,
+        }
+    }
+
     pub fn iter(&self) -> slice::Iter<'_, T> {
         self.as_slice().iter()
     }
@@ -135,6 +145,41 @@ impl<T: Copy, const N: usize> ArrayVec<T, N> {
         }
 
         self.len += values.len();
+    }
+}
+
+pub struct Drain<'a, T> {
+    elems: &'a mut [MaybeUninit<T>],
+    start: usize,
+    end: usize,
+}
+
+impl<T> Iterator for Drain<'_, T> {
+    type Item = T;
+
+    fn next(&mut self) -> Option<T> {
+        if self.start == self.end {
+            return None;
+        }
+
+        let value = unsafe { self.elems[self.start].assume_init_read() };
+        self.start += 1;
+        Some(value)
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let remaining = self.end - self.start;
+        (remaining, Some(remaining))
+    }
+}
+
+impl<T> ExactSizeIterator for Drain<'_, T> {}
+
+impl<T> Drop for Drain<'_, T> {
+    fn drop(&mut self) {
+        for elem in &mut self.elems[self.start..self.end] {
+            unsafe { elem.assume_init_drop() };
+        }
     }
 }
 
@@ -226,5 +271,22 @@ mod tests {
         }
 
         assert!(dropped);
+    }
+
+    #[test]
+    fn test_drain() {
+        let mut vec = ArrayVec::<char, 3>::new();
+        vec.try_push('A').unwrap();
+        vec.try_push('B').unwrap();
+        vec.try_push('C').unwrap();
+
+        let mut drain = vec.drain();
+        assert!(vec.is_empty());
+        assert_eq!(drain.len(), 3);
+        assert_eq!(drain.next(), Some('A'));
+        assert_eq!(drain.next(), Some('B'));
+        assert_eq!(drain.next(), Some('C'));
+        assert_eq!(drain.next(), None);
+        drop(drain);
     }
 }

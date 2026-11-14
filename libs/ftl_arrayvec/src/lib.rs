@@ -8,3 +8,4 @@ pub struct CapacityError;
 
 pub use array_string::ArrayString;
 pub use array_vec::ArrayVec;
+pub use array_vec::Drain;
