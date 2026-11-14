@@ -6,12 +6,12 @@ name: "Cargo cache"
 runs:
   using: composite
   steps:
-  - uses: actions/cache@v6
+  - uses: actions/cache@v6.1.0
     with:
       path: ~/.rustup/toolchains/nightly-*
       key: toolchain-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml') }}
 
-  - uses: actions/cache@v6
+  - uses: actions/cache@v6.1.0
     with:
       path: |
         ~/.cargo/registry/index
