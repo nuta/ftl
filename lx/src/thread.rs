@@ -2,10 +2,10 @@ use alloc::boxed::Box;
 use alloc::sync::Arc;
 use alloc::sync::Weak;
 
-use ftl::hspace::HandleSpace;
 use ftl::poll::Poll;
 use ftl::thread::Thread;
 use ftl::trace;
+use ftl::warn;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use ftl_types::thread::Regs;
@@ -41,9 +41,16 @@ struct Cookie {
     thread: Weak<LxThread>,
 }
 
+impl Drop for LxThread {
+    fn drop(&mut self) {
+        if let Err(err) = self.inner.destroy() {
+            warn!("failed to destroy a thread: {:?}", err);
+        }
+    }
+}
+
 impl LxThread {
     pub fn new(
-        hspace: &HandleSpace,
         vm: Arc<Vm>,
         process: Weak<Process>,
         tid: PId,
@@ -57,7 +64,6 @@ impl LxThread {
         //       thread is started. Should we document and guarantee this?
         let inner = Thread::create(
             vm.quota(),
-            hspace,
             vm.vmspace(),
             syscall_pc,
             fault_pc,

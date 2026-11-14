@@ -96,11 +96,9 @@ impl HandleSpace {
             .cloned()
             .ok_or(ErrorCode::HandleNotFound)?;
 
-        if let Some(hspace) = handle.downcast_ref::<HandleSpace>() {
-            // A hspace can only be moved into itself.
-            if !core::ptr::eq(hspace, dst) {
-                return Err(ErrorCode::NotAllowed);
-            }
+        if handle.is::<HandleSpace>() {
+            // Moving a hspace is not allowed because it can create a cycle.
+            return Err(ErrorCode::NotAllowed);
         }
 
         let handle = handle.update_rights(rights)?;
@@ -117,8 +115,14 @@ impl HandleSpace {
             .handles
             .get(&id.as_usize())
             .cloned()
-            .ok_or(ErrorCode::HandleNotFound)?
-            .update_rights(rights)?;
+            .ok_or(ErrorCode::HandleNotFound)?;
+
+        if handle.is::<HandleSpace>() {
+            // A hspace handle cannot be duplicated.
+            return Err(ErrorCode::NotAllowed);
+        }
+
+        let handle = handle.update_rights(rights)?;
 
         let new_id = Self::find_free_id(&mutable)?;
         self.do_insert(&mut mutable, new_id, handle)?;
@@ -224,8 +228,10 @@ impl HandleSpace {
     }
 }
 
-impl Handleable for HandleSpace {
-    fn close(self: SharedRef<Self>) {
+impl Handleable for HandleSpace {}
+
+impl HandleSpace {
+    pub fn destroy(&self) {
         let (threads, mut handles) = {
             let mut mutable = self.mutable.lock();
             mutable.destroyed = true;
@@ -237,11 +243,13 @@ impl Handleable for HandleSpace {
 
         // Terminate threads.
         for thread in threads {
-            thread.close();
+            thread.destroy();
         }
 
         for (_, handle) in handles.drain() {
-            handle.close();
+            if let Some(hspace) = handle.downcast::<HandleSpace>() {
+                hspace.object().destroy();
+            }
         }
     }
 }
@@ -260,7 +268,7 @@ pub fn sys_hspace_create(
     let id = match current_hspace.insert(handle) {
         Ok(id) => id,
         Err(err) => {
-            new_hspace.close();
+            new_hspace.destroy();
             return Err(err);
         }
     };
@@ -281,7 +289,7 @@ pub fn sys_hspace_move(
     Ok(SyscallOutput::Done(new_id.as_usize()))
 }
 
-pub fn sys_hspace_duplicate(
+pub fn sys_handle_duplicate(
     current: &SharedRef<Thread>,
     ctx: &SyscallRegs,
 ) -> Result<SyscallOutput, ErrorCode> {
@@ -292,12 +300,15 @@ pub fn sys_hspace_duplicate(
     Ok(SyscallOutput::Done(new_id.as_usize()))
 }
 
-pub fn sys_hspace_close(
+pub fn sys_handle_close(
     current: &SharedRef<Thread>,
     ctx: &SyscallRegs,
 ) -> Result<SyscallOutput, ErrorCode> {
     let handle_id = HandleId::new(ctx.a0);
     let handle = current.hspace().remove(handle_id)?;
-    handle.close();
+    if let Some(hspace) = handle.downcast::<HandleSpace>() {
+        hspace.object().destroy();
+    }
+
     Ok(SyscallOutput::Done(0))
 }

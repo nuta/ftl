@@ -1,6 +1,5 @@
 use alloc::sync::Arc;
 
-use ftl::hspace::HandleSpace;
 use ftl::poll::Poll;
 use ftl::quota::Quota;
 use ftl::time::MonoTime;
@@ -34,7 +33,6 @@ const CONSOLE_COOKIE: usize = HANDLE_ID_MAX + 2;
 
 pub struct Container {
     poll: Poll,
-    pub hspace: HandleSpace,
     pub quota: Arc<Quota>,
     pub root_vmspace: VmSpace,
     pub processes: SpinLock<PIdTable>,
@@ -47,7 +45,6 @@ pub struct Container {
 
 impl Container {
     pub fn new(
-        hspace: HandleSpace,
         quota: Quota,
         root_vmspace: VmSpace,
         image: Vmo,
@@ -69,7 +66,6 @@ impl Container {
         let root_dir = RootDir::new(quota.clone(), image, network.clone());
         let this = Arc::new(Self {
             poll,
-            hspace,
             quota,
             root_vmspace,
             processes: SpinLock::new(PIdTable::new()),

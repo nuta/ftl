@@ -5,10 +5,7 @@ use ftl_types::handle::HandleRight;
 
 use crate::shared_ref::SharedRef;
 
-pub trait Handleable: Any + Send + Sync {
-    /// Called when a handle is explicitly closed.
-    fn close(self: SharedRef<Self>) {}
-}
+pub trait Handleable: Any + Send + Sync {}
 
 /// A reference to a kernel object and allowed operations on it.
 pub struct Handle<T: Handleable + ?Sized> {
@@ -52,10 +49,6 @@ impl<T: Handleable + ?Sized> Clone for Handle<T> {
 pub struct AnyHandle(Handle<dyn Handleable>);
 
 impl AnyHandle {
-    pub fn close(self) {
-        self.0.object.close();
-    }
-
     /// Updates the rights of this handle.
     ///
     /// The new rights must be a subset of the current rights.
@@ -71,8 +64,8 @@ impl AnyHandle {
         }))
     }
 
-    pub fn downcast_ref<T: Handleable>(&self) -> Option<&T> {
-        <dyn Any>::downcast_ref::<T>(&*self.0.object)
+    pub fn is<T: Handleable>(&self) -> bool {
+        <dyn Any>::is::<T>(&*self.0.object)
     }
 
     pub fn downcast<T: Handleable>(self) -> Option<Handle<T>> {

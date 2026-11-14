@@ -31,7 +31,6 @@ use core::net::SocketAddrV4;
 use core::str;
 
 use ftl::allocator;
-use ftl::hspace::HandleSpace;
 use ftl::net::Nic;
 use ftl::quota::Quota;
 use ftl::vmo::Vmo;
@@ -101,7 +100,6 @@ fn main(cmdline: &[u8]) {
     let root_vmspace = unsafe { VmSpace::from_handle(HandleId::new(1)) };
     let root_quota = unsafe { Quota::from_handle(HandleId::new(2)) };
     let image = unsafe { Vmo::from_handle(HandleId::new(3)) };
-    let root_hspace = unsafe { HandleSpace::from_handle(HandleId::new(4)) };
 
     // Allocate the VMO for the heap.
     let heap_addr = align_up(&raw const _end as usize, 4096);
@@ -169,7 +167,7 @@ fn main(cmdline: &[u8]) {
         }
         (None, None) => {
             // Instantiate a NIC for the init LX.
-            let pnic = unsafe { Nic::from_handle(HandleId::new(6)) };
+            let pnic = unsafe { Nic::from_handle(HandleId::new(5)) };
             let nic = net::create_init_nic(&pnic, net::INIT_PORT_MIN, net::INIT_PORT_MAX)
                 .expect("failed to create init NIC");
 
@@ -205,7 +203,7 @@ fn main(cmdline: &[u8]) {
         Some(b"none") => None,
         Some(value) => panic!("unknown ftl.lx.console: {:?}", value),
         None => {
-            let device = unsafe { ftl::console::Console::from_handle(HandleId::new(5)) };
+            let device = unsafe { ftl::console::Console::from_handle(HandleId::new(4)) };
             Some(Arc::new(
                 Console::new(device).expect("failed to create console"),
             ))
@@ -213,7 +211,6 @@ fn main(cmdline: &[u8]) {
     };
 
     let container = Container::new(
-        root_hspace,
         root_quota,
         root_vmspace,
         image,

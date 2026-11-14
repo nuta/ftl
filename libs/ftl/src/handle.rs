@@ -21,7 +21,7 @@ impl OwnedHandle {
 
     pub fn duplicate(&self, rights: HandleRight) -> Result<Self, ErrorCode> {
         let id = syscall2(
-            Syscall::HSpaceDuplicate,
+            Syscall::HandleDuplicate,
             self.id.as_usize(),
             rights.as_raw(),
         )?;
@@ -31,6 +31,6 @@ impl OwnedHandle {
 
 impl Drop for OwnedHandle {
     fn drop(&mut self) {
-        let _ = syscall1(Syscall::HSpaceClose, self.id.as_usize());
+        let _ = syscall1(Syscall::HandleClose, self.id.as_usize());
     }
 }

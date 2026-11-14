@@ -95,7 +95,7 @@ fn prepare_stack(quota: &Quota, vmspace: &VmSpace, cmdline: &[u8]) -> Result<usi
     Ok(stack_bottom + sp_offset)
 }
 
-const NIC_HANDLE_ID: usize = 5;
+const NIC_HANDLE_ID: usize = 4;
 
 fn move_handle_to(
     hspace: &HandleSpace,
@@ -162,8 +162,7 @@ impl Zone {
         let entry = load_lx_elf(&quota, &vmspace, image)?;
         let sp = prepare_stack(&quota, &vmspace, &cmdline)?;
         let child_image = image.duplicate(HandleRight::READ)?;
-        let child_hspace = hspace.duplicate(HandleRight::WRITE)?;
-        let thread = Thread::create(&quota, &hspace, &vmspace, 0, 0, 0)?;
+        let thread = Thread::create_in(&quota, &hspace, &vmspace, 0, 0, 0)?;
 
         move_handle_to(
             &hspace,
@@ -173,7 +172,6 @@ impl Zone {
         )?;
         move_handle_to(&hspace, quota.into_handle(), HandleRight::CHARGE, 2)?;
         move_handle_to(&hspace, child_image.into_handle(), HandleRight::READ, 3)?;
-        move_handle_to(&hspace, child_hspace.into_handle(), HandleRight::WRITE, 4)?;
         move_handle_to(
             &hspace,
             nic.into_handle(),

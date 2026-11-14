@@ -163,19 +163,17 @@ pub fn load(bootinfo: &BootInfo) {
     let vmspace_handle = Handle::new(vmspace.clone(), HandleRight::READ | HandleRight::WRITE);
     let quota_handle = Handle::new(quota.clone(), HandleRight::CHARGE);
     let image_handle = Handle::new(image, HandleRight::READ);
-    let hspace_handle = Handle::new(hspace.clone(), HandleRight::WRITE);
     let console = SharedRef::new(Console::new()).unwrap();
     let console_handle = Handle::new(console, HandleRight::READ | HandleRight::WRITE);
     hspace.insert_at(HandleId::new(1), vmspace_handle).unwrap();
     hspace.insert_at(HandleId::new(2), quota_handle).unwrap();
     hspace.insert_at(HandleId::new(3), image_handle).unwrap();
-    hspace.insert_at(HandleId::new(4), hspace_handle).unwrap();
-    hspace.insert_at(HandleId::new(5), console_handle).unwrap();
+    hspace.insert_at(HandleId::new(4), console_handle).unwrap();
     let pnic = GLOBAL_NIC.lock().clone();
     if let Some(pnic) = pnic {
         let pnic = SharedRef::new(Nic::new(pnic)).unwrap();
         let pnic_handle = Handle::new(pnic, HandleRight::READ | HandleRight::WRITE);
-        hspace.insert_at(HandleId::new(6), pnic_handle).unwrap();
+        hspace.insert_at(HandleId::new(5), pnic_handle).unwrap();
     }
     let thread = Thread::new(&quota, hspace, vmspace, 0, 0, 0).unwrap();
     thread.start(entry, sp).unwrap();

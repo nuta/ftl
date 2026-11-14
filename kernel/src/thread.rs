@@ -6,6 +6,7 @@ use core::mem::offset_of;
 use core::mem::size_of;
 
 use ftl_types::error::ErrorCode;
+use ftl_types::handle::CURRENT_HSPACE;
 use ftl_types::handle::HandleId;
 use ftl_types::handle::HandleRight;
 use ftl_types::thread::Regs;
@@ -208,7 +209,7 @@ impl Thread {
             return Err(ErrorCode::ThreadNotRunnable);
         }
 
-        self.close();
+        self.destroy();
         Ok(())
     }
 
@@ -254,8 +255,8 @@ impl Thread {
     }
 }
 
-impl Handleable for Thread {
-    fn close(self: SharedRef<Self>) {
+impl Thread {
+    pub fn destroy(self: &SharedRef<Self>) {
         let mut mutable = self.mutable.lock();
         if matches!(mutable.state, State::Exited) {
             return;
@@ -263,8 +264,8 @@ impl Handleable for Thread {
 
         if let State::Blocked { ref poll, .. } = mutable.state {
             let mut timer = GLOBAL_TIMER.lock();
-            timer.cancel(&self);
-            poll.cancel(&self);
+            timer.cancel(self);
+            poll.cancel(self);
         }
 
         mutable.state = State::Exited;
@@ -272,8 +273,8 @@ impl Handleable for Thread {
         drop(mutable);
 
         // Remove references to this thread.
-        SCHEDULER.cancel(&self);
-        self.hspace.remove_thread(&self);
+        SCHEDULER.cancel(self);
+        self.hspace.remove_thread(self);
 
         // Notify that this thread has exited.
         // FIXME: This is not safe with SMP. We might need to do an IPI to a CPU
@@ -285,6 +286,8 @@ impl Handleable for Thread {
         }
     }
 }
+
+impl Handleable for Thread {}
 
 impl Drop for Thread {
     fn drop(&mut self) {
@@ -305,20 +308,20 @@ pub fn sys_thread_create(
 
     let current_hspace = current.hspace();
     let quota = current_hspace.get::<Quota>(quota_id, HandleRight::CHARGE)?;
-    let (hspace, vmspace) = current_hspace.get2(
-        hspace_id,
-        HandleRight::WRITE,
-        vmspace_id,
-        HandleRight::WRITE,
-    )?;
+    let vmspace = current_hspace.get::<VmSpace>(vmspace_id, HandleRight::WRITE)?;
+    let hspace = if hspace_id == CURRENT_HSPACE {
+        current_hspace.clone()
+    } else {
+        current_hspace.get::<HandleSpace>(hspace_id, HandleRight::WRITE)?
+    };
 
     let thread = Thread::new(&quota, hspace, vmspace, syscall_pc, fault_pc, cookie)?;
-    let rights = HandleRight::READ | HandleRight::WRITE;
+    let rights = HandleRight::READ | HandleRight::WRITE | HandleRight::DESTROY;
     let handle = Handle::new(thread.clone(), rights);
     let id = match current_hspace.insert(handle) {
         Ok(id) => id,
         Err(err) => {
-            thread.close();
+            thread.destroy();
             return Err(err);
         }
     };
@@ -414,6 +417,16 @@ pub fn sys_thread_exit(
 
     current.clone().exit()?;
     Ok(SyscallOutput::Exited)
+}
+
+pub fn sys_thread_destroy(
+    current: &SharedRef<Thread>,
+    ctx: &SyscallRegs,
+) -> Result<SyscallOutput, ErrorCode> {
+    let id = HandleId::new(ctx.a0);
+    let thread = current.hspace().get::<Thread>(id, HandleRight::DESTROY)?;
+    thread.destroy();
+    Ok(SyscallOutput::Done(0))
 }
 
 /// The current thread.

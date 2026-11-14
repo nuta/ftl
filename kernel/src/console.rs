@@ -23,7 +23,6 @@ const MAX_WRITE_LEN: usize = 512;
 static DEVICE: SpinLock<Device> = SpinLock::new(Device::new());
 
 struct Subscription {
-    console: SharedRef<Console>,
     emitter: EventEmitter,
 }
 
@@ -84,14 +83,7 @@ impl Console {
     }
 }
 
-impl Handleable for Console {
-    fn close(self: SharedRef<Self>) {
-        DEVICE
-            .lock()
-            .subscriptions
-            .retain(|subscription| !SharedRef::eq(&subscription.console, &self));
-    }
-}
+impl Handleable for Console {}
 
 pub fn handle_interrupt() {
     let subscriptions = {
@@ -144,7 +136,7 @@ pub fn sys_console_subscribe(
     let poll_id = HandleId::new(ctx.a1);
     let cookie = ctx.a2;
 
-    let (console, poll) = current.hspace().get2::<Console, Poll>(
+    let (_console, poll) = current.hspace().get2::<Console, Poll>(
         console_id,
         HandleRight::READ,
         poll_id,
@@ -166,7 +158,7 @@ pub fn sys_console_subscribe(
         .reserve_slot()
         .map_err(|_| ErrorCode::OutOfMemory)?;
 
-    slot.push_back(Subscription { console, emitter });
+    slot.push_back(Subscription { emitter });
 
     Ok(SyscallOutput::Done(0))
 }

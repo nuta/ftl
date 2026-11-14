@@ -136,7 +136,6 @@ impl Process {
         self.fd_table.lock().close_on_exec();
 
         let thread = LxThread::new(
-            &self.container.hspace,
             Arc::new(vm),
             Arc::downgrade(self),
             self.tgid,
@@ -196,7 +195,6 @@ impl Process {
         // TODO: LX assumes that the cookie won't be dereferenced until the
         // thread is started. Should we document and guarantee this?
         let thread = LxThread::new(
-            &container.hspace,
             Arc::new(vm),
             Arc::downgrade(&process),
             tgid,
@@ -290,7 +288,6 @@ impl Process {
 
         // Create a thread.
         let thread = LxThread::new(
-            &self.container.hspace,
             current.vm().clone(),
             Arc::downgrade(self),
             tid,

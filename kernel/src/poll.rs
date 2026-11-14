@@ -24,7 +24,6 @@ use crate::timer::GLOBAL_TIMER;
 struct Mutable {
     queue: VecDeque<Cookie>,
     waiters: VecDeque<SharedRef<Thread>>,
-    destroyed: bool,
 }
 
 pub struct Poll {
@@ -38,7 +37,6 @@ impl Poll {
             mutable: SpinLock::new(Mutable {
                 queue: VecDeque::new(),
                 waiters: VecDeque::new(),
-                destroyed: false,
             }),
         }
     }
@@ -46,10 +44,6 @@ impl Poll {
     fn enqueue(&self, cookie: Cookie) -> Result<(), ErrorCode> {
         let mut timer = GLOBAL_TIMER.lock();
         let mut mutable = self.mutable.lock();
-        if mutable.destroyed {
-            return Err(ErrorCode::Destroyed);
-        }
-
         let slot = mutable
             .queue
             .reserve_slot()
@@ -85,10 +79,6 @@ impl Poll {
         let mut timer = GLOBAL_TIMER.lock();
         let mut mutable = self.mutable.lock();
 
-        if mutable.destroyed {
-            return Err(ErrorCode::Destroyed);
-        }
-
         if let Some(cookie) = mutable.queue.pop_front() {
             return Ok(Some(cookie.as_usize()));
         }
@@ -117,19 +107,7 @@ impl Poll {
     }
 }
 
-impl Handleable for Poll {
-    fn close(self: SharedRef<Self>) {
-        let mut timer = GLOBAL_TIMER.lock();
-        let mut mutable = self.mutable.lock();
-        mutable.destroyed = true;
-
-        // Wake up threads waiting on this poll, and cancel their poll timeouts.
-        for thread in mutable.waiters.drain(..) {
-            timer.cancel(&thread);
-            SCHEDULER.push_back(thread);
-        }
-    }
-}
+impl Handleable for Poll {}
 
 #[derive(Clone, Copy)]
 struct Cookie(usize);

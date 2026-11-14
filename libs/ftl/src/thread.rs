@@ -1,4 +1,5 @@
 use ftl_types::error::ErrorCode;
+use ftl_types::handle::CURRENT_HSPACE;
 use ftl_types::handle::HandleId;
 use ftl_types::syscall::Syscall;
 use ftl_types::thread::ExitReason;
@@ -30,7 +31,29 @@ impl Thread {
 
     pub fn create(
         quota: &Quota,
+        vmspace: &VmSpace,
+        syscall_pc: usize,
+        fault_pc: usize,
+        cookie: usize,
+    ) -> Result<Self, ErrorCode> {
+        Self::do_create(quota, CURRENT_HSPACE, vmspace, syscall_pc, fault_pc, cookie)
+    }
+
+    pub fn create_in(
+        quota: &Quota,
         hspace: &HandleSpace,
+        vmspace: &VmSpace,
+        syscall_pc: usize,
+        fault_pc: usize,
+        cookie: usize,
+    ) -> Result<Self, ErrorCode> {
+        let hspace_id = hspace.handle().id();
+        Self::do_create(quota, hspace_id, vmspace, syscall_pc, fault_pc, cookie)
+    }
+
+    fn do_create(
+        quota: &Quota,
+        hspace_id: HandleId,
         vmspace: &VmSpace,
         syscall_pc: usize,
         fault_pc: usize,
@@ -39,7 +62,7 @@ impl Thread {
         let id = syscall6(
             Syscall::ThreadCreate,
             quota.handle().id().as_usize(),
-            hspace.handle().id().as_usize(),
+            hspace_id.as_usize(),
             vmspace.handle().id().as_usize(),
             syscall_pc,
             fault_pc,
@@ -70,6 +93,11 @@ impl Thread {
 
     pub fn id(&self) -> HandleId {
         self.handle.id()
+    }
+
+    pub fn destroy(&self) -> Result<(), ErrorCode> {
+        syscall1(Syscall::ThreadDestroy, self.handle.id().as_usize())?;
+        Ok(())
     }
 
     pub fn write_regs(&self, kind: RegsKind, regs: Regs) -> Result<(), ErrorCode> {

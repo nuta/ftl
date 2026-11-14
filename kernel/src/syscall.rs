@@ -55,7 +55,7 @@ fn do_handle_syscall() -> Resched {
         Some(Syscall::NicUnbind) => crate::nic::sys_nic_unbind(&thread, &regs),
         Some(Syscall::NicRecv) => crate::nic::sys_nic_recv(&thread, &regs),
         Some(Syscall::NicSend) => crate::nic::sys_nic_send(&thread, &regs),
-        Some(Syscall::HSpaceClose) => crate::hspace::sys_hspace_close(&thread, &regs),
+        Some(Syscall::HandleClose) => crate::hspace::sys_handle_close(&thread, &regs),
         Some(Syscall::MonoTimeRead) => crate::timer::sys_monotime_read(&thread, &regs),
         Some(Syscall::WallTimeRead) => crate::timer::sys_walltime_read(&thread, &regs),
         Some(Syscall::RandomRead) => crate::random::sys_random_read(&thread, &regs),
@@ -67,7 +67,8 @@ fn do_handle_syscall() -> Resched {
         Some(Syscall::VmSpaceCreate) => crate::vmspace::sys_vmspace_create(&thread, &regs),
         Some(Syscall::HSpaceMove) => crate::hspace::sys_hspace_move(&thread, &regs),
         Some(Syscall::QuotaCreate) => crate::quota::sys_quota_create(&thread, &regs),
-        Some(Syscall::HSpaceDuplicate) => crate::hspace::sys_hspace_duplicate(&thread, &regs),
+        Some(Syscall::HandleDuplicate) => crate::hspace::sys_handle_duplicate(&thread, &regs),
+        Some(Syscall::ThreadDestroy) => crate::thread::sys_thread_destroy(&thread, &regs),
         None => Err(ErrorCode::UnknownSyscall),
     };
 
