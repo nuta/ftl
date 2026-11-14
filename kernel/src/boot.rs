@@ -55,6 +55,13 @@ pub fn boot(mut bootinfo: BootInfo) -> ! {
     crate::cpuvar::init(0);
     crate::driver::init(&bootinfo.cmdline);
     crate::loader::load(&bootinfo);
+
+    // crate::loader copies the modules into VMOs. We can reuse the regions as
+    // free memory.
+    for module in &bootinfo.modules {
+        crate::memory::PAGE_ALLOCATOR.add_region(module.start, module.end);
+    }
+
     trace!("kernel is ready");
     crate::scheduler::return_to_user(Resched::Init);
 }
