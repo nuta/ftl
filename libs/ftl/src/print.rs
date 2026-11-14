@@ -56,8 +56,7 @@ macro_rules! error {
 #[macro_export]
 macro_rules! trace {
     ($($arg:tt)+) => {{
-        #[cfg(debug_assertions)]
-        {
+        if cfg!(debug_assertions) {
             $crate::println!("{}", format_args!($($arg)+));
         }
     }};
