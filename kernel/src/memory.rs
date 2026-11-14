@@ -18,7 +18,7 @@ use crate::arch::MIN_PAGE_SIZE;
 use crate::boot::BootInfo;
 use crate::boot::FreeRam;
 
-const MALLOC_CHUNK_SIZE: usize = 512 * 1024; // 512 KB
+const MALLOC_CHUNK_SIZE: usize = 64 * 1024; // 64 KB
 
 #[global_allocator]
 static GLOBAL_ALLOCATOR: GlobalAllocator = GlobalAllocator::new();
