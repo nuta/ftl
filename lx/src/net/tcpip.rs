@@ -509,10 +509,16 @@ impl TcpIp {
     }
 
     pub fn handle_timeouts(&self, now: MonoTime) {
+        let mutable = self.mutable.lock();
+        if mutable.tcp_conns.is_empty() {
+            return;
+        }
+
         let mut conns = Vec::new();
-        for conn in self.mutable.lock().tcp_conns.values() {
+        for conn in mutable.tcp_conns.values() {
             conns.push(conn.clone());
         }
+        drop(mutable);
 
         for conn in conns {
             conn.poll(now);
