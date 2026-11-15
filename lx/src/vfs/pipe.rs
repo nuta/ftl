@@ -89,7 +89,7 @@ impl FileLike for Pipe {
             return Err(Errno::EBADF);
         }
 
-        let sleep_guard = sleep.guard(&self.inner.wait_queue)?;
+        let sleep_guard = sleep.guard(&self.inner.wait_queue);
         loop {
             let mut mutable = self.inner.mutable.lock();
             if !mutable.buffer.is_empty() {
@@ -100,6 +100,7 @@ impl FileLike for Pipe {
                 // Remove the read data from the pipe.
                 mutable.buffer.drain(..n);
                 drop(mutable);
+                drop(sleep_guard);
 
                 // Notify the waiters. There might be writers that are waiting
                 // for the pipe to be writable.
@@ -122,6 +123,12 @@ impl FileLike for Pipe {
 
             // Wait for the writer to write data to the pipe.
             drop(mutable);
+
+            if !sleep_guard.is_subscribed() {
+                sleep_guard.subscribe()?;
+                continue;
+            }
+
             sleep_guard.wait()?;
         }
     }
@@ -161,7 +168,7 @@ impl FileLike for Pipe {
         let atomic = total_len <= PIPE_BUF;
 
         // Wait until the pipe is writable.
-        let sleep_guard = sleep.guard(&self.inner.wait_queue)?;
+        let sleep_guard = sleep.guard(&self.inner.wait_queue);
         let (mut mutable, writeable_len) = loop {
             let mutable = self.inner.mutable.lock();
             if !mutable.reader_open {
@@ -181,6 +188,12 @@ impl FileLike for Pipe {
                 }
 
                 drop(mutable);
+
+                if !sleep_guard.is_subscribed() {
+                    sleep_guard.subscribe()?;
+                    continue;
+                }
+
                 sleep_guard.wait()?;
                 continue;
             }
@@ -201,6 +214,7 @@ impl FileLike for Pipe {
         }
 
         drop(mutable);
+        drop(sleep_guard);
 
         // Notify the waiters. There might be readers that are waiting
         // for the pipe to be readable.

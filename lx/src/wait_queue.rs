@@ -1,6 +1,7 @@
 use alloc::sync::Arc;
 use alloc::sync::Weak;
 use alloc::vec::Vec;
+use core::cell::OnceCell;
 use core::sync::atomic::AtomicUsize;
 use core::sync::atomic::Ordering;
 
@@ -37,6 +38,14 @@ impl Inner {
     }
 }
 
+fn poll_wait_until(poll: &Poll, deadline: MonoTime) -> Result<bool, ErrorCode> {
+    match poll.wait_until(deadline) {
+        Ok(_) => Ok(false),
+        Err(ErrorCode::TimedOut) => Ok(true),
+        Err(err) => Err(err),
+    }
+}
+
 pub struct WaitSet<'a> {
     poll: Arc<Poll>,
     queues: Vec<&'a Inner>,
@@ -59,14 +68,6 @@ impl<'a> WaitSet<'a> {
         self.poll.wait()?;
         Ok(())
     }
-
-    pub fn wait_with_deadline(&self, deadline: MonoTime) -> Result<bool, ErrorCode> {
-        match self.poll.wait_until(deadline) {
-            Ok(_) => Ok(false),
-            Err(ErrorCode::TimedOut) => Ok(true),
-            Err(err) => Err(err),
-        }
-    }
 }
 
 impl Drop for WaitSet<'_> {
@@ -86,19 +87,10 @@ impl Drop for WaitSet<'_> {
 pub struct WaitGuard<'a>(&'a Inner);
 
 impl<'a> WaitGuard<'a> {
-    pub fn wait(&self) -> Result<(), ErrorCode> {
-        self.0.poll.wait()?;
-        Ok(())
-    }
-
     /// Returns `Ok(true)` if the deadline was reached, `Ok(false)` if the
     /// poll returned an event.
     pub fn wait_with_deadline(&self, deadline: MonoTime) -> Result<bool, ErrorCode> {
-        match self.0.poll.wait_until(deadline) {
-            Ok(_) => Ok(false),
-            Err(ErrorCode::TimedOut) => Ok(true),
-            Err(err) => Err(err),
-        }
+        poll_wait_until(&self.0.poll, deadline)
     }
 }
 
@@ -176,7 +168,7 @@ impl WaitQueue {
 /// ```no_run
 /// impl FileLike for MyFile {
 ///     fn read(&self, buf: &mut [u8], sleep: Sleep) -> Result<usize, Errno> {
-///         let mut guard = sleep.guard(&self.wait_queue)?;
+///         let guard = sleep.guard(&self.wait_queue);
 ///         loop {
 ///              // Read the data if available.
 ///             let mut data = self.data.lock();
@@ -187,8 +179,17 @@ impl WaitQueue {
 ///
 ///             // No data to read. Before waiting, check if the thread was
 ///             // interrupted.
-///             if guard.interrupted() {
+///             if guard.is_interrupted() {
 ///                 return Err(Errno::EINTR);
+///             }
+///
+///             // Need to sleep. Subscribe to the wait queue.
+///             if !guard.is_subscribed() {
+///                 guard.subscribe()?;
+///
+///                 // Check the data again in case it became available while
+///                 // we were subscribing to the queue.
+///                 continue;
 ///             }
 ///
 ///             // Wait for self.wait_queue, or a signal.
@@ -203,51 +204,94 @@ pub enum Sleep<'a> {
     Interruptible(&'a Process),
 }
 
-pub enum SleepGuard<'a> {
-    Uninterruptible(WaitGuard<'a>),
-    Interruptible {
-        set: WaitSet<'a>,
-        process: &'a Process,
-    },
-}
-
 impl<'a> Sleep<'a> {
-    pub fn guard<'b>(self, wq: &'b WaitQueue) -> Result<SleepGuard<'b>, ErrorCode>
+    pub fn guard<'b>(self, wq: &'b WaitQueue) -> SleepGuard<'b>
     where
         'a: 'b,
     {
         match self {
-            Sleep::Uninterruptible => Ok(SleepGuard::Uninterruptible(wq.subscribe())),
+            Sleep::Uninterruptible => {
+                SleepGuard::Uninterruptible {
+                    wq,
+                    guard: OnceCell::new(),
+                }
+            }
             Sleep::Interruptible(process) => {
-                // Wait for both the wait queue and the signal.
-                let mut set = WaitSet::new()?;
-                set.subscribe(wq);
-                set.subscribe(process.signal_wait_queue());
-                Ok(SleepGuard::Interruptible { set, process })
+                SleepGuard::Interruptible {
+                    wq,
+                    process,
+                    set: OnceCell::new(),
+                }
             }
         }
     }
 }
 
+pub enum SleepGuard<'a> {
+    Uninterruptible {
+        wq: &'a WaitQueue,
+        guard: OnceCell<WaitGuard<'a>>,
+    },
+    Interruptible {
+        wq: &'a WaitQueue,
+        process: &'a Process,
+        set: OnceCell<WaitSet<'a>>,
+    },
+}
+
 impl SleepGuard<'_> {
     pub fn is_interrupted(&self) -> bool {
         match self {
-            SleepGuard::Uninterruptible(_) => false,
+            SleepGuard::Uninterruptible { .. } => false,
             SleepGuard::Interruptible { process, .. } => process.has_pending_signal(),
         }
     }
 
-    pub fn wait(&self) -> Result<(), ErrorCode> {
+    pub fn is_subscribed(&self) -> bool {
         match self {
-            SleepGuard::Uninterruptible(guard) => guard.wait(),
-            SleepGuard::Interruptible { set, .. } => set.wait(),
+            SleepGuard::Uninterruptible { guard, .. } => guard.get().is_some(),
+            SleepGuard::Interruptible { set, .. } => set.get().is_some(),
         }
     }
 
-    pub fn wait_until(&self, deadline: MonoTime) -> Result<bool, ErrorCode> {
+    pub fn subscribe(&self) -> Result<(), ErrorCode> {
         match self {
-            SleepGuard::Uninterruptible(guard) => guard.wait_with_deadline(deadline),
-            SleepGuard::Interruptible { set, .. } => set.wait_with_deadline(deadline),
+            SleepGuard::Uninterruptible { wq, guard } => {
+                if guard.set(wq.subscribe()).is_err() {
+                    unreachable!();
+                }
+            }
+            SleepGuard::Interruptible { wq, process, set } => {
+                // Wait for both the wait queue and the signal.
+                let mut new_set = WaitSet::new()?;
+                new_set.subscribe(wq);
+                new_set.subscribe(process.signal_wait_queue());
+                if set.set(new_set).is_err() {
+                    unreachable!();
+                }
+            }
         }
+
+        Ok(())
+    }
+
+    fn poll(&self) -> &Poll {
+        match self {
+            SleepGuard::Uninterruptible { guard, .. } => {
+                &guard.get().expect("wait before subscribe").0.poll
+            }
+            SleepGuard::Interruptible { set, .. } => {
+                &set.get().expect("wait before subscribe").poll
+            }
+        }
+    }
+
+    pub fn wait(&self) -> Result<(), ErrorCode> {
+        self.poll().wait()?;
+        Ok(())
+    }
+
+    pub fn wait_until(&self, deadline: MonoTime) -> Result<bool, ErrorCode> {
+        poll_wait_until(self.poll(), deadline)
     }
 }

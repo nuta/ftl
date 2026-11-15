@@ -251,7 +251,7 @@ impl Epoll {
             None
         };
 
-        let sleep_guard = sleep.guard(&self.inner.wait_queue)?;
+        let sleep_guard = sleep.guard(&self.inner.wait_queue);
         loop {
             let n = self.inner.drain(events)?;
             if n > 0 {
@@ -273,6 +273,11 @@ impl Epoll {
 
             if sleep_guard.is_interrupted() {
                 return Err(Errno::EINTR);
+            }
+
+            if !sleep_guard.is_subscribed() {
+                sleep_guard.subscribe()?;
+                continue;
             }
 
             if let Some(deadline) = deadline {

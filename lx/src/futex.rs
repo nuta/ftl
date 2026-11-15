@@ -46,7 +46,7 @@ impl FutexTable {
         sleep: Sleep,
     ) -> Result<(), Errno> {
         let waiter = Arc::new(Waiter::new(uaddr.addr(), bitset)?);
-        let guard = sleep.guard(&waiter.wq)?;
+        let guard = sleep.guard(&waiter.wq);
 
         let mut waiters = self.waiters.lock();
 
@@ -63,27 +63,31 @@ impl FutexTable {
         waiters.push(waiter.clone());
         drop(waiters);
 
-        // Block until woken up by wake/timeout/signal. Do not use "?" here to
-        // remove waiter regardless of the result.
-        let result = sleep_on_wq(&guard, deadline);
+        loop {
+            let result = if guard.is_subscribed() {
+                // Block until woken up by wake/timeout/signal. Do not use "?"
+                // here to remove waiter regardless of the result.
+                sleep_on_wq(&guard, deadline)
+            } else {
+                // Subscribe to the wait queue, and continue to check if this
+                // thread has already been woken up.
+                guard.subscribe().map_err(Errno::from)
+            };
 
-        // Woken up by wake/timeout/signal. Remove our waiter.
-        let mut waiters = self.waiters.lock();
-        let Some(index) = waiters.iter().position(|w| Arc::ptr_eq(w, &waiter)) else {
-            // The waiter is missing. This means it was removed by wake.
-            return Ok(());
-        };
+            // Check if this thread has been woken up. If so, the our waiter
+            // object does not exist in the queue anymore.
+            let mut waiters = self.waiters.lock();
+            let Some(index) = waiters.iter().position(|w| Arc::ptr_eq(w, &waiter)) else {
+                // The waiter is missing. This means it was removed by wake.
+                return Ok(());
+            };
 
-        // Woken up by timeout or signal.
-        waiters.remove(index);
-
-        if let Err(errno) = result {
-            // If sleep_on_wq knows why we woke up, return that.
-            return Err(errno);
+            if let Err(errno) = result {
+                // Woken up by timeout or signal.
+                waiters.remove(index);
+                return Err(errno);
+            }
         }
-
-        // TODO: Does this happen?
-        Err(Errno::EINTR)
     }
 
     pub fn wake(&self, uaddr: usize, count: usize, bitset: u32) -> Result<usize, Errno> {

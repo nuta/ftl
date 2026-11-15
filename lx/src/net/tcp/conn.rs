@@ -325,7 +325,7 @@ impl TcpConn {
 
     /// Blocks until the connection completes (or fails) the handshake.
     pub fn wait_for_handshake(&self, nonblocking: bool, sleep: Sleep<'_>) -> Result<(), Errno> {
-        let sleep_guard = sleep.guard(&self.wait_queue)?;
+        let sleep_guard = sleep.guard(&self.wait_queue);
         loop {
             let mut mutable = self.mutable.lock();
             if let Some(error) = mutable.error.take() {
@@ -345,6 +345,12 @@ impl TcpConn {
             }
 
             drop(mutable);
+
+            if !sleep_guard.is_subscribed() {
+                sleep_guard.subscribe()?;
+                continue;
+            }
+
             sleep_guard.wait()?;
         }
     }
@@ -729,7 +735,7 @@ impl TcpConn {
             return Ok(0);
         }
 
-        let sleep_guard = sleep.guard(&self.wait_queue)?;
+        let sleep_guard = sleep.guard(&self.wait_queue);
         loop {
             let mut mutable = self.mutable.lock();
             if let Some(error) = mutable.error.take() {
@@ -763,6 +769,12 @@ impl TcpConn {
             }
 
             drop(mutable);
+
+            if !sleep_guard.is_subscribed() {
+                sleep_guard.subscribe()?;
+                continue;
+            }
+
             sleep_guard.wait()?;
         }
     }
@@ -789,7 +801,7 @@ impl TcpConn {
             return Err(Errno::EMSGSIZE);
         }
 
-        let sleep_guard = sleep.guard(&self.wait_queue)?;
+        let sleep_guard = sleep.guard(&self.wait_queue);
         loop {
             let mut mutable = self.mutable.lock();
             if let Some(error) = mutable.error.take() {
@@ -837,6 +849,12 @@ impl TcpConn {
             }
 
             drop(mutable);
+
+            if !sleep_guard.is_subscribed() {
+                sleep_guard.subscribe()?;
+                continue;
+            }
+
             sleep_guard.wait()?;
         }
     }
@@ -879,7 +897,7 @@ impl FileLike for TcpConn {
             return Ok(0);
         }
 
-        let sleep_guard = sleep.guard(&self.wait_queue)?;
+        let sleep_guard = sleep.guard(&self.wait_queue);
         loop {
             let mut mutable = self.mutable.lock();
             if let Some(error) = mutable.error.take() {
@@ -912,6 +930,12 @@ impl FileLike for TcpConn {
             }
 
             drop(mutable);
+
+            if !sleep_guard.is_subscribed() {
+                sleep_guard.subscribe()?;
+                continue;
+            }
+
             sleep_guard.wait()?;
         }
     }
@@ -969,7 +993,7 @@ impl FileLike for TcpConn {
         self.do_close();
 
         let deadline = MonoTime::now() + timeout;
-        let sleep_guard = sleep.guard(&self.wait_queue)?;
+        let sleep_guard = sleep.guard(&self.wait_queue);
         loop {
             let mutable = self.mutable.lock();
 
@@ -983,6 +1007,12 @@ impl FileLike for TcpConn {
             }
 
             drop(mutable);
+
+            if !sleep_guard.is_subscribed() {
+                sleep_guard.subscribe()?;
+                continue;
+            }
+
             if sleep_guard.wait_until(deadline)? {
                 return Ok(());
             }

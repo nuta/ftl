@@ -51,7 +51,7 @@ impl FileLike for EventFd {
         }
 
         // Wait for the eventfd to be signalled.
-        let sleep_guard = sleep.guard(&self.wait_queue)?;
+        let sleep_guard = sleep.guard(&self.wait_queue);
         let mut counter = loop {
             let counter = self.counter.lock();
             if *counter > 0 {
@@ -67,6 +67,12 @@ impl FileLike for EventFd {
             }
 
             drop(counter);
+
+            if !sleep_guard.is_subscribed() {
+                sleep_guard.subscribe()?;
+                continue;
+            }
+
             sleep_guard.wait()?;
         };
 
@@ -110,7 +116,7 @@ impl FileLike for EventFd {
         }
 
         // Wait for the eventfd to be writable.
-        let sleep_guard = sleep.guard(&self.wait_queue)?;
+        let sleep_guard = sleep.guard(&self.wait_queue);
         let mut counter = loop {
             let counter = self.counter.lock();
 
@@ -128,6 +134,12 @@ impl FileLike for EventFd {
             }
 
             drop(counter);
+
+            if !sleep_guard.is_subscribed() {
+                sleep_guard.subscribe()?;
+                continue;
+            }
+
             sleep_guard.wait()?;
         };
 

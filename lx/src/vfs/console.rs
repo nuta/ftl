@@ -60,7 +60,7 @@ impl FileLike for Console {
             return Ok(0);
         }
 
-        let sleep_guard = sleep.guard(&self.wait_queue)?;
+        let sleep_guard = sleep.guard(&self.wait_queue);
         let mut pending = loop {
             let pending = self.pending.lock();
             if !pending.is_empty() {
@@ -75,6 +75,11 @@ impl FileLike for Console {
 
             if sleep_guard.is_interrupted() {
                 return Err(Errno::EINTR);
+            }
+
+            if !sleep_guard.is_subscribed() {
+                sleep_guard.subscribe()?;
+                continue;
             }
 
             sleep_guard.wait()?;

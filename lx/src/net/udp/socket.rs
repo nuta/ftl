@@ -120,7 +120,7 @@ impl UdpSocket {
         sleep: Sleep<'_>,
     ) -> Result<(usize, Endpoint), Errno> {
         let deadline = self.get_recv_deadline(MonoTime::now());
-        let sleep_guard = sleep.guard(&self.wait_queue)?;
+        let sleep_guard = sleep.guard(&self.wait_queue);
         loop {
             if let Some(datagram) = self.rx_queue.pop() {
                 // Received a datagram.
@@ -135,6 +135,11 @@ impl UdpSocket {
 
             if sleep_guard.is_interrupted() {
                 return Err(Errno::EINTR);
+            }
+
+            if !sleep_guard.is_subscribed() {
+                sleep_guard.subscribe()?;
+                continue;
             }
 
             match deadline {

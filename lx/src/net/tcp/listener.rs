@@ -102,7 +102,7 @@ impl TcpListener {
     }
 
     pub fn do_accept(&self, nonblocking: bool, sleep: Sleep<'_>) -> Result<Arc<TcpConn>, Errno> {
-        let sleep_guard = sleep.guard(&self.wait_queue)?;
+        let sleep_guard = sleep.guard(&self.wait_queue);
         loop {
             if let Some(conn) = self.try_accept() {
                 return Ok(conn);
@@ -114,6 +114,11 @@ impl TcpListener {
 
             if sleep_guard.is_interrupted() {
                 return Err(Errno::EINTR);
+            }
+
+            if !sleep_guard.is_subscribed() {
+                sleep_guard.subscribe()?;
+                continue;
             }
 
             sleep_guard.wait()?;
