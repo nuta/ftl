@@ -1,6 +1,5 @@
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(not(test), no_main)]
-#![feature(trim_prefix_suffix)]
 
 extern crate alloc;
 
