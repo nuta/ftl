@@ -149,7 +149,11 @@ pub fn load(bootinfo: &BootInfo) {
     #[cfg(feature = "embed_lx_elf")]
     let elf_file = &LX_ELF.0;
     #[cfg(not(feature = "embed_lx_elf"))]
-    let elf_file = bootinfo.modules.get(0).expect("initrd not found").as_bytes();
+    let elf_file = bootinfo
+        .modules
+        .get(0)
+        .expect("initrd not found")
+        .as_bytes();
     let quota = Quota::new_root().unwrap();
     let vmspace = VmSpace::new(quota.clone())
         .and_then(SharedRef::new)

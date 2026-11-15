@@ -11,9 +11,9 @@ use ftl_utils::spinlock::SpinLock;
 
 use crate::arch::SyscallFrame;
 use crate::arch::restore_regs;
-use crate::global::Global;
 use crate::fd_table::FdTable;
 use crate::futex::FutexTable;
+use crate::global::Global;
 use crate::signal::SigAction;
 use crate::signal::SigDisposition;
 use crate::signal::Signal;
@@ -135,11 +135,7 @@ impl Process {
         )?;
         self.fd_table.lock().close_on_exec();
 
-        let thread = LxThread::new(
-            Arc::new(vm),
-            Arc::downgrade(self),
-            self.tgid,
-        )?;
+        let thread = LxThread::new(Arc::new(vm), Arc::downgrade(self), self.tgid)?;
 
         let mut mutable = self.mutable.lock();
 
@@ -194,11 +190,7 @@ impl Process {
 
         // TODO: LX assumes that the cookie won't be dereferenced until the
         // thread is started. Should we document and guarantee this?
-        let thread = LxThread::new(
-            Arc::new(vm),
-            Arc::downgrade(&process),
-            tgid,
-        )?;
+        let thread = LxThread::new(Arc::new(vm), Arc::downgrade(&process), tgid)?;
         thread_prestart(&thread)?;
 
         // Start the thread.
@@ -287,11 +279,7 @@ impl Process {
         let tid = pid_table.allocate()?;
 
         // Create a thread.
-        let thread = LxThread::new(
-            current.vm().clone(),
-            Arc::downgrade(self),
-            tid,
-        )?;
+        let thread = LxThread::new(current.vm().clone(), Arc::downgrade(self), tid)?;
 
         match tls {
             // Set the TLS base if it is provided.
