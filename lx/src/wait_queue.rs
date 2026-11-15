@@ -68,6 +68,10 @@ impl<'a> WaitSet<'a> {
         self.poll.wait()?;
         Ok(())
     }
+
+    pub fn wait_until(&self, deadline: MonoTime) -> Result<bool, ErrorCode> {
+        poll_wait_until(&self.poll, deadline)
+    }
 }
 
 impl Drop for WaitSet<'_> {

@@ -1,6 +1,10 @@
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 
+use ftl::time::MonoTime;
+use ftl::time::MonoTimeExt;
+use ftl_types::time::Duration;
+
 use super::SyscallResult;
 use crate::open_file::OpenFile;
 use crate::thread::LxThread;
@@ -55,6 +59,13 @@ pub fn sys_poll(
         return Ok(SyscallResult::Done(n));
     }
 
+    let deadline = if let Ok(timeout) = timeout.try_into() {
+        let duration = Duration::from_millis(timeout);
+        Some(MonoTime::now() + duration)
+    } else {
+        None
+    };
+
     // Subscribe to the files' wait queues.
     let mut wait_set = WaitSet::new()?;
     wait_set.subscribe(process.signal_wait_queue());
@@ -75,8 +86,13 @@ pub fn sys_poll(
         }
 
         // No ready entries. Wait for events.
-        // TODO: timeout support
-        wait_set.wait()?;
+        if let Some(deadline) = deadline {
+            if wait_set.wait_until(deadline)? {
+                return Ok(SyscallResult::Done(0));
+            }
+        } else {
+            wait_set.wait()?;
+        }
     }
 }
 
