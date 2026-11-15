@@ -281,12 +281,12 @@ mod tests {
         vec.try_push('C').unwrap();
 
         let mut drain = vec.drain();
-        assert!(vec.is_empty());
         assert_eq!(drain.len(), 3);
         assert_eq!(drain.next(), Some('A'));
         assert_eq!(drain.next(), Some('B'));
         assert_eq!(drain.next(), Some('C'));
         assert_eq!(drain.next(), None);
         drop(drain);
+        assert!(vec.is_empty());
     }
 }
