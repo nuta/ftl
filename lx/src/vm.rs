@@ -582,12 +582,21 @@ fn load_elf(
     let mut ehdr = MaybeUninit::<ftl_elf::Ehdr>::uninit();
     let ehdr = read_uninit(elf_file.as_ref(), 0, &mut ehdr)?;
 
-    let phdrs_end = ehdr.e_phoff as usize + ehdr.e_phnum as usize * size_of::<ftl_elf::Phdr>();
+    let file_size = elf_file.size().map_err(|_| Errno::ENOEXEC)?;
+    let phdrs_len = (ehdr.e_phnum as usize)
+        .checked_mul(size_of::<ftl_elf::Phdr>())
+        .ok_or(Errno::ENOEXEC)?;
+    let phdrs_end = (ehdr.e_phoff as usize)
+        .checked_add(phdrs_len)
+        .ok_or(Errno::ENOEXEC)?;
+    if phdrs_end > file_size {
+        return Err(Errno::ENOEXEC);
+    }
+
     let mut header_region = vec![0u8; phdrs_end]; // TODO: Use MaybeUninit
     read_exact(elf_file.as_ref(), 0, &mut header_region)?;
 
     let elf = Elf::parse(&header_region, ftl_elf::ET_EXEC).map_err(|_| Errno::ENOEXEC)?;
-    let file_size = elf_file.size().map_err(|_| Errno::ENOEXEC)?;
     let mut phdr_vaddr = 0;
     for phdr in elf.phdrs {
         if phdr.p_type == PhdrType::Phdr as u32 {
