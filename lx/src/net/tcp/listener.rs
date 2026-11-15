@@ -19,8 +19,6 @@ use crate::types::sys::poll::POLLIN;
 use crate::wait_queue::Sleep;
 use crate::wait_queue::WaitQueue;
 
-const INITIAL_SEND_SEQ: u32 = 1234;
-
 #[derive(Clone, Copy)]
 struct Handshake {
     remote: Endpoint,
@@ -170,6 +168,12 @@ impl TcpListener {
             port: pkt.remote_port,
         };
 
+        let mut iss = [0; 4];
+        if let Err(err) = crate::random::read(&mut iss) {
+            trace!("failed to generate ISS: {:?}, dropping SYN", err);
+            return;
+        }
+
         let mut mutable = self.mutable.lock();
 
         // Check if the handshake with the peer is already in progress.
@@ -192,7 +196,7 @@ impl TcpListener {
         // TODO: SYN cookie support
         let handshake = Handshake {
             remote,
-            local_iss: INITIAL_SEND_SEQ,
+            local_iss: u32::from_ne_bytes(iss),
             remote_rcv_nxt: pkt.seq.wrapping_add(1),
             remote_rcv_wnd: pkt.window_size,
         };
