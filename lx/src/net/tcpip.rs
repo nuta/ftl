@@ -41,14 +41,6 @@ pub const INIT_PORT_MAX: u16 = 50175;
 pub const ZONE_PORT_LEN: u16 = 1024;
 const ZONE_PORT_START: u16 = 10000;
 
-fn alloc_buf(len: usize) -> Result<Vec<u8>, ErrorCode> {
-    let mut buf = Vec::new();
-    buf.try_reserve_exact(len)
-        .map_err(|_| ErrorCode::OutOfMemory)?;
-    buf.resize(len, 0);
-    Ok(buf)
-}
-
 /// Creates a virtual NIC, and route all TX packets to `pnic`.
 fn create_nic(pnic: &Nic) -> Result<Nic, ErrorCode> {
     let nic = Nic::create_virtual()?;
@@ -123,12 +115,18 @@ struct Mutable {
     last_alloced_port: u16,
 }
 
+struct RxBuffers {
+    header: [u8; RX_HEADER_LEN],
+    payload: [u8; RX_PAYLOAD_LEN],
+}
+
 pub struct TcpIp {
     nic: Nic,
     pnic: Option<Arc<Nic>>,
     port_min: u16,
     port_max: u16,
     mutable: SpinLock<Mutable>,
+    rx_buffers: SpinLock<RxBuffers>,
 }
 
 impl TcpIp {
@@ -143,6 +141,10 @@ impl TcpIp {
                 tcp_listeners: HashMap::new(),
                 udp_ports: HashMap::new(),
                 last_alloced_port: port_min,
+            }),
+            rx_buffers: SpinLock::new(RxBuffers {
+                header: [0; RX_HEADER_LEN],
+                payload: [0; RX_PAYLOAD_LEN],
             }),
         })
     }
@@ -442,17 +444,11 @@ impl TcpIp {
     }
 
     pub fn handle_rx(&self) {
-        let Ok(mut header) = alloc_buf(RX_HEADER_LEN) else {
-            trace!("failed to allocate RX header buffer");
-            return;
-        };
-        let Ok(mut payload) = alloc_buf(RX_PAYLOAD_LEN) else {
-            trace!("failed to allocate RX payload buffer");
-            return;
-        };
+        let mut rx_buffers = self.rx_buffers.lock();
+        let RxBuffers { header, payload } = &mut *rx_buffers;
 
         loop {
-            let payload_len = match self.nic.recv(&mut header, &mut payload) {
+            let payload_len = match self.nic.recv(header, payload) {
                 Ok(len) => len,
                 Err(error) if error == ErrorCode::Empty => return,
                 Err(error) if error == ErrorCode::OutOfBounds => {
@@ -464,8 +460,8 @@ impl TcpIp {
 
             let payload = &payload[..payload_len];
             match header[offset_of!(Ipv4Header, protocol)] {
-                IP_PROTO_TCP => self.handle_tcp_rx(&header, payload),
-                IP_PROTO_UDP => self.handle_udp_rx(&header, payload),
+                IP_PROTO_TCP => self.handle_tcp_rx(header, payload),
+                IP_PROTO_UDP => self.handle_udp_rx(header, payload),
                 _ => {}
             }
         }
