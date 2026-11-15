@@ -2,8 +2,11 @@ use alloc::collections::VecDeque;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 
+use ftl::time::MonoTime;
+use ftl::time::MonoTimeExt;
 use ftl::trace;
 use ftl_types::error::ErrorCode;
+use ftl_types::time::Duration;
 use ftl_utils::spinlock::SpinLock;
 
 use super::buffer::TCP_BUFFER_SIZE;
@@ -19,12 +22,15 @@ use crate::types::sys::poll::POLLIN;
 use crate::wait_queue::Sleep;
 use crate::wait_queue::WaitQueue;
 
+const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(30);
+
 #[derive(Clone, Copy)]
 struct Handshake {
     remote: Endpoint,
     local_iss: u32,
     remote_rcv_nxt: u32,
     remote_rcv_wnd: u16,
+    deadline: MonoTime,
 }
 
 struct Mutable {
@@ -42,6 +48,17 @@ impl Mutable {
         }
 
         None
+    }
+
+    fn evict_expired_handshakes(&mut self, now: MonoTime) {
+        let mut index = 0;
+        while index < self.inflights.len() {
+            if now.duration_since(self.inflights[index].deadline).is_some() {
+                self.inflights.remove(index);
+            } else {
+                index += 1;
+            }
+        }
     }
 }
 
@@ -187,6 +204,11 @@ impl TcpListener {
         }
 
         // Do we have room for a new connection?
+        let now = MonoTime::now();
+        if mutable.inflights.len() + mutable.established.len() >= mutable.backlog {
+            mutable.evict_expired_handshakes(now);
+        }
+
         if mutable.inflights.len() + mutable.established.len() >= mutable.backlog {
             // No room for a new connection.
             return;
@@ -199,6 +221,7 @@ impl TcpListener {
             local_iss: u32::from_ne_bytes(iss),
             remote_rcv_nxt: pkt.seq.wrapping_add(1),
             remote_rcv_wnd: pkt.window_size,
+            deadline: now + HANDSHAKE_TIMEOUT,
         };
         mutable.inflights.push(handshake);
         drop(mutable);
