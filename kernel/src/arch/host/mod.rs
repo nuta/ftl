@@ -60,10 +60,6 @@ pub fn paddr2vaddr(_paddr: PAddr) -> VAddr {
     todo!()
 }
 
-pub fn vmspace_switch_to_kernel() {
-    todo!()
-}
-
 pub struct VmSpace {}
 
 impl VmSpace {

@@ -248,11 +248,6 @@ unsafe fn free_table(paddr: PAddr, level: usize) {
     unsafe { PAGE_ALLOCATOR.free(paddr, MIN_PAGE_SIZE) };
 }
 
-pub fn vmspace_switch_to_kernel() {
-    let vaddr = VAddr::new(&raw const BOOT_PML4 as usize);
-    write_cr3(vaddr2paddr(vaddr).as_usize() as u64);
-}
-
 impl VmSpace {
     pub fn new(quota: SharedRef<Quota>) -> Result<Self, ErrorCode> {
         let pdpt_vaddr = VAddr::new(BOOT_PDPT.0.as_ptr() as usize);

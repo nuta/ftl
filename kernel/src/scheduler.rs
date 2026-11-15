@@ -130,7 +130,6 @@ pub fn return_to_user(resched: Resched) -> ! {
         let next = loop {
             let Some(thread) = SCHEDULER.pop(now) else {
                 // No threads to run. Enter the idle loop.
-                arch::vmspace_switch_to_kernel();
                 arch::idle();
                 now = arch::monotime_read();
                 continue;
