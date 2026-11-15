@@ -31,7 +31,7 @@ pub fn sys_socket(
     }
 
     let process = current.process();
-    let network = process.container().network();
+    let network = process.global().network();
 
     // FIXME: support other socket types
     let socket: Arc<dyn FileLike> = match (socket_type & !SUPPORTED_FLAGS, protocol) {

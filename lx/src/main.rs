@@ -4,14 +4,15 @@
 extern crate alloc;
 
 mod arch;
-mod container;
 mod endian;
 mod fault;
 mod fd_table;
 mod futex;
+mod global;
 mod initfs;
 mod net;
 mod open_file;
+mod pid_table;
 mod process;
 mod random;
 mod reaper;
@@ -38,7 +39,7 @@ use ftl_types::handle::HandleId;
 use ftl_types::vmspace::PageAttrs;
 use ftl_utils::alignment::align_up;
 
-use crate::container::Container;
+use crate::global::Global;
 use crate::initfs::InitFsLoader;
 use crate::types::errno::Errno;
 use crate::vfs::Console;
@@ -209,7 +210,7 @@ fn main(cmdline: &[u8]) {
         }
     };
 
-    let container = Container::new(
+    let global = Global::new(
         root_quota,
         root_vmspace,
         image,
@@ -223,8 +224,8 @@ fn main(cmdline: &[u8]) {
 
     // Keep LX running until the init process exits.
     let status = loop {
-        container.handle_events();
-        if let Some(status) = container.init_exit_status() {
+        global.handle_events();
+        if let Some(status) = global.init_exit_status() {
             break status;
         }
     };
@@ -238,7 +239,7 @@ fn main(cmdline: &[u8]) {
 
     // Send the exit status over the stdio connection.
     while conn.send_exit(status) == Err(Errno::EAGAIN) {
-        container.handle_events();
+        global.handle_events();
     }
 
     // Initiate a connection close.
@@ -246,6 +247,6 @@ fn main(cmdline: &[u8]) {
 
     // Keep LX running until the host LX destroys this thread.
     loop {
-        container.handle_events();
+        global.handle_events();
     }
 }

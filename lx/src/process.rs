@@ -11,7 +11,7 @@ use ftl_utils::spinlock::SpinLock;
 
 use crate::arch::SyscallFrame;
 use crate::arch::restore_regs;
-use crate::container::Container;
+use crate::global::Global;
 use crate::fd_table::FdTable;
 use crate::futex::FutexTable;
 use crate::signal::SigAction;
@@ -72,11 +72,11 @@ struct Mutable {
 ///
 /// 1. Parent's `mutable`
 /// 2. Child's `mutable`
-/// 3. `Container::processes`
+/// 3. `Global::processes`
 pub struct Process {
     tgid: PId,
     child_exit: WaitQueue,
-    container: Arc<Container>,
+    global: Arc<Global>,
     mutable: SpinLock<Mutable>,
     fd_table: SpinLock<FdTable>,
     signal_wait: WaitQueue,
@@ -85,14 +85,14 @@ pub struct Process {
 
 impl Process {
     pub fn new_init(
-        container: Arc<Container>,
+        global: Arc<Global>,
         console: Option<Arc<Console>>,
         stdio: Option<(Arc<dyn FileLike>, Arc<dyn FileLike>)>,
         elf_file: Arc<dyn FileLike>,
         argv: &[&[u8]],
     ) -> Result<Arc<Process>, Errno> {
-        let vmspace = container.root_vmspace.try_clone(&container.quota)?;
-        let (vm, entry, sp) = Vm::create(&container.quota, &vmspace, elf_file, argv)?;
+        let vmspace = global.root_vmspace.try_clone(&global.quota)?;
+        let (vm, entry, sp) = Vm::create(&global.quota, &vmspace, elf_file, argv)?;
 
         let mut fd_table = FdTable::new(1024); // TODO: make this configurable
         let tty: Arc<dyn FileLike> = match console {
@@ -104,9 +104,9 @@ impl Process {
         fd_table.insert_at(1, stdout, O_WRONLY)?;
         fd_table.insert_at(2, stderr, O_WRONLY)?;
 
-        let cwd = container.root_dir.clone();
+        let cwd = global.root_dir.clone();
         let process = Self::new(
-            container,
+            global,
             vm,
             fd_table,
             cwd,
@@ -128,8 +128,8 @@ impl Process {
         argv: &[&[u8]],
     ) -> Result<(), Errno> {
         let (vm, entry, sp) = Vm::create(
-            &self.container.quota,
-            &self.container.root_vmspace,
+            &self.global.quota,
+            &self.global.root_vmspace,
             elf_file,
             argv,
         )?;
@@ -148,7 +148,7 @@ impl Process {
         // This should be done while locking the process's mutable, because the
         // new thread is not yet added to `mutable.threads`, and the thread
         // starts immediately in add_thread.
-        self.container.add_thread(thread.clone(), entry, sp)?;
+        self.global.add_thread(thread.clone(), entry, sp)?;
 
         mutable
             .threads
@@ -158,7 +158,7 @@ impl Process {
     }
 
     fn new<F>(
-        container: Arc<Container>,
+        global: Arc<Global>,
         vm: Vm,
         fd_table: FdTable,
         cwd: Arc<PathNode>,
@@ -177,7 +177,7 @@ impl Process {
         let process = Arc::new(Self {
             tgid,
             child_exit,
-            container: container.clone(),
+            global: global.clone(),
             mutable: SpinLock::new(Mutable {
                 parent,
                 threads: Vec::with_capacity(1),
@@ -203,10 +203,10 @@ impl Process {
 
         // Start the thread.
         //
-        // `fork` calls this while holding `Container::processes`. Locking
+        // `fork` calls this while holding `Global::processes`. Locking
         // `mutable` here is fine because nobody else can reach this process yet.
         process.mutable.lock().threads.push(thread.clone());
-        container.add_thread(thread, entry, sp)?;
+        global.add_thread(thread, entry, sp)?;
 
         Ok(process)
     }
@@ -225,19 +225,19 @@ impl Process {
         // Copy memory into the child's VM space.
         // TODO: copy on write
         let mutable = self.mutable.lock();
-        let new_vm = current.vm().fork(&self.container.root_vmspace)?;
+        let new_vm = current.vm().fork(&self.global.root_vmspace)?;
         let signal_actions = mutable.signal_actions.fork();
         let cwd = mutable.cwd.clone();
         drop(mutable);
 
         // Allocate a new PID for the child process.
-        let mut pid_table = self.container.processes.lock();
+        let mut pid_table = self.global.processes.lock();
         let tgid = pid_table.allocate()?;
 
         // Create a new process and the first thread.
         let entry = restore_regs as *const () as usize;
         let child = Self::new(
-            self.container.clone(),
+            self.global.clone(),
             new_vm,
             fd_table,
             cwd,
@@ -283,7 +283,7 @@ impl Process {
             .ok_or(Errno::EINVAL)?;
 
         // Allocate a new thread ID.
-        let mut pid_table = self.container.processes.lock();
+        let mut pid_table = self.global.processes.lock();
         let tid = pid_table.allocate()?;
 
         // Create a thread.
@@ -325,9 +325,9 @@ impl Process {
         // Start the thread.
         let mut mutable = self.mutable.lock();
         let entry = restore_regs as *const () as usize;
-        if let Err(err) = self.container.add_thread(thread.clone(), entry, frame_addr) {
+        if let Err(err) = self.global.add_thread(thread.clone(), entry, frame_addr) {
             drop(mutable);
-            self.container.processes.lock().remove(tid);
+            self.global.processes.lock().remove(tid);
             return Err(err);
         }
 
@@ -338,7 +338,7 @@ impl Process {
     pub fn on_thread_exit(&self, thread: &LxThread) -> Result<(), Errno> {
         if thread.tid() != self.tgid {
             // This is not the main thread. Remove it from the PID table.
-            self.container.processes.lock().remove(thread.tid());
+            self.global.processes.lock().remove(thread.tid());
         }
 
         let mut mutable = self.mutable.lock();
@@ -372,7 +372,7 @@ impl Process {
     // TODO: Should we make this method infallible?
     pub fn exit(&self, status: c_int) -> Result<(), Errno> {
         if self.tgid == PId::new(1) {
-            self.container.set_init_exit_status(status);
+            self.global.set_init_exit_status(status);
         }
 
         let mut mutable = self.mutable.lock();
@@ -389,7 +389,7 @@ impl Process {
 
         // Reap this process if its parent is gone.
         if parent.is_none() {
-            self.container.processes.lock().remove(self.tgid);
+            self.global.processes.lock().remove(self.tgid);
         }
 
         // Orphan its children that have already exited.
@@ -400,7 +400,7 @@ impl Process {
             child_mutable.parent = None;
 
             if child_mutable.exit_status.is_some() {
-                self.container.processes.lock().remove(child.tgid);
+                self.global.processes.lock().remove(child.tgid);
             }
         }
 
@@ -437,7 +437,7 @@ impl Process {
                 if let Some(status) = exit_status {
                     let tgid = child.tgid;
                     mutable.children.remove(index);
-                    self.container.processes.lock().remove(tgid);
+                    self.global.processes.lock().remove(tgid);
                     return Ok(Some((tgid, status)));
                 }
 
@@ -470,7 +470,7 @@ impl Process {
     pub fn lookup_path(&self, path: &[u8]) -> Result<Arc<PathNode>, Errno> {
         let dir = if path.starts_with(b"/") {
             // Absolute paths. Start from the root directory.
-            self.container.root_dir.clone()
+            self.global.root_dir.clone()
         } else {
             // Relative paths.
             self.mutable.lock().cwd.clone()
@@ -553,7 +553,7 @@ impl Process {
         &self.signal_wait
     }
 
-    pub fn container(&self) -> &Arc<Container> {
-        &self.container
+    pub fn global(&self) -> &Arc<Global> {
+        &self.global
     }
 }

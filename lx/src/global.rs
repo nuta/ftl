@@ -11,9 +11,9 @@ use ftl_types::handle::HANDLE_ID_MAX;
 use ftl_types::handle::HandleId;
 use ftl_types::time::Duration;
 use ftl_utils::spinlock::SpinLock;
-use pid_table::PIdTable;
 
 use crate::net::TcpIp;
+use crate::pid_table::PIdTable;
 use crate::process::PId;
 use crate::process::Process;
 use crate::reaper::Reaper;
@@ -25,13 +25,11 @@ use crate::vfs::FileLike;
 use crate::vfs::PathNode;
 use crate::vfs::RootDir;
 
-mod pid_table;
-
 // `cookie <= HANDLE_ID_MAX` are for threads.
 const NETWORK_COOKIE: usize = HANDLE_ID_MAX + 1;
 const CONSOLE_COOKIE: usize = HANDLE_ID_MAX + 2;
 
-pub struct Container {
+pub struct Global {
     poll: Poll,
     pub quota: Arc<Quota>,
     pub root_vmspace: VmSpace,
@@ -43,7 +41,7 @@ pub struct Container {
     init_exit_status: SpinLock<Option<c_int>>,
 }
 
-impl Container {
+impl Global {
     pub fn new(
         quota: Quota,
         root_vmspace: VmSpace,

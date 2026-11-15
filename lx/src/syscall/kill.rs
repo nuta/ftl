@@ -17,7 +17,7 @@ pub fn sys_kill(current: &LxThread, pid: c_int, signal: c_int) -> Result<Syscall
 
     let process = current.process();
     let target = process
-        .container()
+        .global()
         .processes
         .lock()
         .get(PId::new(pid))
