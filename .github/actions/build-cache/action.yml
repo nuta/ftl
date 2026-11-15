@@ -3,6 +3,11 @@
 # Avoid using this action for release builds and build from scratch instead!
 name: "Cargo cache"
 
+inputs:
+  name:
+    description: "The cache name."
+    default: build
+
 runs:
   using: composite
   steps:
@@ -18,7 +23,7 @@ runs:
         ~/.cargo/registry/cache
         target
         apps/*/target
-      key: build-${{ runner.os }}-${{ github.ref_name }}-${{ hashFiles('Cargo.lock', 'apps/*/Cargo.lock', 'rust-toolchain.toml') }}
+      key: ${{ inputs.name }}-${{ runner.os }}-${{ github.ref_name }}-${{ hashFiles('Cargo.lock', 'apps/*/Cargo.lock', 'rust-toolchain.toml') }}
       restore-keys: |
-        build-${{ runner.os }}-${{ github.ref_name }}-
-        build-${{ runner.os }}-main-
+        ${{ inputs.name }}-${{ runner.os }}-${{ github.ref_name }}-
+        ${{ inputs.name }}-${{ runner.os }}-main-

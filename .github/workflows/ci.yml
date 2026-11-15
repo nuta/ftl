@@ -73,3 +73,22 @@ jobs:
       uses: $/.github/actions/build-cache
     - name: Build World
       run: ./build.sh
+
+  unit_tests:
+    name: "Unit tests"
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+    steps:
+    - uses: actions/checkout@v7.0.1
+      with:
+        persist-credentials: false
+    - name: Use build cache
+      uses: $/.github/actions/build-cache
+      with:
+        name: unit_tests
+    - name: Check code style
+      run: cargo fmt --check
+    - name: Unit tests
+      # Run the unit tests even if the code style check is failed.
+      if: ${{ !cancelled() }}
+      run: cargo test
