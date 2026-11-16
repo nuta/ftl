@@ -80,11 +80,7 @@ fn clone_thread(
         .spawn_thread(current, frame, stack, tls, parent_tid, clear_child_tid)
 }
 
-fn clone_process(
-    current: &LxThread,
-    frame: &SyscallFrame,
-    flags: c_ulong,
-) -> Result<PId, Errno> {
+fn clone_process(current: &LxThread, frame: &SyscallFrame, flags: c_ulong) -> Result<PId, Errno> {
     const SUPPORTED_FLAGS: c_ulong = 0;
 
     let exit_signal = (flags & CLONE_FLAGS_MASK) as c_int;

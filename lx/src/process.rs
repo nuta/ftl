@@ -201,11 +201,7 @@ impl Process {
         Ok(process)
     }
 
-    pub fn fork(
-        self: &Arc<Self>,
-        current: &LxThread,
-        frame: &SyscallFrame,
-    ) -> Result<PId, Errno> {
+    pub fn fork(self: &Arc<Self>, current: &LxThread, frame: &SyscallFrame) -> Result<PId, Errno> {
         let fd_table = self.fd_table.lock().clone();
 
         // Set the return value for the child process.
