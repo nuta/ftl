@@ -6,6 +6,7 @@ pub const SYS_RT_SIGRETURN: usize = 15;
 pub const SYS_OPEN: usize = 2;
 pub const SYS_CLOSE: usize = 3;
 pub const SYS_DUP2: usize = 33;
+pub const SYS_NANOSLEEP: usize = 35;
 pub const SYS_POLL: usize = 7;
 pub const SYS_MMAP: usize = 9;
 pub const SYS_MPROTECT: usize = 10;

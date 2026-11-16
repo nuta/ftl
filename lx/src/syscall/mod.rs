@@ -34,6 +34,7 @@ mod lseek;
 mod mmap;
 mod mprotect;
 mod munmap;
+mod nanosleep;
 mod open;
 mod pipe;
 mod pipe2;
@@ -90,6 +91,7 @@ use self::lseek::sys_lseek;
 use self::mmap::sys_mmap;
 use self::mprotect::sys_mprotect;
 use self::munmap::sys_munmap;
+use self::nanosleep::sys_nanosleep;
 use self::open::sys_open;
 use self::pipe::sys_pipe;
 use self::pipe2::sys_pipe2;
@@ -155,6 +157,7 @@ use crate::types::sys::syscall::SYS_LSEEK;
 use crate::types::sys::syscall::SYS_MMAP;
 use crate::types::sys::syscall::SYS_MPROTECT;
 use crate::types::sys::syscall::SYS_MUNMAP;
+use crate::types::sys::syscall::SYS_NANOSLEEP;
 use crate::types::sys::syscall::SYS_OPEN;
 use crate::types::sys::syscall::SYS_PIPE;
 use crate::types::sys::syscall::SYS_PIPE2;
@@ -317,6 +320,7 @@ fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
                 frame.arg3() as *mut TimeSpec,
             )
         }
+        SYS_NANOSLEEP => sys_nanosleep(current, arg0 as *const TimeSpec, arg1 as *mut TimeSpec),
         SYS_KILL => sys_kill(current, arg0 as c_int, arg1 as c_int),
         SYS_RT_SIGACTION => {
             sys_rt_sigaction(
