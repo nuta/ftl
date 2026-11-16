@@ -9,6 +9,10 @@ pub const SIGPIPE: c_int = 13;
 pub const SIGCHLD: c_int = 17;
 pub const SIGSTOP: c_int = 19;
 
+pub const SIG_BLOCK: c_int = 0;
+pub const SIG_UNBLOCK: c_int = 1;
+pub const SIG_SETMASK: c_int = 2;
+
 #[derive(Clone, Copy)]
 #[repr(C)]
 pub struct SigAction {

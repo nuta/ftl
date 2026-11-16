@@ -237,6 +237,7 @@ impl Process {
             |thread| {
                 current.copy_regs_to(&thread, RegsKind::FsBase)?;
                 current.copy_regs_to(&thread, RegsKind::FpAndVector)?;
+                thread.set_signal_mask(current.signal_mask());
                 Ok(thread.push_syscall_frame(child_frame))
             },
         )?;
@@ -279,6 +280,7 @@ impl Process {
         current.copy_regs_to(&thread, RegsKind::FpAndVector)?;
 
         thread.set_clear_child_tid(clear_child_tid);
+        thread.set_signal_mask(current.signal_mask());
 
         // Reserve the TID and release the table lock. The write to `parent_tid`
         // may cause a page fault.
@@ -513,9 +515,15 @@ impl Process {
         !self.mutable.lock().pending_signals.is_empty()
     }
 
-    pub fn take_pending_signal(&self) -> Option<(Signal, SigAction)> {
+    pub fn has_unblocked_signal(&self, blocked: SignalSet) -> bool {
+        let mutable = self.mutable.lock();
+        !mutable.pending_signals.difference(blocked).is_empty()
+    }
+
+    pub fn take_pending_signal(&self, blocked: SignalSet) -> Option<(Signal, SigAction)> {
         let mut mutable = self.mutable.lock();
-        let signal = mutable.pending_signals.take_first()?;
+        let signal = mutable.pending_signals.difference(blocked).take_first()?;
+        mutable.pending_signals.remove(signal);
         let action = *mutable.signal_actions.get(signal);
         Some((signal, action))
     }

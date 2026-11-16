@@ -70,6 +70,14 @@ impl SignalSet {
         self.0 == 0
     }
 
+    pub fn union(self, other: Self) -> Self {
+        Self(self.0 | other.0)
+    }
+
+    pub fn difference(self, other: Self) -> Self {
+        Self(self.0 & !other.0)
+    }
+
     pub fn take_first(&mut self) -> Option<Signal> {
         if self.is_empty() {
             return None;

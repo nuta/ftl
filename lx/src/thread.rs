@@ -23,9 +23,14 @@ use crate::arch::SyscallFrame;
 use crate::process::PId;
 use crate::process::Process;
 use crate::signal::SigDisposition;
+use crate::signal::Signal;
+use crate::signal::SignalSet;
 use crate::types::c_int;
 use crate::types::c_long;
 use crate::types::errno::Errno;
+use crate::types::signal::SIG_BLOCK;
+use crate::types::signal::SIG_SETMASK;
+use crate::types::signal::SIG_UNBLOCK;
 use crate::types::sys::futex::FUTEX_BITSET_MATCH_ANY;
 use crate::vm::Vm;
 
@@ -49,6 +54,7 @@ const SYSTEM_SP_OFFSET: usize = offset_of!(SystemStack, fault_regs);
 
 struct Mutable {
     signal_frame: Option<SyscallFrame>,
+    blocked: SignalSet,
     exit_status: Option<c_int>,
     clear_child_tid: Option<usize>,
 }
@@ -101,6 +107,7 @@ impl LxThread {
                 inner,
                 mutable: SpinLock::new(Mutable {
                     signal_frame: None,
+                    blocked: SignalSet::empty(),
                     exit_status: None,
                     clear_child_tid: None,
                 }),
@@ -205,6 +212,37 @@ impl LxThread {
         self.inner.copy_regs_to(&dest.inner, kind)
     }
 
+    pub fn signal_mask(&self) -> SignalSet {
+        self.mutable.lock().blocked
+    }
+
+    pub fn set_signal_mask(&self, mask: SignalSet) {
+        let mut mask = mask;
+
+        // SIGKILL/SIGSTOP signals cannot be blocked.
+        mask.remove(Signal::KILL);
+        mask.remove(Signal::STOP);
+
+        self.mutable.lock().blocked = mask;
+    }
+
+    pub fn sigprocmask(&self, how: c_int, set: Option<SignalSet>) -> Result<SignalSet, Errno> {
+        let old = self.signal_mask();
+        let Some(set) = set else {
+            return Ok(old);
+        };
+
+        let new = match how {
+            SIG_BLOCK => old.union(set),
+            SIG_UNBLOCK => old.difference(set),
+            SIG_SETMASK => set,
+            _ => return Err(Errno::EINVAL),
+        };
+
+        self.set_signal_mask(new);
+        Ok(old)
+    }
+
     /// Modifies the thread's state to return to the signal handler.
     pub fn handle_pending_signal(&self, frame: &mut SyscallFrame) {
         if self.mutable.lock().signal_frame.is_some() {
@@ -214,7 +252,7 @@ impl LxThread {
 
         let process = self.process();
         let (signal, action, handler) = loop {
-            let Some((signal, action)) = process.take_pending_signal() else {
+            let Some((signal, action)) = process.take_pending_signal(self.signal_mask()) else {
                 // No pending signal to deliver.
                 return;
             };

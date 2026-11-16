@@ -42,6 +42,7 @@ mod poll;
 mod read;
 mod recvfrom;
 mod rt_sigaction;
+mod rt_sigprocmask;
 mod rt_sigreturn;
 mod sendto;
 mod set_tid_address;
@@ -99,6 +100,7 @@ use self::poll::sys_poll;
 use self::read::sys_read;
 use self::recvfrom::sys_recvfrom;
 use self::rt_sigaction::sys_rt_sigaction;
+use self::rt_sigprocmask::sys_rt_sigprocmask;
 use self::rt_sigreturn::sys_rt_sigreturn;
 use self::sendto::sys_sendto;
 use self::set_tid_address::sys_set_tid_address;
@@ -165,6 +167,7 @@ use crate::types::sys::syscall::SYS_POLL;
 use crate::types::sys::syscall::SYS_READ;
 use crate::types::sys::syscall::SYS_RECVFROM;
 use crate::types::sys::syscall::SYS_RT_SIGACTION;
+use crate::types::sys::syscall::SYS_RT_SIGPROCMASK;
 use crate::types::sys::syscall::SYS_RT_SIGRETURN;
 use crate::types::sys::syscall::SYS_SENDTO;
 use crate::types::sys::syscall::SYS_SET_TID_ADDRESS;
@@ -332,6 +335,15 @@ fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
             )
         }
         SYS_RT_SIGRETURN => sys_rt_sigreturn(current, frame),
+        SYS_RT_SIGPROCMASK => {
+            sys_rt_sigprocmask(
+                current,
+                arg0 as c_int,
+                arg1 as *const u64,
+                arg2 as *mut u64,
+                frame.arg3(),
+            )
+        }
         SYS_SOCKET => sys_socket(current, arg0 as c_int, arg1 as c_int, arg2 as c_int),
         SYS_SHUTDOWN => sys_shutdown(current, arg0 as c_int, arg1 as c_int),
         SYS_BIND => sys_bind(current, arg0 as c_int, arg1 as *const u8, arg2),
