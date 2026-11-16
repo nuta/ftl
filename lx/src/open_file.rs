@@ -114,8 +114,8 @@ impl OpenFile {
             Ok(n) => Ok(n),
             Err(Errno::EPIPE) => {
                 // On EPIPE, trigger PIPE signal before returning the error.
-                if let Sleep::Interruptible(process) = sleep {
-                    let _ = process.queue_signal(Signal::PIPE);
+                if let Sleep::Interruptible { thread, .. } = sleep {
+                    let _ = thread.queue_signal(Signal::PIPE);
                 }
                 Err(Errno::EPIPE)
             }
@@ -128,8 +128,8 @@ impl OpenFile {
             Ok(n) => Ok(n),
             Err(Errno::EPIPE) => {
                 // On EPIPE, trigger PIPE signal before returning the error.
-                if let Sleep::Interruptible(process) = sleep {
-                    let _ = process.queue_signal(Signal::PIPE);
+                if let Sleep::Interruptible { thread, .. } = sleep {
+                    let _ = thread.queue_signal(Signal::PIPE);
                 }
                 Err(Errno::EPIPE)
             }

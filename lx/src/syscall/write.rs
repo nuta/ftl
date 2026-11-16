@@ -27,6 +27,12 @@ pub fn sys_write(
     }
 
     let bytes = unsafe { core::slice::from_raw_parts(buf.cast::<u8>(), count) };
-    let n = file.write(bytes, Sleep::Interruptible(&process))?;
+    let n = file.write(
+        bytes,
+        Sleep::Interruptible {
+            thread: current,
+            process: &process,
+        },
+    )?;
     Ok(SyscallResult::Done(n.try_into().unwrap())) // FIXME: Handle overflow
 }

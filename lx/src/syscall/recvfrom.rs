@@ -39,7 +39,14 @@ pub fn sys_recvfrom(
         fd_table.get(fd)?.clone()
     };
 
-    let (n, addr) = file.recvfrom(bytes, flags, Sleep::Interruptible(&process))?;
+    let (n, addr) = file.recvfrom(
+        bytes,
+        flags,
+        Sleep::Interruptible {
+            thread: current,
+            process: &process,
+        },
+    )?;
     if !src_addr.is_null() {
         write_sockaddr(src_addr, addr_len, &addr.as_raw())?;
     }

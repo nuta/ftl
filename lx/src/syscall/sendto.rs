@@ -44,6 +44,14 @@ pub fn sys_sendto(
         fd_table.get(fd)?.clone()
     };
 
-    let n = file.sendto(bytes, dest, flags, Sleep::Interruptible(&process))?;
+    let n = file.sendto(
+        bytes,
+        dest,
+        flags,
+        Sleep::Interruptible {
+            thread: current,
+            process: &process,
+        },
+    )?;
     Ok(SyscallResult::Done(n.try_into().unwrap())) // TODO: Better type for sendto return value (usize, but won't exceed c_long)
 }

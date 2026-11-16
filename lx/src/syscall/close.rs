@@ -16,7 +16,10 @@ pub fn sys_close(current: &LxThread, fd: c_int) -> Result<SyscallResult, Errno> 
     // Is this the only reference to the file?
     if let Some(file) = Arc::into_inner(file) {
         // If the linger is set, wait for it to complete.
-        file.linger(Sleep::Interruptible(&process))?;
+        file.linger(Sleep::Interruptible {
+            thread: current,
+            process: &process,
+        })?;
     }
 
     Ok(SyscallResult::Done(0))

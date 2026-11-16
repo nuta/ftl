@@ -385,7 +385,12 @@ impl Process {
         Ok(())
     }
 
-    pub fn wait(&self, mut pid: c_int, wnohang: bool) -> Result<Option<(PId, c_int)>, Errno> {
+    pub fn wait(
+        &self,
+        current: &LxThread,
+        mut pid: c_int,
+        wnohang: bool,
+    ) -> Result<Option<(PId, c_int)>, Errno> {
         if pid <= 0 {
             pid = -1;
         }
@@ -427,11 +432,11 @@ impl Process {
                 return Ok(None);
             };
 
-            if !mutable.pending_signals.is_empty() {
+            drop(mutable);
+            if current.has_pending_signal() {
                 return Err(Errno::EINTR);
             }
 
-            drop(mutable);
             wq.wait()?;
         }
     }
@@ -502,10 +507,6 @@ impl Process {
         drop(mutable);
         self.signal_wait.notify(None);
         Ok(())
-    }
-
-    pub fn has_pending_signal(&self) -> bool {
-        !self.mutable.lock().pending_signals.is_empty()
     }
 
     pub fn has_unblocked_signal(&self, blocked: SignalSet) -> bool {

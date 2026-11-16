@@ -31,6 +31,12 @@ pub fn sys_writev(
     }
 
     let iovecs = IoVecSlice::new(iov, iovcnt as usize);
-    let n = file.writev(&iovecs, Sleep::Interruptible(&process))?;
+    let n = file.writev(
+        &iovecs,
+        Sleep::Interruptible {
+            thread: current,
+            process: &process,
+        },
+    )?;
     Ok(SyscallResult::Done(n.try_into().unwrap())) // FIXME: Handle overflow
 }

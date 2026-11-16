@@ -22,7 +22,7 @@ pub fn sys_wait4(
     }
 
     let wnohang = options & WNOHANG != 0;
-    let retval = match current.process().wait(pid, wnohang) {
+    let retval = match current.process().wait(current, pid, wnohang) {
         Ok(Some((pid, exit_status))) => {
             if !wstatus.is_null() {
                 unsafe { wstatus.write(encode_wait_status(exit_status)) };

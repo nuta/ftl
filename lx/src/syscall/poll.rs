@@ -76,7 +76,7 @@ pub fn sys_poll(
     }
 
     loop {
-        if process.has_pending_signal() {
+        if current.has_pending_signal() {
             return Err(Errno::EINTR);
         }
 

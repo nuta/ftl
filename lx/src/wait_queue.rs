@@ -12,6 +12,7 @@ use ftl_types::time::MonoTime;
 use ftl_utils::spinlock::SpinLock;
 
 use crate::process::Process;
+use crate::thread::LxThread;
 use crate::types::c_short;
 
 const WAKE_COOKIE: usize = 0;
@@ -205,7 +206,10 @@ impl WaitQueue {
 #[derive(Clone, Copy)]
 pub enum Sleep<'a> {
     Uninterruptible,
-    Interruptible(&'a Process),
+    Interruptible {
+        thread: &'a LxThread,
+        process: &'a Process,
+    },
 }
 
 impl<'a> Sleep<'a> {
@@ -220,9 +224,10 @@ impl<'a> Sleep<'a> {
                     guard: OnceCell::new(),
                 }
             }
-            Sleep::Interruptible(process) => {
+            Sleep::Interruptible { thread, process } => {
                 SleepGuard::Interruptible {
                     wq,
+                    thread,
                     process,
                     set: OnceCell::new(),
                 }
@@ -238,6 +243,7 @@ pub enum SleepGuard<'a> {
     },
     Interruptible {
         wq: &'a WaitQueue,
+        thread: &'a LxThread,
         process: &'a Process,
         set: OnceCell<WaitSet<'a>>,
     },
@@ -247,7 +253,7 @@ impl SleepGuard<'_> {
     pub fn is_interrupted(&self) -> bool {
         match self {
             SleepGuard::Uninterruptible { .. } => false,
-            SleepGuard::Interruptible { process, .. } => process.has_pending_signal(),
+            SleepGuard::Interruptible { thread, .. } => thread.has_pending_signal(),
         }
     }
 
@@ -265,7 +271,9 @@ impl SleepGuard<'_> {
                     unreachable!();
                 }
             }
-            SleepGuard::Interruptible { wq, process, set } => {
+            SleepGuard::Interruptible {
+                wq, process, set, ..
+            } => {
                 // Wait for both the wait queue and the signal.
                 let mut new_set = WaitSet::new()?;
                 new_set.subscribe(wq);

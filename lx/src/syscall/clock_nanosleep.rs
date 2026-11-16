@@ -66,7 +66,7 @@ pub fn sys_clock_nanosleep(
     let process = current.process();
     let guard = process.signal_wait_queue().subscribe();
     loop {
-        if process.has_pending_signal() {
+        if current.has_pending_signal() {
             if !absolute_time && !remain.is_null() {
                 // The sleep has been interrupted by a signal. Write the
                 // remaining time.

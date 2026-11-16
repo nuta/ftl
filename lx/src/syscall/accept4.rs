@@ -31,7 +31,10 @@ pub fn sys_accept4(
     };
 
     // Wait for a new connection...
-    let conn = file.accept(Sleep::Interruptible(&process))?;
+    let conn = file.accept(Sleep::Interruptible {
+        thread: current,
+        process: &process,
+    })?;
 
     // Write the socket address if a buffer is provided.
     if !addr.is_null() {

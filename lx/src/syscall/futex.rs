@@ -81,7 +81,10 @@ pub fn sys_futex(
                 Some(deadline)
             };
 
-            let sleep = Sleep::Interruptible(&process);
+            let sleep = Sleep::Interruptible {
+                thread: current,
+                process: &process,
+            };
             futexes.wait(uaddr, val, deadline, bitset, sleep)?;
             Ok(SyscallResult::Done(0))
         }

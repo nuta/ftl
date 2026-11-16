@@ -18,6 +18,12 @@ pub fn sys_connect(
         fd_table.get(fd)?.clone()
     };
 
-    file.connect(addr, Sleep::Interruptible(&process))?;
+    file.connect(
+        addr,
+        Sleep::Interruptible {
+            thread: current,
+            process: &process,
+        },
+    )?;
     Ok(SyscallResult::Done(0))
 }

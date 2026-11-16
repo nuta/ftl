@@ -30,7 +30,11 @@ pub fn sys_read(
     }
 
     let bytes = unsafe { slice::from_raw_parts_mut(buf.cast::<u8>(), count) };
-    Ok(SyscallResult::Done(
-        file.read(bytes, Sleep::Interruptible(&process))? as c_long,
-    ))
+    Ok(SyscallResult::Done(file.read(
+        bytes,
+        Sleep::Interruptible {
+            thread: current,
+            process: &process,
+        },
+    )? as c_long))
 }
