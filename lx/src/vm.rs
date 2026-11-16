@@ -363,6 +363,14 @@ impl Vm {
         Ok(())
     }
 
+    pub fn is_mapped(&self, addr: usize) -> bool {
+        let mutable = self.mutable.lock();
+        mutable
+            .mappings
+            .iter()
+            .any(|m| m.start <= addr && addr < m.end())
+    }
+
     pub fn handle_page_fault(&self, addr: usize, info: PageFaultInfo) -> Result<(), Errno> {
         if info.reason() != ErrorCode::PageAbsent {
             return Err(Errno::EFAULT);

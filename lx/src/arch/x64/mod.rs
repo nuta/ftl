@@ -114,7 +114,7 @@ pub struct FaultFrame {
     pub fault: Fault,
     pub addr: usize,
     pub info: usize,
-
+    // Registers saved in LX's fault handler.
     pub rax: usize,
     pub rcx: usize,
     pub rdx: usize,
@@ -123,6 +123,12 @@ pub struct FaultFrame {
     pub r9: usize,
     pub r10: usize,
     pub r11: usize,
+    pub rbx: usize,
+    pub rbp: usize,
+    pub r12: usize,
+    pub r13: usize,
+    pub r14: usize,
+    pub r15: usize,
 }
 
 static_assert!(offset_of!(FaultFrame, rdi) == 0);
@@ -135,8 +141,7 @@ pub extern "C" fn fault_handler() -> ! {
     // RDI = The fault frame (also the top of the system stack).
     // RSP = The user (or system) RSP when the fault occurred.
     naked_asm!(
-        // Save caller-saved registers. Callee-saved registers are preserved by
-        // handle_fault.
+        // Save all registers for signal delivery.
         "mov [rdi + {rax}], rax",
         "mov [rdi + {rcx}], rcx",
         "mov [rdi + {rdx}], rdx",
@@ -145,6 +150,12 @@ pub extern "C" fn fault_handler() -> ! {
         "mov [rdi + {r9}], r9",
         "mov [rdi + {r10}], r10",
         "mov [rdi + {r11}], r11",
+        "mov [rdi + {rbx}], rbx",
+        "mov [rdi + {rbp}], rbp",
+        "mov [rdi + {r12}], r12",
+        "mov [rdi + {r13}], r13",
+        "mov [rdi + {r14}], r14",
+        "mov [rdi + {r15}], r15",
 
         // Check if the fault happened while using the system stack (i.e. in LX's
         // system call handler).
@@ -183,6 +194,12 @@ pub extern "C" fn fault_handler() -> ! {
         r9 = const offset_of!(FaultFrame, r9),
         r10 = const offset_of!(FaultFrame, r10),
         r11 = const offset_of!(FaultFrame, r11),
+        rbx = const offset_of!(FaultFrame, rbx),
+        rbp = const offset_of!(FaultFrame, rbp),
+        r12 = const offset_of!(FaultFrame, r12),
+        r13 = const offset_of!(FaultFrame, r13),
+        r14 = const offset_of!(FaultFrame, r14),
+        r15 = const offset_of!(FaultFrame, r15),
     )
 }
 

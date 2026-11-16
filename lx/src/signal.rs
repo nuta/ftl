@@ -4,9 +4,14 @@ use crate::types::errno::Errno;
 use crate::types::signal::NSIG;
 use crate::types::signal::SIG_DFL;
 use crate::types::signal::SIG_IGN;
+use crate::types::signal::SIGBUS;
+use crate::types::signal::SIGFPE;
+use crate::types::signal::SIGILL;
 use crate::types::signal::SIGKILL;
 use crate::types::signal::SIGPIPE;
+use crate::types::signal::SIGSEGV;
 use crate::types::signal::SIGSTOP;
+use crate::types::signal::SIGTRAP;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Signal(u8);
@@ -14,6 +19,11 @@ pub struct Signal(u8);
 impl Signal {
     pub const KILL: Self = Self(SIGKILL as u8);
     pub const PIPE: Self = Self(SIGPIPE as u8);
+    pub const SEGV: Self = Self(SIGSEGV as u8);
+    pub const BUS: Self = Self(SIGBUS as u8);
+    pub const FPE: Self = Self(SIGFPE as u8);
+    pub const ILL: Self = Self(SIGILL as u8);
+    pub const TRAP: Self = Self(SIGTRAP as u8);
     pub const STOP: Self = Self(SIGSTOP as u8);
 
     pub fn from_raw(raw: c_int) -> Result<Self, Errno> {
@@ -68,6 +78,10 @@ impl SignalSet {
 
     pub fn is_empty(&self) -> bool {
         self.0 == 0
+    }
+
+    pub fn contains(&self, signal: Signal) -> bool {
+        self.0 & signal.bit() != 0
     }
 
     pub fn union(self, other: Self) -> Self {
@@ -175,6 +189,13 @@ impl SigAction {
 
     pub fn disposition(self) -> SigDisposition {
         self.disposition
+    }
+
+    pub fn with_default_handler(self) -> Self {
+        Self {
+            disposition: SigDisposition::Default,
+            ..self
+        }
     }
 
     pub fn flags(self) -> usize {

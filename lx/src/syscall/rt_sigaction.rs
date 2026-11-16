@@ -29,7 +29,7 @@ pub fn sys_rt_sigaction(
         Some(SigAction::from_raw(raw))
     };
 
-    let old = current.process().sigaction(signal, new_action)?;
+    let old = current.process().sigaction(signal, new_action);
     if !old_action.is_null() {
         unsafe { old_action.write(old.to_raw()) };
     }

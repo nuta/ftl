@@ -5,6 +5,7 @@ use ftl_types::thread::X64_USER_CS;
 use ftl_types::thread::X64_USER_SS;
 use ftl_utils::alignment::align_down;
 
+use super::FaultFrame;
 use super::SyscallFrame;
 use crate::signal::SignalSet;
 use crate::types::signal::SigInfo;
@@ -88,6 +89,33 @@ impl UserContext {
             rflags: USER_RFLAGS,
             cs: X64_USER_CS as u16,
             ss: X64_USER_SS as u16,
+            ..Default::default()
+        }
+    }
+
+    pub fn from_fault_frame(frame: &FaultFrame) -> Self {
+        Self {
+            r8: frame.r8,
+            r9: frame.r9,
+            r10: frame.r10,
+            r11: frame.r11,
+            r12: frame.r12,
+            r13: frame.r13,
+            r14: frame.r14,
+            r15: frame.r15,
+            rdi: frame.rdi,
+            rsi: frame.rsi,
+            rbp: frame.rbp,
+            rbx: frame.rbx,
+            rdx: frame.rdx,
+            rax: frame.rax,
+            rcx: frame.rcx,
+            rsp: frame.rsp,
+            rip: frame.rip,
+            rflags: frame.rflags,
+            cs: frame.cs as u16,
+            ss: frame.ss as u16,
+            trapno: frame.fault as usize,
             ..Default::default()
         }
     }

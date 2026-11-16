@@ -32,6 +32,7 @@ use crate::types::errno::Errno;
 use crate::types::signal::MINSIGSTKSZ;
 use crate::types::signal::SA_NODEFER;
 use crate::types::signal::SA_ONSTACK;
+use crate::types::signal::SA_RESETHAND;
 use crate::types::signal::SI_USER;
 use crate::types::signal::SIG_BLOCK;
 use crate::types::signal::SIG_SETMASK;
@@ -406,6 +407,20 @@ impl LxThread {
         }
     }
 
+    pub fn force_signal(&self, ctx: &mut UserContext, signal: Signal, info: SigInfo) -> bool {
+        let action = self.process().get_signal_action(signal);
+        let SigDisposition::Handler(handler) = action.disposition() else {
+            return false;
+        };
+
+        if self.signal_mask().contains(signal) {
+            return false;
+        }
+
+        self.enter_signal(ctx, signal, action, handler, info);
+        true
+    }
+
     fn enter_signal(
         &self,
         ctx: &mut UserContext,
@@ -433,6 +448,12 @@ impl LxThread {
             blocked.insert(signal);
         }
         self.set_signal_mask(blocked);
+
+        if action.flags() & SA_RESETHAND != 0 {
+            // Reset the signal handler to the default.
+            let new_action = action.with_default_handler();
+            self.process().sigaction(signal, Some(new_action));
+        }
 
         unsafe {
             ctx.enter_signal(sp, handler, action.restorer(), info, stack, sigmask);

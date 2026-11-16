@@ -475,11 +475,7 @@ impl Process {
         self.tgid
     }
 
-    pub fn sigaction(
-        &self,
-        signal: Signal,
-        new_action: Option<SigAction>,
-    ) -> Result<SigAction, Errno> {
+    pub fn sigaction(&self, signal: Signal, new_action: Option<SigAction>) -> SigAction {
         let mut mutable = self.mutable.lock();
 
         let old = *mutable.signal_actions.get(signal);
@@ -487,7 +483,7 @@ impl Process {
             mutable.signal_actions.set(signal, action);
         }
 
-        Ok(old)
+        old
     }
 
     pub fn queue_signal(&self, signal: Signal) -> Result<(), Errno> {

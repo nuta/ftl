@@ -47,6 +47,7 @@ impl SyscallFrame {
 
 pub struct FaultFrame {
     pub rip: usize,
+    pub rsp: usize,
     pub fault: ftl_types::thread::Fault,
     pub addr: usize,
     pub info: usize,
@@ -63,6 +64,7 @@ pub extern "C" fn syscall_handler() -> ! {
 pub extern "C" fn fault_handler() -> ! {
     let mut frame = FaultFrame {
         rip: 0,
+        rsp: 0,
         fault: ftl_types::thread::Fault::PageFault,
         addr: 0,
         info: 0,
@@ -80,6 +82,10 @@ pub struct UserContext;
 
 impl UserContext {
     pub fn from_syscall_frame(_frame: &SyscallFrame) -> Self {
+        todo!()
+    }
+
+    pub fn from_fault_frame(_frame: &FaultFrame) -> Self {
         todo!()
     }
 
