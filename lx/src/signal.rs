@@ -130,6 +130,10 @@ impl<T> SignalMap<T> {
     pub fn set(&mut self, signal: Signal, action: T) {
         self.actions[signal.index()] = action;
     }
+
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut T> {
+        self.actions.iter_mut()
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -189,6 +193,18 @@ impl SigAction {
 
     pub fn disposition(self) -> SigDisposition {
         self.disposition
+    }
+
+    pub fn reset_on_exec(self) -> Self {
+        let disposition = match self.disposition {
+            SigDisposition::Ignore => SigDisposition::Ignore,
+            SigDisposition::Default | SigDisposition::Handler(_) => SigDisposition::Default,
+        };
+
+        Self {
+            disposition,
+            ..Self::default()
+        }
     }
 
     pub fn with_default_handler(self) -> Self {

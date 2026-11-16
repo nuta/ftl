@@ -135,8 +135,12 @@ impl Process {
         self.fd_table.lock().close_on_exec();
 
         let thread = LxThread::new(Arc::new(vm), Arc::downgrade(self), self.tgid)?;
+        thread.set_signal_mask(current.signal_mask());
 
         let mut mutable = self.mutable.lock();
+        for action in mutable.signal_actions.iter_mut() {
+            *action = action.reset_on_exec();
+        }
 
         // FIXME: Remove existing threads.
 
