@@ -50,6 +50,7 @@ mod setsockopt;
 mod shutdown;
 mod sigaltstack;
 mod socket;
+mod tgkill;
 mod wait4;
 mod write;
 mod writev;
@@ -109,6 +110,7 @@ use self::setsockopt::sys_setsockopt;
 use self::shutdown::sys_shutdown;
 use self::sigaltstack::sys_sigaltstack;
 use self::socket::sys_socket;
+use self::tgkill::sys_tgkill;
 use self::wait4::sys_wait4;
 use self::write::sys_write;
 use self::writev::sys_writev;
@@ -178,6 +180,7 @@ use crate::types::sys::syscall::SYS_SETSOCKOPT;
 use crate::types::sys::syscall::SYS_SHUTDOWN;
 use crate::types::sys::syscall::SYS_SIGALTSTACK;
 use crate::types::sys::syscall::SYS_SOCKET;
+use crate::types::sys::syscall::SYS_TGKILL;
 use crate::types::sys::syscall::SYS_WAIT4;
 use crate::types::sys::syscall::SYS_WRITE;
 use crate::types::sys::syscall::SYS_WRITEV;
@@ -358,6 +361,7 @@ fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
                 arg1 as *mut types::signal::StackT,
             )
         }
+        SYS_TGKILL => sys_tgkill(current, arg0 as c_int, arg1 as c_int, arg2 as c_int),
         SYS_SOCKET => sys_socket(current, arg0 as c_int, arg1 as c_int, arg2 as c_int),
         SYS_SHUTDOWN => sys_shutdown(current, arg0 as c_int, arg1 as c_int),
         SYS_BIND => sys_bind(current, arg0 as c_int, arg1 as *const u8, arg2),

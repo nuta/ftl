@@ -76,6 +76,7 @@ impl AltStack {
 
 struct Mutable {
     blocked: SignalSet,
+    pending_signals: SignalSet,
     altstack: Option<AltStack>,
     exit_status: Option<c_int>,
     clear_child_tid: Option<usize>,
@@ -154,6 +155,7 @@ impl LxThread {
                 inner,
                 mutable: SpinLock::new(Mutable {
                     blocked: SignalSet::empty(),
+                    pending_signals: SignalSet::empty(),
                     altstack: None,
                     exit_status: None,
                     clear_child_tid: None,
@@ -328,15 +330,55 @@ impl LxThread {
         Ok(old)
     }
 
+    pub fn queue_signal(&self, signal: Signal) -> Result<(), Errno> {
+        let process = self.process();
+        match process.get_signal_action(signal).disposition() {
+            SigDisposition::Ignore => return Ok(()),
+            SigDisposition::Default => {
+                trace!("unsupported default handling for signal {:?}", signal);
+                return Err(Errno::ENOTSUP);
+            }
+            SigDisposition::Handler(_) => {}
+        }
+
+        self.mutable.lock().pending_signals.insert(signal);
+        process.signal_wait_queue().notify(None);
+        Ok(())
+    }
+
     pub fn has_pending_signal(&self) -> bool {
-        self.process().has_unblocked_signal(self.signal_mask())
+        let mutable = self.mutable.lock();
+        let blocked = mutable.blocked;
+        if !mutable.pending_signals.difference(blocked).is_empty() {
+            return true;
+        }
+
+        drop(mutable);
+        self.process().has_unblocked_signal(blocked)
+    }
+
+    fn take_pending_signal(&self) -> Option<(Signal, SigAction)> {
+        let process = self.process();
+        let mut mutable = self.mutable.lock();
+        let blocked = mutable.blocked;
+
+        // Get a pending signal delivered to this thread.
+        if let Some(signal) = mutable.pending_signals.difference(blocked).take_first() {
+            mutable.pending_signals.remove(signal);
+            drop(mutable);
+            return Some((signal, process.get_signal_action(signal)));
+        }
+
+        drop(mutable);
+
+        // Get a pending signal delivered to the process.
+        process.take_pending_signal(blocked)
     }
 
     /// Modifies `ctx` to call the handler of a pending signal, if any.
     pub fn handle_pending_signal(&self, ctx: &mut UserContext) {
-        let process = self.process();
         loop {
-            let Some((signal, action)) = process.take_pending_signal(self.signal_mask()) else {
+            let Some((signal, action)) = self.take_pending_signal() else {
                 // No pending signal to deliver.
                 return;
             };

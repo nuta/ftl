@@ -33,6 +33,7 @@ use crate::vm::Vm;
 use crate::wait_queue::WaitQueue;
 use crate::wait_queue::WaitSet;
 
+/// A Linux process/thread ID.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct PId(c_int);
 
@@ -518,6 +519,21 @@ impl Process {
     pub fn has_unblocked_signal(&self, blocked: SignalSet) -> bool {
         let mutable = self.mutable.lock();
         !mutable.pending_signals.difference(blocked).is_empty()
+    }
+
+    pub fn get_signal_action(&self, signal: Signal) -> SigAction {
+        *self.mutable.lock().signal_actions.get(signal)
+    }
+
+    pub fn get_thread_by_tid(&self, tid: PId) -> Option<Arc<LxThread>> {
+        let mutable = self.mutable.lock();
+        for thread in &mutable.threads {
+            if thread.tid() == tid {
+                return Some(thread.clone());
+            }
+        }
+
+        None
     }
 
     pub fn take_pending_signal(&self, blocked: SignalSet) -> Option<(Signal, SigAction)> {

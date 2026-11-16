@@ -5,6 +5,7 @@ pub const SYS_RT_SIGACTION: usize = 13;
 pub const SYS_RT_SIGPROCMASK: usize = 14;
 pub const SYS_RT_SIGRETURN: usize = 15;
 pub const SYS_SIGALTSTACK: usize = 131;
+pub const SYS_TGKILL: usize = 234;
 pub const SYS_OPEN: usize = 2;
 pub const SYS_CLOSE: usize = 3;
 pub const SYS_DUP2: usize = 33;

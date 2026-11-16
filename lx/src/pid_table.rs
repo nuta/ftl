@@ -7,6 +7,7 @@ use crate::process::Process;
 use crate::types::c_int;
 use crate::types::errno::Errno;
 
+/// A table of processes/threads.
 pub struct PIdTable {
     pids: FxHashMap<c_int, Arc<Process>>,
     next: c_int,
