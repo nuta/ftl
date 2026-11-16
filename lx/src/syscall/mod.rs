@@ -48,6 +48,7 @@ mod sendto;
 mod set_tid_address;
 mod setsockopt;
 mod shutdown;
+mod sigaltstack;
 mod socket;
 mod wait4;
 mod write;
@@ -106,6 +107,7 @@ use self::sendto::sys_sendto;
 use self::set_tid_address::sys_set_tid_address;
 use self::setsockopt::sys_setsockopt;
 use self::shutdown::sys_shutdown;
+use self::sigaltstack::sys_sigaltstack;
 use self::socket::sys_socket;
 use self::wait4::sys_wait4;
 use self::write::sys_write;
@@ -173,6 +175,7 @@ use crate::types::sys::syscall::SYS_SENDTO;
 use crate::types::sys::syscall::SYS_SET_TID_ADDRESS;
 use crate::types::sys::syscall::SYS_SETSOCKOPT;
 use crate::types::sys::syscall::SYS_SHUTDOWN;
+use crate::types::sys::syscall::SYS_SIGALTSTACK;
 use crate::types::sys::syscall::SYS_SOCKET;
 use crate::types::sys::syscall::SYS_WAIT4;
 use crate::types::sys::syscall::SYS_WRITE;
@@ -342,6 +345,14 @@ fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
                 arg1 as *const u64,
                 arg2 as *mut u64,
                 frame.arg3(),
+            )
+        }
+        SYS_SIGALTSTACK => {
+            sys_sigaltstack(
+                current,
+                frame,
+                arg0 as *const types::signal::StackT,
+                arg1 as *mut types::signal::StackT,
             )
         }
         SYS_SOCKET => sys_socket(current, arg0 as c_int, arg1 as c_int, arg2 as c_int),

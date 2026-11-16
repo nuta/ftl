@@ -28,9 +28,14 @@ use crate::signal::SignalSet;
 use crate::types::c_int;
 use crate::types::c_long;
 use crate::types::errno::Errno;
+use crate::types::signal::MINSIGSTKSZ;
 use crate::types::signal::SIG_BLOCK;
 use crate::types::signal::SIG_SETMASK;
 use crate::types::signal::SIG_UNBLOCK;
+use crate::types::signal::SS_AUTODISARM;
+use crate::types::signal::SS_DISABLE;
+use crate::types::signal::SS_ONSTACK;
+use crate::types::signal::StackT;
 use crate::types::sys::futex::FUTEX_BITSET_MATCH_ANY;
 use crate::vm::Vm;
 
@@ -52,9 +57,22 @@ unsafe impl Sync for SystemStack {}
 
 const SYSTEM_SP_OFFSET: usize = offset_of!(SystemStack, fault_regs);
 
+#[derive(Clone, Copy)]
+struct AltStack {
+    sp: usize,
+    size: usize,
+}
+
+impl AltStack {
+    fn contains(&self, sp: usize) -> bool {
+        self.sp <= sp && sp - self.sp < self.size
+    }
+}
+
 struct Mutable {
     signal_frame: Option<SyscallFrame>,
     blocked: SignalSet,
+    altstack: Option<AltStack>,
     exit_status: Option<c_int>,
     clear_child_tid: Option<usize>,
 }
@@ -108,6 +126,7 @@ impl LxThread {
                 mutable: SpinLock::new(Mutable {
                     signal_frame: None,
                     blocked: SignalSet::empty(),
+                    altstack: None,
                     exit_status: None,
                     clear_child_tid: None,
                 }),
@@ -240,6 +259,64 @@ impl LxThread {
         };
 
         self.set_signal_mask(new);
+        Ok(old)
+    }
+
+    pub fn sigaltstack(&self, new: Option<StackT>, current_sp: usize) -> Result<StackT, Errno> {
+        let mut mutable = self.mutable.lock();
+
+        // Build the current stack information.
+        let old = match mutable.altstack {
+            Some(altstack) => {
+                StackT {
+                    sp: altstack.sp,
+                    flags: if altstack.contains(current_sp) {
+                        SS_ONSTACK
+                    } else {
+                        0
+                    },
+                    size: altstack.size,
+                }
+            }
+            None => {
+                StackT {
+                    sp: 0,
+                    flags: SS_DISABLE,
+                    size: 0,
+                }
+            }
+        };
+
+        let Some(new) = new else {
+            // No new stack was specified. They just want to query the current
+            // stack.
+            return Ok(old);
+        };
+
+        if old.flags == SS_ONSTACK {
+            // The user thread currently using the alternate stack.
+            return Err(Errno::EPERM);
+        }
+
+        match new.flags & !SS_AUTODISARM {
+            SS_DISABLE => {
+                mutable.altstack = None;
+            }
+            0 | SS_ONSTACK => {
+                if new.size < MINSIGSTKSZ {
+                    return Err(Errno::ENOMEM);
+                }
+
+                mutable.altstack = Some(AltStack {
+                    sp: new.sp,
+                    size: new.size,
+                });
+            }
+            _ => {
+                return Err(Errno::EINVAL);
+            }
+        }
+
         Ok(old)
     }
 

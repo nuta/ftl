@@ -40,6 +40,10 @@ impl SyscallFrame {
         todo!()
     }
 
+    pub fn sp(&self) -> usize {
+        todo!()
+    }
+
     pub fn set_sp(&mut self, _sp: usize) {
         todo!()
     }

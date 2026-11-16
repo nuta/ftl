@@ -62,6 +62,10 @@ impl SyscallFrame {
         self.rax = retval as usize;
     }
 
+    pub fn sp(&self) -> usize {
+        self.rsp
+    }
+
     pub fn set_sp(&mut self, sp: usize) {
         self.rsp = sp;
     }

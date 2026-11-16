@@ -13,6 +13,13 @@ pub const SIG_BLOCK: c_int = 0;
 pub const SIG_UNBLOCK: c_int = 1;
 pub const SIG_SETMASK: c_int = 2;
 
+pub const SS_ONSTACK: c_int = 1;
+pub const SS_DISABLE: c_int = 2;
+pub const SS_AUTODISARM: c_int = 1 << 31;
+
+// The best value is unclear to me. 2048 bytes should be enough, I guess.
+pub const MINSIGSTKSZ: usize = 2048;
+
 #[derive(Clone, Copy)]
 #[repr(C)]
 pub struct SigAction {
@@ -20,4 +27,12 @@ pub struct SigAction {
     pub flags: usize,
     pub restorer: usize,
     pub mask: u64,
+}
+
+#[derive(Clone, Copy)]
+#[repr(C)]
+pub struct StackT {
+    pub sp: usize,
+    pub flags: c_int,
+    pub size: usize,
 }
