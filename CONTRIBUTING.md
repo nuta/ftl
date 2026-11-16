@@ -23,13 +23,14 @@ Send PRs on [GitHub](https://github.com/nuta/ftl/pulls). Every PR should:
 
 ## AI Contribution Policy
 
-We accept AI-assisted contributions, including on GitHub issues and discussions. We consider AI as a development tool that helps you be more productive.
+We consider AI as a development tool that helps you be more productive, and accept AI-assisted contributions.
 
-Please make sure to:
+That being said, to prevent abuse and ensure the quality of contributions, we have the following guidelines:
 
+- **Keep a human in the loop:** You should review and understand the code and text first, before showing it to other humans.
+- **Do not copy-and-paste AI-generated texts:** This includes PR descriptions, issue comments, discussions. Speak in your own words, understand the AI-generated text, and quote it if it is relevant.
+- **You are responsible for what you submit:** If you submit low-quality AI-generated code/text, your contributions may be blocked. Don't worry, this is for low-effort spams.
 - **AI usage must be disclosed:** In PR description or issue comment, disclose AI you used. This is optional, but it is recommended to help other humans.
-- **Keep a human in the loop:** You should review and understand the code first, before showing it to other humans.
-- **You are responsible for what you submit:** Submitting low-quality AI-generated code/text may lead to a block of your contributions. Don't worry, this is for low-effort spams.
 
 > [!NOTE]
 >
