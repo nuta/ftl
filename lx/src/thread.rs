@@ -20,21 +20,26 @@ use ftl_utils::spinlock::SpinLock;
 
 use crate::arch::FAULT_REGS_SIZE;
 use crate::arch::SyscallFrame;
+use crate::arch::UserContext;
 use crate::process::PId;
 use crate::process::Process;
+use crate::signal::SigAction;
 use crate::signal::SigDisposition;
 use crate::signal::Signal;
 use crate::signal::SignalSet;
 use crate::types::c_int;
-use crate::types::c_long;
 use crate::types::errno::Errno;
 use crate::types::signal::MINSIGSTKSZ;
+use crate::types::signal::SA_NODEFER;
+use crate::types::signal::SA_ONSTACK;
+use crate::types::signal::SI_USER;
 use crate::types::signal::SIG_BLOCK;
 use crate::types::signal::SIG_SETMASK;
 use crate::types::signal::SIG_UNBLOCK;
 use crate::types::signal::SS_AUTODISARM;
 use crate::types::signal::SS_DISABLE;
 use crate::types::signal::SS_ONSTACK;
+use crate::types::signal::SigInfo;
 use crate::types::signal::StackT;
 use crate::types::sys::futex::FUTEX_BITSET_MATCH_ANY;
 use crate::vm::Vm;
@@ -70,11 +75,35 @@ impl AltStack {
 }
 
 struct Mutable {
-    signal_frame: Option<SyscallFrame>,
     blocked: SignalSet,
     altstack: Option<AltStack>,
     exit_status: Option<c_int>,
     clear_child_tid: Option<usize>,
+}
+
+impl Mutable {
+    fn altstack_info(&self, current_sp: usize) -> StackT {
+        match self.altstack {
+            Some(altstack) => {
+                StackT {
+                    sp: altstack.sp,
+                    flags: if altstack.contains(current_sp) {
+                        SS_ONSTACK
+                    } else {
+                        0
+                    },
+                    size: altstack.size,
+                }
+            }
+            None => {
+                StackT {
+                    sp: 0,
+                    flags: SS_DISABLE,
+                    size: 0,
+                }
+            }
+        }
+    }
 }
 
 pub struct LxThread {
@@ -124,7 +153,6 @@ impl LxThread {
                 tid,
                 inner,
                 mutable: SpinLock::new(Mutable {
-                    signal_frame: None,
                     blocked: SignalSet::empty(),
                     altstack: None,
                     exit_status: None,
@@ -265,27 +293,7 @@ impl LxThread {
     pub fn sigaltstack(&self, new: Option<StackT>, current_sp: usize) -> Result<StackT, Errno> {
         let mut mutable = self.mutable.lock();
 
-        // Build the current stack information.
-        let old = match mutable.altstack {
-            Some(altstack) => {
-                StackT {
-                    sp: altstack.sp,
-                    flags: if altstack.contains(current_sp) {
-                        SS_ONSTACK
-                    } else {
-                        0
-                    },
-                    size: altstack.size,
-                }
-            }
-            None => {
-                StackT {
-                    sp: 0,
-                    flags: SS_DISABLE,
-                    size: 0,
-                }
-            }
-        };
+        let old = mutable.altstack_info(current_sp);
 
         let Some(new) = new else {
             // No new stack was specified. They just want to query the current
@@ -320,22 +328,25 @@ impl LxThread {
         Ok(old)
     }
 
-    /// Modifies the thread's state to return to the signal handler.
-    pub fn handle_pending_signal(&self, frame: &mut SyscallFrame) {
-        if self.mutable.lock().signal_frame.is_some() {
-            // A signal is already being delivered.
-            return;
-        }
+    pub fn has_pending_signal(&self) -> bool {
+        self.process().has_unblocked_signal(self.signal_mask())
+    }
 
+    /// Modifies `ctx` to call the handler of a pending signal, if any.
+    pub fn handle_pending_signal(&self, ctx: &mut UserContext) {
         let process = self.process();
-        let (signal, action, handler) = loop {
+        loop {
             let Some((signal, action)) = process.take_pending_signal(self.signal_mask()) else {
                 // No pending signal to deliver.
                 return;
             };
 
             match action.disposition() {
-                SigDisposition::Handler(handler) => break (signal, action, handler),
+                SigDisposition::Handler(handler) => {
+                    let info = SigInfo::new(signal.number(), SI_USER, 0);
+                    self.enter_signal(ctx, signal, action, handler, info);
+                    return;
+                }
                 SigDisposition::Ignore => {
                     // Handle the next pending signal.
                     continue;
@@ -350,23 +361,40 @@ impl LxThread {
                     continue;
                 }
             }
-        };
-
-        // Save the original system call frame. We'll restore it when returning
-        // from the signal handler.
-        self.mutable.lock().signal_frame = Some(*frame);
-
-        unsafe {
-            frame.enter_signal(signal.number() as usize, handler, action.restorer());
         }
     }
 
-    /// Restores the thread's state to resume from signal handling.
-    pub fn return_from_signal(&self, frame: &mut SyscallFrame) -> Result<c_long, Errno> {
-        let mut mutable = self.mutable.lock();
-        let saved = mutable.signal_frame.take().ok_or(Errno::EINVAL)?;
-        *frame = saved;
-        Ok(saved.retval())
+    fn enter_signal(
+        &self,
+        ctx: &mut UserContext,
+        signal: Signal,
+        action: SigAction,
+        handler: usize,
+        info: SigInfo,
+    ) {
+        let mutable = self.mutable.lock();
+        let sigmask = mutable.blocked;
+
+        let mut sp = ctx.sp();
+        let stack = mutable.altstack_info(sp);
+        if action.flags() & SA_ONSTACK != 0
+            && let Some(altstack) = mutable.altstack
+            && !altstack.contains(sp)
+        {
+            sp = altstack.sp + altstack.size;
+        }
+
+        drop(mutable);
+
+        let mut blocked = sigmask.union(action.mask());
+        if action.flags() & SA_NODEFER == 0 {
+            blocked.insert(signal);
+        }
+        self.set_signal_mask(blocked);
+
+        unsafe {
+            ctx.enter_signal(sp, handler, action.restorer(), info, stack, sigmask);
+        }
     }
 
     /// # Safety

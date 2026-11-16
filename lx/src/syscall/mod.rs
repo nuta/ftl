@@ -113,6 +113,7 @@ use self::wait4::sys_wait4;
 use self::write::sys_write;
 use self::writev::sys_writev;
 use crate::arch::SyscallFrame;
+use crate::arch::UserContext;
 use crate::thread::LxThread;
 use crate::types;
 use crate::types::c_int;
@@ -186,6 +187,7 @@ use crate::types::sys::uio::IoVec;
 pub enum SyscallResult {
     Done(c_long),
     Exit(ExitReason),
+    Restore(UserContext),
 }
 
 pub extern "C" fn handle_syscall(frame: *mut SyscallFrame) -> *mut SyscallFrame {
@@ -194,6 +196,7 @@ pub extern "C" fn handle_syscall(frame: *mut SyscallFrame) -> *mut SyscallFrame 
     match do_handle_syscall(frame) {
         SyscallResult::Done(_) => frame,
         SyscallResult::Exit(reason) => ftl::thread::exit(reason),
+        SyscallResult::Restore(ctx) => ctx.restore(),
     }
 }
 
@@ -402,14 +405,20 @@ fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
         Ok(SyscallResult::Exit(reason)) => {
             return SyscallResult::Exit(reason);
         }
+        Ok(SyscallResult::Restore(mut ctx)) => {
+            current.handle_pending_signal(&mut ctx);
+            return SyscallResult::Restore(ctx);
+        }
         Err(errno) => -(errno.as_int() as c_long),
     };
+
     frame.set_retval(retval);
 
-    if nr != SYS_RT_SIGRETURN {
-        // TODO: Nested signal handling is not supported yet.
-        current.handle_pending_signal(frame);
+    if current.has_pending_signal() {
+        let mut ctx = UserContext::from_syscall_frame(frame);
+        current.handle_pending_signal(&mut ctx);
+        return SyscallResult::Restore(ctx);
     }
 
-    SyscallResult::Done(frame.retval())
+    SyscallResult::Done(retval)
 }

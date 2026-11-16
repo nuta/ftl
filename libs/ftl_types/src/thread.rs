@@ -63,6 +63,11 @@ pub enum Fault {
     SimdFloatingPoint = 19,
 }
 
+#[cfg(target_arch = "x86_64")]
+pub const X64_USER_CS: usize = 0x2b;
+#[cfg(target_arch = "x86_64")]
+pub const X64_USER_SS: usize = 0x23;
+
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct FaultFrame {

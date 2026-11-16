@@ -177,7 +177,15 @@ impl SigAction {
         self.disposition
     }
 
+    pub fn flags(self) -> usize {
+        self.flags
+    }
+
     pub fn restorer(self) -> usize {
         self.restorer
+    }
+
+    pub fn mask(self) -> SignalSet {
+        self.mask
     }
 }

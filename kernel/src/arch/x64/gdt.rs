@@ -3,6 +3,10 @@ use core::arch::global_asm;
 use core::mem::MaybeUninit;
 use core::mem::offset_of;
 
+use ftl_types::thread::X64_USER_CS;
+use ftl_types::thread::X64_USER_SS;
+use ftl_utils::static_assert;
+
 use super::NUM_CPUS_MAX;
 use crate::address::VAddr;
 
@@ -12,6 +16,9 @@ pub(super) const GDT_KERNEL_DS: u16 = 2 * 8;
 pub(super) const GDT_USER_DS: u16 = (4 * 8) | 3;
 pub(super) const GDT_USER_CS: u16 = (5 * 8) | 3;
 const GDT_TSS: u16 = 6 * 8;
+
+static_assert!(GDT_USER_CS as usize == X64_USER_CS);
+static_assert!(GDT_USER_DS as usize == X64_USER_SS);
 
 #[repr(C, packed)]
 struct Gdtr {

@@ -2,8 +2,11 @@ use core::arch::naked_asm;
 use core::mem::offset_of;
 
 use ftl_types::thread::Fault;
-use ftl_utils::alignment::align_down;
 use ftl_utils::static_assert;
+
+mod context;
+
+pub use context::UserContext;
 
 #[derive(Clone, Copy)]
 #[repr(C)]
@@ -54,10 +57,6 @@ impl SyscallFrame {
         self.r9
     }
 
-    pub fn retval(&self) -> isize {
-        self.rax as isize
-    }
-
     pub fn set_retval(&mut self, retval: isize) {
         self.rax = retval as usize;
     }
@@ -68,21 +67,6 @@ impl SyscallFrame {
 
     pub fn set_sp(&mut self, sp: usize) {
         self.rsp = sp;
-    }
-
-    pub unsafe fn enter_signal(&mut self, signal: usize, handler: usize, restorer: usize) {
-        // Push the restorer below the red zone. It is the return address for
-        // RET instruction in signal handler.
-        //
-        // Make sure sp will be 16-bytes aligned, after PUSH RBP in the signal
-        // handler.
-        let sp = align_down(self.rsp.wrapping_sub(RED_ZONE_SIZE), 16).wrapping_sub(8);
-        unsafe { (sp as *mut usize).write(restorer) };
-
-        self.rsp = sp;
-
-        self.rdi = signal; // the argument for the signal handler
-        self.rip = handler;
     }
 }
 
@@ -145,8 +129,6 @@ static_assert!(offset_of!(FaultFrame, rdi) == 0);
 static_assert!(offset_of!(FaultFrame, rax) == size_of::<ftl_types::thread::FaultFrame>());
 
 pub const FAULT_REGS_SIZE: usize = size_of::<FaultFrame>() - offset_of!(FaultFrame, rax);
-
-const RED_ZONE_SIZE: usize = 128;
 
 #[unsafe(naked)]
 pub extern "C" fn fault_handler() -> ! {

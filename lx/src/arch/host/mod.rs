@@ -32,10 +32,6 @@ impl SyscallFrame {
         todo!()
     }
 
-    pub fn retval(&self) -> isize {
-        todo!()
-    }
-
     pub fn set_retval(&mut self, _retval: isize) {
         todo!()
     }
@@ -45,10 +41,6 @@ impl SyscallFrame {
     }
 
     pub fn set_sp(&mut self, _sp: usize) {
-        todo!()
-    }
-
-    pub unsafe fn enter_signal(&mut self, _signal: usize, _handler: usize, _restorer: usize) {
         todo!()
     }
 }
@@ -81,4 +73,37 @@ pub extern "C" fn fault_handler() -> ! {
 
 pub extern "C" fn restore_regs() -> ! {
     todo!()
+}
+
+#[derive(Clone, Copy)]
+pub struct UserContext;
+
+impl UserContext {
+    pub fn from_syscall_frame(_frame: &SyscallFrame) -> Self {
+        todo!()
+    }
+
+    pub fn sp(&self) -> usize {
+        todo!()
+    }
+
+    pub unsafe fn enter_signal(
+        &mut self,
+        _sp: usize,
+        _handler: usize,
+        _restorer: usize,
+        _info: crate::types::signal::SigInfo,
+        _stack: crate::types::signal::StackT,
+        _sigmask: crate::signal::SignalSet,
+    ) {
+        todo!()
+    }
+
+    pub unsafe fn return_from_signal(_sp: usize) -> (Self, crate::signal::SignalSet) {
+        todo!()
+    }
+
+    pub fn restore(&self) -> ! {
+        todo!()
+    }
 }

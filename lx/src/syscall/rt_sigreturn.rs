@@ -1,12 +1,11 @@
 use super::SyscallResult;
 use crate::arch::SyscallFrame;
+use crate::arch::UserContext;
 use crate::thread::LxThread;
 use crate::types::errno::Errno;
 
-pub fn sys_rt_sigreturn(
-    current: &LxThread,
-    frame: &mut SyscallFrame,
-) -> Result<SyscallResult, Errno> {
-    let retval = current.return_from_signal(frame)?;
-    Ok(SyscallResult::Done(retval))
+pub fn sys_rt_sigreturn(current: &LxThread, frame: &SyscallFrame) -> Result<SyscallResult, Errno> {
+    let (ctx, sigmask) = unsafe { UserContext::return_from_signal(frame.sp()) };
+    current.set_signal_mask(sigmask);
+    Ok(SyscallResult::Restore(ctx))
 }
