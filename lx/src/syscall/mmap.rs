@@ -4,6 +4,7 @@ use crate::types::c_int;
 use crate::types::c_long;
 use crate::types::errno::Errno;
 use crate::types::sys::mman::MAP_ANONYMOUS;
+use crate::types::sys::mman::MAP_FIXED;
 
 pub fn sys_mmap(
     current: &LxThread,
@@ -15,9 +16,10 @@ pub fn sys_mmap(
     _offset: i64,
 ) -> Result<SyscallResult, Errno> {
     let addr = if flags & MAP_ANONYMOUS != 0 {
-        current.vm().mmap_anonymous(addr, len, prot)?
+        let fixed = flags & MAP_FIXED != 0;
+        current.vm().mmap_anonymous(addr, len, prot, fixed)?
     } else {
-        // TODO: MAP_FIXED is not supported yet.
+        // TODO: File-backed mappings are not supported yet.
         return Err(Errno::ENOSYS);
     };
 

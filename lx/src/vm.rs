@@ -143,6 +143,18 @@ pub struct Mutable {
 }
 
 impl Mutable {
+    fn is_available_range(&self, addr: usize, len: usize) -> bool {
+        let Some(end) = addr.checked_add(len) else {
+            return false;
+        };
+
+        if !is_aligned(addr, PAGE_SIZE) || addr < MMAP_START || end > USER_END {
+            return false;
+        }
+
+        !self.mappings.iter().any(|m| m.overlaps_with(addr, end))
+    }
+
     /// Splits a mapping at `addr` into two mappings.
     fn split_at(&mut self, addr: usize) {
         // Find the mapping containing `addr`.
@@ -237,7 +249,17 @@ impl Vm {
         &self.vmspace
     }
 
-    pub fn mmap_anonymous(&self, _addr: usize, len: usize, prot: c_int) -> Result<usize, Errno> {
+    pub fn mmap_anonymous(
+        &self,
+        addr: usize,
+        len: usize,
+        prot: c_int,
+        fixed: bool,
+    ) -> Result<usize, Errno> {
+        if len == 0 {
+            return Err(Errno::EINVAL);
+        }
+
         let len = align_up(len, PAGE_SIZE);
         let attrs = attrs_from_prot(prot);
 
@@ -247,24 +269,41 @@ impl Vm {
         // Find a space to map the new region. This must be done while holding
         // the lock to prevent other threads from picking the same address.
         let mut mutable = self.mutable.lock();
-        let mut uaddr = MMAP_START;
-        'retry: loop {
-            // Check if the new mapping overlaps with LX's memory area.
-            let end = uaddr.checked_add(len).ok_or(Errno::ENOMEM)?;
-            if end > USER_END {
-                return Err(Errno::ENOMEM);
-            }
-
-            for mapping in &mutable.mappings {
-                if mapping.overlaps_with(uaddr, end) {
-                    // The range is already mapped. Try the next hole.
-                    uaddr = mapping.end();
-                    continue 'retry;
+        let uaddr = if fixed {
+            let end = validate_mapping_range(addr, len)?;
+            // Unmap the existing region if it overlaps with the requested
+            // range, as per the POSIX:
+            //
+            // > The mapping established by mmap() shall replace any previous mappings
+            // >
+            // > https://pubs.opengroup.org/onlinepubs/9799919799/functions/mmap.html
+            self.unmap_locked(&mut mutable, addr, end)?;
+            addr
+        } else if addr != 0 && mutable.is_available_range(addr, len) {
+            // If !MAP_FIXED, the address is just a hint. Use it only if it's
+            // not mapped already.
+            addr
+        } else {
+            let mut uaddr = MMAP_START;
+            'retry: loop {
+                // Check if the new mapping overlaps with LX's memory area.
+                let end = uaddr.checked_add(len).ok_or(Errno::ENOMEM)?;
+                if end > USER_END {
+                    return Err(Errno::ENOMEM);
                 }
-            }
 
-            break;
-        }
+                for mapping in &mutable.mappings {
+                    if mapping.overlaps_with(uaddr, end) {
+                        // The range is already mapped. Try the next hole.
+                        uaddr = mapping.end();
+                        continue 'retry;
+                    }
+                }
+
+                break;
+            }
+            uaddr
+        };
 
         self.vmspace.map(&vmo, uaddr, 0, len, attrs)?;
         let mapping = Mapping::new(uaddr, len, attrs, vmo);
@@ -276,6 +315,10 @@ impl Vm {
     pub fn munmap(&self, addr: usize, len: usize) -> Result<(), Errno> {
         let end = validate_mapping_range(addr, len)?;
         let mut mutable = self.mutable.lock();
+        self.unmap_locked(&mut mutable, addr, end)
+    }
+
+    fn unmap_locked(&self, mutable: &mut Mutable, addr: usize, end: usize) -> Result<(), Errno> {
         self.vmspace.unmap(addr, end - addr)?;
 
         // Update our own mapping state.
