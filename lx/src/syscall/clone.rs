@@ -23,7 +23,7 @@ use crate::types::sys::sched::CLONE_VM;
 
 fn clone_thread(
     current: &LxThread,
-    frame: &mut SyscallFrame,
+    frame: &SyscallFrame,
     flags: c_ulong,
     stack: usize,
     parent_tid: *mut c_int,
@@ -82,7 +82,7 @@ fn clone_thread(
 
 fn clone_process(
     current: &LxThread,
-    frame: &mut SyscallFrame,
+    frame: &SyscallFrame,
     flags: c_ulong,
 ) -> Result<PId, Errno> {
     const SUPPORTED_FLAGS: c_ulong = 0;
@@ -104,7 +104,7 @@ fn clone_process(
 
 pub fn sys_clone(
     current: &LxThread,
-    frame: &mut SyscallFrame,
+    frame: &SyscallFrame,
     flags: c_ulong,
     stack: usize,
     parent_tid: *mut c_int,

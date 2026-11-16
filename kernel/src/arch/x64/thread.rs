@@ -4,9 +4,12 @@ use core::mem::MaybeUninit;
 use core::mem::offset_of;
 
 use ftl_types::error::ErrorCode;
+use ftl_types::thread::FaultFrame;
 use ftl_types::thread::Regs;
 use ftl_types::thread::RegsKind;
+use ftl_types::thread::SyscallFrame;
 use ftl_types::thread::SyscallRegs;
+use ftl_utils::alignment::is_aligned;
 
 use super::gdt::GDT_USER_CS;
 use super::gdt::GDT_USER_DS;
@@ -64,7 +67,8 @@ pub struct Thread {
     pub(super) xsave_ptr: u64,
     pub(super) syscall_pc: u64,
     pub(super) fault_pc: u64,
-    pub(super) cookie: u64,
+    pub(super) fault_frame: u64,
+    pub(super) syscall_frame: u64,
 }
 
 impl Drop for Thread {
@@ -76,7 +80,14 @@ impl Drop for Thread {
 }
 
 impl Thread {
-    pub fn new(syscall_pc: usize, fault_pc: usize, cookie: usize) -> Result<Self, ErrorCode> {
+    pub fn new(syscall_pc: usize, fault_pc: usize, system_sp: usize) -> Result<Self, ErrorCode> {
+        if system_sp >= USER_ADDR_END || !is_aligned(system_sp, 16) {
+            return Err(ErrorCode::InvalidUserAddr);
+        }
+
+        let fault_frame = system_sp.saturating_sub(size_of::<FaultFrame>());
+        let syscall_frame = fault_frame.saturating_sub(size_of::<SyscallFrame>());
+
         let paddr = PAGE_ALLOCATOR
             .alloc(MIN_PAGE_SIZE, PageType::Zeroed)
             .ok_or(ErrorCode::OutOfMemory)?;
@@ -92,7 +103,8 @@ impl Thread {
             syscall_pc: syscall_pc as u64,
             fault_pc: fault_pc as u64,
             xsave_ptr: xsave.as_usize() as u64,
-            cookie: cookie as u64,
+            fault_frame: fault_frame as u64,
+            syscall_frame: syscall_frame as u64,
             rax: 0,
             rbx: 0,
             rcx: 0,

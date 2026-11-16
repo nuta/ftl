@@ -1,6 +1,11 @@
 use alloc::boxed::Box;
 use alloc::sync::Arc;
 use alloc::sync::Weak;
+use core::cell::UnsafeCell;
+use core::mem::MaybeUninit;
+use core::mem::offset_of;
+use core::sync::atomic::AtomicBool;
+use core::sync::atomic::Ordering;
 
 use ftl::poll::Poll;
 use ftl::thread::Thread;
@@ -8,10 +13,12 @@ use ftl::trace;
 use ftl::warn;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
+use ftl_types::thread::FaultFrame;
 use ftl_types::thread::Regs;
 use ftl_types::thread::RegsKind;
 use ftl_utils::spinlock::SpinLock;
 
+use crate::arch::FAULT_REGS_SIZE;
 use crate::arch::SyscallFrame;
 use crate::process::PId;
 use crate::process::Process;
@@ -21,6 +28,24 @@ use crate::types::c_long;
 use crate::types::errno::Errno;
 use crate::types::sys::futex::FUTEX_BITSET_MATCH_ANY;
 use crate::vm::Vm;
+
+pub const SYSTEM_STACK_SIZE: usize = 256 * 1024;
+
+// The system stack area, followed by the cookie. The kernel uses the top of the
+// stack for the fault frame and the system call frame. It is aligned to 16
+// bytes, as required by x86-64 ABI.
+#[repr(C, align(16))]
+struct SystemStack {
+    stack: UnsafeCell<MaybeUninit<[u8; SYSTEM_STACK_SIZE]>>,
+    fault_regs: UnsafeCell<MaybeUninit<[u8; FAULT_REGS_SIZE]>>,
+    cookie: Cookie,
+}
+
+// SAFETY: The stack is used by a single thread, or is written by kernel's trap
+//         handler when the thread is not running.
+unsafe impl Sync for SystemStack {}
+
+const SYSTEM_SP_OFFSET: usize = offset_of!(SystemStack, fault_regs);
 
 struct Mutable {
     signal_frame: Option<SyscallFrame>,
@@ -34,9 +59,11 @@ pub struct LxThread {
     tid: PId,
     inner: Thread,
     mutable: SpinLock<Mutable>,
-    _cookie: Box<Cookie>,
+    system_stack: Box<SystemStack>,
+    handling_fault: AtomicBool,
 }
 
+#[repr(align(16))]
 struct Cookie {
     thread: Weak<LxThread>,
 }
@@ -51,16 +78,22 @@ impl Drop for LxThread {
 
 impl LxThread {
     pub fn new(vm: Arc<Vm>, process: Weak<Process>, tid: PId) -> Result<Arc<Self>, ErrorCode> {
-        let this = Box::<Cookie>::new_uninit();
+        let mut system_stack =
+            Box::<SystemStack>::try_new_uninit().map_err(|_| ErrorCode::OutOfMemory)?;
         let syscall_pc = crate::arch::syscall_handler as *const () as usize;
         let fault_pc = crate::arch::fault_handler as *const () as usize;
-        let cookie = this.as_ptr() as usize;
+        let system_sp = system_stack.as_ptr().addr() + SYSTEM_SP_OFFSET;
 
-        // TODO: LX assumes that the cookie won't be derefernced until the
+        // TODO: LX assumes that kernel won't touch the system stack until the
         //       thread is started. Should we document and guarantee this?
-        let inner = Thread::create(vm.quota(), vm.vmspace(), syscall_pc, fault_pc, cookie)?;
+        let inner = Thread::create(vm.quota(), vm.vmspace(), syscall_pc, fault_pc, system_sp)?;
 
         let thread = Arc::new_cyclic(|thread| {
+            let cookie = Cookie {
+                thread: thread.clone(),
+            };
+            unsafe { (&raw mut (*system_stack.as_mut_ptr()).cookie).write(cookie) };
+
             LxThread {
                 process,
                 vm,
@@ -71,20 +104,36 @@ impl LxThread {
                     exit_status: None,
                     clear_child_tid: None,
                 }),
-                _cookie: Box::write(
-                    this,
-                    Cookie {
-                        thread: thread.clone(),
-                    },
-                ),
+                system_stack: unsafe { system_stack.assume_init() },
+                handling_fault: AtomicBool::new(false),
             }
         });
 
         Ok(thread)
     }
 
+    pub fn enter_fault_handler(&self) -> bool {
+        self.handling_fault.swap(true, Ordering::Relaxed)
+    }
+
+    pub fn leave_fault_handler(&self) {
+        let prev = self.handling_fault.swap(false, Ordering::Relaxed);
+        debug_assert!(prev);
+    }
+
     pub fn start(&self, entry: usize, sp: usize) -> Result<(), ErrorCode> {
         self.inner.start(entry, sp)
+    }
+
+    pub fn push_syscall_frame(&self, frame: SyscallFrame) -> usize {
+        let stack: *mut u8 = self.system_stack.stack.get().cast();
+        unsafe {
+            let sp = stack
+                .add(SYSTEM_STACK_SIZE - size_of::<FaultFrame>() - size_of::<SyscallFrame>())
+                .cast::<SyscallFrame>();
+            sp.write(frame);
+            sp.addr()
+        }
     }
 
     pub fn id(&self) -> HandleId {
@@ -158,8 +207,7 @@ impl LxThread {
 
     /// Modifies the thread's state to return to the signal handler.
     pub fn handle_pending_signal(&self, frame: &mut SyscallFrame) {
-        let mut mutable = self.mutable.lock();
-        if mutable.signal_frame.is_some() {
+        if self.mutable.lock().signal_frame.is_some() {
             // A signal is already being delivered.
             return;
         }
@@ -191,7 +239,7 @@ impl LxThread {
 
         // Save the original system call frame. We'll restore it when returning
         // from the signal handler.
-        mutable.signal_frame = Some(*frame);
+        self.mutable.lock().signal_frame = Some(*frame);
 
         unsafe {
             frame.enter_signal(signal.number() as usize, handler, action.restorer());
@@ -208,11 +256,12 @@ impl LxThread {
 
     /// # Safety
     ///
-    /// `cookie` must be the thread's cookie which we created in
-    /// [`LxThread::new`]. Also, the caller must ensure that the thread is
+    /// `system_sp` must be the thread's system stack pointer which we created
+    /// in [`LxThread::new`]. Also, the caller must ensure that the thread is
     /// not freed.
-    pub unsafe fn from_cookie<'a>(cookie: usize) -> &'a LxThread {
-        let cookie = unsafe { &*(cookie as *const Cookie) };
+    pub unsafe fn from_system_sp<'a>(system_sp: usize) -> &'a LxThread {
+        let stack = (system_sp - SYSTEM_SP_OFFSET) as *const SystemStack;
+        let cookie = unsafe { &(*stack).cookie };
         unsafe { &*cookie.thread.as_ptr() }
     }
 }

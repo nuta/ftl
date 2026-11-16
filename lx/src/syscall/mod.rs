@@ -52,6 +52,7 @@ mod write;
 mod writev;
 
 use ftl_types::thread::ExitReason;
+use ftl_types::thread::FaultFrame;
 
 use self::accept::sys_accept;
 use self::accept4::sys_accept4;
@@ -195,7 +196,9 @@ fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
 
     // SAFETY: The reaper still owns a reference to this thread while executing
     //         this handler.
-    let current = unsafe { LxThread::from_cookie(frame.cookie) };
+    let system_sp =
+        (frame as *const SyscallFrame).addr() + size_of::<SyscallFrame>() + size_of::<FaultFrame>();
+    let current = unsafe { LxThread::from_system_sp(system_sp) };
 
     let result = match nr {
         SYS_WRITE => sys_write(current, arg0 as c_int, arg1 as *const c_void, arg2),

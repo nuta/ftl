@@ -43,9 +43,6 @@ pub struct SyscallRegs {
 
 #[repr(C)]
 pub struct SyscallFrame {
-    pub cookie: usize,
-    /// A padding to keep the frame 16-byte aligned.
-    pub reserved: usize,
     pub rsp: usize,
     pub rip: usize,
 }
@@ -69,9 +66,13 @@ pub enum Fault {
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct FaultFrame {
-    pub rflags: usize,
+    pub rdi: usize,
+    // IRET frame. The order is important!
     pub rip: usize,
-    pub cookie: usize,
+    pub cs: usize,
+    pub rflags: usize,
+    pub rsp: usize,
+    pub ss: usize,
     pub fault: Fault,
     pub addr: usize,
     pub info: usize,

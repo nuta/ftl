@@ -2,6 +2,8 @@ use core::arch::naked_asm;
 use core::mem::offset_of;
 
 use ftl_types::thread::Fault;
+use ftl_utils::alignment::align_down;
+use ftl_utils::static_assert;
 
 #[derive(Clone, Copy)]
 #[repr(C)]
@@ -19,8 +21,6 @@ pub struct SyscallFrame {
     pub rsi: usize,
     pub rdi: usize,
     pub rax: usize,
-    pub cookie: usize,
-    pub reserved: usize,
     pub rsp: usize,
     pub rip: usize,
 }
@@ -67,20 +67,15 @@ impl SyscallFrame {
     }
 
     pub unsafe fn enter_signal(&mut self, signal: usize, handler: usize, restorer: usize) {
-        // Use the beginning of the frame as the restorer, the return address
-        // for RET instruction in signal handler.
+        // Push the restorer below the red zone. It is the return address for
+        // RET instruction in signal handler.
         //
-        // This means when entering the signal handler, R15 (unnecessarily)
-        // points to the restorer, but it shouldn't matter anyway.
-        let sp = (self as *mut Self).addr();
-
         // Make sure sp will be 16-bytes aligned, after PUSH RBP in the signal
-        // handler. LX pushes odd number of registers, so this always holds,
-        // ... I hope.
-        debug_assert_eq!(sp % 16, 8);
+        // handler.
+        let sp = align_down(self.rsp.wrapping_sub(RED_ZONE_SIZE), 16).wrapping_sub(8);
+        unsafe { (sp as *mut usize).write(restorer) };
 
         self.rsp = sp;
-        self.r15 = restorer;
 
         self.rdi = signal; // the argument for the signal handler
         self.rip = handler;
@@ -119,67 +114,89 @@ pub extern "C" fn syscall_handler() -> ! {
     )
 }
 
-#[repr(C, packed)]
+#[repr(C)]
 pub struct FaultFrame {
-    pub r11: usize,
-    pub r10: usize,
-    pub r9: usize,
-    pub r8: usize,
-    pub rdi: usize,
-    pub rsi: usize,
-    pub rdx: usize,
-    pub rcx: usize,
-    pub rax: usize,
-
     // Fields from ftl_types::thread::FaultFrame:
-    pub rflags: usize,
+    pub rdi: usize,
     pub rip: usize,
-    pub cookie: usize,
+    pub cs: usize,
+    pub rflags: usize,
+    pub rsp: usize,
+    pub ss: usize,
     pub fault: Fault,
     pub addr: usize,
     pub info: usize,
+
+    pub rax: usize,
+    pub rcx: usize,
+    pub rdx: usize,
+    pub rsi: usize,
+    pub r8: usize,
+    pub r9: usize,
+    pub r10: usize,
+    pub r11: usize,
 }
+
+static_assert!(offset_of!(FaultFrame, rdi) == 0);
+static_assert!(offset_of!(FaultFrame, rax) == size_of::<ftl_types::thread::FaultFrame>());
+
+pub const FAULT_REGS_SIZE: usize = size_of::<FaultFrame>() - offset_of!(FaultFrame, rax);
 
 const RED_ZONE_SIZE: usize = 128;
 
 #[unsafe(naked)]
 pub extern "C" fn fault_handler() -> ! {
+    // RDI = The fault frame (also the top of the system stack).
+    // RSP = The user (or system) RSP when the fault occurred.
     naked_asm!(
         // Save caller-saved registers. Callee-saved registers are preserved by
         // handle_fault.
-        "push rax",
-        "push rcx",
-        "push rdx",
-        "push rsi",
-        "push rdi",
-        "push r8",
-        "push r9",
-        "push r10",
-        "push r11",
+        "mov [rdi + {rax}], rax",
+        "mov [rdi + {rcx}], rcx",
+        "mov [rdi + {rdx}], rdx",
+        "mov [rdi + {rsi}], rsi",
+        "mov [rdi + {r8}], r8",
+        "mov [rdi + {r9}], r9",
+        "mov [rdi + {r10}], r10",
+        "mov [rdi + {r11}], r11",
 
-        // Align the stack to 16 bytes.
-        "mov rdi, rsp", // handle_fault argument
-        "and rsp, -16",
+        // Check if the fault happened while using the system stack (i.e. in LX's
+        // system call handler).
+        "mov rax, rdi",
+        "sub rax, rsp", // system sp - faulted rsp
+        "cmp rax, {system_stack_size}",
+
+        // If RAX >= system_stack_size, RSP was not in the system stack. Then,
+        // set the RDI (top of the system stack) to RSP.
+        "cmovae rsp, rdi",
+
+        "and rsp, -16", // align down to 16 bytes
         "call {handle_fault}",
 
         // Restore the user registers from the frame.
         "mov rsp, rax",
-        "pop r11",
-        "pop r10",
-        "pop r9",
-        "pop r8",
+        "mov r11, [rsp + {r11}]",
+        "mov r10, [rsp + {r10}]",
+        "mov r9, [rsp + {r9}]",
+        "mov r8, [rsp + {r8}]",
+        "mov rsi, [rsp + {rsi}]",
+        "mov rdx, [rsp + {rdx}]",
+        "mov rcx, [rsp + {rcx}]",
+        "mov rax, [rsp + {rax}]",
         "pop rdi",
-        "pop rsi",
-        "pop rdx",
-        "pop rcx",
-        "pop rax",
-        "popfq", // user RFLAGS
 
-        // Pop user RIP, and then skip the rest of the fault frame & red zone
-        // to move RSP to the user RSP.
-        "ret {skip_size}",
+        // Restore user RIP, RFLAGS, and RSP at once.
+        "iretq",
         handle_fault = sym crate::fault::handle_fault,
-        skip_size = const (size_of::<FaultFrame>() - offset_of!(FaultFrame, cookie)) + RED_ZONE_SIZE,
+        system_stack_size = const crate::thread::SYSTEM_STACK_SIZE,
+        rax = const offset_of!(FaultFrame, rax),
+        rcx = const offset_of!(FaultFrame, rcx),
+        rdx = const offset_of!(FaultFrame, rdx),
+        rsi = const offset_of!(FaultFrame, rsi),
+        r8 = const offset_of!(FaultFrame, r8),
+        r9 = const offset_of!(FaultFrame, r9),
+        r10 = const offset_of!(FaultFrame, r10),
+        r11 = const offset_of!(FaultFrame, r11),
     )
 }
 
@@ -198,10 +215,9 @@ pub extern "C" fn restore_regs() -> ! {
         "pop rdx",
         "pop rsi",
         "pop rdi",
-        "pop rax",     // return value
-        "add rsp, 16", // Skip cookie and reserved
-        "pop rcx",     // user RSP
-        "pop r11",     // user RIP
+        "pop rax", // return value
+        "pop rcx", // user RSP
+        "pop r11", // user RIP
         "mov rsp, rcx",
         "jmp r11",
     )

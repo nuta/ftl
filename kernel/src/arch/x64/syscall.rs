@@ -1,6 +1,5 @@
 use core::arch::naked_asm;
 use core::mem::offset_of;
-use core::mem::size_of;
 
 use ftl_types::syscall::Syscall;
 use ftl_types::thread::SyscallFrame;
@@ -14,13 +13,11 @@ use super::msr::rdmsr;
 use super::msr::wrmsr;
 use super::thread::Thread;
 use super::thread::XSTATE_MASK;
-use super::vmspace::USER_ADDR_END;
 use crate::cpuvar::CpuVar;
 use crate::scheduler;
 use crate::scheduler::Resched;
 
 pub(super) const USER_RFLAGS: u64 = 0x202;
-pub(super) const RED_ZONE_SIZE: usize = 128;
 
 pub(super) fn try_exit_current() {
     let thread = super::get_cpuvar().current_thread.thread();
@@ -122,21 +119,9 @@ extern "C" fn syscall_handler() -> ! {
         // Linux, Windows, XNU, BSD, and Fuchsia don't assume RFLAGS to be
         // preserved.
 
-        // Check if user RSP is safe to use. We're in kernel mode and need to
-        // extremely carefully avoid reading/writing kernel memory on behalf of
-        // the user!
-        "mov r11, gs:[{scratch_offset}]", // user RSP
-        "mov rcx, {user_addr_end}",
-        "cmp r11, rcx",
-        "jae {syscall_copy_recover}",
-
-        // Allocate the trap frame (below the red zone) from user RSP.
-        "mov rcx, r11", // original user RSP
-        "sub r11, {syscall_frame_size}",
-        "jc {syscall_copy_recover}", // user RSP is too low
-
-        // Align RSP to 16 bytes.
-        "and r11, -16",
+        "mov r11, gs:[{current_thread_offset}]",
+        "mov r11, [r11 + {syscall_frame_offset}]",
+        "mov rcx, gs:[{scratch_offset}]", // user RSP
 
         "stac", // Enable user page access.
 
@@ -149,26 +134,17 @@ extern "C" fn syscall_handler() -> ! {
         ".global syscall_copy1; syscall_copy1:",
         "mov [r11 + {frame_rip_offset}], rcx",
 
-        // Write cookie
-        "mov rcx, gs:[{current_thread_offset}]",
-        "mov rcx, [rcx + {cookie_offset}]",
-        ".global syscall_copy2; syscall_copy2:",
-        "mov [r11 + {frame_cookie_offset}], rcx",
-
         "clac", // Disable user page access.
 
         // Load syscall_pc from the current thread.
         "mov rcx, gs:[{current_thread_offset}]",
         "mov rcx, [rcx + {syscall_pc_offset}]", // user RIP (when SYSRET-ing)
-        "mov rsp, r11", // user RSP (for syscall handler)
+        "mov rsp, r11", // system RSP (for syscall handler)
         "mov r11, {user_rflags}", // user RFLAGS (for syscall handler)
         "swapgs",
         "sysretq",
         handle_syscall = sym crate::syscall::handle_syscall,
-        syscall_copy_recover = sym syscall_copy_recover,
         ftl_syscall_base = const Syscall::BASE as isize,
-        user_addr_end = const USER_ADDR_END,
-        syscall_frame_size = const RED_ZONE_SIZE + size_of::<SyscallFrame>(),
         user_rflags = const USER_RFLAGS,
         current_thread_offset = const offset_of!(CpuVar, current_thread),
         xstate_mask_lo = const XSTATE_MASK & 0xffff_ffff,
@@ -177,10 +153,9 @@ extern "C" fn syscall_handler() -> ! {
         gsbase_offset = const offset_of!(Thread, gsbase),
         xsave_ptr_offset = const offset_of!(Thread, xsave_ptr),
         syscall_pc_offset = const offset_of!(Thread, syscall_pc),
-        cookie_offset = const offset_of!(Thread, cookie),
+        syscall_frame_offset = const offset_of!(Thread, syscall_frame),
         frame_rsp_offset = const offset_of!(SyscallFrame, rsp),
         frame_rip_offset = const offset_of!(SyscallFrame, rip),
-        frame_cookie_offset = const offset_of!(SyscallFrame, cookie),
         scratch_offset = const offset_of!(CpuVar, arch.scratch),
         kernel_rsp_offset = const offset_of!(CpuVar, arch.kernel_rsp),
         rip_offset = const offset_of!(Thread, rip),

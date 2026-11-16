@@ -8,7 +8,7 @@ use crate::types::c_ulong;
 use crate::types::errno::Errno;
 use crate::types::signal::SIGCHLD;
 
-pub fn sys_fork(current: &LxThread, frame: &mut SyscallFrame) -> Result<SyscallResult, Errno> {
+pub fn sys_fork(current: &LxThread, frame: &SyscallFrame) -> Result<SyscallResult, Errno> {
     sys_clone(
         current,
         frame,

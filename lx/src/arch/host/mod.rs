@@ -1,7 +1,6 @@
 #[derive(Clone, Copy)]
 pub struct SyscallFrame {
     pub nr: usize,
-    pub cookie: usize,
 }
 
 impl SyscallFrame {
@@ -52,14 +51,15 @@ impl SyscallFrame {
 
 pub struct FaultFrame {
     pub rip: usize,
-    pub cookie: usize,
     pub fault: ftl_types::thread::Fault,
     pub addr: usize,
     pub info: usize,
 }
 
+pub const FAULT_REGS_SIZE: usize = 0;
+
 pub extern "C" fn syscall_handler() -> ! {
-    let mut frame = SyscallFrame { nr: 0, cookie: 0 };
+    let mut frame = SyscallFrame { nr: 0 };
     crate::syscall::handle_syscall(&mut frame as *mut SyscallFrame);
     todo!()
 }
@@ -67,7 +67,6 @@ pub extern "C" fn syscall_handler() -> ! {
 pub extern "C" fn fault_handler() -> ! {
     let mut frame = FaultFrame {
         rip: 0,
-        cookie: 0,
         fault: ftl_types::thread::Fault::PageFault,
         addr: 0,
         info: 0,

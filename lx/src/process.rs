@@ -6,7 +6,6 @@ use core::ptr;
 
 use ftl::trace;
 use ftl_types::thread::RegsKind;
-use ftl_utils::alignment::align_down;
 use ftl_utils::spinlock::SpinLock;
 
 use crate::arch::SyscallFrame;
@@ -113,9 +112,8 @@ impl Process {
             PId(1),
             None,
             entry,
-            sp,
             SignalMap::new(SigAction::default()),
-            |_thread| Ok(()),
+            |_thread| Ok(sp),
         )?;
 
         Ok(process)
@@ -161,12 +159,11 @@ impl Process {
         tgid: PId,
         parent: Option<Weak<Process>>,
         entry: usize,
-        sp: usize,
         signal_actions: SignalMap<SigAction>,
         thread_prestart: F,
     ) -> Result<Arc<Self>, Errno>
     where
-        F: FnOnce(&Arc<LxThread>) -> Result<(), Errno>,
+        F: FnOnce(&Arc<LxThread>) -> Result<usize, Errno>,
     {
         let child_exit = WaitQueue::new()?;
         let signal_wait = WaitQueue::new()?;
@@ -188,10 +185,10 @@ impl Process {
             futexes: FutexTable::new(),
         });
 
-        // TODO: LX assumes that the cookie won't be dereferenced until the
+        // TODO: LX assumes that kernel won't touch the system stack until the
         // thread is started. Should we document and guarantee this?
         let thread = LxThread::new(Arc::new(vm), Arc::downgrade(&process), tgid)?;
-        thread_prestart(&thread)?;
+        let sp = thread_prestart(&thread)?;
 
         // Start the thread.
         //
@@ -206,13 +203,13 @@ impl Process {
     pub fn fork(
         self: &Arc<Self>,
         current: &LxThread,
-        frame: &mut SyscallFrame,
+        frame: &SyscallFrame,
     ) -> Result<PId, Errno> {
         let fd_table = self.fd_table.lock().clone();
 
         // Set the return value for the child process.
-        frame.set_retval(0);
-        let syscall_sp = frame as *const SyscallFrame as usize;
+        let mut child_frame = *frame;
+        child_frame.set_retval(0);
 
         // Copy memory into the child's VM space.
         // TODO: copy on write
@@ -236,12 +233,11 @@ impl Process {
             tgid,
             Some(Arc::downgrade(self)),
             entry,
-            syscall_sp,
             signal_actions,
             |thread| {
                 current.copy_regs_to(&thread, RegsKind::FsBase)?;
                 current.copy_regs_to(&thread, RegsKind::FpAndVector)?;
-                Ok(())
+                Ok(thread.push_syscall_frame(child_frame))
             },
         )?;
 
@@ -265,15 +261,6 @@ impl Process {
         parent_tid: Option<*mut c_int>,
         clear_child_tid: Option<usize>,
     ) -> Result<PId, Errno> {
-        // Calculate the user address to put a register frame.
-        let frame_addr = stack
-            .checked_sub(size_of::<SyscallFrame>())
-            .map(|addr| {
-                // Align the frame to 16 bytes (x86-64 ABI requirement).
-                align_down(addr, 16)
-            })
-            .ok_or(Errno::EINVAL)?;
-
         // Allocate a new thread ID.
         let mut pid_table = self.global.processes.lock();
         let tid = pid_table.allocate()?;
@@ -308,7 +295,7 @@ impl Process {
         let mut child_frame = *frame;
         child_frame.set_retval(0);
         child_frame.set_sp(stack);
-        unsafe { (frame_addr as *mut SyscallFrame).write(child_frame) };
+        let frame_addr = thread.push_syscall_frame(child_frame);
 
         // Start the thread.
         let mut mutable = self.mutable.lock();

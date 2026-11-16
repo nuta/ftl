@@ -16,7 +16,6 @@ use super::gdt::GDT_KERNEL_CS;
 use super::get_cpuvar;
 use super::io_apic::IRQ_VECTOR_BASE;
 use super::local_apic::SPURIOUS_INTERRUPT_VECTOR;
-use super::syscall::RED_ZONE_SIZE;
 use super::syscall::USER_RFLAGS;
 use super::syscall::syscall_copy_recover;
 use super::thread::Thread;
@@ -55,7 +54,6 @@ unsafe extern "C" {
     static usercopy1_recover: u8;
     static syscall_copy0: u8;
     static syscall_copy1: u8;
-    static syscall_copy2: u8;
 }
 
 const NUM_IDT_ENTRIES: usize = 256;
@@ -334,9 +332,8 @@ fn recover_from_kernel_page_fault(rip: u64) -> Option<u64> {
     {
         let addr0 = &raw const syscall_copy0 as u64;
         let addr1 = &raw const syscall_copy1 as u64;
-        let addr2 = &raw const syscall_copy2 as u64;
         let recover = syscall_copy_recover as *const () as u64;
-        if rip == addr0 || rip == addr1 || rip == addr2 {
+        if rip == addr0 || rip == addr1 {
             return Some(recover);
         }
     }
@@ -455,16 +452,20 @@ fn do_raise_user_fault(
     addr: usize,
     info: usize,
 ) -> Result<(), ErrorCode> {
-    let mut rsp = regs.rsp as usize;
-    // Reserve the frame space in the user stack, right below the red zone.
-    rsp = rsp.saturating_sub(RED_ZONE_SIZE + size_of::<FaultFrame>());
+    let frame_addr = regs.fault_frame as usize;
+    if frame_addr == 0 {
+        return Err(ErrorCode::InvalidUserAddr);
+    }
 
     // Write the fault frame.
-    let uslice = USlice::new(UAddr::new(rsp), size_of::<FaultFrame>())?;
+    let uslice = USlice::new(UAddr::new(frame_addr), size_of::<FaultFrame>())?;
     uslice.write(FaultFrame {
-        rflags: regs.rflags as usize,
+        rdi: regs.rdi as usize,
         rip: regs.rip as usize,
-        cookie: regs.cookie as usize,
+        cs: regs.cs as usize,
+        rflags: regs.rflags as usize,
+        rsp: regs.rsp as usize,
+        ss: regs.ss as usize,
         fault,
         addr,
         info,
@@ -472,7 +473,7 @@ fn do_raise_user_fault(
 
     // Update the registers. When switching to this thread again, it will start
     // from the fault handler.
-    regs.rsp = rsp as u64;
+    regs.rdi = frame_addr as u64;
     regs.rip = regs.fault_pc;
     regs.rflags = USER_RFLAGS;
     Ok(())

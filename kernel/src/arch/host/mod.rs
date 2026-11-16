@@ -89,7 +89,7 @@ impl VmSpace {
 pub struct Thread {}
 
 impl Thread {
-    pub fn new(_syscall_pc: usize, _fault_pc: usize, _cookie: usize) -> Result<Self, ErrorCode> {
+    pub fn new(_syscall_pc: usize, _fault_pc: usize, _system_sp: usize) -> Result<Self, ErrorCode> {
         todo!()
     }
 

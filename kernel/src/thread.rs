@@ -81,7 +81,7 @@ impl Thread {
         vmspace: SharedRef<VmSpace>,
         syscall_pc: usize,
         fault_pc: usize,
-        cookie: usize,
+        system_sp: usize,
     ) -> Result<SharedRef<Self>, ErrorCode> {
         // SYSRET-ing to the kernel pages should trigger a page fault, but it
         // is obviously invalid. Reject it early.
@@ -95,7 +95,7 @@ impl Thread {
         };
 
         let memory_reservation = quota.reserve::<MemoryQuota>(MIN_PAGE_SIZE)?;
-        let arch_thread = arch::Thread::new(syscall_pc, fault_pc, cookie)?;
+        let arch_thread = arch::Thread::new(syscall_pc, fault_pc, system_sp)?;
         let mut memory_charge = Charge::new(quota.clone());
         memory_charge.commit(memory_reservation);
         SCHEDULER.reserve_capacity()?;
@@ -304,7 +304,7 @@ pub fn sys_thread_create(
     let vmspace_id = HandleId::new(ctx.a2);
     let syscall_pc = ctx.a3;
     let fault_pc = ctx.a4;
-    let cookie = ctx.a5;
+    let system_sp = ctx.a5;
 
     let current_hspace = current.hspace();
     let quota = current_hspace.get::<Quota>(quota_id, HandleRight::CHARGE)?;
@@ -315,7 +315,7 @@ pub fn sys_thread_create(
         current_hspace.get::<HandleSpace>(hspace_id, HandleRight::WRITE)?
     };
 
-    let thread = Thread::new(&quota, hspace, vmspace, syscall_pc, fault_pc, cookie)?;
+    let thread = Thread::new(&quota, hspace, vmspace, syscall_pc, fault_pc, system_sp)?;
     let rights = HandleRight::READ | HandleRight::WRITE | HandleRight::DESTROY;
     let handle = Handle::new(thread.clone(), rights);
     let id = match current_hspace.insert(handle) {

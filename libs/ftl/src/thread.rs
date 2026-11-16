@@ -34,9 +34,16 @@ impl Thread {
         vmspace: &VmSpace,
         syscall_pc: usize,
         fault_pc: usize,
-        cookie: usize,
+        system_sp: usize,
     ) -> Result<Self, ErrorCode> {
-        Self::do_create(quota, CURRENT_HSPACE, vmspace, syscall_pc, fault_pc, cookie)
+        Self::do_create(
+            quota,
+            CURRENT_HSPACE,
+            vmspace,
+            syscall_pc,
+            fault_pc,
+            system_sp,
+        )
     }
 
     pub fn create_in(
@@ -45,10 +52,10 @@ impl Thread {
         vmspace: &VmSpace,
         syscall_pc: usize,
         fault_pc: usize,
-        cookie: usize,
+        system_sp: usize,
     ) -> Result<Self, ErrorCode> {
         let hspace_id = hspace.handle().id();
-        Self::do_create(quota, hspace_id, vmspace, syscall_pc, fault_pc, cookie)
+        Self::do_create(quota, hspace_id, vmspace, syscall_pc, fault_pc, system_sp)
     }
 
     fn do_create(
@@ -57,7 +64,7 @@ impl Thread {
         vmspace: &VmSpace,
         syscall_pc: usize,
         fault_pc: usize,
-        cookie: usize,
+        system_sp: usize,
     ) -> Result<Self, ErrorCode> {
         let id = syscall6(
             Syscall::ThreadCreate,
@@ -66,7 +73,7 @@ impl Thread {
             vmspace.handle().id().as_usize(),
             syscall_pc,
             fault_pc,
-            cookie,
+            system_sp,
         )?;
 
         // SAFETY: Kernel returns a valid handle.
