@@ -451,11 +451,18 @@ impl Process {
         &self.fd_table
     }
 
-    /// Resolves a path, from the current working directory of this process.
-    pub fn lookup_path(&self, path: &[u8]) -> Result<Arc<PathNode>, Errno> {
+    /// Resolves a path, from `dirfd` or the current working directory of this process.
+    pub fn lookup_path(&self, path: &[u8], dirfd: Option<c_int>) -> Result<Arc<PathNode>, Errno> {
         let dir = if path.starts_with(b"/") {
             // Absolute paths. Start from the root directory.
             self.global.root_dir.clone()
+        } else if let Some(dirfd) = dirfd {
+            let file = self.fd_table.lock().get(dirfd)?.clone();
+            let Some(dir) = file.pnode() else {
+                return Err(Errno::ENOTDIR);
+            };
+
+            dir
         } else {
             // Relative paths.
             self.mutable.lock().cwd.clone()
@@ -471,7 +478,7 @@ impl Process {
     /// Changes the current working directory of this process.
     pub fn chdir(&self, path: &[u8]) -> Result<(), Errno> {
         // Find the new directory.
-        let pnode = self.lookup_path(path)?;
+        let pnode = self.lookup_path(path, None)?;
         if !matches!(pnode.inode(), INode::Dir(_)) {
             return Err(Errno::ENOTDIR);
         }

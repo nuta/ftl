@@ -228,6 +228,10 @@ pub trait FileLike: Send + Sync {
         Err(Errno::ENOTDIR)
     }
 
+    fn pnode(&self) -> Option<Arc<PathNode>> {
+        None
+    }
+
     fn is_seekable(&self) -> bool {
         false
     }

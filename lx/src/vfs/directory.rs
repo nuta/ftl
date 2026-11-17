@@ -4,6 +4,7 @@ use alloc::vec::Vec;
 use crate::types::errno::Errno;
 use crate::vfs::FileLike;
 use crate::vfs::INode;
+use crate::vfs::PathNode;
 use crate::wait_queue::Sleep;
 
 /// An entry in a directory.
@@ -64,12 +65,13 @@ impl Directory for MemDir {
 
 /// An opened directory.
 pub struct OpenedDir {
+    pnode: Arc<PathNode>,
     dir: Arc<dyn Directory>,
 }
 
 impl OpenedDir {
-    pub fn new(dir: Arc<dyn Directory>) -> Self {
-        Self { dir }
+    pub fn new(pnode: Arc<PathNode>, dir: Arc<dyn Directory>) -> Self {
+        Self { pnode, dir }
     }
 }
 
@@ -86,5 +88,9 @@ impl FileLike for OpenedDir {
 
     fn readdir(&self, index: usize) -> Result<Option<DirEntry>, Errno> {
         self.dir.readdir(index)
+    }
+
+    fn pnode(&self) -> Option<Arc<PathNode>> {
+        Some(self.pnode.clone())
     }
 }

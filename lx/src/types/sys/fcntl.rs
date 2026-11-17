@@ -13,3 +13,4 @@ pub const O_RDWR: c_int = 2;
 pub const O_NONBLOCK: c_int = 0o4000;
 pub const O_DIRECTORY: c_int = 0o200000;
 pub const O_CLOEXEC: c_int = 0o2000000;
+pub const AT_FDCWD: c_int = -100;

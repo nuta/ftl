@@ -36,6 +36,7 @@ mod mprotect;
 mod munmap;
 mod nanosleep;
 mod open;
+mod openat;
 mod pipe;
 mod pipe2;
 mod poll;
@@ -97,6 +98,7 @@ use self::mprotect::sys_mprotect;
 use self::munmap::sys_munmap;
 use self::nanosleep::sys_nanosleep;
 use self::open::sys_open;
+use self::openat::sys_openat;
 use self::pipe::sys_pipe;
 use self::pipe2::sys_pipe2;
 use self::poll::sys_poll;
@@ -168,6 +170,7 @@ use crate::types::sys::syscall::SYS_MPROTECT;
 use crate::types::sys::syscall::SYS_MUNMAP;
 use crate::types::sys::syscall::SYS_NANOSLEEP;
 use crate::types::sys::syscall::SYS_OPEN;
+use crate::types::sys::syscall::SYS_OPENAT;
 use crate::types::sys::syscall::SYS_PIPE;
 use crate::types::sys::syscall::SYS_PIPE2;
 use crate::types::sys::syscall::SYS_POLL;
@@ -254,6 +257,7 @@ fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
             )
         }
         SYS_OPEN => sys_open(current, arg0 as *const u8, arg1 as c_int),
+        SYS_OPENAT => sys_openat(current, arg0 as c_int, arg1 as *const u8, arg2 as c_int),
         SYS_CLOSE => sys_close(current, arg0 as c_int),
         SYS_CHDIR => sys_chdir(current, arg0 as *const u8),
         SYS_GETCWD => sys_getcwd(current, arg0 as *mut u8, arg1),
