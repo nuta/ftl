@@ -39,9 +39,13 @@ fn parse_hex(s: &[u8]) -> Option<usize> {
     Some(value)
 }
 
+const S_IFMT: usize = 0o170000;
+const S_IFDIR: usize = 0o040000;
+
 pub struct File<'a> {
     pub name: &'a [u8],
     pub data: &'a [u8],
+    pub is_dir: bool,
 }
 
 pub struct InitFsLoader<'a> {
@@ -70,6 +74,9 @@ impl<'a> Iterator for InitFsLoader<'a> {
         let filesize_offset = self.offset + offset_of!(CpioHeader, filesize);
         let filesize = parse_hex(self.file.get(filesize_offset..filesize_offset + 8)?)?;
 
+        let mode_offset = self.offset + offset_of!(CpioHeader, mode);
+        let mode = parse_hex(self.file.get(mode_offset..mode_offset + 8)?)?;
+
         let name_offset = self.offset + size_of::<CpioHeader>();
         let mut name = self.file.get(name_offset..name_offset + namesize)?;
         if name.ends_with(b"\0") {
@@ -84,6 +91,10 @@ impl<'a> Iterator for InitFsLoader<'a> {
         let data = self.file.get(data_offset..data_offset + filesize)?;
 
         self.offset = align_up(data_offset + filesize, 4);
-        Some(File { name, data })
+        Some(File {
+            name,
+            data,
+            is_dir: mode & S_IFMT == S_IFDIR,
+        })
     }
 }

@@ -7,7 +7,7 @@ use crate::types::sys::poll::POLLOUT;
 use crate::vfs::DirEntry;
 use crate::vfs::FileLike;
 use crate::vfs::INode;
-use crate::vfs::StaticDir;
+use crate::vfs::MemDir;
 use crate::wait_queue::Sleep;
 
 /// `/dev/null`.
@@ -129,8 +129,8 @@ pub struct DevFs {
 }
 
 impl DevFs {
-    pub fn new() -> StaticDir<3> {
-        StaticDir::new([
+    pub fn new() -> MemDir {
+        MemDir::with_entries([
             DirEntry::new(b"null", INode::File(Arc::new(Null::new()))),
             DirEntry::new(b"zero", INode::File(Arc::new(Zero))),
             DirEntry::new(b"urandom", INode::File(Arc::new(URandom))),

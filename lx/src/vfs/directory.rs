@@ -1,4 +1,5 @@
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 
 use crate::types::errno::Errno;
 use crate::vfs::FileLike;
@@ -23,17 +24,29 @@ pub trait Directory: Send + Sync {
     fn readdir(&self, index: usize) -> Result<Option<DirEntry>, Errno>;
 }
 
-pub struct StaticDir<const N: usize> {
-    entries: [DirEntry; N],
+pub struct MemDir {
+    entries: Vec<DirEntry>,
 }
 
-impl<const N: usize> StaticDir<N> {
-    pub fn new(entries: [DirEntry; N]) -> Self {
-        Self { entries }
+impl MemDir {
+    pub fn new() -> Self {
+        Self {
+            entries: Vec::new(),
+        }
+    }
+
+    pub fn with_entries(entries: impl Into<Vec<DirEntry>>) -> Self {
+        Self {
+            entries: entries.into(),
+        }
+    }
+
+    pub fn add(&mut self, entry: DirEntry) {
+        self.entries.push(entry);
     }
 }
 
-impl<const N: usize> Directory for StaticDir<N> {
+impl Directory for MemDir {
     fn lookup(&self, name: &[u8]) -> Result<INode, Errno> {
         for entry in self.entries.iter() {
             if entry.name == name {

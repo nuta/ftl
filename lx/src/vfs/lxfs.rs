@@ -6,7 +6,7 @@ use ftl::vmo::Vmo;
 use crate::net::TcpIp;
 use crate::vfs::DirEntry;
 use crate::vfs::INode;
-use crate::vfs::StaticDir;
+use crate::vfs::MemDir;
 use crate::zone::Fork;
 
 pub struct LxFs {
@@ -14,12 +14,12 @@ pub struct LxFs {
 }
 
 impl LxFs {
-    pub fn new(quota: Arc<Quota>, image: Vmo, network: Arc<TcpIp>) -> StaticDir<1> {
-        let fork_dir = StaticDir::new([DirEntry::new(
+    pub fn new(quota: Arc<Quota>, image: Vmo, network: Arc<TcpIp>) -> MemDir {
+        let fork_dir = MemDir::with_entries([DirEntry::new(
             b"fork",
             INode::File(Arc::new(Fork::new(quota, image, network))),
         )]);
 
-        StaticDir::new([DirEntry::new(b"zone", INode::Dir(Arc::new(fork_dir)))])
+        MemDir::with_entries([DirEntry::new(b"zone", INode::Dir(Arc::new(fork_dir)))])
     }
 }

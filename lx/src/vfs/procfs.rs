@@ -3,7 +3,7 @@ use alloc::sync::Arc;
 use crate::vfs::DirEntry;
 use crate::vfs::EmbeddedFile;
 use crate::vfs::INode;
-use crate::vfs::StaticDir;
+use crate::vfs::MemDir;
 
 /// The contents of `/proc/version`.
 const VERSION: &[u8] = concat!("FTL version ", env!("CARGO_PKG_VERSION"), "\n").as_bytes();
@@ -14,8 +14,8 @@ pub struct ProcFs {
 }
 
 impl ProcFs {
-    pub fn new() -> StaticDir<1> {
-        StaticDir::new([DirEntry::new(
+    pub fn new() -> MemDir {
+        MemDir::with_entries([DirEntry::new(
             b"version",
             INode::File(Arc::new(EmbeddedFile::new(VERSION))),
         )])
