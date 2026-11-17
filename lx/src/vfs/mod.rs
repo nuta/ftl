@@ -228,6 +228,10 @@ pub trait FileLike: Send + Sync {
         Err(Errno::ENOTDIR)
     }
 
+    fn is_seekable(&self) -> bool {
+        false
+    }
+
     fn size(&self) -> Result<usize, Errno> {
         Err(Errno::ESPIPE)
     }

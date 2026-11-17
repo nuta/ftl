@@ -44,6 +44,10 @@ impl FileLike for Null {
         Ok(buf.len())
     }
 
+    fn is_seekable(&self) -> bool {
+        true
+    }
+
     fn size(&self) -> Result<usize, Errno> {
         Ok(0)
     }
@@ -79,6 +83,10 @@ impl FileLike for Zero {
         Ok(buf.len())
     }
 
+    fn is_seekable(&self) -> bool {
+        true
+    }
+
     fn size(&self) -> Result<usize, Errno> {
         Ok(0)
     }
@@ -112,6 +120,10 @@ impl FileLike for URandom {
     ) -> Result<usize, Errno> {
         // Discard the data.
         Ok(buf.len())
+    }
+
+    fn is_seekable(&self) -> bool {
+        true
     }
 
     fn size(&self) -> Result<usize, Errno> {

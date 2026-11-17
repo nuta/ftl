@@ -39,6 +39,7 @@ mod open;
 mod pipe;
 mod pipe2;
 mod poll;
+mod pread64;
 mod read;
 mod recvfrom;
 mod rt_sigaction;
@@ -99,6 +100,7 @@ use self::open::sys_open;
 use self::pipe::sys_pipe;
 use self::pipe2::sys_pipe2;
 use self::poll::sys_poll;
+use self::pread64::sys_pread64;
 use self::read::sys_read;
 use self::recvfrom::sys_recvfrom;
 use self::rt_sigaction::sys_rt_sigaction;
@@ -169,6 +171,7 @@ use crate::types::sys::syscall::SYS_OPEN;
 use crate::types::sys::syscall::SYS_PIPE;
 use crate::types::sys::syscall::SYS_PIPE2;
 use crate::types::sys::syscall::SYS_POLL;
+use crate::types::sys::syscall::SYS_PREAD64;
 use crate::types::sys::syscall::SYS_READ;
 use crate::types::sys::syscall::SYS_RECVFROM;
 use crate::types::sys::syscall::SYS_RT_SIGACTION;
@@ -219,6 +222,15 @@ fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
         SYS_WRITE => sys_write(current, arg0 as c_int, arg1 as *const c_void, arg2),
         SYS_READ => sys_read(current, arg0 as c_int, arg1 as *mut c_void, arg2),
         SYS_LSEEK => sys_lseek(current, arg0 as c_int, arg1 as off_t, arg2 as c_int),
+        SYS_PREAD64 => {
+            sys_pread64(
+                current,
+                arg0 as c_int,
+                arg1 as *mut c_void,
+                arg2,
+                frame.arg3() as off_t,
+            )
+        }
         SYS_RECVFROM => {
             sys_recvfrom(
                 current,

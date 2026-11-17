@@ -93,6 +93,14 @@ impl OpenFile {
         Ok(n)
     }
 
+    pub fn pread(&self, buf: &mut [u8], offset: usize, sleep: Sleep<'_>) -> Result<usize, Errno> {
+        if !self.file.is_seekable() {
+            return Err(Errno::ESPIPE);
+        }
+
+        self.file.read(buf, offset, self.nonblocking(), sleep)
+    }
+
     pub fn do_write(&self, buf: &[u8], sleep: Sleep<'_>) -> Result<usize, Errno> {
         let offset = self.mutable.lock().offset;
         let n = self.file.write(buf, offset, self.nonblocking(), sleep)?;
@@ -140,13 +148,14 @@ impl OpenFile {
     pub fn seek(&self, offset: off_t, whence: c_int) -> Result<off_t, Errno> {
         let offset_isize = offset.try_into().map_err(|_| Errno::EINVAL)?;
 
-        // Return ESPIPE if the file is not seekable.
-        let size = self.file.size()?;
+        if !self.file.is_seekable() {
+            return Err(Errno::ESPIPE);
+        }
 
         let base = match whence {
             SEEK_SET => 0,
             SEEK_CUR => self.mutable.lock().offset,
-            SEEK_END => size,
+            SEEK_END => self.file.size()?,
             _ => return Err(Errno::EINVAL),
         };
 

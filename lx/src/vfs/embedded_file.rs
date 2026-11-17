@@ -33,6 +33,10 @@ impl FileLike for EmbeddedFile {
         Ok(copy_len)
     }
 
+    fn is_seekable(&self) -> bool {
+        true
+    }
+
     fn size(&self) -> Result<usize, Errno> {
         Ok(self.data.len())
     }
