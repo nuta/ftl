@@ -7,8 +7,10 @@ use core::mem::MaybeUninit;
 use core::slice;
 
 use ftl::quota::Quota;
+use ftl::trace;
 use ftl::vmo::Vmo;
 use ftl::vmspace::VmSpace;
+use ftl::warn;
 use ftl_elf::Elf;
 use ftl_elf::PhdrType;
 use ftl_types::error::ErrorCode;
@@ -21,6 +23,8 @@ use ftl_utils::spinlock::SpinLock;
 
 use crate::types::c_int;
 use crate::types::errno::Errno;
+use crate::types::sys::auxv::AT_BASE;
+use crate::types::sys::auxv::AT_ENTRY;
 use crate::types::sys::auxv::AT_PAGESZ;
 use crate::types::sys::auxv::AT_PHDR;
 use crate::types::sys::auxv::AT_PHENT;
@@ -31,6 +35,8 @@ use crate::types::sys::mman::PROT_EXEC;
 use crate::types::sys::mman::PROT_READ;
 use crate::types::sys::mman::PROT_WRITE;
 use crate::vfs::FileLike;
+use crate::vfs::INode;
+use crate::vfs::PathNode;
 use crate::wait_queue::Sleep;
 
 pub(crate) const PAGE_SIZE: usize = 4096; // TODO: system call?
@@ -39,6 +45,8 @@ const STACK_SIZE: usize = 256 * 1024;
 const BRK_END: usize = STACK_BOTTOM;
 const MMAP_START: usize = STACK_BOTTOM + STACK_SIZE;
 const USER_END: usize = 0x3000_0000;
+const PIE_BASE: usize = 0x0040_0000;
+const INTERP_BASE: usize = 0x2f00_0000;
 
 #[derive(Clone, Copy)]
 struct Brk {
@@ -204,13 +212,14 @@ impl Vm {
     pub fn create(
         quota: &Arc<Quota>,
         root_vmspace: &VmSpace,
+        root_dir: &Arc<PathNode>,
         elf_file: Arc<dyn FileLike>,
         argv: &[&[u8]],
     ) -> Result<(Vm, usize, usize), Errno> {
         let vmspace = root_vmspace.try_clone(quota)?;
 
         let mut mappings = Vec::new();
-        let elf = load_elf(quota, &vmspace, &elf_file, &mut mappings)?;
+        let elf = load_elf(quota, &vmspace, &elf_file, &mut mappings, PIE_BASE)?;
 
         // Find the end of the program segments.
         // TODO: Can we guarantee that mappings is not empty?
@@ -221,8 +230,36 @@ impl Vm {
             .unwrap_or(0);
         let brk_end = BRK_END;
 
+        // If it is a dynamic executable, load the interpreter ELF.
+        let interp = match &elf.interp {
+            Some(path) => {
+                if !path.starts_with(b"/") {
+                    warn!(
+                        "relative interpreter path is not supported: {}",
+                        path.escape_ascii()
+                    );
+                    return Err(Errno::ENOEXEC);
+                }
+
+                let INode::File(interp_file) = root_dir.lookup(path)?.inode().clone() else {
+                    return Err(Errno::EISDIR);
+                };
+
+                let interp = load_elf(quota, &vmspace, &interp_file, &mut mappings, INTERP_BASE)?;
+                Some(interp)
+            }
+            None => None,
+        };
+
         let stack = Vmo::create_zeroed(quota, STACK_SIZE)?;
-        let sp = prepare_stack(&stack, STACK_BOTTOM, STACK_SIZE, argv, &elf)?;
+        let sp = prepare_stack(
+            &stack,
+            STACK_BOTTOM,
+            STACK_SIZE,
+            argv,
+            &elf,
+            interp.as_ref(),
+        )?;
 
         let attrs = PageAttrs::READ | PageAttrs::WRITE;
         vmspace.map(&stack, STACK_BOTTOM, 0, STACK_SIZE, attrs)?;
@@ -238,7 +275,12 @@ impl Vm {
             }),
         };
 
-        Ok((vm, elf.entry, sp))
+        let entry = match &interp {
+            Some(interp) => interp.entry,
+            None => elf.entry,
+        };
+
+        Ok((vm, entry, sp))
     }
 
     pub fn quota(&self) -> &Quota {
@@ -619,9 +661,11 @@ fn read_uninit<T: Copy>(
 
 struct LoadedElf {
     entry: usize,
+    base: usize,
     phdr: usize,
     phent: usize,
     phnum: usize,
+    interp: Option<Vec<u8>>,
 }
 
 fn load_elf(
@@ -629,6 +673,7 @@ fn load_elf(
     vmspace: &VmSpace,
     elf_file: &Arc<dyn FileLike>,
     mappings: &mut Vec<Mapping>,
+    dyn_base: usize,
 ) -> Result<LoadedElf, Errno> {
     let mut ehdr = MaybeUninit::<ftl_elf::Ehdr>::uninit();
     let ehdr = read_uninit(elf_file.as_ref(), 0, &mut ehdr)?;
@@ -647,18 +692,44 @@ fn load_elf(
     let mut header_region = vec![0u8; phdrs_end]; // TODO: Use MaybeUninit
     read_exact(elf_file.as_ref(), 0, &mut header_region)?;
 
-    let elf = Elf::parse(&header_region, ftl_elf::ET_EXEC).map_err(|_| Errno::ENOEXEC)?;
+    let (etype, base) = if ehdr.e_type == ftl_elf::ET_DYN {
+        (ftl_elf::ET_DYN, dyn_base)
+    } else {
+        (ftl_elf::ET_EXEC, 0)
+    };
+
+    let elf = Elf::parse(&header_region, etype).map_err(|_| Errno::ENOEXEC)?;
     let mut phdr_vaddr = 0;
+    let mut interp = None;
     for phdr in elf.phdrs {
         if phdr.p_type == PhdrType::Phdr as u32 {
-            phdr_vaddr = phdr.p_vaddr as usize;
+            phdr_vaddr = base + phdr.p_vaddr as usize;
+        }
+
+        // Read the interpreter path if present.
+        if phdr.p_type == PhdrType::Interp as u32 {
+            let len = phdr.p_filesz as usize;
+            if len > 512 {
+                trace!("too long interpreter path: {}", len);
+                return Err(Errno::ENOEXEC);
+            }
+
+            let mut path = vec![0u8; len];
+            read_exact(elf_file.as_ref(), phdr.p_offset as usize, &mut path)?;
+            if path.last() == Some(&0) {
+                path.pop();
+            }
+
+            interp = Some(path);
         }
 
         if phdr.p_type != PhdrType::Load as u32 {
             continue;
         }
 
-        let vaddr = phdr.p_vaddr as usize;
+        let vaddr = base
+            .checked_add(phdr.p_vaddr as usize)
+            .ok_or(Errno::ENOEXEC)?;
         let region_base = align_down(vaddr, PAGE_SIZE);
         let page_offset = vaddr - region_base;
         let region_len = align_up(page_offset + phdr.p_memsz as usize, PAGE_SIZE);
@@ -708,10 +779,12 @@ fn load_elf(
     }
 
     Ok(LoadedElf {
-        entry: elf.ehdr.e_entry as usize,
+        entry: base + elf.ehdr.e_entry as usize,
+        base,
         phdr: phdr_vaddr,
         phent: elf.ehdr.e_phentsize as usize,
         phnum: elf.ehdr.e_phnum as usize,
+        interp,
     })
 }
 
@@ -721,6 +794,7 @@ fn prepare_stack(
     stack_size: usize,
     argv: &[&[u8]],
     elf: &LoadedElf,
+    interp: Option<&LoadedElf>,
 ) -> Result<usize, Errno> {
     // FIXME: Reject too long argv / envp / auxv.
     let mut words = Vec::new();
@@ -758,6 +832,12 @@ fn prepare_stack(
     words.extend([AT_PHNUM, elf.phnum]);
     words.extend([AT_PAGESZ, PAGE_SIZE]);
     words.extend([AT_RANDOM, random_addr]);
+    words.extend([AT_ENTRY, elf.entry]);
+
+    if let Some(interp) = interp {
+        words.extend([AT_BASE, interp.base]);
+    }
+
     words.extend([0, 0]); // AT_NULL
 
     // Align to 16 bytes (x64 ABI requirement).

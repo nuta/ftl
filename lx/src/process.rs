@@ -92,7 +92,8 @@ impl Process {
         argv: &[&[u8]],
     ) -> Result<Arc<Process>, Errno> {
         let vmspace = global.root_vmspace.try_clone(&global.quota)?;
-        let (vm, entry, sp) = Vm::create(&global.quota, &vmspace, elf_file, argv)?;
+        let (vm, entry, sp) =
+            Vm::create(&global.quota, &vmspace, &global.root_dir, elf_file, argv)?;
 
         let mut fd_table = FdTable::new(1024); // TODO: make this configurable
         let tty: Arc<dyn FileLike> = match console {
@@ -129,6 +130,7 @@ impl Process {
         let (vm, entry, sp) = Vm::create(
             &self.global.quota,
             &self.global.root_vmspace,
+            &self.global.root_dir,
             elf_file,
             argv,
         )?;
