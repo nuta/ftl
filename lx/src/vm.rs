@@ -215,6 +215,7 @@ impl Vm {
         root_dir: &Arc<PathNode>,
         elf_file: Arc<dyn FileLike>,
         argv: &[&[u8]],
+        envp: &[&[u8]],
     ) -> Result<(Vm, usize, usize), Errno> {
         let vmspace = root_vmspace.try_clone(quota)?;
 
@@ -257,6 +258,7 @@ impl Vm {
             STACK_BOTTOM,
             STACK_SIZE,
             argv,
+            envp,
             &elf,
             interp.as_ref(),
         )?;
@@ -832,6 +834,7 @@ fn prepare_stack(
     sp_bottom: usize,
     stack_size: usize,
     argv: &[&[u8]],
+    envp: &[&[u8]],
     elf: &LoadedElf,
     interp: Option<&LoadedElf>,
 ) -> Result<usize, Errno> {
@@ -841,23 +844,29 @@ fn prepare_stack(
     // argc
     words.push(argv.len());
 
-    // argv
-    let strings_len: usize = argv.iter().map(|arg| arg.len() + 1).sum();
+    // The total size of argv and envp strings.
+    let mut strings_len = 0;
+    for strings in [argv, envp] {
+        for s in strings {
+            strings_len += s.len() + 1;
+        }
+    }
+
+    // Write argv and envp strings to the stack.
     let args_offset = stack_size
         .checked_sub(strings_len + AT_RANDOM_LEN)
         .ok_or(Errno::ENOMEM)?;
     let mut offset = args_offset;
-    for arg in argv {
-        stack.write(offset, arg)?;
-        words.push(sp_bottom + offset);
-        offset += arg.len();
-        stack.write(offset, &[0])?;
-        offset += 1;
+    for strings in [argv, envp] {
+        for s in strings {
+            stack.write(offset, s)?;
+            words.push(sp_bottom + offset);
+            offset += s.len();
+            stack.write(offset, &[0])?;
+            offset += 1;
+        }
+        words.push(0); // NULL (terminator)
     }
-    words.push(0); // NULL (terminator)
-
-    // TODO: envp
-    words.push(0); // NULL (terminator)
 
     // Read random bytes for AT_RANDOM.
     let mut random = [0u8; AT_RANDOM_LEN];

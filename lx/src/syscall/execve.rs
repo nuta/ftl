@@ -10,24 +10,31 @@ use crate::thread::LxThread;
 use crate::types::errno::Errno;
 use crate::vfs::EmbeddedFile;
 
-pub fn sys_execve(
-    current: &LxThread,
-    path: *const u8,
-    argv: *const *const u8,
-    _envp: *const *const u8,
-) -> Result<SyscallResult, Errno> {
-    let mut argv_vec = Vec::new();
-    if !argv.is_null() {
+fn read_strings<'a>(array: *const *const u8) -> Vec<&'a [u8]> {
+    let mut strings = Vec::new();
+    if !array.is_null() {
         for i in 0.. {
-            let ptr = unsafe { *argv.add(i) };
+            let ptr = unsafe { *array.add(i) };
             if ptr.is_null() {
                 break;
             }
 
-            let arg = unsafe { CStr::from_ptr(ptr.cast()) };
-            argv_vec.push(arg.to_bytes());
+            let s = unsafe { CStr::from_ptr(ptr.cast()) };
+            strings.push(s.to_bytes());
         }
     }
+
+    strings
+}
+
+pub fn sys_execve(
+    current: &LxThread,
+    path: *const u8,
+    argv: *const *const u8,
+    envp: *const *const u8,
+) -> Result<SyscallResult, Errno> {
+    let argv_vec = read_strings(argv);
+    let envp_vec = read_strings(envp);
 
     if argv_vec.is_empty() {
         return Err(Errno::EINVAL);
@@ -45,7 +52,8 @@ pub fn sys_execve(
         .ok_or(Errno::ENOENT)?;
     let elf_file = Arc::new(EmbeddedFile::new(initfs_file.data));
 
-    // TODO: envp support
-    current.process().exec(current, elf_file, &argv_vec)?;
+    current
+        .process()
+        .exec(current, elf_file, &argv_vec, &envp_vec)?;
     Ok(SyscallResult::Exit(ExitReason::Success))
 }
