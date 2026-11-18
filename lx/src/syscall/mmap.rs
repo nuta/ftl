@@ -12,15 +12,26 @@ pub fn sys_mmap(
     len: usize,
     prot: c_int,
     flags: c_int,
-    _fd: c_int,
-    _offset: i64,
+    fd: c_int,
+    offset: i64,
 ) -> Result<SyscallResult, Errno> {
+    let fixed = flags & MAP_FIXED != 0;
     let addr = if flags & MAP_ANONYMOUS != 0 {
-        let fixed = flags & MAP_FIXED != 0;
         current.vm().mmap_anonymous(addr, len, prot, fixed)?
     } else {
-        // TODO: File-backed mappings are not supported yet.
-        return Err(Errno::ENOSYS);
+        let file = {
+            let process = current.process();
+            let fd_table = process.fd_table().lock();
+            fd_table.get(fd)?.file().clone()
+        };
+
+        let Ok(offset) = usize::try_from(offset) else {
+            return Err(Errno::EINVAL);
+        };
+
+        current
+            .vm()
+            .mmap_file(addr, len, prot, fixed, file, offset)?
     };
 
     Ok(SyscallResult::Done(addr as c_long))

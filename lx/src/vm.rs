@@ -298,6 +298,41 @@ impl Vm {
         prot: c_int,
         fixed: bool,
     ) -> Result<usize, Errno> {
+        self.mmap(addr, len, prot, fixed, None)
+    }
+
+    pub fn mmap_file(
+        &self,
+        addr: usize,
+        len: usize,
+        prot: c_int,
+        fixed: bool,
+        file: Arc<dyn FileLike>,
+        offset: usize,
+    ) -> Result<usize, Errno> {
+        if !is_aligned(offset, PAGE_SIZE) {
+            return Err(Errno::EINVAL);
+        }
+
+        let file_size = file.size().map_err(|_| Errno::ENODEV)?;
+        let offset_end = min(file_size, offset.saturating_add(len));
+        let backing_file = BackingFile {
+            file,
+            offset,
+            offset_end: max(offset, offset_end),
+        };
+
+        self.mmap(addr, len, prot, fixed, Some(backing_file))
+    }
+
+    fn mmap(
+        &self,
+        addr: usize,
+        len: usize,
+        prot: c_int,
+        fixed: bool,
+        file: Option<BackingFile>,
+    ) -> Result<usize, Errno> {
         if len == 0 {
             return Err(Errno::EINVAL);
         }
@@ -306,7 +341,10 @@ impl Vm {
         let attrs = attrs_from_prot(prot);
 
         // Allocate a VMO.
-        let vmo = Vmo::create_zeroed(&self.quota, len)?;
+        let vmo = match file {
+            Some(_) => Vmo::create_user(&self.quota, len)?,
+            None => Vmo::create_zeroed(&self.quota, len)?,
+        };
 
         // Find a space to map the new region. This must be done while holding
         // the lock to prevent other threads from picking the same address.
@@ -348,7 +386,8 @@ impl Vm {
         };
 
         self.vmspace.map(&vmo, uaddr, 0, len, attrs)?;
-        let mapping = Mapping::new(uaddr, len, attrs, vmo);
+        let mut mapping = Mapping::new(uaddr, len, attrs, vmo);
+        mapping.file = file;
         mutable.mappings.push(mapping);
 
         Ok(uaddr)

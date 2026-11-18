@@ -67,6 +67,10 @@ impl OpenFile {
         mutable.close_listeners.push(listener);
     }
 
+    pub fn file(&self) -> &Arc<dyn FileLike> {
+        &self.file
+    }
+
     pub fn flags(&self) -> c_int {
         self.mutable.lock().flags
     }
