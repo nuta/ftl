@@ -10,6 +10,7 @@ use crate::types::c_ulong;
 use crate::types::errno::Errno;
 use crate::types::signal::SIGCHLD;
 use crate::types::sys::sched::CLONE_CHILD_CLEARTID;
+use crate::types::sys::sched::CLONE_CHILD_SETTID;
 use crate::types::sys::sched::CLONE_DETACHED;
 use crate::types::sys::sched::CLONE_FILES;
 use crate::types::sys::sched::CLONE_FLAGS_MASK;
@@ -80,8 +81,13 @@ fn clone_thread(
         .spawn_thread(current, frame, stack, tls, parent_tid, clear_child_tid)
 }
 
-fn clone_process(current: &LxThread, frame: &SyscallFrame, flags: c_ulong) -> Result<PId, Errno> {
-    const SUPPORTED_FLAGS: c_ulong = 0;
+fn clone_process(
+    current: &LxThread,
+    frame: &SyscallFrame,
+    flags: c_ulong,
+    child_tid: *mut c_int,
+) -> Result<PId, Errno> {
+    const SUPPORTED_FLAGS: c_ulong = CLONE_CHILD_SETTID | CLONE_CHILD_CLEARTID;
 
     let exit_signal = (flags & CLONE_FLAGS_MASK) as c_int;
     if exit_signal != SIGCHLD {
@@ -95,7 +101,21 @@ fn clone_process(current: &LxThread, frame: &SyscallFrame, flags: c_ulong) -> Re
         return Err(Errno::EINVAL);
     }
 
-    current.process().fork(current, frame)
+    let set_child_tid = if flags & CLONE_CHILD_SETTID != 0 {
+        Some(child_tid.addr())
+    } else {
+        None
+    };
+
+    let clear_child_tid = if flags & CLONE_CHILD_CLEARTID != 0 {
+        Some(child_tid.addr())
+    } else {
+        None
+    };
+
+    current
+        .process()
+        .fork(current, frame, set_child_tid, clear_child_tid)
 }
 
 pub fn sys_clone(
@@ -115,7 +135,7 @@ pub fn sys_clone(
             return Err(Errno::EINVAL);
         }
 
-        clone_process(current, frame, flags)?
+        clone_process(current, frame, flags, child_tid)?
     };
 
     Ok(SyscallResult::Done(pid.as_int() as c_long))

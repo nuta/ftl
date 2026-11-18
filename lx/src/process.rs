@@ -207,7 +207,13 @@ impl Process {
         Ok(process)
     }
 
-    pub fn fork(self: &Arc<Self>, current: &LxThread, frame: &SyscallFrame) -> Result<PId, Errno> {
+    pub fn fork(
+        self: &Arc<Self>,
+        current: &LxThread,
+        frame: &SyscallFrame,
+        set_child_tid: Option<usize>,
+        clear_child_tid: Option<usize>,
+    ) -> Result<PId, Errno> {
         let fd_table = self.fd_table.lock().clone();
 
         // Set the return value for the child process.
@@ -241,6 +247,13 @@ impl Process {
                 current.copy_regs_to(&thread, RegsKind::FsBase)?;
                 current.copy_regs_to(&thread, RegsKind::FpAndVector)?;
                 thread.set_signal_mask(current.signal_mask());
+                thread.set_clear_child_tid(clear_child_tid);
+
+                if let Some(uaddr) = set_child_tid {
+                    let tgid_bytes = tgid.as_int().to_ne_bytes();
+                    thread.vm().write(uaddr, &tgid_bytes)?;
+                }
+
                 Ok(thread.push_syscall_frame(child_frame))
             },
         )?;
