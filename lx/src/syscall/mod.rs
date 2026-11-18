@@ -31,6 +31,7 @@ mod getdents64;
 mod getpid;
 mod getrandom;
 mod gettid;
+mod getuid;
 mod ioctl;
 mod kill;
 mod listen;
@@ -101,6 +102,7 @@ use self::getdents64::sys_getdents64;
 use self::getpid::sys_getpid;
 use self::getrandom::sys_getrandom;
 use self::gettid::sys_gettid;
+use self::getuid::sys_getuid;
 use self::ioctl::sys_ioctl;
 use self::kill::sys_kill;
 use self::listen::sys_listen;
@@ -180,9 +182,13 @@ use crate::types::sys::syscall::SYS_FSTAT;
 use crate::types::sys::syscall::SYS_FUTEX;
 use crate::types::sys::syscall::SYS_GETCWD;
 use crate::types::sys::syscall::SYS_GETDENTS64;
+use crate::types::sys::syscall::SYS_GETEGID;
+use crate::types::sys::syscall::SYS_GETEUID;
+use crate::types::sys::syscall::SYS_GETGID;
 use crate::types::sys::syscall::SYS_GETPID;
 use crate::types::sys::syscall::SYS_GETRANDOM;
 use crate::types::sys::syscall::SYS_GETTID;
+use crate::types::sys::syscall::SYS_GETUID;
 use crate::types::sys::syscall::SYS_IOCTL;
 use crate::types::sys::syscall::SYS_KILL;
 use crate::types::sys::syscall::SYS_LISTEN;
@@ -377,6 +383,7 @@ fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
         SYS_FORK | SYS_VFORK => sys_fork(current, frame),
         SYS_GETPID => sys_getpid(current),
         SYS_GETTID => sys_gettid(current),
+        SYS_GETUID | SYS_GETEUID | SYS_GETGID | SYS_GETEGID => sys_getuid(current),
         SYS_FUTEX => {
             sys_futex(
                 current,
