@@ -47,6 +47,7 @@ mod pipe2;
 mod poll;
 mod pread64;
 mod prlimit64;
+mod pselect6;
 mod read;
 mod recvfrom;
 mod rt_sigaction;
@@ -116,6 +117,7 @@ use self::pipe2::sys_pipe2;
 use self::poll::sys_poll;
 use self::pread64::sys_pread64;
 use self::prlimit64::sys_prlimit64;
+use self::pselect6::sys_pselect6;
 use self::read::sys_read;
 use self::recvfrom::sys_recvfrom;
 use self::rt_sigaction::sys_rt_sigaction;
@@ -197,6 +199,7 @@ use crate::types::sys::syscall::SYS_PIPE2;
 use crate::types::sys::syscall::SYS_POLL;
 use crate::types::sys::syscall::SYS_PREAD64;
 use crate::types::sys::syscall::SYS_PRLIMIT64;
+use crate::types::sys::syscall::SYS_PSELECT6;
 use crate::types::sys::syscall::SYS_READ;
 use crate::types::sys::syscall::SYS_RECVFROM;
 use crate::types::sys::syscall::SYS_RT_SIGACTION;
@@ -349,6 +352,16 @@ fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
         SYS_PIPE => sys_pipe(current, arg0 as *mut c_int),
         SYS_PIPE2 => sys_pipe2(current, arg0 as *mut c_int, arg1 as c_int),
         SYS_POLL => sys_poll(current, arg0 as *mut PollFd, arg1 as nfds_t, arg2 as c_int),
+        SYS_PSELECT6 => {
+            sys_pselect6(
+                current,
+                arg0 as c_int,
+                arg1 as *mut u8,
+                arg2 as *mut u8,
+                frame.arg3() as *mut u8,
+                frame.arg4() as *const TimeSpec,
+            )
+        }
         SYS_WRITEV => sys_writev(current, arg0 as c_int, arg1 as *const IoVec, arg2 as c_int),
         SYS_CLONE => {
             sys_clone(

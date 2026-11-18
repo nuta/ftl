@@ -11,6 +11,7 @@ pub const TIMER_ABSTIME: c_int = 1;
 pub type time_t = c_long;
 
 #[allow(non_camel_case_types)]
+#[derive(Debug, Clone, Copy)]
 #[repr(C)]
 pub struct TimeSpec {
     pub tv_sec: time_t,

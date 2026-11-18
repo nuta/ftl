@@ -55,6 +55,7 @@ pub const SYS_CLOCK_NANOSLEEP: usize = 230;
 pub const SYS_EXIT_GROUP: usize = 231;
 pub const SYS_EPOLL_WAIT: usize = 232;
 pub const SYS_EPOLL_CTL: usize = 233;
+pub const SYS_PSELECT6: usize = 270;
 pub const SYS_SET_ROBUST_LIST: usize = 273;
 pub const SYS_EPOLL_PWAIT: usize = 281;
 pub const SYS_EVENTFD: usize = 284;
