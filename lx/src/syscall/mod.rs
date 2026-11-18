@@ -49,6 +49,7 @@ mod rt_sigaction;
 mod rt_sigprocmask;
 mod rt_sigreturn;
 mod sendto;
+mod set_robust_list;
 mod set_tid_address;
 mod setsockopt;
 mod shutdown;
@@ -113,6 +114,7 @@ use self::rt_sigaction::sys_rt_sigaction;
 use self::rt_sigprocmask::sys_rt_sigprocmask;
 use self::rt_sigreturn::sys_rt_sigreturn;
 use self::sendto::sys_sendto;
+use self::set_robust_list::sys_set_robust_list;
 use self::set_tid_address::sys_set_tid_address;
 use self::setsockopt::sys_setsockopt;
 use self::shutdown::sys_shutdown;
@@ -188,6 +190,7 @@ use crate::types::sys::syscall::SYS_RT_SIGACTION;
 use crate::types::sys::syscall::SYS_RT_SIGPROCMASK;
 use crate::types::sys::syscall::SYS_RT_SIGRETURN;
 use crate::types::sys::syscall::SYS_SENDTO;
+use crate::types::sys::syscall::SYS_SET_ROBUST_LIST;
 use crate::types::sys::syscall::SYS_SET_TID_ADDRESS;
 use crate::types::sys::syscall::SYS_SETSOCKOPT;
 use crate::types::sys::syscall::SYS_SHUTDOWN;
@@ -432,6 +435,7 @@ fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
         SYS_FCNTL => sys_fcntl(current, arg0 as c_int, arg1 as c_int, arg2 as c_long),
         SYS_ARCH_PRCTL => sys_arch_prctl(current, arg0 as c_int, arg1),
         SYS_SET_TID_ADDRESS => sys_set_tid_address(current, arg0 as *mut c_int),
+        SYS_SET_ROBUST_LIST => sys_set_robust_list(current, arg0 as *const c_void, arg1),
         SYS_EXIT => sys_exit(current, arg0 as c_int),
         SYS_EXIT_GROUP => sys_exit_group(current, arg0 as c_int),
         _ => Err(Errno::ENOSYS),
