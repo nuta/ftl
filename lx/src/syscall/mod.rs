@@ -1,5 +1,6 @@
 mod accept;
 mod accept4;
+mod access;
 mod arch_prctl;
 mod bind;
 mod brk;
@@ -20,6 +21,7 @@ mod eventfd2;
 mod execve;
 mod exit;
 mod exit_group;
+mod faccessat;
 mod fcntl;
 mod fork;
 mod fstat;
@@ -66,6 +68,7 @@ use ftl_types::thread::FaultFrame;
 
 use self::accept::sys_accept;
 use self::accept4::sys_accept4;
+use self::access::sys_access;
 use self::arch_prctl::sys_arch_prctl;
 use self::bind::sys_bind;
 use self::brk::sys_brk;
@@ -86,6 +89,7 @@ use self::eventfd2::sys_eventfd2;
 use self::execve::sys_execve;
 use self::exit::sys_exit;
 use self::exit_group::sys_exit_group;
+use self::faccessat::sys_faccessat;
 use self::fcntl::sys_fcntl;
 use self::fork::sys_fork;
 use self::fstat::sys_fstat;
@@ -144,6 +148,7 @@ use crate::types::sys::resource::RLimit;
 use crate::types::sys::stat::Stat;
 use crate::types::sys::syscall::SYS_ACCEPT;
 use crate::types::sys::syscall::SYS_ACCEPT4;
+use crate::types::sys::syscall::SYS_ACCESS;
 use crate::types::sys::syscall::SYS_ARCH_PRCTL;
 use crate::types::sys::syscall::SYS_BIND;
 use crate::types::sys::syscall::SYS_BRK;
@@ -164,6 +169,7 @@ use crate::types::sys::syscall::SYS_EVENTFD2;
 use crate::types::sys::syscall::SYS_EXECVE;
 use crate::types::sys::syscall::SYS_EXIT;
 use crate::types::sys::syscall::SYS_EXIT_GROUP;
+use crate::types::sys::syscall::SYS_FACCESSAT;
 use crate::types::sys::syscall::SYS_FCNTL;
 use crate::types::sys::syscall::SYS_FORK;
 use crate::types::sys::syscall::SYS_FSTAT;
@@ -271,6 +277,8 @@ fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
             )
         }
         SYS_OPEN => sys_open(current, arg0 as *const u8, arg1 as c_int),
+        SYS_ACCESS => sys_access(current, arg0 as *const u8, arg1 as c_int),
+        SYS_FACCESSAT => sys_faccessat(current, arg0 as c_int, arg1 as *const u8, arg2 as c_int),
         SYS_OPENAT => sys_openat(current, arg0 as c_int, arg1 as *const u8, arg2 as c_int),
         SYS_FSTAT => sys_fstat(current, arg0 as c_int, arg1 as *mut Stat),
         SYS_NEWFSTATAT => {
