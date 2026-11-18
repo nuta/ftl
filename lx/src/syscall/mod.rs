@@ -22,6 +22,7 @@ mod exit;
 mod exit_group;
 mod fcntl;
 mod fork;
+mod fstat;
 mod futex;
 mod getcwd;
 mod getdents64;
@@ -35,6 +36,7 @@ mod mmap;
 mod mprotect;
 mod munmap;
 mod nanosleep;
+mod newfstatat;
 mod open;
 mod openat;
 mod pipe;
@@ -84,6 +86,7 @@ use self::exit::sys_exit;
 use self::exit_group::sys_exit_group;
 use self::fcntl::sys_fcntl;
 use self::fork::sys_fork;
+use self::fstat::sys_fstat;
 use self::futex::sys_futex;
 use self::getcwd::sys_getcwd;
 use self::getdents64::sys_getdents64;
@@ -97,6 +100,7 @@ use self::mmap::sys_mmap;
 use self::mprotect::sys_mprotect;
 use self::munmap::sys_munmap;
 use self::nanosleep::sys_nanosleep;
+use self::newfstatat::sys_newfstatat;
 use self::open::sys_open;
 use self::openat::sys_openat;
 use self::pipe::sys_pipe;
@@ -132,6 +136,7 @@ use crate::types::off_t;
 use crate::types::sys::epoll::EpollEvent;
 use crate::types::sys::poll::PollFd;
 use crate::types::sys::poll::nfds_t;
+use crate::types::sys::stat::Stat;
 use crate::types::sys::syscall::SYS_ACCEPT;
 use crate::types::sys::syscall::SYS_ACCEPT4;
 use crate::types::sys::syscall::SYS_ARCH_PRCTL;
@@ -156,6 +161,7 @@ use crate::types::sys::syscall::SYS_EXIT;
 use crate::types::sys::syscall::SYS_EXIT_GROUP;
 use crate::types::sys::syscall::SYS_FCNTL;
 use crate::types::sys::syscall::SYS_FORK;
+use crate::types::sys::syscall::SYS_FSTAT;
 use crate::types::sys::syscall::SYS_FUTEX;
 use crate::types::sys::syscall::SYS_GETCWD;
 use crate::types::sys::syscall::SYS_GETDENTS64;
@@ -169,6 +175,7 @@ use crate::types::sys::syscall::SYS_MMAP;
 use crate::types::sys::syscall::SYS_MPROTECT;
 use crate::types::sys::syscall::SYS_MUNMAP;
 use crate::types::sys::syscall::SYS_NANOSLEEP;
+use crate::types::sys::syscall::SYS_NEWFSTATAT;
 use crate::types::sys::syscall::SYS_OPEN;
 use crate::types::sys::syscall::SYS_OPENAT;
 use crate::types::sys::syscall::SYS_PIPE;
@@ -258,6 +265,16 @@ fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
         }
         SYS_OPEN => sys_open(current, arg0 as *const u8, arg1 as c_int),
         SYS_OPENAT => sys_openat(current, arg0 as c_int, arg1 as *const u8, arg2 as c_int),
+        SYS_FSTAT => sys_fstat(current, arg0 as c_int, arg1 as *mut Stat),
+        SYS_NEWFSTATAT => {
+            sys_newfstatat(
+                current,
+                arg0 as c_int,
+                arg1 as *const u8,
+                arg2 as *mut Stat,
+                frame.arg3() as c_int,
+            )
+        }
         SYS_CLOSE => sys_close(current, arg0 as c_int),
         SYS_CHDIR => sys_chdir(current, arg0 as *const u8),
         SYS_GETCWD => sys_getcwd(current, arg0 as *mut u8, arg1),

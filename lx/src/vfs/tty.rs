@@ -1,7 +1,10 @@
 use alloc::sync::Arc;
+use core::ptr;
 
 use crate::types::c_short;
 use crate::types::errno::Errno;
+use crate::types::sys::stat::S_IFCHR;
+use crate::types::sys::stat::Stat;
 use crate::vfs::FileLike;
 use crate::wait_queue::Sleep;
 use crate::wait_queue::WaitQueue;
@@ -50,6 +53,14 @@ impl FileLike for Tty {
 
     fn poll(&self) -> Result<c_short, Errno> {
         self.inner.poll()
+    }
+
+    fn stat(&self) -> Result<Stat, Errno> {
+        Ok(Stat::new(
+            ptr::from_ref(self).addr() as u64,
+            S_IFCHR | 0o620,
+            0,
+        ))
     }
 
     fn wait_queue(&self) -> Option<&WaitQueue> {

@@ -7,6 +7,7 @@ pub mod mman;
 pub mod poll;
 pub mod sched;
 pub mod socket;
+pub mod stat;
 pub mod syscall;
 pub mod time;
 pub mod uio;

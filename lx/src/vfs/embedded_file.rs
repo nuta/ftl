@@ -1,6 +1,8 @@
 use core::cmp::min;
 
 use crate::types::errno::Errno;
+use crate::types::sys::stat::S_IFREG;
+use crate::types::sys::stat::Stat;
 use crate::vfs::FileLike;
 use crate::wait_queue::Sleep;
 
@@ -39,5 +41,10 @@ impl FileLike for EmbeddedFile {
 
     fn size(&self) -> Result<usize, Errno> {
         Ok(self.data.len())
+    }
+
+    fn stat(&self) -> Result<Stat, Errno> {
+        let ino = self.data.as_ptr().addr() as u64;
+        Ok(Stat::new(ino, S_IFREG | 0o755, self.data.len()))
     }
 }

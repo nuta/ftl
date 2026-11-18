@@ -2,6 +2,7 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 
 use crate::types::errno::Errno;
+use crate::types::sys::stat::Stat;
 use crate::vfs::FileLike;
 use crate::vfs::INode;
 use crate::vfs::PathNode;
@@ -92,5 +93,9 @@ impl FileLike for OpenedDir {
 
     fn pnode(&self) -> Option<Arc<PathNode>> {
         Some(self.pnode.clone())
+    }
+
+    fn stat(&self) -> Result<Stat, Errno> {
+        self.pnode.inode().stat()
     }
 }

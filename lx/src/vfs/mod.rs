@@ -7,6 +7,7 @@ use crate::types::c_int;
 use crate::types::c_short;
 use crate::types::errno::Errno;
 use crate::types::sys::socket::SockAddr;
+use crate::types::sys::stat::Stat;
 use crate::wait_queue::Sleep;
 use crate::wait_queue::WaitQueue;
 
@@ -238,6 +239,10 @@ pub trait FileLike: Send + Sync {
 
     fn size(&self) -> Result<usize, Errno> {
         Err(Errno::ESPIPE)
+    }
+
+    fn stat(&self) -> Result<Stat, Errno> {
+        Err(Errno::ENOTSUP)
     }
 
     fn poll(&self) -> Result<c_short, Errno> {

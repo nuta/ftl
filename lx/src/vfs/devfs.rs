@@ -1,9 +1,12 @@
 use alloc::sync::Arc;
+use core::ptr;
 
 use crate::types::c_short;
 use crate::types::errno::Errno;
 use crate::types::sys::poll::POLLIN;
 use crate::types::sys::poll::POLLOUT;
+use crate::types::sys::stat::S_IFCHR;
+use crate::types::sys::stat::Stat;
 use crate::vfs::DirEntry;
 use crate::vfs::FileLike;
 use crate::vfs::INode;
@@ -54,6 +57,14 @@ impl FileLike for Null {
 
     fn poll(&self) -> Result<c_short, Errno> {
         Ok(POLLIN | POLLOUT)
+    }
+
+    fn stat(&self) -> Result<Stat, Errno> {
+        Ok(Stat::new(
+            ptr::from_ref(self).addr() as u64,
+            S_IFCHR | 0o666,
+            0,
+        ))
     }
 }
 
