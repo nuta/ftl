@@ -4,7 +4,9 @@ use core::slice;
 
 use crate::types;
 use crate::types::c_int;
+use crate::types::c_long;
 use crate::types::c_short;
+use crate::types::c_ulong;
 use crate::types::errno::Errno;
 use crate::types::sys::socket::SockAddr;
 use crate::types::sys::stat::Stat;
@@ -243,6 +245,10 @@ pub trait FileLike: Send + Sync {
 
     fn stat(&self) -> Result<Stat, Errno> {
         Err(Errno::ENOTSUP)
+    }
+
+    fn ioctl(&self, _cmd: c_ulong, _arg: usize) -> Result<c_long, Errno> {
+        Err(Errno::ENOTTY)
     }
 
     fn poll(&self) -> Result<c_short, Errno> {

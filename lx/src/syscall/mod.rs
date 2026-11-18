@@ -31,6 +31,7 @@ mod getdents64;
 mod getpid;
 mod getrandom;
 mod gettid;
+mod ioctl;
 mod kill;
 mod listen;
 mod lseek;
@@ -99,6 +100,7 @@ use self::getdents64::sys_getdents64;
 use self::getpid::sys_getpid;
 use self::getrandom::sys_getrandom;
 use self::gettid::sys_gettid;
+use self::ioctl::sys_ioctl;
 use self::kill::sys_kill;
 use self::listen::sys_listen;
 use self::lseek::sys_lseek;
@@ -179,6 +181,7 @@ use crate::types::sys::syscall::SYS_GETDENTS64;
 use crate::types::sys::syscall::SYS_GETPID;
 use crate::types::sys::syscall::SYS_GETRANDOM;
 use crate::types::sys::syscall::SYS_GETTID;
+use crate::types::sys::syscall::SYS_IOCTL;
 use crate::types::sys::syscall::SYS_KILL;
 use crate::types::sys::syscall::SYS_LISTEN;
 use crate::types::sys::syscall::SYS_LSEEK;
@@ -279,6 +282,7 @@ fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
         SYS_OPEN => sys_open(current, arg0 as *const u8, arg1 as c_int),
         SYS_ACCESS => sys_access(current, arg0 as *const u8, arg1 as c_int),
         SYS_FACCESSAT => sys_faccessat(current, arg0 as c_int, arg1 as *const u8, arg2 as c_int),
+        SYS_IOCTL => sys_ioctl(current, arg0 as c_int, arg1 as c_ulong, arg2),
         SYS_OPENAT => sys_openat(current, arg0 as c_int, arg1 as *const u8, arg2 as c_int),
         SYS_FSTAT => sys_fstat(current, arg0 as c_int, arg1 as *mut Stat),
         SYS_NEWFSTATAT => {

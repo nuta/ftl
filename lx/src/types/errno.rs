@@ -23,6 +23,7 @@ impl Errno {
     pub const ENOMEM: Self = Self(12);
     pub const EACCES: Self = Self(13);
     pub const EMFILE: Self = Self(24);
+    pub const ENOTTY: Self = Self(25);
     pub const ENODEV: Self = Self(19);
     pub const ENOTDIR: Self = Self(20);
     pub const EISDIR: Self = Self(21);
