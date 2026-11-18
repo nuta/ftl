@@ -41,7 +41,7 @@ use crate::wait_queue::Sleep;
 
 pub(crate) const PAGE_SIZE: usize = 4096; // TODO: system call?
 const STACK_BOTTOM: usize = 0x0200_0000;
-const STACK_SIZE: usize = 256 * 1024;
+pub(crate) const STACK_SIZE: usize = 256 * 1024;
 const BRK_END: usize = STACK_BOTTOM;
 const MMAP_START: usize = STACK_BOTTOM + STACK_SIZE;
 const USER_END: usize = 0x3000_0000;

@@ -5,6 +5,7 @@ pub mod fcntl;
 pub mod futex;
 pub mod mman;
 pub mod poll;
+pub mod resource;
 pub mod sched;
 pub mod socket;
 pub mod stat;

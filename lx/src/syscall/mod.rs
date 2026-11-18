@@ -43,6 +43,7 @@ mod pipe;
 mod pipe2;
 mod poll;
 mod pread64;
+mod prlimit64;
 mod read;
 mod recvfrom;
 mod rt_sigaction;
@@ -108,6 +109,7 @@ use self::pipe::sys_pipe;
 use self::pipe2::sys_pipe2;
 use self::poll::sys_poll;
 use self::pread64::sys_pread64;
+use self::prlimit64::sys_prlimit64;
 use self::read::sys_read;
 use self::recvfrom::sys_recvfrom;
 use self::rt_sigaction::sys_rt_sigaction;
@@ -138,6 +140,7 @@ use crate::types::off_t;
 use crate::types::sys::epoll::EpollEvent;
 use crate::types::sys::poll::PollFd;
 use crate::types::sys::poll::nfds_t;
+use crate::types::sys::resource::RLimit;
 use crate::types::sys::stat::Stat;
 use crate::types::sys::syscall::SYS_ACCEPT;
 use crate::types::sys::syscall::SYS_ACCEPT4;
@@ -184,6 +187,7 @@ use crate::types::sys::syscall::SYS_PIPE;
 use crate::types::sys::syscall::SYS_PIPE2;
 use crate::types::sys::syscall::SYS_POLL;
 use crate::types::sys::syscall::SYS_PREAD64;
+use crate::types::sys::syscall::SYS_PRLIMIT64;
 use crate::types::sys::syscall::SYS_READ;
 use crate::types::sys::syscall::SYS_RECVFROM;
 use crate::types::sys::syscall::SYS_RT_SIGACTION;
@@ -436,6 +440,15 @@ fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
         SYS_ARCH_PRCTL => sys_arch_prctl(current, arg0 as c_int, arg1),
         SYS_SET_TID_ADDRESS => sys_set_tid_address(current, arg0 as *mut c_int),
         SYS_SET_ROBUST_LIST => sys_set_robust_list(current, arg0 as *const c_void, arg1),
+        SYS_PRLIMIT64 => {
+            sys_prlimit64(
+                current,
+                arg0 as c_int,
+                arg1 as u32,
+                arg2 as *const RLimit,
+                frame.arg3() as *mut RLimit,
+            )
+        }
         SYS_EXIT => sys_exit(current, arg0 as c_int),
         SYS_EXIT_GROUP => sys_exit_group(current, arg0 as c_int),
         _ => Err(Errno::ENOSYS),

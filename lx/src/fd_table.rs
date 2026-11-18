@@ -29,6 +29,10 @@ impl FdTable {
         }
     }
 
+    pub fn capacity(&self) -> usize {
+        self.capacity
+    }
+
     pub fn insert(&mut self, file: Arc<dyn FileLike>, flags: c_int) -> Result<c_int, Errno> {
         if self.active_fds >= self.capacity {
             return Err(Errno::EMFILE);

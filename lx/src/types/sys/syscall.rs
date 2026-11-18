@@ -58,4 +58,5 @@ pub const SYS_EVENTFD2: usize = 290;
 pub const SYS_EPOLL_CREATE1: usize = 291;
 pub const SYS_DUP3: usize = 292;
 pub const SYS_PIPE2: usize = 293;
+pub const SYS_PRLIMIT64: usize = 302;
 pub const SYS_GETRANDOM: usize = 318;
