@@ -27,6 +27,7 @@ pub const SYS_PIPE: usize = 22;
 pub const SYS_GETPID: usize = 39;
 pub const SYS_CLONE: usize = 56;
 pub const SYS_FORK: usize = 57;
+pub const SYS_VFORK: usize = 58;
 pub const SYS_KILL: usize = 62;
 pub const SYS_SOCKET: usize = 41;
 pub const SYS_CONNECT: usize = 42;

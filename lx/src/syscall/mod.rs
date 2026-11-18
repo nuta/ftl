@@ -210,6 +210,7 @@ use crate::types::sys::syscall::SYS_SHUTDOWN;
 use crate::types::sys::syscall::SYS_SIGALTSTACK;
 use crate::types::sys::syscall::SYS_SOCKET;
 use crate::types::sys::syscall::SYS_TGKILL;
+use crate::types::sys::syscall::SYS_VFORK;
 use crate::types::sys::syscall::SYS_WAIT4;
 use crate::types::sys::syscall::SYS_WRITE;
 use crate::types::sys::syscall::SYS_WRITEV;
@@ -360,7 +361,7 @@ fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
                 frame.arg4() as c_ulong,
             )
         }
-        SYS_FORK => sys_fork(current, frame),
+        SYS_FORK | SYS_VFORK => sys_fork(current, frame),
         SYS_GETPID => sys_getpid(current),
         SYS_GETTID => sys_gettid(current),
         SYS_FUTEX => {
