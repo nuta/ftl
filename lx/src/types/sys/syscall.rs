@@ -14,6 +14,7 @@ pub const SYS_FSTAT: usize = 5;
 pub const SYS_LSTAT: usize = 6;
 pub const SYS_OPENAT: usize = 257;
 pub const SYS_NEWFSTATAT: usize = 262;
+pub const SYS_READLINK: usize = 89;
 pub const SYS_ACCESS: usize = 21;
 pub const SYS_FACCESSAT: usize = 269;
 pub const SYS_CLOSE: usize = 3;

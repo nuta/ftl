@@ -51,6 +51,7 @@ mod pread64;
 mod prlimit64;
 mod pselect6;
 mod read;
+mod readlink;
 mod recvfrom;
 mod rt_sigaction;
 mod rt_sigprocmask;
@@ -124,6 +125,7 @@ use self::pread64::sys_pread64;
 use self::prlimit64::sys_prlimit64;
 use self::pselect6::sys_pselect6;
 use self::read::sys_read;
+use self::readlink::sys_readlink;
 use self::recvfrom::sys_recvfrom;
 use self::rt_sigaction::sys_rt_sigaction;
 use self::rt_sigprocmask::sys_rt_sigprocmask;
@@ -212,6 +214,7 @@ use crate::types::sys::syscall::SYS_PREAD64;
 use crate::types::sys::syscall::SYS_PRLIMIT64;
 use crate::types::sys::syscall::SYS_PSELECT6;
 use crate::types::sys::syscall::SYS_READ;
+use crate::types::sys::syscall::SYS_READLINK;
 use crate::types::sys::syscall::SYS_RECVFROM;
 use crate::types::sys::syscall::SYS_RT_SIGACTION;
 use crate::types::sys::syscall::SYS_RT_SIGPROCMASK;
@@ -312,6 +315,7 @@ fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
                 frame.arg3() as c_int,
             )
         }
+        SYS_READLINK => sys_readlink(current, arg0 as *const u8, arg1 as *mut u8, arg2),
         SYS_CLOSE => sys_close(current, arg0 as c_int),
         SYS_CHDIR => sys_chdir(current, arg0 as *const u8),
         SYS_GETCWD => sys_getcwd(current, arg0 as *mut u8, arg1),
