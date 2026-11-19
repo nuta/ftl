@@ -152,6 +152,10 @@ impl TcpConn {
         self.mutable.lock().state == State::Closed
     }
 
+    pub fn take_error(&self) -> Option<Errno> {
+        self.mutable.lock().error.take()
+    }
+
     pub fn is_connecting(&self) -> bool {
         self.mutable.lock().state == State::SynSent
     }

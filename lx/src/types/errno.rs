@@ -35,6 +35,7 @@ impl Errno {
     pub const ENOTSOCK: Self = Self(88);
     pub const EDESTADDRREQ: Self = Self(89);
     pub const EMSGSIZE: Self = Self(90);
+    pub const ENOPROTOOPT: Self = Self(92);
     pub const ENOTSUP: Self = Self(95);
     pub const EAFNOSUPPORT: Self = Self(97);
     pub const EADDRINUSE: Self = Self(98);

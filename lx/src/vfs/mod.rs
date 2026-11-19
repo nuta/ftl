@@ -167,6 +167,11 @@ pub trait FileLike: Send + Sync {
         Err(Errno::ENOTSUP)
     }
 
+    fn getsockopt(&self, level: c_int, optname: c_int) -> Result<c_int, Errno> {
+        let _ = (level, optname);
+        Err(Errno::ENOTSOCK)
+    }
+
     fn linger(&self, _sleep: Sleep<'_>) -> Result<(), Errno> {
         Ok(())
     }

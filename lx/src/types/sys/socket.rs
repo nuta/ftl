@@ -16,6 +16,7 @@ pub const SHUT_RDWR: c_int = 2;
 
 pub const SOL_SOCKET: c_int = 1;
 pub const SO_REUSEADDR: c_int = 2;
+pub const SO_ERROR: c_int = 4;
 pub const SO_LINGER: c_int = 13;
 pub const SO_RCVTIMEO: c_int = 20;
 

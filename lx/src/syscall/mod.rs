@@ -32,6 +32,7 @@ mod getcwd;
 mod getdents64;
 mod getpid;
 mod getrandom;
+mod getsockopt;
 mod gettid;
 mod getuid;
 mod ioctl;
@@ -114,6 +115,7 @@ use self::getcwd::sys_getcwd;
 use self::getdents64::sys_getdents64;
 use self::getpid::sys_getpid;
 use self::getrandom::sys_getrandom;
+use self::getsockopt::sys_getsockopt;
 use self::gettid::sys_gettid;
 use self::getuid::sys_getuid;
 use self::ioctl::sys_ioctl;
@@ -214,6 +216,7 @@ use crate::types::sys::syscall::SYS_GETEUID;
 use crate::types::sys::syscall::SYS_GETGID;
 use crate::types::sys::syscall::SYS_GETPID;
 use crate::types::sys::syscall::SYS_GETRANDOM;
+use crate::types::sys::syscall::SYS_GETSOCKOPT;
 use crate::types::sys::syscall::SYS_GETTID;
 use crate::types::sys::syscall::SYS_GETUID;
 use crate::types::sys::syscall::SYS_IOCTL;
@@ -503,6 +506,16 @@ fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
         SYS_BIND => sys_bind(current, arg0 as c_int, arg1 as *const u8, arg2),
         SYS_LISTEN => sys_listen(current, arg0 as c_int, arg1 as c_int),
         SYS_CONNECT => sys_connect(current, arg0 as c_int, arg1 as *const u8, arg2),
+        SYS_GETSOCKOPT => {
+            sys_getsockopt(
+                current,
+                arg0 as c_int,
+                arg1 as c_int,
+                arg2 as c_int,
+                frame.arg3() as *mut u8,
+                frame.arg4() as *mut u32,
+            )
+        }
         SYS_SETSOCKOPT => {
             sys_setsockopt(
                 current,

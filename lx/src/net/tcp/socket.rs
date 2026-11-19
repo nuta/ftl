@@ -15,6 +15,7 @@ use crate::types::c_int;
 use crate::types::c_short;
 use crate::types::errno::Errno;
 use crate::types::sys::poll::POLLIN;
+use crate::types::sys::socket::SO_ERROR;
 use crate::types::sys::socket::SO_LINGER;
 use crate::types::sys::socket::SO_REUSEADDR;
 use crate::types::sys::socket::SOL_SOCKET;
@@ -200,6 +201,22 @@ impl FileLike for TcpSocket {
                 conn.setsockopt(level, optname, optval, optlen)
             }
             _ => Err(Errno::ENOTSUP),
+        }
+    }
+
+    fn getsockopt(&self, level: c_int, optname: c_int) -> Result<c_int, Errno> {
+        match (level, optname) {
+            (SOL_SOCKET, SO_ERROR) => {
+                let State::Conn(conn) = &*self.state.lock() else {
+                    return Ok(0);
+                };
+
+                match conn.take_error() {
+                    Some(error) => Ok(error.as_int()),
+                    None => Ok(0),
+                }
+            }
+            _ => Err(Errno::ENOPROTOOPT),
         }
     }
 
