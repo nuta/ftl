@@ -39,6 +39,7 @@ mod kill;
 mod listen;
 mod lseek;
 mod lstat;
+mod madvise;
 mod mmap;
 mod mprotect;
 mod munmap;
@@ -118,6 +119,7 @@ use self::kill::sys_kill;
 use self::listen::sys_listen;
 use self::lseek::sys_lseek;
 use self::lstat::sys_lstat;
+use self::madvise::sys_madvise;
 use self::mmap::sys_mmap;
 use self::mprotect::sys_mprotect;
 use self::munmap::sys_munmap;
@@ -214,6 +216,7 @@ use crate::types::sys::syscall::SYS_KILL;
 use crate::types::sys::syscall::SYS_LISTEN;
 use crate::types::sys::syscall::SYS_LSEEK;
 use crate::types::sys::syscall::SYS_LSTAT;
+use crate::types::sys::syscall::SYS_MADVISE;
 use crate::types::sys::syscall::SYS_MMAP;
 use crate::types::sys::syscall::SYS_MPROTECT;
 use crate::types::sys::syscall::SYS_MUNMAP;
@@ -386,6 +389,7 @@ fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
         }
         SYS_MPROTECT => sys_mprotect(current, arg0, arg1, arg2 as c_int),
         SYS_MUNMAP => sys_munmap(current, arg0, arg1),
+        SYS_MADVISE => sys_madvise(current, arg0, arg1, arg2 as c_int),
         SYS_PIPE => sys_pipe(current, arg0 as *mut c_int),
         SYS_PIPE2 => sys_pipe2(current, arg0 as *mut c_int, arg1 as c_int),
         SYS_POLL => sys_poll(current, arg0 as *mut PollFd, arg1 as nfds_t, arg2 as c_int),
