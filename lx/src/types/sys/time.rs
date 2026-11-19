@@ -5,6 +5,10 @@ use crate::types::c_long;
 
 pub const CLOCK_REALTIME: c_int = 0;
 pub const CLOCK_MONOTONIC: c_int = 1;
+pub const CLOCK_MONOTONIC_RAW: c_int = 4;
+pub const CLOCK_REALTIME_COARSE: c_int = 5;
+pub const CLOCK_MONOTONIC_COARSE: c_int = 6;
+pub const CLOCK_BOOTTIME: c_int = 7;
 
 pub const TIMER_ABSTIME: c_int = 1;
 

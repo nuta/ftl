@@ -8,8 +8,12 @@ use super::SyscallResult;
 use crate::thread::LxThread;
 use crate::types::c_int;
 use crate::types::errno::Errno;
+use crate::types::sys::time::CLOCK_BOOTTIME;
 use crate::types::sys::time::CLOCK_MONOTONIC;
+use crate::types::sys::time::CLOCK_MONOTONIC_COARSE;
+use crate::types::sys::time::CLOCK_MONOTONIC_RAW;
 use crate::types::sys::time::CLOCK_REALTIME;
+use crate::types::sys::time::CLOCK_REALTIME_COARSE;
 use crate::types::sys::time::TimeSpec;
 
 pub fn sys_clock_gettime(
@@ -22,8 +26,10 @@ pub fn sys_clock_gettime(
     }
 
     let nanos = match clockid {
-        CLOCK_MONOTONIC => MonoTime::now().as_nanos(),
-        CLOCK_REALTIME => WallTime::now().as_nanos(),
+        CLOCK_MONOTONIC | CLOCK_MONOTONIC_RAW | CLOCK_MONOTONIC_COARSE | CLOCK_BOOTTIME => {
+            MonoTime::now().as_nanos()
+        }
+        CLOCK_REALTIME | CLOCK_REALTIME_COARSE => WallTime::now().as_nanos(),
         _ => {
             warn!("clock_gettime: unsupported clockid: {}", clockid);
             return Err(Errno::EINVAL);
