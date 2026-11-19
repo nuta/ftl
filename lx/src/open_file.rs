@@ -105,6 +105,13 @@ impl OpenFile {
         self.file.read(buf, offset, self.nonblocking(), sleep)
     }
 
+    pub fn readv(&self, iovecs: &IoVecSlice, sleep: Sleep<'_>) -> Result<usize, Errno> {
+        let offset = self.mutable.lock().offset;
+        let n = self.file.readv(iovecs, offset, self.nonblocking(), sleep)?;
+        self.mutable.lock().offset = offset + n;
+        Ok(n)
+    }
+
     pub fn do_write(&self, buf: &[u8], sleep: Sleep<'_>) -> Result<usize, Errno> {
         let offset = self.mutable.lock().offset;
         let n = self.file.write(buf, offset, self.nonblocking(), sleep)?;

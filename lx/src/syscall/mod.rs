@@ -56,6 +56,7 @@ mod prlimit64;
 mod pselect6;
 mod read;
 mod readlink;
+mod readv;
 mod recvfrom;
 mod rt_sigaction;
 mod rt_sigprocmask;
@@ -137,6 +138,7 @@ use self::prlimit64::sys_prlimit64;
 use self::pselect6::sys_pselect6;
 use self::read::sys_read;
 use self::readlink::sys_readlink;
+use self::readv::sys_readv;
 use self::recvfrom::sys_recvfrom;
 use self::rt_sigaction::sys_rt_sigaction;
 use self::rt_sigprocmask::sys_rt_sigprocmask;
@@ -236,6 +238,7 @@ use crate::types::sys::syscall::SYS_PRLIMIT64;
 use crate::types::sys::syscall::SYS_PSELECT6;
 use crate::types::sys::syscall::SYS_READ;
 use crate::types::sys::syscall::SYS_READLINK;
+use crate::types::sys::syscall::SYS_READV;
 use crate::types::sys::syscall::SYS_RECVFROM;
 use crate::types::sys::syscall::SYS_RT_SIGACTION;
 use crate::types::sys::syscall::SYS_RT_SIGPROCMASK;
@@ -416,6 +419,7 @@ fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
                 frame.arg4() as *const TimeSpec,
             )
         }
+        SYS_READV => sys_readv(current, arg0 as c_int, arg1 as *const IoVec, arg2 as c_int),
         SYS_WRITEV => sys_writev(current, arg0 as c_int, arg1 as *const IoVec, arg2 as c_int),
         SYS_CLONE => {
             sys_clone(

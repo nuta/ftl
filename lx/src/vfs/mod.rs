@@ -76,6 +76,15 @@ impl<'a> IoVecSlice<'a> {
             })
     }
 
+    pub fn buffers_mut(&self) -> impl Iterator<Item = &mut [u8]> {
+        self.iovecs
+            .iter()
+            .filter(|iovec| iovec.iov_len != 0)
+            .map(|iovec| unsafe {
+                slice::from_raw_parts_mut(iovec.iov_base as *mut u8, iovec.iov_len)
+            })
+    }
+
     pub fn copy_to(&self, mut dst: &mut [u8]) -> usize {
         let mut total_len = 0;
         for src in self.buffers() {
@@ -194,6 +203,36 @@ pub trait FileLike: Send + Sync {
         let _ = nonblocking;
         let _ = sleep;
         Err(Errno::ENOTSUP)
+    }
+
+    fn readv(
+        &self,
+        iovecs: &IoVecSlice,
+        offset: usize,
+        nonblocking: bool,
+        sleep: Sleep<'_>,
+    ) -> Result<usize, Errno> {
+        let mut total = 0;
+        for buf in iovecs.buffers_mut() {
+            match self.read(buf, offset + total, nonblocking || total > 0, sleep) {
+                Ok(n) if n < buf.len() => {
+                    // Partial write.
+                    total += n;
+                    break;
+                }
+                Ok(n) => {
+                    total += n;
+                }
+                Err(_) if total > 0 => {
+                    // Read failed this time, but some data were successfully
+                    // read.
+                    break;
+                }
+                Err(error) => return Err(error),
+            }
+        }
+
+        Ok(total)
     }
 
     fn writev(
