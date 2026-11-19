@@ -54,6 +54,7 @@ pub const SYS_GETUID: usize = 102;
 pub const SYS_GETGID: usize = 104;
 pub const SYS_GETEUID: usize = 107;
 pub const SYS_GETEGID: usize = 108;
+pub const SYS_PRCTL: usize = 157;
 pub const SYS_ARCH_PRCTL: usize = 158;
 pub const SYS_GETTID: usize = 186;
 pub const SYS_FUTEX: usize = 202;

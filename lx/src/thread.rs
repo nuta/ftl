@@ -2,6 +2,7 @@ use alloc::boxed::Box;
 use alloc::sync::Arc;
 use alloc::sync::Weak;
 use core::cell::UnsafeCell;
+use core::cmp::min;
 use core::mem::MaybeUninit;
 use core::mem::offset_of;
 use core::sync::atomic::AtomicBool;
@@ -43,6 +44,7 @@ use crate::types::signal::SS_ONSTACK;
 use crate::types::signal::SigInfo;
 use crate::types::signal::StackT;
 use crate::types::sys::futex::FUTEX_BITSET_MATCH_ANY;
+use crate::types::sys::sched::TASK_COMM_LEN;
 use crate::vm::Vm;
 
 pub const SYSTEM_STACK_SIZE: usize = 256 * 1024;
@@ -81,6 +83,7 @@ struct Mutable {
     altstack: Option<AltStack>,
     exit_status: Option<c_int>,
     clear_child_tid: Option<usize>,
+    name: [u8; TASK_COMM_LEN],
 }
 
 impl Mutable {
@@ -160,6 +163,7 @@ impl LxThread {
                     altstack: None,
                     exit_status: None,
                     clear_child_tid: None,
+                    name: [0; TASK_COMM_LEN],
                 }),
                 system_stack: unsafe { system_stack.assume_init() },
                 handling_fault: AtomicBool::new(false),
@@ -260,6 +264,17 @@ impl LxThread {
 
     pub fn copy_regs_to(&self, dest: &LxThread, kind: RegsKind) -> Result<(), ErrorCode> {
         self.inner.copy_regs_to(&dest.inner, kind)
+    }
+
+    pub fn name(&self) -> [u8; TASK_COMM_LEN] {
+        self.mutable.lock().name
+    }
+
+    pub fn set_name(&self, name: &[u8]) {
+        let len = min(name.len(), TASK_COMM_LEN - 1);
+        let mut buf = [0; TASK_COMM_LEN];
+        buf[..len].copy_from_slice(&name[..len]);
+        self.mutable.lock().name = buf;
     }
 
     pub fn signal_mask(&self) -> SignalSet {

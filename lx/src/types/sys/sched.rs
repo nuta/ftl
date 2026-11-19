@@ -12,3 +12,4 @@ pub const CLONE_PARENT_SETTID: c_ulong = 0x0010_0000;
 pub const CLONE_CHILD_CLEARTID: c_ulong = 0x0020_0000;
 pub const CLONE_DETACHED: c_ulong = 0x0040_0000;
 pub const CLONE_CHILD_SETTID: c_ulong = 0x0100_0000;
+pub const TASK_COMM_LEN: usize = 16;

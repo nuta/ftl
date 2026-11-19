@@ -6,6 +6,7 @@ pub mod futex;
 pub mod ioctl;
 pub mod mman;
 pub mod poll;
+pub mod prctl;
 pub mod resource;
 pub mod sched;
 pub mod socket;

@@ -48,6 +48,7 @@ mod openat;
 mod pipe;
 mod pipe2;
 mod poll;
+mod prctl;
 mod pread64;
 mod prlimit64;
 mod pselect6;
@@ -125,6 +126,7 @@ use self::openat::sys_openat;
 use self::pipe::sys_pipe;
 use self::pipe2::sys_pipe2;
 use self::poll::sys_poll;
+use self::prctl::sys_prctl;
 use self::pread64::sys_pread64;
 use self::prlimit64::sys_prlimit64;
 use self::pselect6::sys_pselect6;
@@ -217,6 +219,7 @@ use crate::types::sys::syscall::SYS_OPENAT;
 use crate::types::sys::syscall::SYS_PIPE;
 use crate::types::sys::syscall::SYS_PIPE2;
 use crate::types::sys::syscall::SYS_POLL;
+use crate::types::sys::syscall::SYS_PRCTL;
 use crate::types::sys::syscall::SYS_PREAD64;
 use crate::types::sys::syscall::SYS_PRLIMIT64;
 use crate::types::sys::syscall::SYS_PSELECT6;
@@ -496,6 +499,7 @@ fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
         }
         SYS_WAIT4 => sys_wait4(current, arg0 as c_int, arg1 as *mut c_int, arg2 as c_int),
         SYS_FCNTL => sys_fcntl(current, arg0 as c_int, arg1 as c_int, arg2 as c_long),
+        SYS_PRCTL => sys_prctl(current, arg0 as c_int, arg1),
         SYS_ARCH_PRCTL => sys_arch_prctl(current, arg0 as c_int, arg1),
         SYS_SET_TID_ADDRESS => sys_set_tid_address(current, arg0 as *mut c_int),
         SYS_SET_ROBUST_LIST => sys_set_robust_list(current, arg0 as *const c_void, arg1),

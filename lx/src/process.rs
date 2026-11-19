@@ -256,6 +256,7 @@ impl Process {
                 current.copy_regs_to(&thread, RegsKind::FpAndVector)?;
                 thread.set_signal_mask(current.signal_mask());
                 thread.set_clear_child_tid(clear_child_tid);
+                thread.set_name(&current.name());
 
                 if let Some(uaddr) = set_child_tid {
                     let tgid_bytes = tgid.as_int().to_ne_bytes();
@@ -305,6 +306,7 @@ impl Process {
 
         thread.set_clear_child_tid(clear_child_tid);
         thread.set_signal_mask(current.signal_mask());
+        thread.set_name(&current.name());
 
         // Reserve the TID and release the table lock. The write to `parent_tid`
         // may cause a page fault.
