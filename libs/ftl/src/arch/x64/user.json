@@ -13,7 +13,7 @@
     "ld.lld": [
       "-e",
       "start",
-      "--image-base=0x40000000",
+      "--image-base=0x70000000",
       "-z",
       "separate-loadable-segments"
     ]

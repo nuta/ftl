@@ -129,7 +129,7 @@ fn prepare_stack(quota: &SharedRef<Quota>, vmspace: &SharedRef<VmSpace>, cmdline
     let stack_size = 256 * 1024;
     let vmo = VmObject::new_zeroed(quota.clone(), stack_size).unwrap();
 
-    let stack_bottom = UAddr::new(0x40000000 - stack_size); // TODO: find an empty region in vmspace
+    let stack_bottom = UAddr::new(0x70000000 - stack_size); // TODO: find an empty region in vmspace
     let sp_offset = write_stack(&vmo, stack_bottom, stack_size, cmdline);
 
     let vmo = Handle::new(vmo, HandleRight::READ | HandleRight::WRITE);

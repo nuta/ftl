@@ -39,7 +39,7 @@ use crate::zone::spec::Spec;
 
 // FIXME: Remove these hard-coded parameters.
 const STACK_SIZE: usize = 256 * 1024;
-const STACK_TOP: usize = 0x40000000;
+const STACK_TOP: usize = 0x70000000;
 
 fn load_lx_elf(quota: &Quota, vmspace: &VmSpace, image: &Vmo) -> Result<usize, Errno> {
     let mut header = vec![0u8; PAGE_SIZE];
