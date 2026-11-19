@@ -6,6 +6,7 @@ pub mod alignment;
 pub mod cmdline;
 pub mod formatter;
 pub mod fxhash;
+pub mod radix_tree;
 pub mod reserve_slot;
 pub mod ring_buffer;
 pub mod spinlock;

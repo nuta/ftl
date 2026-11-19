@@ -6,8 +6,7 @@ use ftl_types::handle::HandleRight;
 use ftl_types::thread::SyscallRegs;
 use ftl_types::vmo::SupplyMode;
 use ftl_utils::alignment::is_aligned;
-use ftl_utils::fxhash::FxHashMap;
-use ftl_utils::reserve_slot::ReserveSlot;
+use ftl_utils::radix_tree::RadixTree;
 use ftl_utils::spinlock::SpinLock;
 
 use crate::address::PAddr;
@@ -37,23 +36,23 @@ struct Page {
 
 impl Page {
     /// Allocates a zero-filled page.
-    fn allocate_zeroed() -> Result<SharedRef<Self>, ErrorCode> {
+    fn allocate_zeroed() -> Result<Self, ErrorCode> {
         Self::allocate_with(PageType::Zeroed)
     }
 
     /// Allocates a page without zeroing it.
     ///
     /// The caller must initialize the page before mapping it.
-    fn allocate_dirty() -> Result<SharedRef<Self>, ErrorCode> {
+    fn allocate_dirty() -> Result<Self, ErrorCode> {
         Self::allocate_with(PageType::Dirty)
     }
 
-    fn allocate_with(page_type: PageType) -> Result<SharedRef<Self>, ErrorCode> {
+    fn allocate_with(page_type: PageType) -> Result<Self, ErrorCode> {
         let paddr = PAGE_ALLOCATOR
             .alloc(MIN_PAGE_SIZE, page_type)
             .ok_or(ErrorCode::OutOfMemory)?;
 
-        SharedRef::new(Self { paddr })
+        Ok(Self { paddr })
     }
 }
 
@@ -65,41 +64,40 @@ impl Drop for Page {
 }
 
 struct Mutable {
-    pages: FxHashMap<usize, SharedRef<Page>>,
+    pages: RadixTree<Page, 64>,
     charge: Charge<MemoryQuota>,
 }
 
 impl Mutable {
     /// Returns the page at the given index. Returns `None` if the page is not present.
-    fn get(&mut self, index: usize) -> Option<SharedRef<Page>> {
-        self.pages.get(&index).cloned()
+    fn get(&self, index: usize) -> Option<&Page> {
+        self.pages.get(index)
     }
 
     /// Returns the page at the given index. If the page is not present, it
     /// is allocated on demand.
-    fn get_or_fill(&mut self, quota: &Quota, index: usize) -> Result<SharedRef<Page>, ErrorCode> {
+    fn get_or_fill(&mut self, quota: &Quota, index: usize) -> Result<PAddr, ErrorCode> {
         if let Some(page) = self.get(index) {
-            return Ok(page);
+            return Ok(page.paddr);
         }
 
         let reservation = quota.reserve::<MemoryQuota>(MIN_PAGE_SIZE)?;
         let page = Page::allocate_zeroed()?;
-        self.insert(index, page.clone(), reservation)?;
-        Ok(page)
+        let paddr = page.paddr;
+        self.insert(index, page, reservation)?;
+        Ok(paddr)
     }
 
     fn insert(
         &mut self,
         index: usize,
-        page: SharedRef<Page>,
+        page: Page,
         reservation: Reservation<'_, MemoryQuota>,
     ) -> Result<(), ErrorCode> {
-        let slot = self
-            .pages
-            .reserve_slot()
-            .map_err(|_| ErrorCode::OutOfMemory)?;
+        if self.pages.try_insert(index, page).is_err() {
+            return Err(ErrorCode::OutOfMemory);
+        }
 
-        slot.insert(index, page);
         self.charge.commit(reservation);
         Ok(())
     }
@@ -143,7 +141,7 @@ impl VmObject {
             len,
             source,
             mutable: SpinLock::new(Mutable {
-                pages: FxHashMap::new(),
+                pages: RadixTree::new(len / MIN_PAGE_SIZE),
                 charge,
             }),
         })
@@ -153,13 +151,19 @@ impl VmObject {
         self.len
     }
 
-    fn get_page(&self, index: usize) -> Result<SharedRef<Page>, ErrorCode> {
+    fn get_page(&self, index: usize) -> Result<PAddr, ErrorCode> {
         let mut mutable = self.mutable.lock();
         match self.source {
             Source::Zeroed => mutable.get_or_fill(&self.quota, index),
             // User VMOs are filled by the user explicitly. If the page
             // is not present, just return an error.
-            Source::User => mutable.get(index).ok_or(ErrorCode::PageAbsent),
+            Source::User => {
+                let Some(page) = mutable.get(index) else {
+                    return Err(ErrorCode::PageAbsent);
+                };
+
+                Ok(page.paddr)
+            }
         }
     }
 
@@ -168,8 +172,7 @@ impl VmObject {
             return Err(ErrorCode::OutOfBounds);
         }
 
-        let page = self.get_page(index)?;
-        Ok(page.paddr)
+        self.get_page(index)
     }
 
     /// Fill pages in a user-paged VMO.
@@ -196,7 +199,7 @@ impl VmObject {
             let index = (offset + off) / MIN_PAGE_SIZE;
 
             // Skip present pages.
-            if self.mutable.lock().pages.contains_key(&index) {
+            if self.mutable.lock().get(index).is_some() {
                 off += MIN_PAGE_SIZE;
                 continue;
             }
@@ -209,7 +212,7 @@ impl VmObject {
                     // TODO: Copy-on-write to share the same physical page.
                     let page = Page::allocate_dirty()?;
                     let src = uslice.subslice(off, MIN_PAGE_SIZE)?;
-                    let page_slice = PageSlice::new(page.clone(), 0, MIN_PAGE_SIZE)?;
+                    let page_slice = PageSlice::new(page.paddr, 0, MIN_PAGE_SIZE)?;
                     page_slice.read_user(src)?;
                     page
                 }
@@ -221,7 +224,7 @@ impl VmObject {
             // thread, it will trigger another page fault on this VMO, kernel
             // finds this new page, and resolves it.
             let mut mutable = self.mutable.lock();
-            if !mutable.pages.contains_key(&index) {
+            if mutable.get(index).is_none() {
                 mutable.insert(index, page, reservation)?;
             }
 
@@ -259,11 +262,10 @@ impl VmObject {
         let mutable = self.mutable.lock();
         let start_index = offset / MIN_PAGE_SIZE;
         let end_index = end / MIN_PAGE_SIZE;
-        for (index, page) in mutable.pages.iter() {
-            if !(start_index..end_index).contains(index) {
-                // TODO: Use BTreeMap?
+        for index in start_index..end_index {
+            let Some(page) = mutable.get(index) else {
                 continue;
-            }
+            };
 
             // Copy the page.
             // TODO: Copy-on-write to share the same physical page.
@@ -339,8 +341,8 @@ impl VmObject {
             let page_offset = vmo_offset % MIN_PAGE_SIZE;
             let len = min(remaining, MIN_PAGE_SIZE - page_offset);
 
-            let page = self.get_page(page_index)?;
-            let page_slice = PageSlice::new(page, page_offset, len)?;
+            let paddr = self.get_page(page_index)?;
+            let page_slice = PageSlice::new(paddr, page_offset, len)?;
 
             // Note: Do not hold the VMO lock before calling the callback.
             //
@@ -363,28 +365,22 @@ impl Handleable for VmObject {}
 /// This provides access without creating a Rust reference to the page data,
 /// which might also be mapped into userspace.
 struct PageSlice {
-    /// Keeps the page alive while this slice exists.
-    _page: SharedRef<Page>,
     vaddr: VAddr,
     len: usize,
 }
 
 impl PageSlice {
-    fn new(page: SharedRef<Page>, offset: usize, len: usize) -> Result<Self, ErrorCode> {
+    fn new(paddr: PAddr, offset: usize, len: usize) -> Result<Self, ErrorCode> {
         let end = offset.checked_add(len).ok_or(ErrorCode::OutOfBounds)?;
         if end > MIN_PAGE_SIZE {
             return Err(ErrorCode::OutOfBounds);
         }
 
-        let vaddr = arch::paddr2vaddr(page.paddr)
+        let vaddr = arch::paddr2vaddr(paddr)
             .add(offset)
             .ok_or(ErrorCode::OutOfBounds)?;
 
-        Ok(Self {
-            _page: page,
-            vaddr,
-            len,
-        })
+        Ok(Self { vaddr, len })
     }
 
     fn len(&self) -> usize {
@@ -406,12 +402,12 @@ impl PageSlice {
     }
 
     fn read_user(&self, uslice: USlice) -> Result<(), ErrorCode> {
-        // SAFETY: We keep `self._page` alive while copying.
+        // SAFETY: Pages are not freed until the VMO is dropped.
         unsafe { uslice.do_read(self.vaddr.as_mut_ptr(), self.len) }
     }
 
     fn write_user(&self, uslice: USlice) -> Result<(), ErrorCode> {
-        // SAFETY: We keep `self._page` alive while copying.
+        // SAFETY: Pages are not freed until the VMO is dropped.
         unsafe { uslice.do_write(self.vaddr.as_ptr(), self.len) }
     }
 }
