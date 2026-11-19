@@ -2,6 +2,8 @@ use crate::types::c_int;
 
 pub const FUTEX_WAIT: c_int = 0;
 pub const FUTEX_WAKE: c_int = 1;
+pub const FUTEX_REQUEUE: c_int = 3;
+pub const FUTEX_CMP_REQUEUE: c_int = 4;
 pub const FUTEX_WAIT_BITSET: c_int = 9;
 pub const FUTEX_WAKE_BITSET: c_int = 10;
 pub const FUTEX_PRIVATE_FLAG: c_int = 128;

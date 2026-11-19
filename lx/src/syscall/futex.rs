@@ -12,7 +12,9 @@ use crate::types::c_long;
 use crate::types::errno::Errno;
 use crate::types::sys::futex::FUTEX_BITSET_MATCH_ANY;
 use crate::types::sys::futex::FUTEX_CLOCK_REALTIME;
+use crate::types::sys::futex::FUTEX_CMP_REQUEUE;
 use crate::types::sys::futex::FUTEX_PRIVATE_FLAG;
+use crate::types::sys::futex::FUTEX_REQUEUE;
 use crate::types::sys::futex::FUTEX_WAIT;
 use crate::types::sys::futex::FUTEX_WAIT_BITSET;
 use crate::types::sys::futex::FUTEX_WAKE;
@@ -28,6 +30,7 @@ pub fn sys_futex(
     op: c_int,
     val: u32,
     timeout: *const TimeSpec,
+    uaddr2: *mut u32,
     val3: u32,
 ) -> Result<SyscallResult, Errno> {
     if uaddr.is_null() {
@@ -90,6 +93,26 @@ pub fn sys_futex(
         }
         FUTEX_WAKE | FUTEX_WAKE_BITSET => {
             let count = futexes.wake(uaddr.addr(), val as usize, bitset)?;
+            Ok(SyscallResult::Done(count as c_long))
+        }
+        FUTEX_REQUEUE | FUTEX_CMP_REQUEUE => {
+            if uaddr2.is_null() {
+                return Err(Errno::EFAULT);
+            }
+
+            if !uaddr2.is_aligned() {
+                return Err(Errno::EINVAL);
+            }
+
+            let expected = if cmd == FUTEX_CMP_REQUEUE {
+                Some(val3)
+            } else {
+                None
+            };
+
+            let requeue_count = timeout.addr();
+            let count =
+                futexes.requeue(uaddr, uaddr2.addr(), val as usize, requeue_count, expected)?;
             Ok(SyscallResult::Done(count as c_long))
         }
         _ => {

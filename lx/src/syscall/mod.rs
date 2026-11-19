@@ -435,6 +435,7 @@ fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
                 arg1 as c_int,
                 arg2 as u32,
                 frame.arg3() as *const TimeSpec,
+                frame.arg4() as *mut u32,
                 frame.arg5() as u32,
             )
         }
