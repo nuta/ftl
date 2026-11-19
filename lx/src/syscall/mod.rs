@@ -30,8 +30,10 @@ mod fstat;
 mod futex;
 mod getcwd;
 mod getdents64;
+mod getpeername;
 mod getpid;
 mod getrandom;
+mod getsockname;
 mod getsockopt;
 mod gettid;
 mod getuid;
@@ -113,8 +115,10 @@ use self::fstat::sys_fstat;
 use self::futex::sys_futex;
 use self::getcwd::sys_getcwd;
 use self::getdents64::sys_getdents64;
+use self::getpeername::sys_getpeername;
 use self::getpid::sys_getpid;
 use self::getrandom::sys_getrandom;
+use self::getsockname::sys_getsockname;
 use self::getsockopt::sys_getsockopt;
 use self::gettid::sys_gettid;
 use self::getuid::sys_getuid;
@@ -214,8 +218,10 @@ use crate::types::sys::syscall::SYS_GETDENTS64;
 use crate::types::sys::syscall::SYS_GETEGID;
 use crate::types::sys::syscall::SYS_GETEUID;
 use crate::types::sys::syscall::SYS_GETGID;
+use crate::types::sys::syscall::SYS_GETPEERNAME;
 use crate::types::sys::syscall::SYS_GETPID;
 use crate::types::sys::syscall::SYS_GETRANDOM;
+use crate::types::sys::syscall::SYS_GETSOCKNAME;
 use crate::types::sys::syscall::SYS_GETSOCKOPT;
 use crate::types::sys::syscall::SYS_GETTID;
 use crate::types::sys::syscall::SYS_GETUID;
@@ -515,6 +521,12 @@ fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
                 frame.arg3() as *mut u8,
                 frame.arg4() as *mut u32,
             )
+        }
+        SYS_GETSOCKNAME => {
+            sys_getsockname(current, arg0 as c_int, arg1 as *mut u8, arg2 as *mut u32)
+        }
+        SYS_GETPEERNAME => {
+            sys_getpeername(current, arg0 as c_int, arg1 as *mut u8, arg2 as *mut u32)
         }
         SYS_SETSOCKOPT => {
             sys_setsockopt(

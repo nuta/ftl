@@ -133,6 +133,10 @@ pub trait FileLike: Send + Sync {
         Err(Errno::ENOTSUP)
     }
 
+    fn local_addr(&self) -> Result<SockAddr, Errno> {
+        Err(Errno::ENOTSOCK)
+    }
+
     fn recvfrom(
         &self,
         buf: &mut [u8],

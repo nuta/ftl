@@ -231,6 +231,13 @@ impl FileLike for UdpSocket {
         })
     }
 
+    fn local_addr(&self) -> Result<SockAddr, Errno> {
+        match &self.mutable.lock().bind_guard {
+            Some(bind_guard) => Ok(bind_guard.local_addr()),
+            None => Ok(SockAddr::Inet { ip: 0, port: 0 }),
+        }
+    }
+
     fn close(&self) {
         if let Some(bind_guard) = self.mutable.lock().bind_guard.take() {
             self.tcpip.unbind_udp(bind_guard.port());

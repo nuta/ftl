@@ -152,6 +152,10 @@ impl TcpConn {
         self.mutable.lock().state == State::Closed
     }
 
+    pub fn local_addr(&self) -> SockAddr {
+        self.bind_guard.local_addr()
+    }
+
     pub fn take_error(&self) -> Option<Errno> {
         self.mutable.lock().error.take()
     }

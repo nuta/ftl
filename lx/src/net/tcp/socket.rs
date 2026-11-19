@@ -242,6 +242,28 @@ impl FileLike for TcpSocket {
         self.as_conn()?.peer_addr()
     }
 
+    fn local_addr(&self) -> Result<SockAddr, Errno> {
+        match &*self.state.lock() {
+            State::Init {
+                local_ip,
+                bind_guard: Some(bind_guard),
+            } => {
+                Ok(SockAddr::Inet {
+                    ip: local_ip.to_bits(),
+                    port: bind_guard.port(),
+                })
+            }
+            State::Init { local_ip, .. } => {
+                Ok(SockAddr::Inet {
+                    ip: local_ip.to_bits(),
+                    port: 0,
+                })
+            }
+            State::Listener(listener) => Ok(listener.local_addr()),
+            State::Conn(conn) => Ok(conn.local_addr()),
+        }
+    }
+
     fn linger(&self, sleep: Sleep<'_>) -> Result<(), Errno> {
         let conn = match &*self.state.lock() {
             State::Conn(conn) => conn.clone(),

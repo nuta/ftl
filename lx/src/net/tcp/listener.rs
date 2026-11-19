@@ -19,6 +19,7 @@ use crate::net::tcpip::BindGuard;
 use crate::net::tcpip::TcpIp;
 use crate::types::errno::Errno;
 use crate::types::sys::poll::POLLIN;
+use crate::types::sys::socket::SockAddr;
 use crate::wait_queue::Sleep;
 use crate::wait_queue::WaitQueue;
 
@@ -101,6 +102,10 @@ impl TcpListener {
 
     pub fn accepts(&self, ip: u32) -> bool {
         self.bind_guard.accepts(ip)
+    }
+
+    pub fn local_addr(&self) -> SockAddr {
+        self.bind_guard.local_addr()
     }
 
     pub fn set_backlog(&self, backlog: usize) {

@@ -32,6 +32,7 @@ use super::udp::RxQueue;
 use super::udp::UdpPacketInfo;
 use super::udp::UdpSocket;
 use crate::types::errno::Errno;
+use crate::types::sys::socket::SockAddr;
 use crate::wait_queue::WaitQueue;
 
 const RX_HEADER_LEN: usize = 128;
@@ -91,6 +92,13 @@ pub struct BindGuard {
 impl BindGuard {
     pub fn port(&self) -> u16 {
         self.rule.port_min
+    }
+
+    pub fn local_addr(&self) -> SockAddr {
+        SockAddr::Inet {
+            ip: self.ip.to_bits(),
+            port: self.port(),
+        }
     }
 
     pub fn accepts(&self, ip: u32) -> bool {
