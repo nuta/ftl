@@ -4,6 +4,7 @@ mod access;
 mod arch_prctl;
 mod bind;
 mod brk;
+mod capget;
 mod chdir;
 mod clock_getres;
 mod clock_gettime;
@@ -82,6 +83,7 @@ use self::access::sys_access;
 use self::arch_prctl::sys_arch_prctl;
 use self::bind::sys_bind;
 use self::brk::sys_brk;
+use self::capget::sys_capget;
 use self::chdir::sys_chdir;
 use self::clock_getres::sys_clock_getres;
 use self::clock_gettime::sys_clock_gettime;
@@ -161,6 +163,8 @@ use crate::types::c_unsigned;
 use crate::types::c_void;
 use crate::types::errno::Errno;
 use crate::types::off_t;
+use crate::types::sys::capability::CapUserData;
+use crate::types::sys::capability::CapUserHeader;
 use crate::types::sys::epoll::EpollEvent;
 use crate::types::sys::poll::PollFd;
 use crate::types::sys::poll::nfds_t;
@@ -172,6 +176,7 @@ use crate::types::sys::syscall::SYS_ACCESS;
 use crate::types::sys::syscall::SYS_ARCH_PRCTL;
 use crate::types::sys::syscall::SYS_BIND;
 use crate::types::sys::syscall::SYS_BRK;
+use crate::types::sys::syscall::SYS_CAPGET;
 use crate::types::sys::syscall::SYS_CHDIR;
 use crate::types::sys::syscall::SYS_CLOCK_GETRES;
 use crate::types::sys::syscall::SYS_CLOCK_GETTIME;
@@ -410,6 +415,13 @@ fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
         SYS_GETPID => sys_getpid(current),
         SYS_GETTID => sys_gettid(current),
         SYS_GETUID | SYS_GETEUID | SYS_GETGID | SYS_GETEGID => sys_getuid(current),
+        SYS_CAPGET => {
+            sys_capget(
+                current,
+                arg0 as *mut CapUserHeader,
+                arg1 as *mut CapUserData,
+            )
+        }
         SYS_UNAME => sys_uname(current, arg0 as *mut UtsName),
         SYS_SYSINFO => sys_sysinfo(current, arg0 as *mut SysInfo),
         SYS_FUTEX => {

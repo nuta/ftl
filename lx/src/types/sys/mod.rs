@@ -1,4 +1,5 @@
 pub mod auxv;
+pub mod capability;
 pub mod epoll;
 pub mod eventfd;
 pub mod fcntl;
