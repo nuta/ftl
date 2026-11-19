@@ -7,6 +7,7 @@ use crate::types::c_int;
 use crate::types::errno::Errno;
 use crate::types::sys::fcntl::AT_EMPTY_PATH;
 use crate::types::sys::fcntl::AT_FDCWD;
+use crate::types::sys::fcntl::AT_NO_AUTOMOUNT;
 use crate::types::sys::fcntl::AT_SYMLINK_NOFOLLOW;
 use crate::types::sys::stat::Stat;
 
@@ -17,7 +18,7 @@ pub fn sys_newfstatat(
     buf: *mut Stat,
     flags: c_int,
 ) -> Result<SyscallResult, Errno> {
-    if flags & !(AT_EMPTY_PATH | AT_SYMLINK_NOFOLLOW) != 0 {
+    if flags & !(AT_EMPTY_PATH | AT_SYMLINK_NOFOLLOW | AT_NO_AUTOMOUNT) != 0 {
         // Unsupported flags.
         return Err(Errno::EINVAL);
     }

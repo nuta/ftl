@@ -15,4 +15,6 @@ pub const O_DIRECTORY: c_int = 0o200000;
 pub const O_CLOEXEC: c_int = 0o2000000;
 pub const AT_FDCWD: c_int = -100;
 pub const AT_SYMLINK_NOFOLLOW: c_int = 0x100;
+pub const AT_NO_AUTOMOUNT: c_int = 0x800;
 pub const AT_EMPTY_PATH: c_int = 0x1000;
+pub const AT_STATX_SYNC_TYPE: c_int = 0x6000;

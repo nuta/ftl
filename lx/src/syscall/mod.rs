@@ -68,6 +68,7 @@ mod shutdown;
 mod sigaltstack;
 mod socket;
 mod stat;
+mod statx;
 mod sysinfo;
 mod tgkill;
 mod uname;
@@ -148,6 +149,7 @@ use self::shutdown::sys_shutdown;
 use self::sigaltstack::sys_sigaltstack;
 use self::socket::sys_socket;
 use self::stat::sys_stat;
+use self::statx::sys_statx;
 use self::sysinfo::sys_sysinfo;
 use self::tgkill::sys_tgkill;
 use self::uname::sys_uname;
@@ -172,6 +174,7 @@ use crate::types::sys::poll::PollFd;
 use crate::types::sys::poll::nfds_t;
 use crate::types::sys::resource::RLimit;
 use crate::types::sys::stat::Stat;
+use crate::types::sys::stat::Statx;
 use crate::types::sys::syscall::SYS_ACCEPT;
 use crate::types::sys::syscall::SYS_ACCEPT4;
 use crate::types::sys::syscall::SYS_ACCESS;
@@ -245,6 +248,7 @@ use crate::types::sys::syscall::SYS_SHUTDOWN;
 use crate::types::sys::syscall::SYS_SIGALTSTACK;
 use crate::types::sys::syscall::SYS_SOCKET;
 use crate::types::sys::syscall::SYS_STAT;
+use crate::types::sys::syscall::SYS_STATX;
 use crate::types::sys::syscall::SYS_SYSINFO;
 use crate::types::sys::syscall::SYS_TGKILL;
 use crate::types::sys::syscall::SYS_UNAME;
@@ -335,6 +339,15 @@ fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
                 arg1 as *const u8,
                 arg2 as *mut Stat,
                 frame.arg3() as c_int,
+            )
+        }
+        SYS_STATX => {
+            sys_statx(
+                current,
+                arg0 as c_int,
+                arg1 as *const u8,
+                arg2 as c_int,
+                frame.arg4() as *mut Statx,
             )
         }
         SYS_READLINK => sys_readlink(current, arg0 as *const u8, arg1 as *mut u8, arg2),
