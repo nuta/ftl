@@ -61,6 +61,7 @@ mod setsockopt;
 mod shutdown;
 mod sigaltstack;
 mod socket;
+mod stat;
 mod tgkill;
 mod wait4;
 mod write;
@@ -132,6 +133,7 @@ use self::setsockopt::sys_setsockopt;
 use self::shutdown::sys_shutdown;
 use self::sigaltstack::sys_sigaltstack;
 use self::socket::sys_socket;
+use self::stat::sys_stat;
 use self::tgkill::sys_tgkill;
 use self::wait4::sys_wait4;
 use self::write::sys_write;
@@ -218,6 +220,7 @@ use crate::types::sys::syscall::SYS_SETSOCKOPT;
 use crate::types::sys::syscall::SYS_SHUTDOWN;
 use crate::types::sys::syscall::SYS_SIGALTSTACK;
 use crate::types::sys::syscall::SYS_SOCKET;
+use crate::types::sys::syscall::SYS_STAT;
 use crate::types::sys::syscall::SYS_TGKILL;
 use crate::types::sys::syscall::SYS_VFORK;
 use crate::types::sys::syscall::SYS_WAIT4;
@@ -294,6 +297,7 @@ fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
         SYS_FACCESSAT => sys_faccessat(current, arg0 as c_int, arg1 as *const u8, arg2 as c_int),
         SYS_IOCTL => sys_ioctl(current, arg0 as c_int, arg1 as c_ulong, arg2),
         SYS_OPENAT => sys_openat(current, arg0 as c_int, arg1 as *const u8, arg2 as c_int),
+        SYS_STAT => sys_stat(current, arg0 as *const u8, arg1 as *mut Stat),
         SYS_FSTAT => sys_fstat(current, arg0 as c_int, arg1 as *mut Stat),
         SYS_NEWFSTATAT => {
             sys_newfstatat(

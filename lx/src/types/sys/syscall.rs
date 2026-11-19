@@ -9,6 +9,7 @@ pub const SYS_PREAD64: usize = 17;
 pub const SYS_SIGALTSTACK: usize = 131;
 pub const SYS_TGKILL: usize = 234;
 pub const SYS_OPEN: usize = 2;
+pub const SYS_STAT: usize = 4;
 pub const SYS_FSTAT: usize = 5;
 pub const SYS_OPENAT: usize = 257;
 pub const SYS_NEWFSTATAT: usize = 262;
