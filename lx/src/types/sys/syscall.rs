@@ -58,6 +58,7 @@ pub const SYS_FUTEX: usize = 202;
 pub const SYS_GETDENTS64: usize = 217;
 pub const SYS_SET_TID_ADDRESS: usize = 218;
 pub const SYS_CLOCK_GETTIME: usize = 228;
+pub const SYS_CLOCK_GETRES: usize = 229;
 pub const SYS_CLOCK_NANOSLEEP: usize = 230;
 pub const SYS_EXIT_GROUP: usize = 231;
 pub const SYS_EPOLL_WAIT: usize = 232;

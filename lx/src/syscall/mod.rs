@@ -5,6 +5,7 @@ mod arch_prctl;
 mod bind;
 mod brk;
 mod chdir;
+mod clock_getres;
 mod clock_gettime;
 mod clock_nanosleep;
 mod clone;
@@ -79,6 +80,7 @@ use self::arch_prctl::sys_arch_prctl;
 use self::bind::sys_bind;
 use self::brk::sys_brk;
 use self::chdir::sys_chdir;
+use self::clock_getres::sys_clock_getres;
 use self::clock_gettime::sys_clock_gettime;
 use self::clock_nanosleep::sys_clock_nanosleep;
 use self::clone::sys_clone;
@@ -165,6 +167,7 @@ use crate::types::sys::syscall::SYS_ARCH_PRCTL;
 use crate::types::sys::syscall::SYS_BIND;
 use crate::types::sys::syscall::SYS_BRK;
 use crate::types::sys::syscall::SYS_CHDIR;
+use crate::types::sys::syscall::SYS_CLOCK_GETRES;
 use crate::types::sys::syscall::SYS_CLOCK_GETTIME;
 use crate::types::sys::syscall::SYS_CLOCK_NANOSLEEP;
 use crate::types::sys::syscall::SYS_CLONE;
@@ -408,6 +411,7 @@ fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
         }
         SYS_GETRANDOM => sys_getrandom(current, arg0 as *mut c_void, arg1, arg2 as c_unsigned),
         SYS_CLOCK_GETTIME => sys_clock_gettime(current, arg0 as c_int, arg1 as *mut TimeSpec),
+        SYS_CLOCK_GETRES => sys_clock_getres(current, arg0 as c_int, arg1 as *mut TimeSpec),
         SYS_CLOCK_NANOSLEEP => {
             sys_clock_nanosleep(
                 current,
