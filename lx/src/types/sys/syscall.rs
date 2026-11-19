@@ -11,6 +11,7 @@ pub const SYS_TGKILL: usize = 234;
 pub const SYS_OPEN: usize = 2;
 pub const SYS_STAT: usize = 4;
 pub const SYS_FSTAT: usize = 5;
+pub const SYS_LSTAT: usize = 6;
 pub const SYS_OPENAT: usize = 257;
 pub const SYS_NEWFSTATAT: usize = 262;
 pub const SYS_ACCESS: usize = 21;

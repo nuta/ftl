@@ -36,6 +36,7 @@ mod ioctl;
 mod kill;
 mod listen;
 mod lseek;
+mod lstat;
 mod mmap;
 mod mprotect;
 mod munmap;
@@ -108,6 +109,7 @@ use self::ioctl::sys_ioctl;
 use self::kill::sys_kill;
 use self::listen::sys_listen;
 use self::lseek::sys_lseek;
+use self::lstat::sys_lstat;
 use self::mmap::sys_mmap;
 use self::mprotect::sys_mprotect;
 use self::munmap::sys_munmap;
@@ -195,6 +197,7 @@ use crate::types::sys::syscall::SYS_IOCTL;
 use crate::types::sys::syscall::SYS_KILL;
 use crate::types::sys::syscall::SYS_LISTEN;
 use crate::types::sys::syscall::SYS_LSEEK;
+use crate::types::sys::syscall::SYS_LSTAT;
 use crate::types::sys::syscall::SYS_MMAP;
 use crate::types::sys::syscall::SYS_MPROTECT;
 use crate::types::sys::syscall::SYS_MUNMAP;
@@ -299,6 +302,7 @@ fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
         SYS_OPENAT => sys_openat(current, arg0 as c_int, arg1 as *const u8, arg2 as c_int),
         SYS_STAT => sys_stat(current, arg0 as *const u8, arg1 as *mut Stat),
         SYS_FSTAT => sys_fstat(current, arg0 as c_int, arg1 as *mut Stat),
+        SYS_LSTAT => sys_lstat(current, arg0 as *const u8, arg1 as *mut Stat),
         SYS_NEWFSTATAT => {
             sys_newfstatat(
                 current,
