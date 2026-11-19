@@ -11,6 +11,7 @@ pub mod sched;
 pub mod socket;
 pub mod stat;
 pub mod syscall;
+pub mod sysinfo;
 pub mod time;
 pub mod uio;
 pub mod utsname;

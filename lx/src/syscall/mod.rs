@@ -65,6 +65,7 @@ mod shutdown;
 mod sigaltstack;
 mod socket;
 mod stat;
+mod sysinfo;
 mod tgkill;
 mod uname;
 mod wait4;
@@ -141,6 +142,7 @@ use self::shutdown::sys_shutdown;
 use self::sigaltstack::sys_sigaltstack;
 use self::socket::sys_socket;
 use self::stat::sys_stat;
+use self::sysinfo::sys_sysinfo;
 use self::tgkill::sys_tgkill;
 use self::uname::sys_uname;
 use self::wait4::sys_wait4;
@@ -232,12 +234,14 @@ use crate::types::sys::syscall::SYS_SHUTDOWN;
 use crate::types::sys::syscall::SYS_SIGALTSTACK;
 use crate::types::sys::syscall::SYS_SOCKET;
 use crate::types::sys::syscall::SYS_STAT;
+use crate::types::sys::syscall::SYS_SYSINFO;
 use crate::types::sys::syscall::SYS_TGKILL;
 use crate::types::sys::syscall::SYS_UNAME;
 use crate::types::sys::syscall::SYS_VFORK;
 use crate::types::sys::syscall::SYS_WAIT4;
 use crate::types::sys::syscall::SYS_WRITE;
 use crate::types::sys::syscall::SYS_WRITEV;
+use crate::types::sys::sysinfo::SysInfo;
 use crate::types::sys::time::TimeSpec;
 use crate::types::sys::uio::IoVec;
 use crate::types::sys::utsname::UtsName;
@@ -404,6 +408,7 @@ fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
         SYS_GETTID => sys_gettid(current),
         SYS_GETUID | SYS_GETEUID | SYS_GETGID | SYS_GETEGID => sys_getuid(current),
         SYS_UNAME => sys_uname(current, arg0 as *mut UtsName),
+        SYS_SYSINFO => sys_sysinfo(current, arg0 as *mut SysInfo),
         SYS_FUTEX => {
             sys_futex(
                 current,

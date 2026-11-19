@@ -49,6 +49,7 @@ pub const SYS_UNAME: usize = 63;
 pub const SYS_FCNTL: usize = 72;
 pub const SYS_GETCWD: usize = 79;
 pub const SYS_CHDIR: usize = 80;
+pub const SYS_SYSINFO: usize = 99;
 pub const SYS_GETUID: usize = 102;
 pub const SYS_GETGID: usize = 104;
 pub const SYS_GETEUID: usize = 107;
