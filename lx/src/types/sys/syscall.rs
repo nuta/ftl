@@ -45,6 +45,7 @@ pub const SYS_SETSOCKOPT: usize = 54;
 pub const SYS_EXECVE: usize = 59;
 pub const SYS_EXIT: usize = 60;
 pub const SYS_WAIT4: usize = 61;
+pub const SYS_UNAME: usize = 63;
 pub const SYS_FCNTL: usize = 72;
 pub const SYS_GETCWD: usize = 79;
 pub const SYS_CHDIR: usize = 80;

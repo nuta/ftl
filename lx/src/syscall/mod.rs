@@ -66,6 +66,7 @@ mod sigaltstack;
 mod socket;
 mod stat;
 mod tgkill;
+mod uname;
 mod wait4;
 mod write;
 mod writev;
@@ -141,6 +142,7 @@ use self::sigaltstack::sys_sigaltstack;
 use self::socket::sys_socket;
 use self::stat::sys_stat;
 use self::tgkill::sys_tgkill;
+use self::uname::sys_uname;
 use self::wait4::sys_wait4;
 use self::write::sys_write;
 use self::writev::sys_writev;
@@ -231,12 +233,14 @@ use crate::types::sys::syscall::SYS_SIGALTSTACK;
 use crate::types::sys::syscall::SYS_SOCKET;
 use crate::types::sys::syscall::SYS_STAT;
 use crate::types::sys::syscall::SYS_TGKILL;
+use crate::types::sys::syscall::SYS_UNAME;
 use crate::types::sys::syscall::SYS_VFORK;
 use crate::types::sys::syscall::SYS_WAIT4;
 use crate::types::sys::syscall::SYS_WRITE;
 use crate::types::sys::syscall::SYS_WRITEV;
 use crate::types::sys::time::TimeSpec;
 use crate::types::sys::uio::IoVec;
+use crate::types::sys::utsname::UtsName;
 
 pub enum SyscallResult {
     Done(c_long),
@@ -399,6 +403,7 @@ fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
         SYS_GETPID => sys_getpid(current),
         SYS_GETTID => sys_gettid(current),
         SYS_GETUID | SYS_GETEUID | SYS_GETGID | SYS_GETEGID => sys_getuid(current),
+        SYS_UNAME => sys_uname(current, arg0 as *mut UtsName),
         SYS_FUTEX => {
             sys_futex(
                 current,
