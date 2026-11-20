@@ -13,6 +13,7 @@ fn main() -> ExitCode {
 
     let name = &args[1];
     match name.as_str() {
+        "bench" => commands::bench::main(&args[2..]),
         "cat" => commands::cat::main(&args[2..]),
         "echo" => commands::echo::main(&args[2..]),
         "exit" => commands::exit::main(&args[2..]),

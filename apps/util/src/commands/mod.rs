@@ -1,3 +1,4 @@
+pub mod bench;
 pub mod cat;
 pub mod echo;
 pub mod exit;

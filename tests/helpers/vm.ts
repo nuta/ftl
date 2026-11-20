@@ -18,11 +18,12 @@ export async function getAvailablePort(): Promise<number> {
 }
 
 interface QemuArgs {
-    hostPort: number;
+    hostPort?: number;
     init: string;
+    extra?: string[];
 }
 
-function buildQemuArgs({ hostPort, init }: QemuArgs) {
+export function buildQemuArgs({ hostPort, init, extra = [] }: QemuArgs) {
     return [
         "qemu-system-x86_64",
         "-machine", "microvm,acpi=off",
@@ -35,8 +36,9 @@ function buildQemuArgs({ hostPort, init }: QemuArgs) {
         "-serial", "mon:stdio",
         "--no-reboot",
         "-device", "isa-debug-exit,iobase=0x501,iosize=0x04",
-        "-netdev", `user,id=net0,hostfwd=tcp:127.0.0.1:${hostPort}-:80`,
+        "-netdev", hostPort ? `user,id=net0,hostfwd=tcp:127.0.0.1:${hostPort}-:80` : "user,id=net0",
         "-device", "virtio-net-device,netdev=net0",
+        ...extra,
     ]
 }
 
