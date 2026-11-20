@@ -61,7 +61,7 @@ fn mmap() -> std::io::Result<()> {
 
 pub fn main(args: &[String]) -> ExitCode {
     let [name, iterations_str] = args else {
-        eprintln!("usage: util bench <name> <iterations>");
+        eprintln!("usage: easybox bench <name> <iterations>");
         return ExitCode::FAILURE;
     };
 

@@ -18,7 +18,7 @@ const BENCHMARKS: Record<string, Benchmark> = {
 async function run(name: string, { iterations }: Benchmark): Promise<number> {
   const qemu = Bun.spawn(
     buildQemuArgs({
-      init: `/bin/util bench ${name} ${iterations}`,
+      init: `/bin/easybox bench ${name} ${iterations}`,
       // Make the QEMU's RTC deterministic:
       //
       // shift=0: 1 nanosecond per instruction

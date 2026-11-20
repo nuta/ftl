@@ -4,7 +4,7 @@ import { boot, getAvailablePort } from "./helpers/vm";
 
 test("HTTP server handles a request", async () => {
     const hostPort = await getAvailablePort();
-    using vm = await boot({ hostPort, init: "/bin/util httpd" });
+    using vm = await boot({ hostPort, init: "/bin/easybox httpd" });
     await vm.waitForLog("HTTP server listening on port 80");
 
     const resp1 = await fetch(`http://127.0.0.1:${hostPort}`, {
@@ -32,7 +32,7 @@ test("TCP active open", async () => {
     });
 
     const hostPort = await getAvailablePort();
-    using vm = await boot({ hostPort, init: `/bin/util nc 10.0.2.2 ${server.port}` });
+    using vm = await boot({ hostPort, init: `/bin/easybox nc 10.0.2.2 ${server.port}` });
     await vm.waitForLog("echo: hello from nc");
 }, 5000);
 
@@ -49,7 +49,7 @@ test("UDP send and receive", async () => {
 
     try {
         const hostPort = await getAvailablePort();
-        using vm = await boot({ hostPort, init: `/bin/util nc -u 10.0.2.2 ${server.port}` });
+        using vm = await boot({ hostPort, init: `/bin/easybox nc -u 10.0.2.2 ${server.port}` });
         await vm.waitForLog("echo: hello from nc");
     } finally {
         server.close();

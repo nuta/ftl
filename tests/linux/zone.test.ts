@@ -5,19 +5,19 @@ import { boot, getAvailablePort } from "../helpers/vm";
 describe("zone", () => {
     test("stdout", async () => {
         const hostPort = await getAvailablePort();
-        using vm = await boot({ hostPort, init: "/bin/util zone /bin/util echo hello from zone" });
+        using vm = await boot({ hostPort, init: "/bin/easybox zone /bin/easybox echo hello from zone" });
         await vm.waitForLog("[zone:stdout] hello from zone");
     }, 5000);
 
     test("stderr", async () => {
         const hostPort = await getAvailablePort();
-        using vm = await boot({ hostPort, init: "/bin/util zone /bin/util cat /nonexistent" });
+        using vm = await boot({ hostPort, init: "/bin/easybox zone /bin/easybox cat /nonexistent" });
         await vm.waitForLog("[zone:stderr] cat: /nonexistent:");
     }, 5000);
 
     test("exit status", async () => {
         const hostPort = await getAvailablePort();
-        using vm = await boot({ hostPort, init: "/bin/util zone /bin/util exit 42" });
+        using vm = await boot({ hostPort, init: "/bin/easybox zone /bin/easybox exit 42" });
         await vm.waitForLog("[zone:exit] status 42");
     }, 5000);
 });

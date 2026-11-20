@@ -17,7 +17,7 @@ const FRAME_EXIT: u8 = 3;
 
 pub fn main(args: &[String]) -> ExitCode {
     let [init, args @ ..] = args else {
-        eprintln!("usage: util zone <init> [args...]");
+        eprintln!("usage: easybox zone <init> [args...]");
         return ExitCode::FAILURE;
     };
 

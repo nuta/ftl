@@ -7,7 +7,7 @@ mod commands;
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().collect();
     if args.len() < 2 {
-        eprintln!("usage: util <command> [args...]");
+        eprintln!("usage: easybox <command> [args...]");
         return ExitCode::FAILURE;
     }
 
@@ -24,11 +24,11 @@ fn main() -> ExitCode {
         "pwd" => commands::pwd::main(&args[2..]),
         "zone" => commands::zone::main(&args[2..]),
         "" => {
-            eprintln!("usage: util <command> [args...]");
+            eprintln!("usage: easybox <command> [args...]");
             ExitCode::FAILURE
         }
         _ => {
-            eprintln!("util: unknown command: {name}");
+            eprintln!("easybox: unknown command: {name}");
             ExitCode::FAILURE
         }
     }

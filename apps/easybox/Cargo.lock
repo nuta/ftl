@@ -9,6 +9,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc652a48c352aef3ea3aed32080501cf3ef6ed5da78602a020c991775b0aff04"
 
 [[package]]
+name = "easybox"
+version = "0.0.1"
+dependencies = [
+ "httparse",
+ "tokio",
+]
+
+[[package]]
 name = "httparse"
 version = "1.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -59,14 +67,6 @@ dependencies = [
  "pin-project-lite",
  "socket2",
  "windows-sys",
-]
-
-[[package]]
-name = "util"
-version = "0.0.1"
-dependencies = [
- "httparse",
- "tokio",
 ]
 
 [[package]]

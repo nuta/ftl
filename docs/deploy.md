@@ -9,7 +9,7 @@ FTL supports several hosting platforms.
 1. Build FTL with embedded initrd and boot args:
 
 ```
-RELEASE=1 EMBED_SYSTEM_ELF=1 APPEND_CMDLINE="ftl.run=/bin/util ftl.arg=httpd" ./build.sh
+RELEASE=1 EMBED_SYSTEM_ELF=1 APPEND_CMDLINE="ftl.run=/bin/easybox ftl.arg=httpd" ./build.sh
 ```
 
 2. [Open the images page](https://microvm.cloud/#/images) and upload `ftl.elf` as a new image.
@@ -78,7 +78,7 @@ RELEASE=1 ./build.sh
   "boot-source": {
     "kernel_image_path": "ftl.elf",
     "initrd_path": "system.elf",
-    "boot_args": "ftl.run=/bin/util ftl.arg=httpd"
+    "boot_args": "ftl.run=/bin/easybox ftl.arg=httpd"
   }
 }
 ```

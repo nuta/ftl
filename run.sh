@@ -5,8 +5,8 @@ cmdline=""
 if [[ $# -gt 0 ]]; then
   cmdline="ftl.run=\"$1\""
 else
-  echo "run.sh: No init program specified, using default \"/bin/util httpd\""
-  cmdline="ftl.run=\"/bin/util httpd\""
+  echo "run.sh: No init program specified, using default \"/bin/easybox httpd\""
+  cmdline="ftl.run=\"/bin/easybox httpd\""
 fi
 
 ./build.sh

@@ -12,7 +12,7 @@ pub fn main(args: &[String]) -> ExitCode {
         // TODO: A good flag parser
         [flag, host, port] if flag == "-u" => (true, host, port),
         _ => {
-            eprintln!("usage: util nc [-u] <host> <port>");
+            eprintln!("usage: easybox nc [-u] <host> <port>");
             return ExitCode::FAILURE;
         }
     };

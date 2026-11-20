@@ -14,7 +14,7 @@ build_rust_app() {
 
 build_default_initfs() {
   mkdir -p initfs/bin
-  build_rust_app util
+  build_rust_app easybox
 }
 
 build_initfs() {
