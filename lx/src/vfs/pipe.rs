@@ -1,5 +1,5 @@
+use alloc::collections::VecDeque;
 use alloc::sync::Arc;
-use alloc::vec::Vec;
 use core::cmp::min;
 
 use ftl_utils::spinlock::SpinLock;
@@ -20,7 +20,7 @@ use crate::wait_queue::WaitQueue;
 /// and 4096 is what Linux uses.
 const PIPE_BUF: usize = 4096;
 /// The pipe capacity.
-const PIPE_CAPACITY: usize = 8192;
+const PIPE_CAPACITY: usize = 65536;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum End {
@@ -29,7 +29,7 @@ enum End {
 }
 
 struct Mutable {
-    buffer: Vec<u8>,
+    buffer: VecDeque<u8>,
     reader_open: bool,
     writer_open: bool,
 }
@@ -46,14 +46,9 @@ pub struct Pipe {
 
 impl Pipe {
     pub fn pair() -> Result<(Self, Self), Errno> {
-        let mut buffer = Vec::new();
-        buffer
-            .try_reserve_exact(PIPE_CAPACITY)
-            .map_err(|_| Errno::ENOMEM)?;
-
         let inner = Arc::new(Inner {
             mutable: SpinLock::new(Mutable {
-                buffer,
+                buffer: VecDeque::new(),
                 reader_open: true,
                 writer_open: true,
             }),
@@ -95,7 +90,10 @@ impl FileLike for Pipe {
             if !mutable.buffer.is_empty() {
                 // Read the data from the pipe.
                 let n = min(buf.len(), mutable.buffer.len());
-                buf[..n].copy_from_slice(&mutable.buffer[..n]);
+                let (front, back) = mutable.buffer.as_slices();
+                let front_len = min(n, front.len());
+                buf[..front_len].copy_from_slice(&front[..front_len]);
+                buf[front_len..n].copy_from_slice(&back[..n - front_len]);
 
                 // Remove the read data from the pipe.
                 mutable.buffer.drain(..n);
@@ -203,10 +201,12 @@ impl FileLike for Pipe {
 
         // Write the data to the pipe.
         let n = min(writeable_len, total_len);
+        mutable.buffer.try_reserve(n).map_err(|_| Errno::ENOMEM)?;
+
         let mut remaining = n;
         for buf in iovecs.buffers() {
             let chunk_len = min(remaining, buf.len());
-            mutable.buffer.extend_from_slice(&buf[..chunk_len]);
+            mutable.buffer.extend(&buf[..chunk_len]);
             remaining -= chunk_len;
             if remaining == 0 {
                 break;
