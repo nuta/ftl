@@ -58,9 +58,6 @@ async fn handle(mut stream: TcpStream) -> std::io::Result<()> {
             (Some("GET"), Some("/" | "/index.html")) => {
                 ("200 OK", "text/html", include_bytes!("index.html"))
             }
-            (Some("GET"), Some("/hill.webp")) => {
-                ("200 OK", "image/webp", include_bytes!("hill.webp"))
-            }
             _ => ("404 Not Found", "text/html", include_bytes!("404.html")),
         };
 
