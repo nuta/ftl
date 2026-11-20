@@ -119,6 +119,7 @@ pub struct LxThread {
     mutable: SpinLock<Mutable>,
     system_stack: Box<SystemStack>,
     handling_fault: AtomicBool,
+    sleep_poll: Arc<Poll>,
 }
 
 #[repr(align(16))]
@@ -145,6 +146,7 @@ impl LxThread {
         // TODO: LX assumes that kernel won't touch the system stack until the
         //       thread is started. Should we document and guarantee this?
         let inner = Thread::create(vm.quota(), vm.vmspace(), syscall_pc, fault_pc, system_sp)?;
+        let sleep_poll = Arc::new(Poll::create()?);
 
         let thread = Arc::new_cyclic(|thread| {
             let cookie = Cookie {
@@ -167,6 +169,7 @@ impl LxThread {
                 }),
                 system_stack: unsafe { system_stack.assume_init() },
                 handling_fault: AtomicBool::new(false),
+                sleep_poll,
             }
         });
 
@@ -203,6 +206,10 @@ impl LxThread {
 
     pub fn subscribe(&self, poll: &Poll, cookie: usize) -> Result<(), ErrorCode> {
         self.inner.subscribe(poll, cookie)
+    }
+
+    pub(crate) fn sleep_poll(&self) -> &Arc<Poll> {
+        &self.sleep_poll
     }
 
     pub fn tid(&self) -> PId {

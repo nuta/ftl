@@ -67,7 +67,7 @@ pub fn sys_poll(
     };
 
     // Subscribe to the files' wait queues.
-    let mut wait_set = WaitSet::new()?;
+    let mut wait_set = WaitSet::new(current);
     wait_set.subscribe(process.signal_wait_queue());
     for file in &files {
         if let Some(wait_queue) = file.wait_queue() {

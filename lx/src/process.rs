@@ -426,7 +426,7 @@ impl Process {
 
         let mut wq = None;
         if !wnohang {
-            let mut set = WaitSet::new()?;
+            let mut set = WaitSet::new(current);
             set.subscribe(&self.child_exit);
             set.subscribe(&self.signal_wait);
             wq = Some(set);

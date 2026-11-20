@@ -53,11 +53,11 @@ pub struct WaitSet<'a> {
 }
 
 impl<'a> WaitSet<'a> {
-    pub fn new() -> Result<Self, ErrorCode> {
-        Ok(Self {
-            poll: Arc::new(Poll::create()?),
+    pub fn new(current: &LxThread) -> Self {
+        Self {
+            poll: current.sleep_poll().clone(),
             queues: Vec::new(),
-        })
+        }
     }
 
     pub fn subscribe(&mut self, wq: &'a WaitQueue) {
@@ -272,10 +272,13 @@ impl SleepGuard<'_> {
                 }
             }
             SleepGuard::Interruptible {
-                wq, process, set, ..
+                wq,
+                thread,
+                process,
+                set,
             } => {
                 // Wait for both the wait queue and the signal.
-                let mut new_set = WaitSet::new()?;
+                let mut new_set = WaitSet::new(thread);
                 new_set.subscribe(wq);
                 new_set.subscribe(process.signal_wait_queue());
                 if set.set(new_set).is_err() {
