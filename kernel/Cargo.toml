@@ -22,4 +22,4 @@ virtio_net = { workspace = true }
 hashbrown = { workspace = true }
 
 [features]
-embed_lx_elf = []
+embed_system_elf = []

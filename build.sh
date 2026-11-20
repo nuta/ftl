@@ -54,16 +54,16 @@ build_os() {
     cargo_command=check
   fi
 
-  # Build userspace OS.
+  # Build system.
   cargo "${cargo_command}" "${CARGOFLAGS[@]}" --target libs/ftl/src/arch/$ARCH/user.json \
-    --manifest-path lx/Cargo.toml
+    --manifest-path system/linux/Cargo.toml
 
   if [[ "$cargo_command" != "check" ]]; then
-    cp target/user/$target/lx lx.elf
+    cp target/user/$target/linux_system system.elf
   fi
 
-  if [[ -n "${EMBED_LX_ELF:-}" ]]; then
-    CARGOFLAGS+=(--features embed_lx_elf)
+  if [[ -n "${EMBED_SYSTEM_ELF:-}" ]]; then
+    CARGOFLAGS+=(--features embed_system_elf)
   fi
 
   # Build kernel.
@@ -84,7 +84,7 @@ build_iso() {
   echo "Building ISO..."
   mkdir -p isofiles/boot/grub
   cp kernel/src/arch/x64/grub.cfg isofiles/boot/grub/
-  cp ftl.elf lx.elf isofiles/
+  cp ftl.elf system.elf isofiles/
 
   export PATH="$PATH:/opt/homebrew/opt/i686-elf-grub/bin"
   i686-elf-grub-mkrescue -o ftl.iso isofiles

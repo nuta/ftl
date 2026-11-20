@@ -22,13 +22,13 @@ use crate::thread::Thread;
 use crate::vmobject::VmObject;
 use crate::vmspace::VmSpace;
 
-#[cfg(feature = "embed_lx_elf")]
+#[cfg(feature = "embed_system_elf")]
 #[repr(C, align(8))]
 struct Aligned<const N: usize>([u8; N]);
 
-#[cfg(feature = "embed_lx_elf")]
-static LX_ELF: Aligned<{ include_bytes!("../../lx.elf").len() }> =
-    Aligned(*include_bytes!("../../lx.elf"));
+#[cfg(feature = "embed_system_elf")]
+static SYSTEM_ELF: Aligned<{ include_bytes!("../../system.elf").len() }> =
+    Aligned(*include_bytes!("../../system.elf"));
 
 fn load_elf(
     quota: &SharedRef<Quota>,
@@ -146,9 +146,9 @@ fn prepare_stack(quota: &SharedRef<Quota>, vmspace: &SharedRef<VmSpace>, cmdline
 }
 
 pub fn load(bootinfo: &BootInfo) {
-    #[cfg(feature = "embed_lx_elf")]
-    let elf_file = &LX_ELF.0;
-    #[cfg(not(feature = "embed_lx_elf"))]
+    #[cfg(feature = "embed_system_elf")]
+    let elf_file = &SYSTEM_ELF.0;
+    #[cfg(not(feature = "embed_system_elf"))]
     let elf_file = bootinfo
         .modules
         .get(0)

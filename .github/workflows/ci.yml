@@ -41,7 +41,7 @@ jobs:
         name: dist
         path: |
           ftl.elf
-          lx.elf
+          system.elf
         if-no-files-found: error
 
   e2e:

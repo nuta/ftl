@@ -176,10 +176,10 @@ mod tests {
 
     #[test]
     fn test_parse_bare_tokens() {
-        let input = b"/ftl.elf ftl.lx.init=/bin/httpd nosmp debug ro";
+        let input = b"/ftl.elf ftl.run=/bin/httpd nosmp debug ro";
         assert_eq!(parse(input, b"nosmp"), Ok(Some(&b""[..])));
         assert_eq!(parse(input, b"debug"), Ok(Some(&b""[..])));
         assert_eq!(parse(input, b"ro"), Ok(Some(&b""[..])));
-        assert_eq!(parse(input, b"ftl.lx.init"), Ok(Some(&b"/bin/httpd"[..])));
+        assert_eq!(parse(input, b"ftl.run"), Ok(Some(&b"/bin/httpd"[..])));
     }
 }

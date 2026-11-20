@@ -177,7 +177,7 @@ pub(super) fn parse_multiboot2_info(info_addr: PAddr) -> BootInfo {
     reserved_regions
         .try_push(super::vmspace::get_kernel_reserved_range())
         .unwrap();
-    // Reserve the modules (e.g. lx.elf).
+    // Reserve the modules (e.g. system.elf).
     for module in &modules {
         reserved_regions
             .try_push(module.start..module.end)

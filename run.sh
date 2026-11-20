@@ -3,10 +3,10 @@ set -eu
 
 cmdline=""
 if [[ $# -gt 0 ]]; then
-  cmdline="ftl.lx.init=\"$1\""
+  cmdline="ftl.run=\"$1\""
 else
   echo "run.sh: No init program specified, using default \"/bin/util httpd\""
-  cmdline="ftl.lx.init=\"/bin/util httpd\""
+  cmdline="ftl.run=\"/bin/util httpd\""
 fi
 
 ./build.sh
@@ -14,7 +14,7 @@ fi
 qemuflags=()
 qemuflags+=(-machine microvm,acpi=off -m "${MEMORY:-128}")
 qemuflags+=(-cpu qemu64,+fsgsbase,+xsave,+xsaveopt,+smep,+smap,+rdrand,+rdtscp)
-qemuflags+=(-kernel ftl.elf -initrd lx.elf -append "$cmdline")
+qemuflags+=(-kernel ftl.elf -initrd system.elf -append "$cmdline")
 qemuflags+=(--no-reboot -gdb tcp::7778)
 qemuflags+=(-d cpu_reset,unimp,guest_errors -D qemu.log)
 qemuflags+=(-device isa-debug-exit,iobase=0x501,iosize=0x04)

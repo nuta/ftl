@@ -5,7 +5,7 @@ edition = "2024"
 
 [workspace]
 resolver = "2"
-members = ["kernel", "libs/*", "drivers/*", "lx"]
+members = ["kernel", "libs/*", "drivers/*", "system/*"]
 
 [workspace.dependencies]
 ftl = { path = "libs/ftl" }

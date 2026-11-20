@@ -39,7 +39,7 @@ fn run(init: &str, args: &[String]) -> std::io::Result<u8> {
     }
     spec.push_str("exec\n");
 
-    let mut fork = OpenOptions::new().write(true).open("/lx/zone/fork")?;
+    let mut fork = OpenOptions::new().write(true).open("/ftl/zone/fork")?;
     fork.write_all(spec.as_bytes())?;
 
     let (mut stream, _) = listener.accept()?;
@@ -90,7 +90,7 @@ fn run(init: &str, args: &[String]) -> std::io::Result<u8> {
     };
 
     // Close the connection and wait for the zone to acknowledge our FIN.
-    // Othsewise, this LX will try sending FIN to close the connection
+    // Othsewise, this system will try sending FIN to close the connection
     // gracefully.
     stream.set_linger(Some(Duration::from_secs(5)))?;
     drop(stream);

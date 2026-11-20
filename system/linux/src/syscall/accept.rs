@@ -1,0 +1,14 @@
+use super::SyscallResult;
+use super::accept4::sys_accept4;
+use crate::thread::Thread;
+use crate::types::c_int;
+use crate::types::errno::Errno;
+
+pub fn sys_accept(
+    current: &Thread,
+    fd: c_int,
+    addr: *mut u8,
+    addr_len: *mut u32,
+) -> Result<SyscallResult, Errno> {
+    sys_accept4(current, fd, addr, addr_len, 0)
+}

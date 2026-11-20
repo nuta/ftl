@@ -1,0 +1,587 @@
+use alloc::sync::Arc;
+use alloc::sync::Weak;
+use alloc::vec::Vec;
+use core::fmt;
+use core::ptr;
+
+use ftl::trace;
+use ftl_types::thread::RegsKind;
+use ftl_utils::spinlock::SpinLock;
+
+use crate::arch::SyscallFrame;
+use crate::arch::restore_regs;
+use crate::fd_table::FdTable;
+use crate::futex::FutexTable;
+use crate::global::Global;
+use crate::signal::SigAction;
+use crate::signal::SigDisposition;
+use crate::signal::Signal;
+use crate::signal::SignalMap;
+use crate::signal::SignalSet;
+use crate::thread::Thread;
+use crate::types::c_int;
+use crate::types::errno::Errno;
+use crate::types::sys::fcntl::O_RDONLY;
+use crate::types::sys::fcntl::O_WRONLY;
+use crate::vfs::Console;
+use crate::vfs::FileLike;
+use crate::vfs::INode;
+use crate::vfs::Null;
+use crate::vfs::PathNode;
+use crate::vfs::Tty;
+use crate::vm::Vm;
+use crate::wait_queue::WaitQueue;
+use crate::wait_queue::WaitSet;
+
+/// A Linux process/thread ID.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct PId(c_int);
+
+impl PId {
+    pub const fn new(id: c_int) -> Self {
+        Self(id)
+    }
+}
+
+impl fmt::Display for PId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl PId {
+    pub fn as_int(self) -> c_int {
+        self.0
+    }
+}
+
+struct Mutable {
+    parent: Option<Weak<Process>>,
+    threads: Vec<Arc<Thread>>,
+    children: Vec<Arc<Process>>,
+    exit_status: Option<c_int>,
+    signal_actions: SignalMap<SigAction>,
+    pending_signals: SignalSet,
+    /// The current working directory.
+    cwd: Arc<PathNode>,
+}
+
+/// A Linux process.
+///
+/// # Lock order
+///
+/// 1. Parent's `mutable`
+/// 2. Child's `mutable`
+/// 3. `Global::processes`
+pub struct Process {
+    tgid: PId,
+    child_exit: WaitQueue,
+    global: Arc<Global>,
+    mutable: SpinLock<Mutable>,
+    fd_table: SpinLock<FdTable>,
+    signal_wait: WaitQueue,
+    futexes: FutexTable,
+}
+
+impl Process {
+    pub fn new_init(
+        global: Arc<Global>,
+        console: Option<Arc<Console>>,
+        stdio: Option<(Arc<dyn FileLike>, Arc<dyn FileLike>)>,
+        elf_file: Arc<dyn FileLike>,
+        argv: &[&[u8]],
+    ) -> Result<Arc<Process>, Errno> {
+        let vmspace = global.root_vmspace.try_clone(&global.quota)?;
+        let (vm, entry, sp) = Vm::create(
+            &global.quota,
+            &vmspace,
+            &global.root_dir,
+            elf_file,
+            argv,
+            &[],
+        )?;
+
+        let mut fd_table = FdTable::new(1024); // TODO: make this configurable
+        let tty: Arc<dyn FileLike> = match console {
+            Some(console) => Arc::new(Tty::new(console)),
+            None => Arc::new(Null::new()),
+        };
+        let (stdout, stderr) = stdio.unwrap_or_else(|| (tty.clone(), tty.clone()));
+        fd_table.insert_at(0, tty, O_RDONLY)?;
+        fd_table.insert_at(1, stdout, O_WRONLY)?;
+        fd_table.insert_at(2, stderr, O_WRONLY)?;
+
+        let cwd = global.root_dir.clone();
+        let process = Self::new(
+            global,
+            vm,
+            fd_table,
+            cwd,
+            PId(1),
+            None,
+            entry,
+            SignalMap::new(SigAction::default()),
+            |_thread| Ok(sp),
+        )?;
+
+        Ok(process)
+    }
+
+    pub fn exec(
+        self: &Arc<Self>,
+        current: &Thread,
+        elf_file: Arc<dyn FileLike>,
+        argv: &[&[u8]],
+        envp: &[&[u8]],
+    ) -> Result<(), Errno> {
+        let (vm, entry, sp) = Vm::create(
+            &self.global.quota,
+            &self.global.root_vmspace,
+            &self.global.root_dir,
+            elf_file,
+            argv,
+            envp,
+        )?;
+        self.fd_table.lock().close_on_exec();
+
+        let thread = Thread::new(Arc::new(vm), Arc::downgrade(self), self.tgid)?;
+        thread.set_signal_mask(current.signal_mask());
+
+        let mut mutable = self.mutable.lock();
+        for action in mutable.signal_actions.iter_mut() {
+            *action = action.reset_on_exec();
+        }
+
+        // FIXME: Remove existing threads.
+
+        // This should be done while locking the process's mutable, because the
+        // new thread is not yet added to `mutable.threads`, and the thread
+        // starts immediately in add_thread.
+        self.global.add_thread(thread.clone(), entry, sp)?;
+
+        mutable
+            .threads
+            .retain(|thread| !core::ptr::eq(thread.as_ref(), current));
+        mutable.threads.push(thread);
+        Ok(())
+    }
+
+    fn new<F>(
+        global: Arc<Global>,
+        vm: Vm,
+        fd_table: FdTable,
+        cwd: Arc<PathNode>,
+        tgid: PId,
+        parent: Option<Weak<Process>>,
+        entry: usize,
+        signal_actions: SignalMap<SigAction>,
+        thread_prestart: F,
+    ) -> Result<Arc<Self>, Errno>
+    where
+        F: FnOnce(&Arc<Thread>) -> Result<usize, Errno>,
+    {
+        let child_exit = WaitQueue::new()?;
+        let signal_wait = WaitQueue::new()?;
+        let process = Arc::new(Self {
+            tgid,
+            child_exit,
+            global: global.clone(),
+            mutable: SpinLock::new(Mutable {
+                parent,
+                threads: Vec::with_capacity(1),
+                children: Vec::new(),
+                exit_status: None,
+                signal_actions,
+                pending_signals: SignalSet::empty(),
+                cwd,
+            }),
+            fd_table: SpinLock::new(fd_table),
+            signal_wait,
+            futexes: FutexTable::new(),
+        });
+
+        // TODO: The system assumes that kernel won't touch the system stack until the
+        // thread is started. Should we document and guarantee this?
+        let thread = Thread::new(Arc::new(vm), Arc::downgrade(&process), tgid)?;
+        let sp = thread_prestart(&thread)?;
+
+        // Start the thread.
+        //
+        // `fork` calls this while holding `Global::processes`. Locking
+        // `mutable` here is fine because nobody else can reach this process yet.
+        process.mutable.lock().threads.push(thread.clone());
+        global.add_thread(thread, entry, sp)?;
+
+        Ok(process)
+    }
+
+    pub fn fork(
+        self: &Arc<Self>,
+        current: &Thread,
+        frame: &SyscallFrame,
+        set_child_tid: Option<usize>,
+        clear_child_tid: Option<usize>,
+    ) -> Result<PId, Errno> {
+        let fd_table = self.fd_table.lock().clone();
+
+        // Set the return value for the child process.
+        let mut child_frame = *frame;
+        child_frame.set_retval(0);
+
+        // Copy memory into the child's VM space.
+        // TODO: copy on write
+        let mutable = self.mutable.lock();
+        let new_vm = current.vm().fork(&self.global.root_vmspace)?;
+        let signal_actions = mutable.signal_actions.fork();
+        let cwd = mutable.cwd.clone();
+        drop(mutable);
+
+        // Allocate a new PID for the child process.
+        let mut pid_table = self.global.processes.lock();
+        let tgid = pid_table.allocate()?;
+
+        // Create a new process and the first thread.
+        let entry = restore_regs as *const () as usize;
+        let child = Self::new(
+            self.global.clone(),
+            new_vm,
+            fd_table,
+            cwd,
+            tgid,
+            Some(Arc::downgrade(self)),
+            entry,
+            signal_actions,
+            |thread| {
+                current.copy_regs_to(&thread, RegsKind::FsBase)?;
+                current.copy_regs_to(&thread, RegsKind::FpAndVector)?;
+                thread.set_signal_mask(current.signal_mask());
+                thread.set_clear_child_tid(clear_child_tid);
+                thread.set_name(&current.name());
+
+                if let Some(uaddr) = set_child_tid {
+                    let tgid_bytes = tgid.as_int().to_ne_bytes();
+                    thread.vm().write(uaddr, &tgid_bytes)?;
+                }
+
+                Ok(thread.push_syscall_frame(child_frame))
+            },
+        )?;
+
+        pid_table.insert(tgid, child.clone());
+
+        // Release the PID table lock before locking mutable, to follow the
+        // lock order.
+        drop(pid_table);
+
+        self.mutable.lock().children.push(child);
+        Ok(tgid)
+    }
+
+    /// Spawns a new thread (`clone(2)` with `CLONE_THREAD`).
+    pub fn spawn_thread(
+        self: &Arc<Self>,
+        current: &Thread,
+        frame: &SyscallFrame,
+        stack: usize,
+        tls: Option<usize>,
+        parent_tid: Option<*mut c_int>,
+        clear_child_tid: Option<usize>,
+    ) -> Result<PId, Errno> {
+        // Allocate a new thread ID.
+        let mut pid_table = self.global.processes.lock();
+        let tid = pid_table.allocate()?;
+
+        // Create a thread.
+        let thread = Thread::new(current.vm().clone(), Arc::downgrade(self), tid)?;
+
+        match tls {
+            // Set the TLS base if it is provided.
+            Some(tls) => thread.set_fsbase(tls)?,
+            // Otherwise, inherit the parent's FS base.
+            None => current.copy_regs_to(&thread, RegsKind::FsBase)?,
+        }
+
+        // TODO: Do we really need to copy the FP registers?
+        current.copy_regs_to(&thread, RegsKind::FpAndVector)?;
+
+        thread.set_clear_child_tid(clear_child_tid);
+        thread.set_signal_mask(current.signal_mask());
+        thread.set_name(&current.name());
+
+        // Reserve the TID and release the table lock. The write to `parent_tid`
+        // may cause a page fault.
+        pid_table.insert(tid, self.clone());
+        drop(pid_table);
+
+        // Write the new thread's ID to the parent's clear_child_tid.
+        let tid = thread.tid();
+        if let Some(parent_tid) = parent_tid {
+            unsafe { parent_tid.write(tid.as_int()) };
+        }
+
+        // Write the new thread's initial registers.
+        let mut child_frame = *frame;
+        child_frame.set_retval(0);
+        child_frame.set_sp(stack);
+        let frame_addr = thread.push_syscall_frame(child_frame);
+
+        // Start the thread.
+        let mut mutable = self.mutable.lock();
+        let entry = restore_regs as *const () as usize;
+        if let Err(err) = self.global.add_thread(thread.clone(), entry, frame_addr) {
+            drop(mutable);
+            self.global.processes.lock().remove(tid);
+            return Err(err);
+        }
+
+        mutable.threads.push(thread);
+        Ok(tid)
+    }
+
+    pub fn on_thread_exit(&self, thread: &Thread) -> Result<(), Errno> {
+        if thread.tid() != self.tgid {
+            // This is not the main thread. Remove it from the PID table.
+            self.global.processes.lock().remove(thread.tid());
+        }
+
+        let mut mutable = self.mutable.lock();
+
+        if mutable.exit_status.is_some() {
+            // The process has already exited.
+            return Ok(());
+        }
+
+        // Remove the thread from the process's thread list.
+        mutable
+            .threads
+            .retain(|entry| !ptr::eq(entry.as_ref(), thread));
+
+        if !mutable.threads.is_empty() {
+            // Preserve the process if there are still threads running.
+            return Ok(());
+        }
+
+        drop(mutable);
+
+        // This is the last thread in the process. Exit the process with its
+        // exit status.
+        //
+        // TODO: What's the proper exit status if thread has aborted without
+        //       exit(2), such as page faults?
+        let status = thread.exit_status().unwrap_or(1);
+        self.exit(status)
+    }
+
+    // TODO: Should we make this method infallible?
+    pub fn exit(&self, status: c_int) -> Result<(), Errno> {
+        if self.tgid == PId::new(1) {
+            self.global.set_init_exit_status(status);
+        }
+
+        let mut mutable = self.mutable.lock();
+
+        // Wake up the parent process while holding the lock.
+        let parent = mutable.parent.as_ref().and_then(Weak::upgrade);
+        if let Some(parent) = &parent {
+            parent.child_exit.notify(None);
+        }
+
+        // Mark the process as exited.
+        mutable.exit_status = Some(status);
+        mutable.threads.clear();
+
+        // Reap this process if its parent is gone.
+        if parent.is_none() {
+            self.global.processes.lock().remove(self.tgid);
+        }
+
+        // Orphan its children that have already exited.
+        while let Some(child) = mutable.children.pop() {
+            let mut child_mutable = child.mutable.lock();
+
+            // Drop the reference to this process. It has ceased to be. It is an ex-process.
+            child_mutable.parent = None;
+
+            if child_mutable.exit_status.is_some() {
+                self.global.processes.lock().remove(child.tgid);
+            }
+        }
+
+        drop(mutable);
+
+        // Close all file descriptors.
+        self.fd_table.lock().clear();
+        Ok(())
+    }
+
+    pub fn wait(
+        &self,
+        current: &Thread,
+        mut pid: c_int,
+        wnohang: bool,
+    ) -> Result<Option<(PId, c_int)>, Errno> {
+        if pid <= 0 {
+            pid = -1;
+        }
+
+        let mut wq = None;
+        if !wnohang {
+            let mut set = WaitSet::new(current);
+            set.subscribe(&self.child_exit);
+            set.subscribe(&self.signal_wait);
+            wq = Some(set);
+        }
+
+        loop {
+            let mut mutable = self.mutable.lock();
+            let mut matched_any = false;
+            for (index, child) in mutable.children.iter().enumerate() {
+                if pid != -1 && child.tgid != PId::new(pid) {
+                    // This child is not the one we are waiting for.
+                    continue;
+                }
+
+                let exit_status = child.mutable.lock().exit_status;
+                if let Some(status) = exit_status {
+                    let tgid = child.tgid;
+                    mutable.children.remove(index);
+                    self.global.processes.lock().remove(tgid);
+                    return Ok(Some((tgid, status)));
+                }
+
+                matched_any = true;
+            }
+
+            if !matched_any {
+                return Err(Errno::ECHILD);
+            }
+
+            let Some(wq) = &wq else {
+                // WNOHANG is set. Return immediately.
+                return Ok(None);
+            };
+
+            drop(mutable);
+            if current.has_pending_signal() {
+                return Err(Errno::EINTR);
+            }
+
+            wq.wait()?;
+        }
+    }
+
+    pub fn fd_table(&self) -> &SpinLock<FdTable> {
+        &self.fd_table
+    }
+
+    /// Resolves a path, from `dirfd` or the current working directory of this process.
+    pub fn lookup_path(&self, path: &[u8], dirfd: Option<c_int>) -> Result<Arc<PathNode>, Errno> {
+        let dir = if path.starts_with(b"/") {
+            // Absolute paths. Start from the root directory.
+            self.global.root_dir.clone()
+        } else if let Some(dirfd) = dirfd {
+            let file = self.fd_table.lock().get(dirfd)?.clone();
+            let Some(dir) = file.pnode() else {
+                return Err(Errno::ENOTDIR);
+            };
+
+            dir
+        } else {
+            // Relative paths.
+            self.mutable.lock().cwd.clone()
+        };
+
+        dir.lookup(path)
+    }
+
+    pub fn cwd(&self) -> Arc<PathNode> {
+        self.mutable.lock().cwd.clone()
+    }
+
+    /// Changes the current working directory of this process.
+    pub fn chdir(&self, path: &[u8]) -> Result<(), Errno> {
+        // Find the new directory.
+        let pnode = self.lookup_path(path, None)?;
+        if !matches!(pnode.inode(), INode::Dir(_)) {
+            return Err(Errno::ENOTDIR);
+        }
+
+        // Replace the old pnode with the new one.
+        let mut mutable = self.mutable.lock();
+        mutable.cwd = pnode;
+        Ok(())
+    }
+
+    pub fn id(&self) -> PId {
+        self.tgid
+    }
+
+    pub fn sigaction(&self, signal: Signal, new_action: Option<SigAction>) -> SigAction {
+        let mut mutable = self.mutable.lock();
+
+        let old = *mutable.signal_actions.get(signal);
+        if let Some(action) = new_action {
+            mutable.signal_actions.set(signal, action);
+        }
+
+        old
+    }
+
+    pub fn queue_signal(&self, signal: Signal) -> Result<(), Errno> {
+        let mut mutable = self.mutable.lock();
+        let action = *mutable.signal_actions.get(signal);
+        match action.disposition() {
+            SigDisposition::Ignore => return Ok(()),
+            SigDisposition::Default => {
+                trace!("unsupproted default handling for signal {:?}", signal);
+                return Err(Errno::ENOTSUP);
+            }
+            SigDisposition::Handler(_) => {}
+        }
+
+        mutable.pending_signals.insert(signal);
+        drop(mutable);
+        self.signal_wait.notify(None);
+        Ok(())
+    }
+
+    pub fn has_unblocked_signal(&self, blocked: SignalSet) -> bool {
+        let mutable = self.mutable.lock();
+        !mutable.pending_signals.difference(blocked).is_empty()
+    }
+
+    pub fn get_signal_action(&self, signal: Signal) -> SigAction {
+        *self.mutable.lock().signal_actions.get(signal)
+    }
+
+    pub fn get_thread_by_tid(&self, tid: PId) -> Option<Arc<Thread>> {
+        let mutable = self.mutable.lock();
+        for thread in &mutable.threads {
+            if thread.tid() == tid {
+                return Some(thread.clone());
+            }
+        }
+
+        None
+    }
+
+    pub fn take_pending_signal(&self, blocked: SignalSet) -> Option<(Signal, SigAction)> {
+        let mut mutable = self.mutable.lock();
+        let signal = mutable.pending_signals.difference(blocked).take_first()?;
+        mutable.pending_signals.remove(signal);
+        let action = *mutable.signal_actions.get(signal);
+        Some((signal, action))
+    }
+
+    pub fn futexes(&self) -> &FutexTable {
+        &self.futexes
+    }
+
+    pub fn signal_wait_queue(&self) -> &WaitQueue {
+        &self.signal_wait
+    }
+
+    pub fn global(&self) -> &Arc<Global> {
+        &self.global
+    }
+}
