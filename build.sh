@@ -13,6 +13,7 @@ build_rust_app() {
 }
 
 build_default_initfs() {
+  rm -rf initfs
   mkdir -p initfs/bin
   build_rust_app easybox
 }
