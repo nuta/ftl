@@ -121,7 +121,8 @@ pub fn sys_console_read(
     let id = HandleId::new(ctx.a0);
     let uslice = USlice::new(UAddr::new(ctx.a1), ctx.a2)?;
 
-    let _console = current.hspace().get::<Console>(id, HandleRight::READ)?;
+    let console_handle = current.hspace().get::<Console>(id)?;
+    let _console = console_handle.authorize(HandleRight::READ)?;
 
     let mut device = DEVICE.lock();
     let n = device.read(uslice)?;
@@ -136,12 +137,11 @@ pub fn sys_console_subscribe(
     let poll_id = HandleId::new(ctx.a1);
     let cookie = ctx.a2;
 
-    let (_console, poll) = current.hspace().get2::<Console, Poll>(
-        console_id,
-        HandleRight::READ,
-        poll_id,
-        HandleRight::WRITE,
-    )?;
+    let (console_handle, poll_handle) = current
+        .hspace()
+        .get2::<Console, Poll>(console_id, poll_id)?;
+    let _console = console_handle.authorize(HandleRight::READ)?;
+    let poll = poll_handle.authorize(HandleRight::WRITE)?;
 
     let emitter = EventEmitter::new(poll, cookie)?;
     let mut device = DEVICE.lock();

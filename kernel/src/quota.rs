@@ -291,7 +291,8 @@ pub fn sys_quota_create(
     let parent_id = HandleId::new(ctx.a0);
 
     let hspace = current.hspace();
-    let parent = hspace.get::<Quota>(parent_id, HandleRight::CHARGE)?;
+    let parent_handle = hspace.get::<Quota>(parent_id)?;
+    let parent = parent_handle.authorize(HandleRight::CHARGE)?;
     let quota = Quota::new(parent)?;
     let handle = Handle::new(quota, HandleRight::CHARGE | HandleRight::WRITE);
     let id = hspace.insert(handle)?;
@@ -306,7 +307,8 @@ pub fn sys_quota_limit(
     let resource = Resource::from_usize(ctx.a1).ok_or(ErrorCode::InvalidArg)?;
     let limit = ctx.a2;
 
-    let quota = current.hspace().get::<Quota>(id, HandleRight::WRITE)?;
+    let quota_handle = current.hspace().get::<Quota>(id)?;
+    let quota = quota_handle.authorize(HandleRight::WRITE)?;
     quota.limit(resource, limit);
     Ok(SyscallOutput::Done(0))
 }

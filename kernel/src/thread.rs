@@ -307,12 +307,15 @@ pub fn sys_thread_create(
     let system_sp = ctx.a5;
 
     let current_hspace = current.hspace();
-    let quota = current_hspace.get::<Quota>(quota_id, HandleRight::CHARGE)?;
-    let vmspace = current_hspace.get::<VmSpace>(vmspace_id, HandleRight::WRITE)?;
+    let (quota_handle, vmspace_handle) =
+        current_hspace.get2::<Quota, VmSpace>(quota_id, vmspace_id)?;
+    let quota = quota_handle.authorize(HandleRight::CHARGE)?;
+    let vmspace = vmspace_handle.authorize(HandleRight::WRITE)?;
     let hspace = if hspace_id == CURRENT_HSPACE {
         current_hspace.clone()
     } else {
-        current_hspace.get::<HandleSpace>(hspace_id, HandleRight::WRITE)?
+        let hspace_handle = current_hspace.get::<HandleSpace>(hspace_id)?;
+        hspace_handle.authorize(HandleRight::WRITE)?
     };
 
     let thread = Thread::new(&quota, hspace, vmspace, syscall_pc, fault_pc, system_sp)?;
@@ -336,9 +339,8 @@ pub fn sys_thread_start(
     let pc = ctx.a1;
     let sp = ctx.a2;
 
-    let thread = current
-        .hspace()
-        .get::<Thread>(thread_id, HandleRight::WRITE)?;
+    let thread_handle = current.hspace().get::<Thread>(thread_id)?;
+    let thread = thread_handle.authorize(HandleRight::WRITE)?;
     thread.start(pc, sp)?;
     Ok(SyscallOutput::Done(0))
 }
@@ -351,12 +353,9 @@ pub fn sys_thread_subscribe(
     let poll_id = HandleId::new(ctx.a1);
     let cookie = ctx.a2;
 
-    let (thread, poll) = current.hspace().get2::<Thread, Poll>(
-        thread_id,
-        HandleRight::READ,
-        poll_id,
-        HandleRight::WRITE,
-    )?;
+    let (thread_handle, poll_handle) = current.hspace().get2::<Thread, Poll>(thread_id, poll_id)?;
+    let thread = thread_handle.authorize(HandleRight::READ)?;
+    let poll = poll_handle.authorize(HandleRight::WRITE)?;
 
     let emitter = EventEmitter::new(poll, cookie)?;
     thread.subscribe(emitter)?;
@@ -371,9 +370,8 @@ pub fn sys_thread_write_regs(
     let thread_id = HandleId::new(ctx.a0);
     let kind = RegsKind::from_usize(ctx.a1).ok_or(ErrorCode::InvalidArg)?;
     let regs = USlice::new(UAddr::new(ctx.a2), size_of::<Regs>())?;
-    let thread = current
-        .hspace()
-        .get::<Thread>(thread_id, HandleRight::WRITE)?;
+    let thread_handle = current.hspace().get::<Thread>(thread_id)?;
+    let thread = thread_handle.authorize(HandleRight::WRITE)?;
 
     if SharedRef::eq(&thread, current) {
         thread.write_current_regs(current_arch, kind, regs)?;
@@ -393,8 +391,9 @@ pub fn sys_thread_copy_regs(
     let dest_id = HandleId::new(ctx.a1);
     let kind = RegsKind::from_usize(ctx.a2).ok_or(ErrorCode::InvalidArg)?;
     let hspace = current.hspace();
-    let (src, dest) =
-        hspace.get2::<Thread, Thread>(src_id, HandleRight::READ, dest_id, HandleRight::WRITE)?;
+    let (src_handle, dest_handle) = hspace.get2::<Thread, Thread>(src_id, dest_id)?;
+    let src = src_handle.authorize(HandleRight::READ)?;
+    let dest = dest_handle.authorize(HandleRight::WRITE)?;
 
     if SharedRef::eq(&src, &dest) {
         return Err(ErrorCode::InvalidArg);
@@ -424,7 +423,8 @@ pub fn sys_thread_destroy(
     ctx: &SyscallRegs,
 ) -> Result<SyscallOutput, ErrorCode> {
     let id = HandleId::new(ctx.a0);
-    let thread = current.hspace().get::<Thread>(id, HandleRight::DESTROY)?;
+    let thread_handle = current.hspace().get::<Thread>(id)?;
+    let thread = thread_handle.authorize(HandleRight::DESTROY)?;
     thread.destroy();
     Ok(SyscallOutput::Done(0))
 }

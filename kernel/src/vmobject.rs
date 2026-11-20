@@ -420,7 +420,8 @@ pub fn sys_vmo_create_zeroed(
     let len = ctx.a1;
 
     let hspace = current.hspace();
-    let quota = hspace.get::<Quota>(quota_id, HandleRight::CHARGE)?;
+    let quota_handle = hspace.get::<Quota>(quota_id)?;
+    let quota = quota_handle.authorize(HandleRight::CHARGE)?;
     let vmo = VmObject::new_zeroed(quota, len)?;
     let rights = HandleRight::READ | HandleRight::WRITE;
     let handle = Handle::new(vmo, rights);
@@ -436,7 +437,8 @@ pub fn sys_vmo_create_user(
     let len = ctx.a1;
 
     let hspace = current.hspace();
-    let quota = hspace.get::<Quota>(quota_id, HandleRight::CHARGE)?;
+    let quota_handle = hspace.get::<Quota>(quota_id)?;
+    let quota = quota_handle.authorize(HandleRight::CHARGE)?;
     let vmo = VmObject::new_user(quota, len)?;
     let rights = HandleRight::READ | HandleRight::WRITE;
     let handle = Handle::new(vmo, rights);
@@ -454,7 +456,8 @@ pub fn sys_vmo_read(
     let len = min(ctx.a3, MAX_COPY_LEN);
 
     let uslice = USlice::new(uaddr, len)?;
-    let vmo = current.hspace().get::<VmObject>(id, HandleRight::READ)?;
+    let vmo_handle = current.hspace().get::<VmObject>(id)?;
+    let vmo = vmo_handle.authorize(HandleRight::READ)?;
 
     vmo.read_user(offset, uslice)?;
     Ok(SyscallOutput::Done(len))
@@ -470,7 +473,8 @@ pub fn sys_vmo_write(
     let len = min(ctx.a3, MAX_COPY_LEN);
 
     let uslice = USlice::new(uaddr, len)?;
-    let vmo = current.hspace().get::<VmObject>(id, HandleRight::WRITE)?;
+    let vmo_handle = current.hspace().get::<VmObject>(id)?;
+    let vmo = vmo_handle.authorize(HandleRight::WRITE)?;
 
     vmo.write_user(offset, uslice)?;
     Ok(SyscallOutput::Done(len))
@@ -487,7 +491,8 @@ pub fn sys_vmo_supply(
     let len = min(ctx.a4, MAX_COPY_LEN);
 
     let uslice = USlice::new(uaddr, len)?;
-    let vmo = current.hspace().get::<VmObject>(id, HandleRight::WRITE)?;
+    let vmo_handle = current.hspace().get::<VmObject>(id)?;
+    let vmo = vmo_handle.authorize(HandleRight::WRITE)?;
 
     vmo.supply(mode, offset, uslice)?;
     Ok(SyscallOutput::Done(len))
@@ -503,8 +508,9 @@ pub fn sys_vmo_snapshot(
     let len = ctx.a3;
 
     let hspace = current.hspace();
-    let (quota, vmo) =
-        hspace.get2::<Quota, VmObject>(quota_id, HandleRight::CHARGE, id, HandleRight::READ)?;
+    let (quota_handle, vmo_handle) = hspace.get2::<Quota, VmObject>(quota_id, id)?;
+    let quota = quota_handle.authorize(HandleRight::CHARGE)?;
+    let vmo = vmo_handle.authorize(HandleRight::READ)?;
 
     let new_vmo = vmo.snapshot(quota, offset, len)?;
     let rights = HandleRight::READ | HandleRight::WRITE;

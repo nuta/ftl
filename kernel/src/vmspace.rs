@@ -300,12 +300,11 @@ pub fn sys_vmspace_clone(
 ) -> Result<SyscallOutput, ErrorCode> {
     let quota_id = HandleId::new(ctx.a0);
     let source_id = HandleId::new(ctx.a1);
-    let (quota, source) = current.hspace().get2::<Quota, VmSpace>(
-        quota_id,
-        HandleRight::CHARGE,
-        source_id,
-        HandleRight::READ | HandleRight::WRITE,
-    )?;
+    let (quota_handle, source_handle) = current
+        .hspace()
+        .get2::<Quota, VmSpace>(quota_id, source_id)?;
+    let quota = quota_handle.authorize(HandleRight::CHARGE)?;
+    let source = source_handle.authorize(HandleRight::READ | HandleRight::WRITE)?;
     let vmspace = VmSpace::clone(&source, quota)?;
     let vmspace = SharedRef::new(vmspace)?;
     let rights = HandleRight::READ | HandleRight::WRITE;
@@ -326,9 +325,9 @@ pub fn sys_vmspace_map(
     let attrs = PageAttrs::from_raw(ctx.a5)?;
 
     let hspace = current.hspace();
-    let vmspace = hspace.get::<VmSpace>(vmspace_id, HandleRight::WRITE)?;
-    let vmo = hspace.get_handle::<VmObject>(vmo_id)?;
-    vmspace.map(vmo, uaddr, offset, len, attrs)?;
+    let (vmspace_handle, vmo_handle) = hspace.get2::<VmSpace, VmObject>(vmspace_id, vmo_id)?;
+    let vmspace = vmspace_handle.authorize(HandleRight::WRITE)?;
+    vmspace.map(vmo_handle, uaddr, offset, len, attrs)?;
     Ok(SyscallOutput::Done(0))
 }
 
@@ -339,9 +338,8 @@ pub fn sys_vmspace_unmap(
     let vmspace_id = HandleId::new(ctx.a0);
     let uaddr = UAddr::new(ctx.a1);
     let len = ctx.a2;
-    let vmspace = current
-        .hspace()
-        .get::<VmSpace>(vmspace_id, HandleRight::WRITE)?;
+    let vmspace_handle = current.hspace().get::<VmSpace>(vmspace_id)?;
+    let vmspace = vmspace_handle.authorize(HandleRight::WRITE)?;
 
     vmspace.unmap(uaddr, len)?;
     Ok(SyscallOutput::Done(0))
@@ -355,9 +353,8 @@ pub fn sys_vmspace_permit(
     let uaddr = UAddr::new(ctx.a1);
     let len = ctx.a2;
     let attrs = PageAttrs::from_raw(ctx.a3)?;
-    let vmspace = current
-        .hspace()
-        .get::<VmSpace>(vmspace_id, HandleRight::WRITE)?;
+    let vmspace_handle = current.hspace().get::<VmSpace>(vmspace_id)?;
+    let vmspace = vmspace_handle.authorize(HandleRight::WRITE)?;
 
     vmspace.permit(uaddr, len, attrs)?;
     Ok(SyscallOutput::Done(0))
@@ -368,9 +365,8 @@ pub fn sys_vmspace_create(
     ctx: &SyscallRegs,
 ) -> Result<SyscallOutput, ErrorCode> {
     let quota_id = HandleId::new(ctx.a0);
-    let quota = current
-        .hspace()
-        .get::<Quota>(quota_id, HandleRight::CHARGE)?;
+    let quota_handle = current.hspace().get::<Quota>(quota_id)?;
+    let quota = quota_handle.authorize(HandleRight::CHARGE)?;
     let vmspace = VmSpace::new(quota)?;
     let vmspace = SharedRef::new(vmspace)?;
     let rights = HandleRight::READ | HandleRight::WRITE;

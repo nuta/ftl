@@ -158,7 +158,8 @@ pub fn sys_poll_wait(
 ) -> Result<SyscallOutput, ErrorCode> {
     let handle_id = HandleId::new(ctx.a0);
 
-    let poll = current.hspace().get::<Poll>(handle_id, HandleRight::READ)?;
+    let poll_handle = current.hspace().get::<Poll>(handle_id)?;
+    let poll = poll_handle.authorize(HandleRight::READ)?;
 
     current.start_polling(poll, None)
 }
@@ -170,7 +171,8 @@ pub fn sys_poll_wait_until(
     let handle_id = HandleId::new(ctx.a0);
     let deadline_uslice = USlice::new(UAddr::new(ctx.a1), size_of::<MonoTime>())?;
 
-    let poll = current.hspace().get::<Poll>(handle_id, HandleRight::READ)?;
+    let poll_handle = current.hspace().get::<Poll>(handle_id)?;
+    let poll = poll_handle.authorize(HandleRight::READ)?;
 
     let mut deadline_buf = MaybeUninit::uninit();
     let deadline = unsafe { deadline_uslice.read_uninit(&mut deadline_buf)? };
@@ -185,10 +187,9 @@ pub fn sys_poll_notify(
     let handle_id = HandleId::new(ctx.a0);
     let cookie = ctx.a1;
 
-    current
-        .hspace()
-        .get::<Poll>(handle_id, HandleRight::WRITE)?
-        .notify(cookie)?;
+    let poll_handle = current.hspace().get::<Poll>(handle_id)?;
+    let poll = poll_handle.authorize(HandleRight::WRITE)?;
+    poll.notify(cookie)?;
 
     Ok(SyscallOutput::Done(0))
 }

@@ -171,7 +171,7 @@ impl HandleSpace {
         Ok(())
     }
 
-    pub fn get_handle<T: Handleable>(&self, id: HandleId) -> Result<Handle<T>, ErrorCode> {
+    pub fn get<T: Handleable>(&self, id: HandleId) -> Result<Handle<T>, ErrorCode> {
         let mutable = self.mutable.lock();
         mutable
             .handles
@@ -182,21 +182,11 @@ impl HandleSpace {
             .ok_or(ErrorCode::InvalidHandleType)
     }
 
-    pub fn get<T: Handleable>(
-        &self,
-        id: HandleId,
-        required: HandleRight,
-    ) -> Result<SharedRef<T>, ErrorCode> {
-        self.get_handle::<T>(id)?.authorize(required)
-    }
-
     pub fn get2<T1: Handleable, T2: Handleable>(
         &self,
         id1: HandleId,
-        required1: HandleRight,
         id2: HandleId,
-        required2: HandleRight,
-    ) -> Result<(SharedRef<T1>, SharedRef<T2>), ErrorCode> {
+    ) -> Result<(Handle<T1>, Handle<T2>), ErrorCode> {
         let mutable = self.mutable.lock();
         let Some(handle1) = mutable.handles.get(&id1.as_usize()) else {
             return Err(ErrorCode::HandleNotFound);
@@ -209,13 +199,11 @@ impl HandleSpace {
         let handle1 = handle1
             .clone()
             .downcast::<T1>()
-            .ok_or(ErrorCode::InvalidHandleType)?
-            .authorize(required1)?;
+            .ok_or(ErrorCode::InvalidHandleType)?;
         let handle2 = handle2
             .clone()
             .downcast::<T2>()
-            .ok_or(ErrorCode::InvalidHandleType)?
-            .authorize(required2)?;
+            .ok_or(ErrorCode::InvalidHandleType)?;
         Ok((handle1, handle2))
     }
 
@@ -284,7 +272,8 @@ pub fn sys_hspace_move(
     let rights = HandleRight::from_raw(ctx.a2)?;
 
     let current_hspace = current.hspace();
-    let dst = current_hspace.get::<HandleSpace>(dst_id, HandleRight::WRITE)?;
+    let dst_handle = current_hspace.get::<HandleSpace>(dst_id)?;
+    let dst = dst_handle.authorize(HandleRight::WRITE)?;
     let new_id = current_hspace.do_move(handle_id, &dst, rights)?;
     Ok(SyscallOutput::Done(new_id.as_usize()))
 }

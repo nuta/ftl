@@ -82,8 +82,9 @@ pub fn sys_nic_subscribe(
     let cookie = ctx.a2;
 
     let hspace = current.hspace();
-    let (nic, poll) =
-        hspace.get2::<Nic, Poll>(nic_id, HandleRight::READ, poll_id, HandleRight::WRITE)?;
+    let (nic_handle, poll_handle) = hspace.get2::<Nic, Poll>(nic_id, poll_id)?;
+    let nic = nic_handle.authorize(HandleRight::READ)?;
+    let poll = poll_handle.authorize(HandleRight::WRITE)?;
 
     let emitter = EventEmitter::new(poll, cookie)?;
     nic.inner.subscribe(emitter)?;
@@ -106,8 +107,9 @@ pub fn sys_nic_bind(
     let dst_id = HandleId::new(ctx.a2);
 
     let hspace = current.hspace();
-    let (nic, dst) =
-        hspace.get2::<Nic, Nic>(nic_id, HandleRight::WRITE, dst_id, HandleRight::WRITE)?;
+    let (nic_handle, dst_handle) = hspace.get2::<Nic, Nic>(nic_id, dst_id)?;
+    let nic = nic_handle.authorize(HandleRight::WRITE)?;
+    let dst = dst_handle.authorize(HandleRight::WRITE)?;
 
     nic.inner.bind(&rule, &dst.inner)?;
     Ok(SyscallOutput::Done(0))
@@ -120,7 +122,8 @@ pub fn sys_nic_unbind(
     let nic_id = HandleId::new(ctx.a0);
     let rule = read_route_rule(ctx.a1)?;
 
-    let nic = current.hspace().get::<Nic>(nic_id, HandleRight::WRITE)?;
+    let nic_handle = current.hspace().get::<Nic>(nic_id)?;
+    let nic = nic_handle.authorize(HandleRight::WRITE)?;
     nic.inner.unbind(&rule)?;
     Ok(SyscallOutput::Done(0))
 }
@@ -133,7 +136,8 @@ pub fn sys_nic_recv(
     let mut header = USlice::new(UAddr::new(ctx.a2), ctx.a3)?;
     let mut payload = USlice::new(UAddr::new(ctx.a4), ctx.a5)?;
 
-    let nic = current.hspace().get::<Nic>(nic_id, HandleRight::READ)?;
+    let nic_handle = current.hspace().get::<Nic>(nic_id)?;
+    let nic = nic_handle.authorize(HandleRight::READ)?;
     let payload_len = nic.inner.recv(&mut header, &mut payload)?;
     Ok(SyscallOutput::Done(payload_len))
 }
@@ -148,7 +152,8 @@ pub fn sys_nic_send(
 
     let mut header = USlice::new(UAddr::new(ctx.a2), header_len)?;
     let mut payload = USlice::new(UAddr::new(ctx.a4), payload_len)?;
-    let nic = current.hspace().get::<Nic>(nic_id, HandleRight::WRITE)?;
+    let nic_handle = current.hspace().get::<Nic>(nic_id)?;
+    let nic = nic_handle.authorize(HandleRight::WRITE)?;
     nic.inner.send(&mut header, Some(&mut payload))?;
     Ok(SyscallOutput::Done(0))
 }
