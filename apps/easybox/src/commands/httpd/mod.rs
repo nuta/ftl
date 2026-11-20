@@ -21,7 +21,7 @@ pub fn main(_args: &[String]) -> ExitCode {
 }
 
 async fn serve() -> std::io::Result<()> {
-    let listener = TcpListener::bind("0.0.0.0:80").await?;
+    let listener = TcpListener::bind((std::net::Ipv4Addr::UNSPECIFIED, 80)).await?;
     println!("HTTP server listening on port 80");
 
     loop {

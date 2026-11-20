@@ -32,17 +32,21 @@ pub fn main(args: &[String]) -> ExitCode {
     }
 }
 
+fn addr(host: &str, port: &str) -> std::io::Result<std::net::SocketAddr> {
+    format!("{host}:{port}").parse().map_err(std::io::Error::other)
+}
+
 fn nc_tcp(host: &str, port: &str) -> std::io::Result<()> {
-    let mut stream = TcpStream::connect(format!("{host}:{port}"))?;
+    let mut stream = TcpStream::connect(addr(host, port)?)?;
     stream.write_all(b"hello from nc\n")?;
     std::io::copy(&mut stream, &mut std::io::stdout())?;
     Ok(())
 }
 
 fn nc_udp(host: &str, port: &str) -> std::io::Result<()> {
-    let socket = UdpSocket::bind("0.0.0.0:0")?;
+    let socket = UdpSocket::bind((std::net::Ipv4Addr::UNSPECIFIED, 0))?;
     socket.set_read_timeout(Some(UDP_TIMEOUT))?;
-    socket.connect(format!("{host}:{port}"))?;
+    socket.connect(addr(host, port)?)?;
     socket.send(b"hello from nc\n")?;
 
     let mut buf = [0; 1500];

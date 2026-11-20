@@ -9,4 +9,6 @@ rustflags = [
     "-C", "target-feature=+crt-static",
     "-C", "relocation-model=static",
     "-C", "panic=immediate-abort",
+    "-C", "force-unwind-tables=no",
+    "-C", "link-arg=--no-eh-frame-hdr",
 ]
