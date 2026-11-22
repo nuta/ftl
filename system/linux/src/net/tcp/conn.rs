@@ -755,10 +755,14 @@ impl TcpConn {
             }
 
             if !mutable.rx_buffer.is_empty() {
+                let was_window_small = mutable.rx_buffer.writable_len() < TCP_BUFFER_SIZE / 2;
                 let len = mutable.rx_buffer.read(buf);
 
-                // We've consumed some data. Tell the peer the new window size.
-                self.send_ack(&mutable);
+                // We've consumed some data. Tell the peer the new window size
+                // if it was small (avoid sending ACKs for every single read).
+                if was_window_small {
+                    self.send_ack(&mutable);
+                }
 
                 return Ok(len);
             }
