@@ -1,6 +1,7 @@
 use alloc::collections::vec_deque::VecDeque;
 
 use ftl_types::error::ErrorCode;
+use ftl_types::time::Duration;
 use ftl_types::time::MonoTime;
 use ftl_utils::spinlock::SpinLock;
 
@@ -10,6 +11,12 @@ use crate::shared_ref::SharedRef;
 use crate::thread::Thread;
 
 pub static SCHEDULER: Scheduler = Scheduler::new();
+
+/// The max duration that a thread can use a CPU continuously.
+///
+/// If the thread exceeds this duration, it will be preempted, and the
+/// scheduler will switch to another thread.
+const TIME_SLICE: Duration = Duration::from_millis(5);
 
 struct Mutable {
     run_queue: VecDeque<SharedRef<Thread>>,
@@ -87,9 +94,9 @@ impl Scheduler {
 pub enum Resched {
     /// The first context switch in this CPU.
     Init,
-    /// The current thread can continue running, but the kernel decided to
-    /// preempt and schedule a new thread to run.
-    Preempt,
+    /// The current thread can continue running. The kernel preempts it if
+    /// its time slice has expired.
+    Runnable,
     /// The current thread is now blocked.
     Block,
 }
@@ -105,6 +112,7 @@ pub fn return_to_user(resched: Resched) -> ! {
     let current = &cpuvar.current_thread;
 
     let mut now = arch::monotime_read();
+    let mut continue_current = None;
     if !matches!(resched, Resched::Init) {
         let thread = current.thread();
         let switched_at = cpuvar.switched_at.get();
@@ -116,32 +124,41 @@ pub fn return_to_user(resched: Resched) -> ! {
         // Charge the CPU time.
         thread.quota().charge_periodic::<CpuTimeQuota>(now, elapsed);
 
-        // Requeue the current thread to the runqueue if it is runnable.
-        //
         // The thread might have been terminated by a different CPU. Check
         // the latest state.
-        if matches!(resched, Resched::Preempt) && thread.is_runnable() {
-            SCHEDULER.push_back(thread);
+        if matches!(resched, Resched::Runnable) && thread.is_runnable() {
+            let slice_used = now.duration_since(cpuvar.slice_started_at.get()).unwrap();
+            if slice_used < TIME_SLICE && !thread.quota().is_exhausted::<CpuTimeQuota>(now) {
+                // The current thread still has time left in its time slice.
+                continue_current = Some(thread);
+            } else {
+                SCHEDULER.push_back(thread);
+            }
         }
     }
 
     loop {
         // Find the next thread to switch to.
-        let next = loop {
-            let Some(thread) = SCHEDULER.pop(now) else {
-                // No threads to run. Enter the idle loop.
-                arch::idle();
-                now = arch::monotime_read();
-                continue;
-            };
+        let next = if let Some(thread) = continue_current.take() {
+            thread
+        } else {
+            loop {
+                let Some(thread) = SCHEDULER.pop(now) else {
+                    // No threads to run. Enter the idle loop.
+                    arch::idle();
+                    now = arch::monotime_read();
+                    continue;
+                };
 
-            // Try resuming the thread if it is blocked.
-            thread.try_wake();
+                // Try resuming the thread if it is blocked.
+                thread.try_wake();
 
-            // The thread can be blocked while in the runqueue. Make sure it
-            // is still runnable.
-            if thread.is_runnable() {
-                break thread;
+                // The thread can be blocked while in the runqueue. Make sure it
+                // is still runnable.
+                if thread.is_runnable() {
+                    cpuvar.slice_started_at.set(now);
+                    break thread;
+                }
             }
         };
 

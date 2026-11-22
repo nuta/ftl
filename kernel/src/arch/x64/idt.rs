@@ -522,7 +522,7 @@ extern "C" fn handle_user_interrupt(vector: u8, error_code: u64) -> ! {
         }
     }
 
-    crate::scheduler::return_to_user(Resched::Preempt);
+    crate::scheduler::return_to_user(Resched::Runnable);
 }
 
 pub(super) fn init() {

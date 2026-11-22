@@ -84,7 +84,7 @@ fn do_handle_syscall() -> Resched {
     };
 
     arch_thread.set_syscall_retval(retval);
-    Resched::Preempt
+    Resched::Runnable
 }
 
 pub extern "C" fn handle_syscall() -> ! {

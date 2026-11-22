@@ -29,7 +29,7 @@ pub(super) fn try_exit_current() {
 
 extern "C" fn do_syscall_copy_recover() -> ! {
     try_exit_current();
-    scheduler::return_to_user(Resched::Preempt)
+    scheduler::return_to_user(Resched::Runnable)
 }
 
 #[unsafe(naked)]

@@ -11,6 +11,7 @@ pub struct CpuVar {
     //       `arch::Thread`.
     pub current_thread: CurrentThread,
     pub switched_at: Cell<MonoTime>,
+    pub slice_started_at: Cell<MonoTime>,
 }
 
 pub fn init(cpu_id: usize) {
@@ -20,6 +21,7 @@ pub fn init(cpu_id: usize) {
             arch: arch::CpuVar::new(cpu_id),
             current_thread: CurrentThread::new(),
             switched_at: Cell::new(MonoTime::from_nanos(0)),
+            slice_started_at: Cell::new(MonoTime::from_nanos(0)),
         },
     );
 }
