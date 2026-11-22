@@ -196,9 +196,14 @@ impl Mutable {
         // Shrink the range of the original mapping.
         left.len = addr - left.start;
 
-        // Insert the new one. The order of mappings does not matter.
-        self.mappings.push(right);
+        // Insert the new one.
+        insert_mapping(&mut self.mappings, right);
     }
+}
+
+fn insert_mapping(mappings: &mut Vec<Mapping>, mapping: Mapping) {
+    let index = mappings.partition_point(|m| m.start < mapping.start);
+    mappings.insert(index, mapping);
 }
 
 /// A virtual memory space.
@@ -267,6 +272,7 @@ impl Vm {
         vmspace.map(&stack, STACK_BOTTOM, 0, STACK_SIZE, attrs)?;
         let mapping = Mapping::new(STACK_BOTTOM, STACK_SIZE, attrs, stack);
         mappings.push(mapping);
+        mappings.sort_by_key(|m| m.start);
 
         let vm = Vm {
             quota: quota.clone(),
@@ -366,31 +372,34 @@ impl Vm {
             // not mapped already.
             addr
         } else {
+            // Any addresses are allowed.
             let mut uaddr = MMAP_START;
-            'retry: loop {
-                // Check if the new mapping overlaps with the system's memory area.
+            for mapping in &mutable.mappings {
                 let end = uaddr.checked_add(len).ok_or(Errno::ENOMEM)?;
-                if end > USER_END {
-                    return Err(Errno::ENOMEM);
+                if !mapping.overlaps_with(uaddr, end) {
+                    // [uaddr, end) might be available. Continue checking
+                    // remaining mappings to make sure it doesn't overlap
+                    // with any.
+                    continue;
                 }
 
-                for mapping in &mutable.mappings {
-                    if mapping.overlaps_with(uaddr, end) {
-                        // The range is already mapped. Try the next hole.
-                        uaddr = mapping.end();
-                        continue 'retry;
-                    }
-                }
-
-                break;
+                // The range is already mapped. Try the next hole.
+                uaddr = mapping.end();
             }
+
+            // Check if the new mapping overlaps with the system's memory area.
+            let end = uaddr.checked_add(len).ok_or(Errno::ENOMEM)?;
+            if end > USER_END {
+                return Err(Errno::ENOMEM);
+            }
+
             uaddr
         };
 
         self.vmspace.map(&vmo, uaddr, 0, len, attrs)?;
         let mut mapping = Mapping::new(uaddr, len, attrs, vmo);
         mapping.file = file;
-        mutable.mappings.push(mapping);
+        insert_mapping(&mut mutable.mappings, mapping);
 
         Ok(uaddr)
     }
@@ -575,7 +584,7 @@ impl Vm {
         // Record the mapping.
         let mut mutable = self.mutable.lock();
         let mapping = Mapping::new(brk.current_aligned, len, attrs, vmo);
-        mutable.mappings.push(mapping);
+        insert_mapping(&mut mutable.mappings, mapping);
 
         mutable.brk.current = addr;
         mutable.brk.current_aligned = current_aligned;
