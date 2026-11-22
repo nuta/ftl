@@ -240,9 +240,11 @@ impl<'a> PhysicalState<'a> {
             return;
         }
 
-        self.device.driver().handle_interrupt(self.env);
-        while let Some((buf, headroom, frame_len)) = self.receive() {
-            self.handle_eth_frame(pnic, buf, headroom, frame_len, now);
+        if irq.is_some() {
+            self.device.driver().handle_interrupt(self.env);
+            while let Some((buf, headroom, frame_len)) = self.receive() {
+                self.handle_eth_frame(pnic, buf, headroom, frame_len, now);
+            }
         }
 
         self.device.poll(now);
