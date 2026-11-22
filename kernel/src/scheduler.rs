@@ -87,6 +87,7 @@ impl Scheduler {
         let mut m = self.mutable.lock();
         debug_assert!(m.run_queue.len() < m.num_threads);
         m.run_queue.push_back(thread);
+        arch::get_cpuvar().need_reschedule.set(true);
     }
 }
 
@@ -128,7 +129,10 @@ pub fn return_to_user(resched: Resched) -> ! {
         // the latest state.
         if matches!(resched, Resched::Runnable) && thread.is_runnable() {
             let slice_used = now.duration_since(cpuvar.slice_started_at.get()).unwrap();
-            if slice_used < TIME_SLICE && !thread.quota().is_exhausted::<CpuTimeQuota>(now) {
+            if !cpuvar.need_reschedule.get()
+                && slice_used < TIME_SLICE
+                && !thread.quota().is_exhausted::<CpuTimeQuota>(now)
+            {
                 // The current thread still has time left in its time slice.
                 continue_current = Some(thread);
             } else {
@@ -164,6 +168,7 @@ pub fn return_to_user(resched: Resched) -> ! {
 
         // Jump into the next thread. This function does not return on success.
         cpuvar.switched_at.set(now);
+        cpuvar.need_reschedule.set(false);
         let Err(err) = current.enter(next);
 
         // Failed to enter the thread due to its invalid state. Terminate it.
