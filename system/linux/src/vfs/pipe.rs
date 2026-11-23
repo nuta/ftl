@@ -2,7 +2,7 @@ use alloc::collections::VecDeque;
 use alloc::sync::Arc;
 use core::cmp::min;
 
-use ftl_utils::spinlock::SpinLock;
+use ftl::mutex::Mutex;
 
 use crate::types::c_short;
 use crate::types::errno::Errno;
@@ -35,7 +35,7 @@ struct Mutable {
 }
 
 struct Inner {
-    mutable: SpinLock<Mutable>,
+    mutable: Mutex<Mutable>,
     wait_queue: WaitQueue,
 }
 
@@ -47,7 +47,7 @@ pub struct Pipe {
 impl Pipe {
     pub fn pair() -> Result<(Self, Self), Errno> {
         let inner = Arc::new(Inner {
-            mutable: SpinLock::new(Mutable {
+            mutable: Mutex::new(Mutable {
                 buffer: VecDeque::new(),
                 reader_open: true,
                 writer_open: true,

@@ -9,6 +9,7 @@ mod arch;
 pub mod console;
 pub mod handle;
 pub mod hspace;
+pub mod mutex;
 pub mod net;
 mod panic;
 pub mod poll;

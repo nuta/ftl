@@ -1,10 +1,10 @@
 use alloc::sync::Arc;
 use core::net::Ipv4Addr;
 
+use ftl::mutex::Mutex;
 use ftl_types::error::ErrorCode;
 use ftl_types::nic::PROTO_IPV4;
 use ftl_types::nic::PROTO_TCP;
-use ftl_utils::spinlock::SpinLock;
 
 use super::conn::TcpConn;
 use super::listener::TcpListener;
@@ -36,7 +36,7 @@ enum State {
 pub struct TcpSocket {
     tcpip: Arc<TcpIp>,
     wait_queue: Arc<WaitQueue>,
-    state: SpinLock<State>,
+    state: Mutex<State>,
 }
 
 impl TcpSocket {
@@ -45,7 +45,7 @@ impl TcpSocket {
         Ok(Arc::new(Self {
             tcpip,
             wait_queue,
-            state: SpinLock::new(State::Init {
+            state: Mutex::new(State::Init {
                 local_ip: Ipv4Addr::UNSPECIFIED,
                 bind_guard: None,
             }),

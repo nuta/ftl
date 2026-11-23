@@ -8,6 +8,7 @@ use core::mem::offset_of;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering;
 
+use ftl::mutex::Mutex;
 use ftl::poll::Poll;
 use ftl::trace;
 use ftl::warn;
@@ -16,7 +17,6 @@ use ftl_types::handle::HandleId;
 use ftl_types::thread::FaultFrame;
 use ftl_types::thread::Regs;
 use ftl_types::thread::RegsKind;
-use ftl_utils::spinlock::SpinLock;
 
 use crate::arch::FAULT_REGS_SIZE;
 use crate::arch::SyscallFrame;
@@ -115,7 +115,7 @@ pub struct Thread {
     vm: Arc<Vm>,
     tid: PId,
     inner: ftl::thread::Thread,
-    mutable: SpinLock<Mutable>,
+    mutable: Mutex<Mutable>,
     system_stack: Box<SystemStack>,
     handling_fault: AtomicBool,
     sleep_poll: Arc<Poll>,
@@ -159,7 +159,7 @@ impl Thread {
                 vm,
                 tid,
                 inner,
-                mutable: SpinLock::new(Mutable {
+                mutable: Mutex::new(Mutable {
                     blocked: SignalSet::empty(),
                     pending_signals: SignalSet::empty(),
                     altstack: None,

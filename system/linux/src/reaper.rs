@@ -1,11 +1,11 @@
 use alloc::sync::Arc;
 
+use ftl::mutex::Mutex;
 use ftl::poll::Poll;
 use ftl::warn;
 use ftl_types::error::ErrorCode;
 use ftl_types::handle::HandleId;
 use ftl_utils::fxhash::FxHashMap;
-use ftl_utils::spinlock::SpinLock;
 
 use crate::thread::Thread;
 
@@ -15,13 +15,13 @@ struct Mutable {
 
 /// A thread reaper, which cleans up exited threads.
 pub struct Reaper {
-    mutable: SpinLock<Mutable>,
+    mutable: Mutex<Mutable>,
 }
 
 impl Reaper {
     pub fn new() -> Result<Self, ErrorCode> {
         Ok(Self {
-            mutable: SpinLock::new(Mutable {
+            mutable: Mutex::new(Mutable {
                 threads: FxHashMap::default(),
             }),
         })

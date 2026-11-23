@@ -2,9 +2,9 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::net::Ipv4Addr;
 
+use ftl::mutex::Mutex;
 use ftl::quota::Quota;
 use ftl::vmo::Vmo;
-use ftl_utils::spinlock::SpinLock;
 
 use crate::net::TcpIp;
 use crate::types::c_short;
@@ -19,13 +19,13 @@ const CHILD_IP_START: Ipv4Addr = Ipv4Addr::new(10, 77, 0, 2);
 const CHILD_IP_END: Ipv4Addr = Ipv4Addr::new(10, 77, 255, 254);
 
 struct ChildIpAllocator {
-    used_ips: SpinLock<Vec<Ipv4Addr>>,
+    used_ips: Mutex<Vec<Ipv4Addr>>,
 }
 
 impl ChildIpAllocator {
     fn new() -> Arc<Self> {
         Arc::new(Self {
-            used_ips: SpinLock::new(Vec::new()),
+            used_ips: Mutex::new(Vec::new()),
         })
     }
 
@@ -97,7 +97,7 @@ impl FileLike for Fork {
     fn open(&self) -> Result<Option<Arc<dyn FileLike>>, Errno> {
         Ok(Some(Arc::new(ForkBuilder {
             globals: self.globals.clone(),
-            state: SpinLock::new(State::Parse(SpecParser::new())),
+            state: Mutex::new(State::Parse(SpecParser::new())),
         })))
     }
 }
@@ -110,7 +110,7 @@ enum State {
 
 struct ForkBuilder {
     globals: Arc<Globals>,
-    state: SpinLock<State>,
+    state: Mutex<State>,
 }
 
 impl FileLike for ForkBuilder {

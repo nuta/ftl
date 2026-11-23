@@ -2,7 +2,7 @@ use alloc::collections::VecDeque;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 
-use ftl_utils::spinlock::SpinLock;
+use ftl::mutex::Mutex;
 
 use crate::net::ipv4::Endpoint;
 use crate::types::sys::poll::POLLIN;
@@ -22,14 +22,14 @@ struct Mutable {
 
 pub struct RxQueue {
     wait_queue: Arc<WaitQueue>,
-    mutable: SpinLock<Mutable>,
+    mutable: Mutex<Mutable>,
 }
 
 impl RxQueue {
     pub fn new(wait_queue: Arc<WaitQueue>) -> Self {
         Self {
             wait_queue,
-            mutable: SpinLock::new(Mutable {
+            mutable: Mutex::new(Mutable {
                 peer: None,
                 datagrams: VecDeque::new(),
             }),

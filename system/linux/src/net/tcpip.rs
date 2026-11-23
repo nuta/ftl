@@ -4,6 +4,7 @@ use core::mem::offset_of;
 use core::net::Ipv4Addr;
 use core::net::SocketAddrV4;
 
+use ftl::mutex::Mutex;
 use ftl::net::Nic;
 use ftl::poll::Poll;
 use ftl::time::MonoTime;
@@ -16,7 +17,6 @@ use ftl_types::nic::PROTO_IPV4;
 use ftl_types::nic::PROTO_TCP;
 use ftl_types::nic::PROTO_UDP;
 use ftl_types::nic::RouteRule;
-use ftl_utils::spinlock::SpinLock;
 use hashbrown::HashMap;
 
 use super::ipv4::Endpoint;
@@ -133,8 +133,8 @@ pub struct TcpIp {
     pnic: Option<Arc<Nic>>,
     port_min: u16,
     port_max: u16,
-    mutable: SpinLock<Mutable>,
-    rx_buffers: SpinLock<RxBuffers>,
+    mutable: Mutex<Mutable>,
+    rx_buffers: Mutex<RxBuffers>,
 }
 
 impl TcpIp {
@@ -144,13 +144,13 @@ impl TcpIp {
             pnic,
             port_min,
             port_max,
-            mutable: SpinLock::new(Mutable {
+            mutable: Mutex::new(Mutable {
                 tcp_conns: HashMap::new(),
                 tcp_listeners: HashMap::new(),
                 udp_ports: HashMap::new(),
                 last_alloced_port: port_min,
             }),
-            rx_buffers: SpinLock::new(RxBuffers {
+            rx_buffers: Mutex::new(RxBuffers {
                 header: [0; RX_HEADER_LEN],
                 payload: [0; RX_PAYLOAD_LEN],
             }),

@@ -4,8 +4,8 @@ use alloc::vec::Vec;
 use core::mem::offset_of;
 use core::ops::Deref;
 
+use ftl::mutex::Mutex;
 use ftl_utils::alignment::align_up;
-use ftl_utils::spinlock::SpinLock;
 
 use crate::signal::Signal;
 use crate::types::c_int;
@@ -41,14 +41,14 @@ struct Mutable {
 /// when all `Arc<OpenFile>` are dropped.
 pub struct OpenFile {
     file: Arc<dyn FileLike>,
-    mutable: SpinLock<Mutable>,
+    mutable: Mutex<Mutable>,
 }
 
 impl OpenFile {
     pub(crate) fn new(file: Arc<dyn FileLike>, flags: c_int) -> Self {
         Self {
             file,
-            mutable: SpinLock::new(Mutable {
+            mutable: Mutex::new(Mutable {
                 flags,
                 offset: 0,
                 close_listeners: Vec::new(),

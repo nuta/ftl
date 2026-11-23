@@ -2,12 +2,12 @@ use alloc::collections::VecDeque;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 
+use ftl::mutex::Mutex;
 use ftl::time::MonoTime;
 use ftl::time::MonoTimeExt;
 use ftl::trace;
 use ftl_types::error::ErrorCode;
 use ftl_types::time::Duration;
-use ftl_utils::spinlock::SpinLock;
 
 use super::buffer::TCP_BUFFER_SIZE;
 use super::conn::TcpConn;
@@ -67,7 +67,7 @@ pub struct TcpListener {
     tcpip: Arc<TcpIp>,
     wait_queue: Arc<WaitQueue>,
     bind_guard: Arc<BindGuard>,
-    mutable: SpinLock<Mutable>,
+    mutable: Mutex<Mutable>,
 }
 
 impl TcpListener {
@@ -82,7 +82,7 @@ impl TcpListener {
             tcpip: tcpip.clone(),
             wait_queue,
             bind_guard,
-            mutable: SpinLock::new(Mutable {
+            mutable: Mutex::new(Mutable {
                 backlog,
                 inflights: Vec::new(),
                 established: VecDeque::new(),

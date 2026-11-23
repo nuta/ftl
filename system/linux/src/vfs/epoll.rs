@@ -3,11 +3,11 @@ use alloc::sync::Arc;
 use alloc::sync::Weak;
 use alloc::vec::Vec;
 
+use ftl::mutex::Mutex;
 use ftl::time::MonoTime;
 use ftl::time::MonoTimeExt;
 use ftl_types::time::Duration;
 use ftl_utils::fxhash::FxHashMap;
-use ftl_utils::spinlock::SpinLock;
 
 use crate::open_file::CloseListener;
 use crate::open_file::OpenFile;
@@ -27,7 +27,7 @@ use crate::wait_queue::WaitQueue;
 struct Watch {
     fd: c_int,
     file: Weak<OpenFile>,
-    event: SpinLock<EpollEvent>,
+    event: Mutex<EpollEvent>,
     inner: Weak<Inner>,
 }
 
@@ -86,7 +86,7 @@ struct Mutable {
 }
 
 struct Inner {
-    mutable: SpinLock<Mutable>,
+    mutable: Mutex<Mutable>,
     wait_queue: WaitQueue,
 }
 
@@ -178,7 +178,7 @@ impl Epoll {
     pub fn new() -> Result<Self, Errno> {
         Ok(Self {
             inner: Arc::new(Inner {
-                mutable: SpinLock::new(Mutable {
+                mutable: Mutex::new(Mutable {
                     watches: FxHashMap::new(),
                     ready_fds: VecDeque::new(),
                 }),
@@ -192,7 +192,7 @@ impl Epoll {
         let watch = Arc::new(Watch {
             fd,
             file: Arc::downgrade(&file),
-            event: SpinLock::new(event),
+            event: Mutex::new(event),
             inner: Arc::downgrade(&self.inner),
         });
 

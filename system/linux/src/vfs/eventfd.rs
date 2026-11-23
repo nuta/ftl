@@ -1,7 +1,7 @@
 use core::mem;
 use core::mem::size_of;
 
-use ftl_utils::spinlock::SpinLock;
+use ftl::mutex::Mutex;
 
 use crate::types::c_short;
 use crate::types::errno::Errno;
@@ -20,7 +20,7 @@ const COUNTER_MAX_VALUE: u64 = u64::MAX - 1;
 
 pub struct EventFd {
     semaphore: bool,
-    counter: SpinLock<u64>,
+    counter: Mutex<u64>,
     wait_queue: WaitQueue,
 }
 
@@ -28,7 +28,7 @@ impl EventFd {
     pub fn new(initval: u64, semaphore: bool) -> Result<Self, Errno> {
         Ok(Self {
             semaphore,
-            counter: SpinLock::new(initval),
+            counter: Mutex::new(initval),
             wait_queue: WaitQueue::new()?,
         })
     }

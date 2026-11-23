@@ -6,6 +6,7 @@ use core::cmp::min;
 use core::mem::MaybeUninit;
 use core::slice;
 
+use ftl::mutex::Mutex;
 use ftl::quota::Quota;
 use ftl::trace;
 use ftl::vmo::Vmo;
@@ -19,7 +20,6 @@ use ftl_types::vmspace::PageAttrs;
 use ftl_utils::alignment::align_down;
 use ftl_utils::alignment::align_up;
 use ftl_utils::alignment::is_aligned;
-use ftl_utils::spinlock::SpinLock;
 
 use crate::types::c_int;
 use crate::types::errno::Errno;
@@ -210,7 +210,7 @@ fn insert_mapping(mappings: &mut Vec<Mapping>, mapping: Mapping) {
 pub struct Vm {
     quota: Arc<Quota>,
     vmspace: VmSpace,
-    mutable: SpinLock<Mutable>,
+    mutable: Mutex<Mutable>,
 }
 
 impl Vm {
@@ -277,7 +277,7 @@ impl Vm {
         let vm = Vm {
             quota: quota.clone(),
             vmspace,
-            mutable: SpinLock::new(Mutable {
+            mutable: Mutex::new(Mutable {
                 mappings,
                 brk: Brk::new(brk_start, brk_end),
             }),
@@ -612,7 +612,7 @@ impl Vm {
         Ok(Self {
             quota: self.quota.clone(),
             vmspace,
-            mutable: SpinLock::new(Mutable { mappings, brk }),
+            mutable: Mutex::new(Mutable { mappings, brk }),
         })
     }
 }

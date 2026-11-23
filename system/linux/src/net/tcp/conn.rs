@@ -1,13 +1,13 @@
 use alloc::sync::Arc;
 use core::cmp::min;
 
+use ftl::mutex::Mutex;
+use ftl::mutex::MutexGuard;
 use ftl::time::MonoTime;
 use ftl::time::MonoTimeExt;
 use ftl::trace;
 use ftl_types::error::ErrorCode;
 use ftl_types::time::Duration;
-use ftl_utils::spinlock::SpinLock;
-use ftl_utils::spinlock::SpinLockGuard;
 
 use super::buffer::TCP_BUFFER_SIZE;
 use super::buffer::TcpBuffer;
@@ -83,7 +83,7 @@ pub struct TcpConn {
     wait_queue: Arc<WaitQueue>,
     remote: Endpoint,
     bind_guard: Arc<BindGuard>,
-    mutable: SpinLock<Mutable>,
+    mutable: Mutex<Mutable>,
 }
 
 impl TcpConn {
@@ -140,7 +140,7 @@ impl TcpConn {
             wait_queue,
             remote,
             bind_guard,
-            mutable: SpinLock::new(mutable),
+            mutable: Mutex::new(mutable),
         }))
     }
 
@@ -253,7 +253,7 @@ impl TcpConn {
     }
 
     /// Aborts a connection with an error.
-    fn destroy(&self, mut mutable: SpinLockGuard<'_, Mutable>, error: Errno) {
+    fn destroy(&self, mut mutable: MutexGuard<'_, Mutable>, error: Errno) {
         mutable.state = State::Closed;
         mutable.peer_closed = true;
         mutable.error = Some(error);
@@ -285,7 +285,7 @@ impl TcpConn {
         })
     }
 
-    fn receive_syn_sent(&self, mut mutable: SpinLockGuard<'_, Mutable>, pkt: &TcpPacketInfo) {
+    fn receive_syn_sent(&self, mut mutable: MutexGuard<'_, Mutable>, pkt: &TcpPacketInfo) {
         let flags = TcpFlags::from_u8(pkt.flags);
         if !flags.contains(TcpFlags::ACK) {
             // A reply to our SYN must set ACK.

@@ -1,7 +1,7 @@
 use alloc::sync::Arc;
 use core::ptr;
 
-use ftl_utils::spinlock::SpinLock;
+use ftl::mutex::Mutex;
 
 use crate::types::c_long;
 use crate::types::c_short;
@@ -24,14 +24,14 @@ use crate::wait_queue::WaitQueue;
 
 pub struct Tty {
     inner: Arc<dyn FileLike>,
-    termios: SpinLock<Termios>,
+    termios: Mutex<Termios>,
 }
 
 impl Tty {
     pub fn new(inner: Arc<dyn FileLike>) -> Self {
         Self {
             inner,
-            termios: SpinLock::new(Termios::new()),
+            termios: Mutex::new(Termios::new()),
         }
     }
 }

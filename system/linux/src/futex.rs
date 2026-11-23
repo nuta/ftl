@@ -1,8 +1,8 @@
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 
+use ftl::mutex::Mutex;
 use ftl_types::time::MonoTime;
-use ftl_utils::spinlock::SpinLock;
 
 use crate::types::errno::Errno;
 use crate::types::sys::futex::FUTEX_BITSET_MATCH_ANY;
@@ -23,13 +23,13 @@ impl Waiter {
 }
 
 pub struct FutexTable {
-    waiters: SpinLock<Vec<Waiter>>,
+    waiters: Mutex<Vec<Waiter>>,
 }
 
 impl FutexTable {
     pub fn new() -> Self {
         Self {
-            waiters: SpinLock::new(Vec::new()),
+            waiters: Mutex::new(Vec::new()),
         }
     }
 

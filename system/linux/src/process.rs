@@ -4,9 +4,9 @@ use alloc::vec::Vec;
 use core::fmt;
 use core::ptr;
 
+use ftl::mutex::Mutex;
 use ftl::trace;
 use ftl_types::thread::RegsKind;
-use ftl_utils::spinlock::SpinLock;
 
 use crate::arch::SyscallFrame;
 use crate::arch::restore_regs;
@@ -77,8 +77,8 @@ pub struct Process {
     tgid: PId,
     child_exit: WaitQueue,
     global: Arc<Global>,
-    mutable: SpinLock<Mutable>,
-    fd_table: SpinLock<FdTable>,
+    mutable: Mutex<Mutable>,
+    fd_table: Mutex<FdTable>,
     signal_wait: WaitQueue,
     futexes: FutexTable,
 }
@@ -186,7 +186,7 @@ impl Process {
             tgid,
             child_exit,
             global: global.clone(),
-            mutable: SpinLock::new(Mutable {
+            mutable: Mutex::new(Mutable {
                 parent,
                 threads: Vec::with_capacity(1),
                 children: Vec::new(),
@@ -195,7 +195,7 @@ impl Process {
                 pending_signals: SignalSet::empty(),
                 cwd,
             }),
-            fd_table: SpinLock::new(fd_table),
+            fd_table: Mutex::new(fd_table),
             signal_wait,
             futexes: FutexTable::new(),
         });
@@ -470,7 +470,7 @@ impl Process {
         }
     }
 
-    pub fn fd_table(&self) -> &SpinLock<FdTable> {
+    pub fn fd_table(&self) -> &Mutex<FdTable> {
         &self.fd_table
     }
 

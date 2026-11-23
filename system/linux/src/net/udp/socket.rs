@@ -2,11 +2,11 @@ use alloc::sync::Arc;
 use core::cmp::min;
 use core::mem::size_of;
 
+use ftl::mutex::Mutex;
 use ftl::time::MonoTime;
 use ftl::time::MonoTimeExt;
 use ftl_types::error::ErrorCode;
 use ftl_types::time::Duration;
-use ftl_utils::spinlock::SpinLock;
 
 use super::rx_queue::RxQueue;
 use crate::net::ipv4::Endpoint;
@@ -37,7 +37,7 @@ pub struct UdpSocket {
     tcpip: Arc<TcpIp>,
     wait_queue: Arc<WaitQueue>,
     rx_queue: Arc<RxQueue>,
-    mutable: SpinLock<Mutable>,
+    mutable: Mutex<Mutable>,
 }
 
 impl UdpSocket {
@@ -47,7 +47,7 @@ impl UdpSocket {
             tcpip,
             rx_queue: Arc::new(RxQueue::new(wait_queue.clone())),
             wait_queue,
-            mutable: SpinLock::new(Mutable {
+            mutable: Mutex::new(Mutable {
                 bind_guard: None,
                 recv_timeout: None,
             }),

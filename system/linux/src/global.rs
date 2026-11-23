@@ -1,5 +1,6 @@
 use alloc::sync::Arc;
 
+use ftl::mutex::Mutex;
 use ftl::poll::Poll;
 use ftl::quota::Quota;
 use ftl::time::MonoTime;
@@ -10,7 +11,6 @@ use ftl_types::error::ErrorCode;
 use ftl_types::handle::HANDLE_ID_MAX;
 use ftl_types::handle::HandleId;
 use ftl_types::time::Duration;
-use ftl_utils::spinlock::SpinLock;
 
 use crate::net::TcpIp;
 use crate::pid_table::PIdTable;
@@ -33,12 +33,12 @@ pub struct Global {
     poll: Poll,
     pub quota: Arc<Quota>,
     pub root_vmspace: VmSpace,
-    pub processes: SpinLock<PIdTable>,
+    pub processes: Mutex<PIdTable>,
     pub reaper: Reaper,
     network: Arc<TcpIp>,
     console: Option<Arc<Console>>,
     pub root_dir: Arc<PathNode>,
-    init_exit_status: SpinLock<Option<c_int>>,
+    init_exit_status: Mutex<Option<c_int>>,
 }
 
 impl Global {
@@ -66,12 +66,12 @@ impl Global {
             poll,
             quota,
             root_vmspace,
-            processes: SpinLock::new(PIdTable::new()),
+            processes: Mutex::new(PIdTable::new()),
             reaper: Reaper::new()?,
             network,
             console: console.clone(),
             root_dir: PathNode::root_dir(root_dir),
-            init_exit_status: SpinLock::new(None),
+            init_exit_status: Mutex::new(None),
         });
 
         let init_process = Process::new_init(this.clone(), console, stdio, elf_file, argv)?;

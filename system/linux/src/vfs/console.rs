@@ -1,9 +1,9 @@
 use alloc::vec::Vec;
 use core::cmp::min;
 
+use ftl::mutex::Mutex;
 use ftl::poll::Poll;
 use ftl_types::error::ErrorCode;
-use ftl_utils::spinlock::SpinLock;
 
 use crate::types::c_short;
 use crate::types::errno::Errno;
@@ -15,7 +15,7 @@ use crate::wait_queue::WaitQueue;
 
 pub struct Console {
     device: ftl::console::Console,
-    pending: SpinLock<Vec<u8>>,
+    pending: Mutex<Vec<u8>>,
     wait_queue: WaitQueue,
 }
 
@@ -23,7 +23,7 @@ impl Console {
     pub fn new(device: ftl::console::Console) -> Result<Self, Errno> {
         Ok(Self {
             device,
-            pending: SpinLock::new(Vec::new()),
+            pending: Mutex::new(Vec::new()),
             wait_queue: WaitQueue::new()?,
         })
     }

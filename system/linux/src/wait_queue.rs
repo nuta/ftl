@@ -5,11 +5,11 @@ use core::cell::OnceCell;
 use core::sync::atomic::AtomicUsize;
 use core::sync::atomic::Ordering;
 
+use ftl::mutex::Mutex;
 use ftl::poll::Poll;
 use ftl::warn;
 use ftl_types::error::ErrorCode;
 use ftl_types::time::MonoTime;
-use ftl_utils::spinlock::SpinLock;
 
 use crate::process::Process;
 use crate::thread::Thread;
@@ -24,8 +24,8 @@ pub trait WaitListener: Send + Sync {
 struct Inner {
     poll: Poll,
     wait_ones: AtomicUsize,
-    wait_sets: SpinLock<Vec<Arc<Poll>>>,
-    listeners: SpinLock<Vec<Weak<dyn WaitListener>>>,
+    wait_sets: Mutex<Vec<Arc<Poll>>>,
+    listeners: Mutex<Vec<Weak<dyn WaitListener>>>,
 }
 
 impl Inner {
@@ -33,8 +33,8 @@ impl Inner {
         Self {
             poll,
             wait_ones: AtomicUsize::new(0),
-            wait_sets: SpinLock::new(Vec::new()),
-            listeners: SpinLock::new(Vec::new()),
+            wait_sets: Mutex::new(Vec::new()),
+            listeners: Mutex::new(Vec::new()),
         }
     }
 }
