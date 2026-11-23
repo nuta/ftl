@@ -6,6 +6,7 @@ use ftl_types::thread::ExitReason;
 use ftl_types::thread::Regs;
 use ftl_types::thread::RegsKind;
 
+use crate::arch::syscall0;
 use crate::arch::syscall1;
 use crate::arch::syscall3;
 use crate::arch::syscall6;
@@ -126,6 +127,10 @@ impl Thread {
         )?;
         Ok(())
     }
+}
+
+pub fn thread_yield() {
+    let _ = syscall0(Syscall::ThreadYield);
 }
 
 pub fn exit(reason: ExitReason) -> ! {

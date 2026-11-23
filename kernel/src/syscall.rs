@@ -69,6 +69,7 @@ fn do_handle_syscall() -> Resched {
         Some(Syscall::QuotaCreate) => crate::quota::sys_quota_create(&thread, &regs),
         Some(Syscall::HandleDuplicate) => crate::hspace::sys_handle_duplicate(&thread, &regs),
         Some(Syscall::ThreadDestroy) => crate::thread::sys_thread_destroy(&thread, &regs),
+        Some(Syscall::ThreadYield) => crate::thread::sys_thread_yield(&thread, &regs),
         None => Err(ErrorCode::UnknownSyscall),
     };
 

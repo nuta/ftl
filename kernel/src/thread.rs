@@ -429,6 +429,14 @@ pub fn sys_thread_destroy(
     Ok(SyscallOutput::Done(0))
 }
 
+pub fn sys_thread_yield(
+    _current: &SharedRef<Thread>,
+    _ctx: &SyscallRegs,
+) -> Result<SyscallOutput, ErrorCode> {
+    arch::get_cpuvar().need_reschedule.set(true);
+    Ok(SyscallOutput::Done(0))
+}
+
 /// The current thread.
 ///
 /// This is a special struct replacing SharedRef<Thread> for the current
