@@ -516,10 +516,10 @@ impl TcpIp {
         }
     }
 
-    pub fn handle_timeouts(&self, now: MonoTime) {
+    pub fn handle_timeouts(&self, now: MonoTime) -> Option<MonoTime> {
         let mutable = self.mutable.lock();
         if mutable.tcp_conns.is_empty() {
-            return;
+            return None;
         }
 
         let mut conns = Vec::new();
@@ -528,8 +528,18 @@ impl TcpIp {
         }
         drop(mutable);
 
+        let mut earliest = None;
         for conn in conns {
-            conn.poll(now);
+            let Some(deadline) = conn.poll(now) else {
+                continue;
+            };
+
+            match earliest {
+                Some(earliest) if deadline.duration_since(earliest).is_some() => {}
+                _ => earliest = Some(deadline),
+            }
         }
+
+        earliest
     }
 }

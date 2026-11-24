@@ -43,6 +43,7 @@ const MAX_SYN_RETRIES: u32 = 5;
 const RTO_SECS: u64 = 1;
 const MAX_RTO_RETRIES: u32 = 8;
 const MAX_ZWP_BACKOFF: u32 = 6;
+const DELAYED_ACK_TIMEOUT: Duration = Duration::from_millis(10);
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum State {
@@ -75,6 +76,7 @@ struct Mutable {
     rto_retries: u32,
     zwp_deadline: Option<MonoTime>,
     zwps: u32,
+    ack_deadline: Option<MonoTime>,
     error: Option<Errno>,
 }
 
@@ -132,6 +134,7 @@ impl TcpConn {
             rto_retries: 0,
             zwp_deadline: None,
             zwps: 0,
+            ack_deadline: None,
             error: None,
         };
 
@@ -171,9 +174,10 @@ impl TcpConn {
         }
     }
 
-    pub fn poll(&self, now: MonoTime) {
+    pub fn poll(&self, now: MonoTime) -> Option<MonoTime> {
         self.do_poll(now);
         self.remove_if_closed();
+        self.mutable.lock().ack_deadline
     }
 
     fn do_poll(&self, now: MonoTime) {
@@ -228,6 +232,12 @@ impl TcpConn {
             && now.duration_since(deadline).is_some()
         {
             self.send_zwp(&mut mutable);
+        }
+
+        if let Some(deadline) = mutable.ack_deadline
+            && now.duration_since(deadline).is_some()
+        {
+            self.send_ack(&mut mutable);
         }
 
         let Some(deadline) = mutable.closing_deadline else {
@@ -324,7 +334,7 @@ impl TcpConn {
         mutable.snd_una = pkt.ack;
         mutable.snd_wnd = pkt.window_size;
         mutable.rcv_nxt = pkt.seq.wrapping_add(1);
-        self.send_ack(&mutable);
+        self.send_ack(&mut mutable);
 
         self.flush(&mut mutable);
         drop(mutable);
@@ -364,7 +374,8 @@ impl TcpConn {
     }
 
     /// Sends an ACK.
-    fn send_ack(&self, mutable: &Mutable) {
+    fn send_ack(&self, mutable: &mut Mutable) {
+        mutable.ack_deadline = None;
         let window_size = mutable.rx_buffer.writable_len() as u16;
         let segment = Segment {
             seq: mutable.snd_nxt,
@@ -381,6 +392,7 @@ impl TcpConn {
 
     /// Sends a FIN.
     fn send_fin(&self, mutable: &mut Mutable) {
+        mutable.ack_deadline = None;
         let window_size = mutable.rx_buffer.writable_len() as u16;
         let segment = Segment {
             seq: mutable.snd_nxt,
@@ -455,6 +467,7 @@ impl TcpConn {
             }
 
             mutable.snd_nxt = mutable.snd_nxt.wrapping_add(payload_len as u32);
+            mutable.ack_deadline = None;
 
             // Arm a retransmission timer if it's not set.
             if mutable.rto_deadline.is_none() {
@@ -616,7 +629,7 @@ impl TcpConn {
         // Handle out-of-order segments.
         if pkt.seq != mutable.rcv_nxt {
             // Send an ACK to tell the peer to resend the segment we want.
-            self.send_ack(&mutable);
+            self.send_ack(&mut mutable);
             return;
         }
 
@@ -681,8 +694,16 @@ impl TcpConn {
         let prev_snd_nxt = mutable.snd_nxt;
         self.flush(&mut mutable);
         if mutable.snd_nxt == prev_snd_nxt && (received_len > 0 || received_fin) {
-            // Flush did not send any data. Send an ACK to the peer.
-            self.send_ack(&mutable);
+            // Flush did not send any data.
+            if received_fin || mutable.ack_deadline.is_some() {
+                // Send an ACK to the peer now if we've received a FIN, or
+                // received a second segment while delaying an ACK (see SHLD-19
+                // in RFC9293).
+                self.send_ack(&mut mutable);
+            } else {
+                // Otherwise, delay it to piggyback it on a response.
+                mutable.ack_deadline = Some(MonoTime::now() + DELAYED_ACK_TIMEOUT);
+            }
         }
         drop(mutable);
 
@@ -761,7 +782,7 @@ impl TcpConn {
                 // We've consumed some data. Tell the peer the new window size
                 // if it was small (avoid sending ACKs for every single read).
                 if was_window_small {
-                    self.send_ack(&mutable);
+                    self.send_ack(&mut mutable);
                 }
 
                 return Ok(len);

@@ -98,7 +98,12 @@ impl Global {
     }
 
     pub fn handle_events(&self) {
-        let deadline = MonoTime::now() + Duration::from_secs(1);
+        let now = MonoTime::now();
+        let deadline = match self.network.handle_timeouts(now) {
+            Some(ack_deadline) => ack_deadline,
+            None => now + Duration::from_secs(1),
+        };
+
         match self.poll.wait_until(deadline) {
             Ok(NETWORK_COOKIE) => {
                 self.network.handle_rx();
@@ -119,7 +124,5 @@ impl Global {
             Err(ErrorCode::TimedOut) => {}
             Err(err) => panic!("poll wait failed: {:?}", err),
         }
-
-        self.network.handle_timeouts(MonoTime::now());
     }
 }
