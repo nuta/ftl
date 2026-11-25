@@ -77,6 +77,7 @@ mod sigaltstack;
 mod socket;
 mod stat;
 mod statx;
+mod sync;
 mod sysinfo;
 mod tgkill;
 mod umask;
@@ -167,6 +168,7 @@ use self::sigaltstack::sys_sigaltstack;
 use self::socket::sys_socket;
 use self::stat::sys_stat;
 use self::statx::sys_statx;
+use self::sync::sys_sync;
 use self::sysinfo::sys_sysinfo;
 use self::tgkill::sys_tgkill;
 use self::umask::sys_umask;
@@ -276,6 +278,7 @@ use crate::types::sys::syscall::SYS_SIGALTSTACK;
 use crate::types::sys::syscall::SYS_SOCKET;
 use crate::types::sys::syscall::SYS_STAT;
 use crate::types::sys::syscall::SYS_STATX;
+use crate::types::sys::syscall::SYS_SYNC;
 use crate::types::sys::syscall::SYS_SYSINFO;
 use crate::types::sys::syscall::SYS_TGKILL;
 use crate::types::sys::syscall::SYS_UMASK;
@@ -473,6 +476,7 @@ fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
         }
         SYS_UMASK => sys_umask(current, arg0 as u32),
         SYS_UNAME => sys_uname(current, arg0 as *mut UtsName),
+        SYS_SYNC => sys_sync(current),
         SYS_SYSINFO => sys_sysinfo(current, arg0 as *mut SysInfo),
         SYS_FUTEX => {
             sys_futex(

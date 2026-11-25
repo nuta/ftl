@@ -67,6 +67,7 @@ pub const SYS_CAPGET: usize = 125;
 pub const SYS_GETPRIORITY: usize = 140;
 pub const SYS_PRCTL: usize = 157;
 pub const SYS_ARCH_PRCTL: usize = 158;
+pub const SYS_SYNC: usize = 162;
 pub const SYS_GETTID: usize = 186;
 pub const SYS_FUTEX: usize = 202;
 pub const SYS_SCHED_GETAFFINITY: usize = 204;
