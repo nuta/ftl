@@ -516,6 +516,12 @@ impl Process {
         self.tgid
     }
 
+    pub fn parent_id(&self) -> Option<PId> {
+        let mutable = self.mutable.lock();
+        let parent = mutable.parent.as_ref()?.upgrade()?;
+        Some(parent.id())
+    }
+
     pub fn sigaction(&self, signal: Signal, new_action: Option<SigAction>) -> SigAction {
         let mut mutable = self.mutable.lock();
 

@@ -32,6 +32,7 @@ mod getcwd;
 mod getdents64;
 mod getpeername;
 mod getpid;
+mod getppid;
 mod getrandom;
 mod getsockname;
 mod getsockopt;
@@ -117,6 +118,7 @@ use self::getcwd::sys_getcwd;
 use self::getdents64::sys_getdents64;
 use self::getpeername::sys_getpeername;
 use self::getpid::sys_getpid;
+use self::getppid::sys_getppid;
 use self::getrandom::sys_getrandom;
 use self::getsockname::sys_getsockname;
 use self::getsockopt::sys_getsockopt;
@@ -220,6 +222,7 @@ use crate::types::sys::syscall::SYS_GETEUID;
 use crate::types::sys::syscall::SYS_GETGID;
 use crate::types::sys::syscall::SYS_GETPEERNAME;
 use crate::types::sys::syscall::SYS_GETPID;
+use crate::types::sys::syscall::SYS_GETPPID;
 use crate::types::sys::syscall::SYS_GETRANDOM;
 use crate::types::sys::syscall::SYS_GETSOCKNAME;
 use crate::types::sys::syscall::SYS_GETSOCKOPT;
@@ -443,6 +446,7 @@ fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
         }
         SYS_FORK | SYS_VFORK => sys_fork(current, frame),
         SYS_GETPID => sys_getpid(current),
+        SYS_GETPPID => sys_getppid(current),
         SYS_GETTID => sys_gettid(current),
         SYS_GETUID | SYS_GETEUID | SYS_GETGID | SYS_GETEGID => sys_getuid(current),
         SYS_CAPGET => {
