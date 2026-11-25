@@ -990,6 +990,10 @@ impl FileLike for TcpConn {
         })
     }
 
+    fn local_addr(&self) -> Result<SockAddr, Errno> {
+        Ok(TcpConn::local_addr(self))
+    }
+
     fn setsockopt(
         &self,
         level: c_int,
