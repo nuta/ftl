@@ -15,11 +15,13 @@ use crate::types::c_int;
 use crate::types::c_short;
 use crate::types::errno::Errno;
 use crate::types::sys::poll::POLLIN;
+use crate::types::sys::socket::IPPROTO_TCP;
 use crate::types::sys::socket::SO_ERROR;
 use crate::types::sys::socket::SO_LINGER;
 use crate::types::sys::socket::SO_REUSEADDR;
 use crate::types::sys::socket::SOL_SOCKET;
 use crate::types::sys::socket::SockAddr;
+use crate::types::sys::socket::TCP_NODELAY;
 use crate::vfs::FileLike;
 use crate::wait_queue::Sleep;
 use crate::wait_queue::WaitQueue;
@@ -199,6 +201,10 @@ impl FileLike for TcpSocket {
             (SOL_SOCKET, SO_LINGER) => {
                 let conn = self.as_conn()?;
                 conn.setsockopt(level, optname, optval, optlen)
+            }
+            (IPPROTO_TCP, TCP_NODELAY) => {
+                // We don't implement Nagle algorithm anyway.
+                Ok(())
             }
             _ => Err(Errno::ENOTSUP),
         }

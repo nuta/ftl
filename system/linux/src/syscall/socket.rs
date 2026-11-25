@@ -8,6 +8,7 @@ use crate::types::errno::Errno;
 use crate::types::sys::fcntl::O_CLOEXEC;
 use crate::types::sys::fcntl::O_NONBLOCK;
 use crate::types::sys::fcntl::O_RDWR;
+use crate::types::sys::socket::IPPROTO_TCP;
 use crate::vfs::FileLike;
 
 const AF_INET: c_int = 2;
@@ -15,7 +16,6 @@ const SOCK_STREAM: c_int = 1;
 const SOCK_DGRAM: c_int = 2;
 const SOCK_CLOEXEC: c_int = O_CLOEXEC;
 const SOCK_NONBLOCK: c_int = O_NONBLOCK;
-const IPPROTO_TCP: c_int = 6;
 const IPPROTO_UDP: c_int = 17;
 
 const SUPPORTED_FLAGS: c_int = SOCK_CLOEXEC | SOCK_NONBLOCK;

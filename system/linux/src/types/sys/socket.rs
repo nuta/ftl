@@ -14,6 +14,9 @@ pub const SHUT_RD: c_int = 0;
 pub const SHUT_WR: c_int = 1;
 pub const SHUT_RDWR: c_int = 2;
 
+pub const IPPROTO_TCP: c_int = 6;
+pub const TCP_NODELAY: c_int = 1;
+
 pub const SOL_SOCKET: c_int = 1;
 pub const SO_REUSEADDR: c_int = 2;
 pub const SO_ERROR: c_int = 4;
