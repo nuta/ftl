@@ -1,8 +1,11 @@
+use ftl::trace;
+
 use super::SyscallResult;
 use crate::thread::Thread;
 use crate::types::c_int;
 use crate::types::c_long;
 use crate::types::errno::Errno;
+use crate::types::sys::resource::RUsage;
 use crate::types::sys::wait::WNOHANG;
 
 const SUPPORTED_FLAGS: c_int = WNOHANG;
@@ -16,6 +19,7 @@ pub fn sys_wait4(
     pid: c_int,
     wstatus: *mut c_int,
     options: c_int,
+    rusage: *mut RUsage,
 ) -> Result<SyscallResult, Errno> {
     if options & !SUPPORTED_FLAGS != 0 {
         return Err(Errno::EINVAL);
@@ -26,6 +30,11 @@ pub fn sys_wait4(
         Ok(Some((pid, exit_status))) => {
             if !wstatus.is_null() {
                 unsafe { wstatus.write(encode_wait_status(exit_status)) };
+            }
+
+            if !rusage.is_null() {
+                trace!("wait4: rusage is not supported");
+                unsafe { rusage.write(RUsage::default()) };
             }
 
             pid.as_int() as c_long

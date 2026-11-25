@@ -185,6 +185,7 @@ use crate::types::sys::epoll::EpollEvent;
 use crate::types::sys::poll::PollFd;
 use crate::types::sys::poll::nfds_t;
 use crate::types::sys::resource::RLimit;
+use crate::types::sys::resource::RUsage;
 use crate::types::sys::stat::Stat;
 use crate::types::sys::stat::Statx;
 use crate::types::sys::syscall::SYS_ACCEPT;
@@ -564,7 +565,15 @@ fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
                 arg2 as *const *const u8,
             )
         }
-        SYS_WAIT4 => sys_wait4(current, arg0 as c_int, arg1 as *mut c_int, arg2 as c_int),
+        SYS_WAIT4 => {
+            sys_wait4(
+                current,
+                arg0 as c_int,
+                arg1 as *mut c_int,
+                arg2 as c_int,
+                frame.arg3() as *mut RUsage,
+            )
+        }
         SYS_FCNTL => sys_fcntl(current, arg0 as c_int, arg1 as c_int, arg2 as c_long),
         SYS_PRCTL => sys_prctl(current, arg0 as c_int, arg1),
         SYS_ARCH_PRCTL => sys_arch_prctl(current, arg0 as c_int, arg1),
