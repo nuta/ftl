@@ -23,6 +23,7 @@ use crate::types::errno::Errno;
 use crate::types::sys::poll::POLLERR;
 use crate::types::sys::poll::POLLIN;
 use crate::types::sys::poll::POLLOUT;
+use crate::types::sys::socket::IPPROTO_TCP;
 use crate::types::sys::socket::Linger;
 use crate::types::sys::socket::SHUT_RD;
 use crate::types::sys::socket::SHUT_RDWR;
@@ -30,6 +31,7 @@ use crate::types::sys::socket::SHUT_WR;
 use crate::types::sys::socket::SO_LINGER;
 use crate::types::sys::socket::SOL_SOCKET;
 use crate::types::sys::socket::SockAddr;
+use crate::types::sys::socket::TCP_NODELAY;
 use crate::vfs::FileLike;
 use crate::vfs::IoVecSlice;
 use crate::wait_queue::Sleep;
@@ -1018,6 +1020,7 @@ impl FileLike for TcpConn {
                 mutable.linger = Some(Duration::from_secs(linger.l_linger as u64));
                 Ok(())
             }
+            (IPPROTO_TCP, TCP_NODELAY) => Ok(()),
             _ => Err(Errno::ENOTSUP),
         }
     }
