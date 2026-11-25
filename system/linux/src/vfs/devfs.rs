@@ -1,5 +1,4 @@
 use alloc::sync::Arc;
-use core::ptr;
 
 use crate::types::c_short;
 use crate::types::errno::Errno;
@@ -11,6 +10,7 @@ use crate::vfs::DirEntry;
 use crate::vfs::FileLike;
 use crate::vfs::INode;
 use crate::vfs::MemDir;
+use crate::vfs::addr_as_ino;
 use crate::wait_queue::Sleep;
 
 /// `/dev/null`.
@@ -60,11 +60,7 @@ impl FileLike for Null {
     }
 
     fn stat(&self) -> Result<Stat, Errno> {
-        Ok(Stat::new(
-            ptr::from_ref(self).addr() as u64,
-            S_IFCHR | 0o666,
-            0,
-        ))
+        Ok(Stat::new(addr_as_ino(self), S_IFCHR | 0o666, 0))
     }
 }
 
@@ -107,11 +103,7 @@ impl FileLike for Zero {
     }
 
     fn stat(&self) -> Result<Stat, Errno> {
-        Ok(Stat::new(
-            ptr::from_ref(self).addr() as u64,
-            S_IFCHR | 0o666,
-            0,
-        ))
+        Ok(Stat::new(addr_as_ino(self), S_IFCHR | 0o666, 0))
     }
 }
 
@@ -154,11 +146,7 @@ impl FileLike for URandom {
     }
 
     fn stat(&self) -> Result<Stat, Errno> {
-        Ok(Stat::new(
-            ptr::from_ref(self).addr() as u64,
-            S_IFCHR | 0o666,
-            0,
-        ))
+        Ok(Stat::new(addr_as_ino(self), S_IFCHR | 0o666, 0))
     }
 }
 

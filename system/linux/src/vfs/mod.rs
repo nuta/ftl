@@ -1,5 +1,6 @@
 use alloc::sync::Arc;
 use core::cmp::min;
+use core::ptr;
 use core::slice;
 
 use crate::types;
@@ -44,6 +45,10 @@ pub use pipe::Pipe;
 pub use procfs::ProcFs;
 pub use root_dir::RootDir;
 pub use tty::Tty;
+
+pub fn addr_as_ino<T: ?Sized>(obj: &T) -> u64 {
+    ptr::from_ref(obj).addr() as u64
+}
 
 pub struct IoVecSlice<'a> {
     iovecs: &'a [types::sys::uio::IoVec],

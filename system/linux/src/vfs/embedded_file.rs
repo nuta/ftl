@@ -4,6 +4,7 @@ use crate::types::errno::Errno;
 use crate::types::sys::stat::S_IFREG;
 use crate::types::sys::stat::Stat;
 use crate::vfs::FileLike;
+use crate::vfs::addr_as_ino;
 use crate::wait_queue::Sleep;
 
 /// A file that is embedded into the system's binary.
@@ -44,7 +45,7 @@ impl FileLike for EmbeddedFile {
     }
 
     fn stat(&self) -> Result<Stat, Errno> {
-        let ino = self.data.as_ptr().addr() as u64;
+        let ino = addr_as_ino(self.data);
         Ok(Stat::new(ino, S_IFREG | 0o755, self.data.len()))
     }
 }

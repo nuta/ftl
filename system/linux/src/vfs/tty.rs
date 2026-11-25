@@ -1,5 +1,4 @@
 use alloc::sync::Arc;
-use core::ptr;
 
 use ftl::mutex::Mutex;
 
@@ -19,6 +18,7 @@ use crate::types::sys::ioctl::WinSize;
 use crate::types::sys::stat::S_IFCHR;
 use crate::types::sys::stat::Stat;
 use crate::vfs::FileLike;
+use crate::vfs::addr_as_ino;
 use crate::wait_queue::Sleep;
 use crate::wait_queue::WaitQueue;
 
@@ -75,11 +75,7 @@ impl FileLike for Tty {
     }
 
     fn stat(&self) -> Result<Stat, Errno> {
-        Ok(Stat::new(
-            ptr::from_ref(self).addr() as u64,
-            S_IFCHR | 0o620,
-            0,
-        ))
+        Ok(Stat::new(addr_as_ino(self), S_IFCHR | 0o620, 0))
     }
 
     fn ioctl(&self, cmd: c_ulong, arg: usize) -> Result<c_long, Errno> {

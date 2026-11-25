@@ -15,6 +15,7 @@ use crate::types::sys::stat::Stat;
 use crate::types::sys::uio::IoVec;
 use crate::vfs::FileLike;
 use crate::vfs::IoVecSlice;
+use crate::vfs::addr_as_ino;
 use crate::wait_queue::Sleep;
 use crate::wait_queue::WaitQueue;
 
@@ -269,7 +270,7 @@ impl FileLike for Pipe {
     }
 
     fn stat(&self) -> Result<Stat, Errno> {
-        let ino = Arc::as_ptr(&self.inner).addr() as u64;
+        let ino = addr_as_ino(&*self.inner);
         Ok(Stat::new(ino, S_IFIFO | 0o600, 0))
     }
 }
