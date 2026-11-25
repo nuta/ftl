@@ -79,6 +79,7 @@ mod stat;
 mod statx;
 mod sysinfo;
 mod tgkill;
+mod umask;
 mod uname;
 mod wait4;
 mod write;
@@ -168,6 +169,7 @@ use self::stat::sys_stat;
 use self::statx::sys_statx;
 use self::sysinfo::sys_sysinfo;
 use self::tgkill::sys_tgkill;
+use self::umask::sys_umask;
 use self::uname::sys_uname;
 use self::wait4::sys_wait4;
 use self::write::sys_write;
@@ -276,6 +278,7 @@ use crate::types::sys::syscall::SYS_STAT;
 use crate::types::sys::syscall::SYS_STATX;
 use crate::types::sys::syscall::SYS_SYSINFO;
 use crate::types::sys::syscall::SYS_TGKILL;
+use crate::types::sys::syscall::SYS_UMASK;
 use crate::types::sys::syscall::SYS_UNAME;
 use crate::types::sys::syscall::SYS_VFORK;
 use crate::types::sys::syscall::SYS_WAIT4;
@@ -468,6 +471,7 @@ fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
                 arg1 as *mut CapUserData,
             )
         }
+        SYS_UMASK => sys_umask(current, arg0 as u32),
         SYS_UNAME => sys_uname(current, arg0 as *mut UtsName),
         SYS_SYSINFO => sys_sysinfo(current, arg0 as *mut SysInfo),
         SYS_FUTEX => {

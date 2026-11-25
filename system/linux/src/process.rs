@@ -64,6 +64,7 @@ struct Mutable {
     pending_signals: SignalSet,
     /// The current working directory.
     cwd: Arc<PathNode>,
+    umask: u32,
 }
 
 /// A Linux process.
@@ -117,6 +118,7 @@ impl Process {
             vm,
             fd_table,
             cwd,
+            0o022,
             PId(1),
             None,
             entry,
@@ -171,6 +173,7 @@ impl Process {
         vm: Vm,
         fd_table: FdTable,
         cwd: Arc<PathNode>,
+        umask: u32,
         tgid: PId,
         parent: Option<Weak<Process>>,
         entry: usize,
@@ -194,6 +197,7 @@ impl Process {
                 signal_actions,
                 pending_signals: SignalSet::empty(),
                 cwd,
+                umask,
             }),
             fd_table: Mutex::new(fd_table),
             signal_wait,
@@ -234,6 +238,7 @@ impl Process {
         let new_vm = current.vm().fork(&self.global.root_vmspace)?;
         let signal_actions = mutable.signal_actions.fork();
         let cwd = mutable.cwd.clone();
+        let umask = mutable.umask;
         drop(mutable);
 
         // Allocate a new PID for the child process.
@@ -247,6 +252,7 @@ impl Process {
             new_vm,
             fd_table,
             cwd,
+            umask,
             tgid,
             Some(Arc::downgrade(self)),
             entry,
@@ -510,6 +516,12 @@ impl Process {
         let mut mutable = self.mutable.lock();
         mutable.cwd = pnode;
         Ok(())
+    }
+
+    /// Sets the umask of this process, and returns the old one.
+    pub fn set_umask(&self, umask: u32) -> u32 {
+        let mut mutable = self.mutable.lock();
+        core::mem::replace(&mut mutable.umask, umask & 0o777)
     }
 
     pub fn id(&self) -> PId {
