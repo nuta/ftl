@@ -66,6 +66,7 @@ mod recvfrom;
 mod rt_sigaction;
 mod rt_sigprocmask;
 mod rt_sigreturn;
+mod sched_getaffinity;
 mod sendto;
 mod set_robust_list;
 mod set_tid_address;
@@ -153,6 +154,7 @@ use self::recvfrom::sys_recvfrom;
 use self::rt_sigaction::sys_rt_sigaction;
 use self::rt_sigprocmask::sys_rt_sigprocmask;
 use self::rt_sigreturn::sys_rt_sigreturn;
+use self::sched_getaffinity::sys_sched_getaffinity;
 use self::sendto::sys_sendto;
 use self::set_robust_list::sys_set_robust_list;
 use self::set_tid_address::sys_set_tid_address;
@@ -259,6 +261,7 @@ use crate::types::sys::syscall::SYS_RECVFROM;
 use crate::types::sys::syscall::SYS_RT_SIGACTION;
 use crate::types::sys::syscall::SYS_RT_SIGPROCMASK;
 use crate::types::sys::syscall::SYS_RT_SIGRETURN;
+use crate::types::sys::syscall::SYS_SCHED_GETAFFINITY;
 use crate::types::sys::syscall::SYS_SENDTO;
 use crate::types::sys::syscall::SYS_SET_ROBUST_LIST;
 use crate::types::sys::syscall::SYS_SET_TID_ADDRESS;
@@ -473,6 +476,9 @@ fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
                 frame.arg4() as *mut u32,
                 frame.arg5() as u32,
             )
+        }
+        SYS_SCHED_GETAFFINITY => {
+            sys_sched_getaffinity(current, arg0 as c_int, arg1, arg2 as *mut c_ulong)
         }
         SYS_GETRANDOM => sys_getrandom(current, arg0 as *mut c_void, arg1, arg2 as c_unsigned),
         SYS_CLOCK_GETTIME => sys_clock_gettime(current, arg0 as c_int, arg1 as *mut TimeSpec),
