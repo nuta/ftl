@@ -105,6 +105,14 @@ impl FileLike for Zero {
     fn poll(&self) -> Result<c_short, Errno> {
         Ok(POLLIN | POLLOUT)
     }
+
+    fn stat(&self) -> Result<Stat, Errno> {
+        Ok(Stat::new(
+            ptr::from_ref(self).addr() as u64,
+            S_IFCHR | 0o666,
+            0,
+        ))
+    }
 }
 
 /// `/dev/urandom`.
@@ -143,6 +151,14 @@ impl FileLike for URandom {
 
     fn poll(&self) -> Result<c_short, Errno> {
         Ok(POLLIN | POLLOUT)
+    }
+
+    fn stat(&self) -> Result<Stat, Errno> {
+        Ok(Stat::new(
+            ptr::from_ref(self).addr() as u64,
+            S_IFCHR | 0o666,
+            0,
+        ))
     }
 }
 
