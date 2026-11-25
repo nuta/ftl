@@ -10,6 +10,8 @@ use crate::types::sys::poll::POLLERR;
 use crate::types::sys::poll::POLLHUP;
 use crate::types::sys::poll::POLLIN;
 use crate::types::sys::poll::POLLOUT;
+use crate::types::sys::stat::S_IFIFO;
+use crate::types::sys::stat::Stat;
 use crate::types::sys::uio::IoVec;
 use crate::vfs::FileLike;
 use crate::vfs::IoVecSlice;
@@ -264,5 +266,10 @@ impl FileLike for Pipe {
 
     fn wait_queue(&self) -> Option<&WaitQueue> {
         Some(&self.inner.wait_queue)
+    }
+
+    fn stat(&self) -> Result<Stat, Errno> {
+        let ino = Arc::as_ptr(&self.inner).addr() as u64;
+        Ok(Stat::new(ino, S_IFIFO | 0o600, 0))
     }
 }
