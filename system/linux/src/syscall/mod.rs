@@ -30,6 +30,7 @@ mod fstat;
 mod futex;
 mod getcwd;
 mod getdents64;
+mod getgroups;
 mod getpeername;
 mod getpid;
 mod getppid;
@@ -116,6 +117,7 @@ use self::fstat::sys_fstat;
 use self::futex::sys_futex;
 use self::getcwd::sys_getcwd;
 use self::getdents64::sys_getdents64;
+use self::getgroups::sys_getgroups;
 use self::getpeername::sys_getpeername;
 use self::getpid::sys_getpid;
 use self::getppid::sys_getppid;
@@ -220,6 +222,7 @@ use crate::types::sys::syscall::SYS_GETDENTS64;
 use crate::types::sys::syscall::SYS_GETEGID;
 use crate::types::sys::syscall::SYS_GETEUID;
 use crate::types::sys::syscall::SYS_GETGID;
+use crate::types::sys::syscall::SYS_GETGROUPS;
 use crate::types::sys::syscall::SYS_GETPEERNAME;
 use crate::types::sys::syscall::SYS_GETPID;
 use crate::types::sys::syscall::SYS_GETPPID;
@@ -449,6 +452,7 @@ fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
         SYS_GETPPID => sys_getppid(current),
         SYS_GETTID => sys_gettid(current),
         SYS_GETUID | SYS_GETEUID | SYS_GETGID | SYS_GETEGID => sys_getuid(current),
+        SYS_GETGROUPS => sys_getgroups(current, arg0 as c_int),
         SYS_CAPGET => {
             sys_capget(
                 current,
