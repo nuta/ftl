@@ -29,6 +29,7 @@ pub const SYS_BRK: usize = 12;
 pub const SYS_READV: usize = 19;
 pub const SYS_WRITEV: usize = 20;
 pub const SYS_PIPE: usize = 22;
+pub const SYS_SCHED_YIELD: usize = 24;
 pub const SYS_MADVISE: usize = 28;
 pub const SYS_GETPID: usize = 39;
 pub const SYS_CLONE: usize = 56;
