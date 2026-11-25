@@ -34,6 +34,7 @@ mod getgroups;
 mod getpeername;
 mod getpid;
 mod getppid;
+mod getpriority;
 mod getrandom;
 mod getsockname;
 mod getsockopt;
@@ -122,6 +123,7 @@ use self::getgroups::sys_getgroups;
 use self::getpeername::sys_getpeername;
 use self::getpid::sys_getpid;
 use self::getppid::sys_getppid;
+use self::getpriority::sys_getpriority;
 use self::getrandom::sys_getrandom;
 use self::getsockname::sys_getsockname;
 use self::getsockopt::sys_getsockopt;
@@ -229,6 +231,7 @@ use crate::types::sys::syscall::SYS_GETGROUPS;
 use crate::types::sys::syscall::SYS_GETPEERNAME;
 use crate::types::sys::syscall::SYS_GETPID;
 use crate::types::sys::syscall::SYS_GETPPID;
+use crate::types::sys::syscall::SYS_GETPRIORITY;
 use crate::types::sys::syscall::SYS_GETRANDOM;
 use crate::types::sys::syscall::SYS_GETSOCKNAME;
 use crate::types::sys::syscall::SYS_GETSOCKOPT;
@@ -457,6 +460,7 @@ fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
         SYS_GETTID => sys_gettid(current),
         SYS_GETUID | SYS_GETEUID | SYS_GETGID | SYS_GETEGID => sys_getuid(current),
         SYS_GETGROUPS => sys_getgroups(current, arg0 as c_int),
+        SYS_GETPRIORITY => sys_getpriority(current, arg0 as c_int, arg1 as c_int),
         SYS_CAPGET => {
             sys_capget(
                 current,
