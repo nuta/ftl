@@ -48,6 +48,8 @@ mod listen;
 mod lseek;
 mod lstat;
 mod madvise;
+mod mkdir;
+mod mkdirat;
 mod mmap;
 mod mprotect;
 mod munmap;
@@ -143,6 +145,8 @@ use self::listen::sys_listen;
 use self::lseek::sys_lseek;
 use self::lstat::sys_lstat;
 use self::madvise::sys_madvise;
+use self::mkdir::sys_mkdir;
+use self::mkdirat::sys_mkdirat;
 use self::mmap::sys_mmap;
 use self::mprotect::sys_mprotect;
 use self::munmap::sys_munmap;
@@ -257,6 +261,8 @@ use crate::types::sys::syscall::SYS_LISTEN;
 use crate::types::sys::syscall::SYS_LSEEK;
 use crate::types::sys::syscall::SYS_LSTAT;
 use crate::types::sys::syscall::SYS_MADVISE;
+use crate::types::sys::syscall::SYS_MKDIR;
+use crate::types::sys::syscall::SYS_MKDIRAT;
 use crate::types::sys::syscall::SYS_MMAP;
 use crate::types::sys::syscall::SYS_MPROTECT;
 use crate::types::sys::syscall::SYS_MUNMAP;
@@ -375,6 +381,8 @@ fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
         SYS_FACCESSAT => sys_faccessat(current, arg0 as c_int, arg1 as *const u8, arg2 as c_int),
         SYS_IOCTL => sys_ioctl(current, arg0 as c_int, arg1 as c_ulong, arg2),
         SYS_OPENAT => sys_openat(current, arg0 as c_int, arg1 as *const u8, arg2 as c_int),
+        SYS_MKDIR => sys_mkdir(current, arg0 as *const u8),
+        SYS_MKDIRAT => sys_mkdirat(current, arg0 as c_int, arg1 as *const u8),
         SYS_STAT => sys_stat(current, arg0 as *const u8, arg1 as *mut Stat),
         SYS_FSTAT => sys_fstat(current, arg0 as c_int, arg1 as *mut Stat),
         SYS_LSTAT => sys_lstat(current, arg0 as *const u8, arg1 as *mut Stat),
