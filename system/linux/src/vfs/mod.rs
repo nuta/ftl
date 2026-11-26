@@ -26,6 +26,7 @@ mod path;
 mod pipe;
 mod procfs;
 mod root_dir;
+mod tmpfs;
 mod tty;
 
 pub use console::Console;
@@ -43,7 +44,8 @@ pub use inode::INode;
 pub use path::PathNode;
 pub use pipe::Pipe;
 pub use procfs::ProcFs;
-pub use root_dir::RootDir;
+pub use root_dir::build_root_dir;
+pub use tmpfs::TmpDir;
 pub use tty::Tty;
 
 pub fn addr_as_ino<T: ?Sized>(obj: &T) -> u64 {

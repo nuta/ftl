@@ -212,7 +212,7 @@ impl OpenFile {
             };
 
             // Write the name string, which is next to the header.
-            dirent[name_offset..][..entry.name.len()].copy_from_slice(entry.name);
+            dirent[name_offset..][..entry.name.len()].copy_from_slice(&entry.name);
             // Write the null terminator.
             dirent[name_offset + entry.name.len()] = 0;
 

@@ -11,19 +11,32 @@ use crate::wait_queue::Sleep;
 /// An entry in a directory.
 #[derive(Clone)]
 pub struct DirEntry {
-    pub name: &'static [u8],
+    pub name: Arc<[u8]>,
     pub inode: INode,
 }
 
 impl DirEntry {
-    pub fn new(name: &'static [u8], inode: INode) -> Self {
-        Self { name, inode }
+    pub fn new(name: &[u8], inode: INode) -> Self {
+        Self {
+            name: name.into(),
+            inode,
+        }
     }
 }
 
 pub trait Directory: Send + Sync {
     fn lookup(&self, name: &[u8]) -> Result<INode, Errno>;
     fn readdir(&self, index: usize) -> Result<Option<DirEntry>, Errno>;
+
+    fn create(&self, name: &[u8]) -> Result<Arc<dyn FileLike>, Errno> {
+        let _ = name;
+        Err(Errno::EROFS)
+    }
+
+    fn mkdir(&self, name: &[u8]) -> Result<(), Errno> {
+        let _ = name;
+        Err(Errno::EROFS)
+    }
 }
 
 pub struct MemDir {
@@ -31,27 +44,17 @@ pub struct MemDir {
 }
 
 impl MemDir {
-    pub fn new() -> Self {
-        Self {
-            entries: Vec::new(),
-        }
-    }
-
     pub fn with_entries(entries: impl Into<Vec<DirEntry>>) -> Self {
         Self {
             entries: entries.into(),
         }
-    }
-
-    pub fn add(&mut self, entry: DirEntry) {
-        self.entries.push(entry);
     }
 }
 
 impl Directory for MemDir {
     fn lookup(&self, name: &[u8]) -> Result<INode, Errno> {
         for entry in self.entries.iter() {
-            if entry.name == name {
+            if *entry.name == *name {
                 return Ok(entry.inode.clone());
             }
         }

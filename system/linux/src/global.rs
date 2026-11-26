@@ -23,7 +23,7 @@ use crate::types::errno::Errno;
 use crate::vfs::Console;
 use crate::vfs::FileLike;
 use crate::vfs::PathNode;
-use crate::vfs::RootDir;
+use crate::vfs::build_root_dir;
 
 // `cookie <= HANDLE_ID_MAX` are for threads.
 const NETWORK_COOKIE: usize = HANDLE_ID_MAX + 1;
@@ -61,7 +61,7 @@ impl Global {
         }
 
         let quota = Arc::new(quota);
-        let root_dir = RootDir::new(quota.clone(), image, network.clone());
+        let root_dir = build_root_dir(quota.clone(), image, network.clone());
         let this = Arc::new(Self {
             poll,
             quota,

@@ -6,66 +6,54 @@ use ftl::vmo::Vmo;
 use crate::initfs::InitFsLoader;
 use crate::net::TcpIp;
 use crate::vfs::DevFs;
-use crate::vfs::DirEntry;
-use crate::vfs::EmbeddedFile;
 use crate::vfs::FtlFs;
 use crate::vfs::INode;
-use crate::vfs::MemDir;
+use crate::vfs::PathNode;
 use crate::vfs::ProcFs;
+use crate::vfs::TmpDir;
+use crate::wait_queue::Sleep;
 
-fn visit_initfs_dir(parent_dir: Option<&[u8]>) -> MemDir {
-    let mut dir = MemDir::new();
+fn populate_from_initfs(root_dir: &Arc<TmpDir>) {
+    let root = PathNode::root_dir(INode::Dir(root_dir.clone()));
     for file in InitFsLoader::new(&crate::INITFS.0) {
-        let name = match parent_dir {
-            Some(parent) => {
-                let Some(rest) = file.name.strip_prefix(parent) else {
-                    // The prefix does not match. Skip this entry.
-                    continue;
-                };
-
-                let Some(name) = rest.strip_prefix(b"/") else {
-                    // This is not a directory. SKip it.
-                    continue;
-                };
-
-                name
-            }
-            None => file.name,
-        };
-
-        if name.is_empty() || name.contains(&b'/') {
-            continue;
-        }
-
+        let top_level = file.name.split(|&b| b == b'/').next().unwrap();
         // Ignore top-level /dev, /ftl, and /proc since we'll add them later.
-        if parent_dir.is_none() && matches!(name, b"dev" | b"ftl" | b"proc") {
+        if matches!(top_level, b"" | b"." | b"dev" | b"ftl" | b"proc") {
             continue;
         }
 
-        let inode = if file.is_dir {
-            INode::Dir(Arc::new(visit_initfs_dir(Some(file.name))))
-        } else {
-            INode::File(Arc::new(EmbeddedFile::new(file.data)))
+        let (parent_path, name) = match file.name.iter().rposition(|&b| b == b'/') {
+            Some(pos) => (&file.name[..pos], &file.name[pos + 1..]),
+            None => (&b""[..], file.name),
         };
 
-        dir.add(DirEntry::new(name, inode));
-    }
+        let parent = root.lookup(parent_path).expect("initfs: parent not found");
+        let INode::Dir(parent_dir) = parent.inode() else {
+            panic!("initfs: parent is not a directory");
+        };
 
-    dir
+        if file.is_dir {
+            parent_dir.mkdir(name).expect("initfs: failed to mkdir");
+        } else {
+            let new_file = parent_dir.create(name).unwrap();
+            new_file
+                .write(file.data, 0, false, Sleep::Uninterruptible)
+                .unwrap();
+        }
+    }
 }
 
-/// The root directory.
-pub struct RootDir;
+/// Builds the root directory.
+pub fn build_root_dir(quota: Arc<Quota>, image: Vmo, network: Arc<TcpIp>) -> INode {
+    let root_dir = Arc::new(TmpDir::new());
+    populate_from_initfs(&root_dir);
 
-impl RootDir {
-    pub fn new(quota: Arc<Quota>, image: Vmo, network: Arc<TcpIp>) -> INode {
-        let mut root = visit_initfs_dir(None);
-        root.add(DirEntry::new(b"dev", INode::Dir(Arc::new(DevFs::new()))));
-        root.add(DirEntry::new(
-            b"ftl",
-            INode::Dir(Arc::new(FtlFs::new(quota, image, network))),
-        ));
-        root.add(DirEntry::new(b"proc", INode::Dir(Arc::new(ProcFs::new()))));
-        INode::Dir(Arc::new(root))
-    }
+    let devfs = DevFs::new();
+    let procfs = ProcFs::new();
+    let ftlfs = FtlFs::new(quota, image, network);
+    root_dir.add(b"proc", INode::Dir(Arc::new(procfs))).unwrap();
+    root_dir.add(b"dev", INode::Dir(Arc::new(devfs))).unwrap();
+    root_dir.add(b"ftl", INode::Dir(Arc::new(ftlfs))).unwrap();
+
+    INode::Dir(root_dir)
 }
