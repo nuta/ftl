@@ -109,7 +109,11 @@ impl Thread {
         todo!()
     }
 
-    pub fn copy_regs(&mut self, _source: &Self, _kind: RegsKind) -> Result<(), ErrorCode> {
+    pub fn copy_regs_from_current(&mut self, _current: &Self, _kind: RegsKind) -> Result<(), ErrorCode> {
+        todo!()
+    }
+
+    pub fn switch_fpu(_prev: Option<&Thread>, _next: &Thread) {
         todo!()
     }
 

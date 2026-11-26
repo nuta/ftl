@@ -236,9 +236,6 @@ impl Thread {
     }
 
     /// Copies the current thread's registers to another thread.
-    ///
-    /// The system call entry already saved the current thread's state. No need
-    /// to copy any more registers.
     pub fn copy_regs_from_current(
         &self,
         current_arch: &arch::Thread,
@@ -251,7 +248,7 @@ impl Thread {
 
         // SAFETY: The thread is blocked and we hold the mutable lock to prevent
         // concurrent access.
-        unsafe { &mut *self.arch.get() }.copy_regs(current_arch, kind)
+        unsafe { &mut *self.arch.get() }.copy_regs_from_current(current_arch, kind)
     }
 }
 
@@ -528,6 +525,21 @@ impl CurrentThread {
     pub fn enter(&self, new_thread: SharedRef<Thread>) -> Result<Infallible, ErrorCode> {
         // Switch to the new thread's virtual memory space.
         new_thread.vmspace().switch();
+
+        // Switch FPU registers.
+        let prev = unsafe { *self.ptr.get() };
+        if !core::ptr::eq(prev, &*new_thread) {
+            // SAFETY: The `new_thread` is alive since we hold its shared ref.
+            let next_arch = unsafe { &*new_thread.arch.get() };
+
+            // SAFETY: The `prev` thread is alive until `update` below.
+            let prev_arch = match unsafe { prev.as_ref() } {
+                Some(prev) => Some(unsafe { &*prev.arch.get() }),
+                None => None,
+            };
+
+            arch::Thread::switch_fpu(prev_arch, next_arch);
+        }
 
         self.update(new_thread);
 

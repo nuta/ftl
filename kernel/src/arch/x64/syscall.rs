@@ -12,7 +12,6 @@ use super::gdt::GDT_USER_DS;
 use super::msr::rdmsr;
 use super::msr::wrmsr;
 use super::thread::Thread;
-use super::thread::XSTATE_MASK;
 use crate::cpuvar::CpuVar;
 use crate::scheduler;
 use crate::scheduler::Resched;
@@ -97,12 +96,6 @@ extern "C" fn syscall_handler() -> ! {
         "swapgs",
         "mov [rax + {gsbase_offset}], rdi",
 
-        // Save the user XSTATE.
-        "mov rdi, [rax + {xsave_ptr_offset}]",
-        "mov eax, {xstate_mask_lo}",
-        "mov edx, {xstate_mask_hi}",
-        "xsaveopt64 [rdi]",
-
         // Switch to the kernel stack and handle the FTL syscall.
         "mov rsp, gs:[{kernel_rsp_offset}]",
         "sub rsp, 8", // Align the stack to 16 bytes.
@@ -147,11 +140,8 @@ extern "C" fn syscall_handler() -> ! {
         ftl_syscall_base = const Syscall::BASE as isize,
         user_rflags = const USER_RFLAGS,
         current_thread_offset = const offset_of!(CpuVar, current_thread),
-        xstate_mask_lo = const XSTATE_MASK & 0xffff_ffff,
-        xstate_mask_hi = const XSTATE_MASK >> 32,
         fsbase_offset = const offset_of!(Thread, fsbase),
         gsbase_offset = const offset_of!(Thread, gsbase),
-        xsave_ptr_offset = const offset_of!(Thread, xsave_ptr),
         syscall_pc_offset = const offset_of!(Thread, syscall_pc),
         syscall_frame_offset = const offset_of!(Thread, syscall_frame),
         frame_rsp_offset = const offset_of!(SyscallFrame, rsp),

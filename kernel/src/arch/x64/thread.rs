@@ -71,6 +71,30 @@ pub struct Thread {
     pub(super) syscall_frame: u64,
 }
 
+fn xsave(xsave_ptr: u64) {
+    unsafe {
+        asm!(
+            "xsaveopt64 [{}]",
+            in(reg) xsave_ptr,
+            in("eax") XSTATE_MASK & 0xffff_ffff,
+            in("edx") XSTATE_MASK >> 32,
+            options(nostack),
+        );
+    }
+}
+
+fn xrstor(xsave_ptr: u64) {
+    unsafe {
+        asm!(
+            "xrstor64 [{}]",
+            in(reg) xsave_ptr,
+            in("eax") XSTATE_MASK & 0xffff_ffff,
+            in("edx") XSTATE_MASK >> 32,
+            options(nostack),
+        );
+    }
+}
+
 impl Drop for Thread {
     fn drop(&mut self) {
         let paddr = vaddr2paddr(VAddr::new(self.xsave_ptr as usize));
@@ -165,12 +189,20 @@ impl Thread {
         Ok(())
     }
 
-    pub fn copy_regs(&mut self, src: &Self, kind: RegsKind) -> Result<(), ErrorCode> {
+    pub fn copy_regs_from_current(
+        &mut self,
+        current: &Self,
+        kind: RegsKind,
+    ) -> Result<(), ErrorCode> {
         match kind {
-            RegsKind::FsBase => self.fsbase = src.fsbase,
+            RegsKind::FsBase => self.fsbase = current.fsbase,
             RegsKind::FpAndVector => unsafe {
+                // The latest state is in the registers. Write them to the
+                // memory.
+                xsave(current.xsave_ptr);
+
                 core::ptr::copy_nonoverlapping(
-                    src.xsave_ptr as *const u8,
+                    current.xsave_ptr as *const u8,
                     self.xsave_ptr as *mut u8,
                     MIN_PAGE_SIZE, // FIXME: use the correct size
                 );
@@ -178,6 +210,15 @@ impl Thread {
         }
 
         Ok(())
+    }
+
+    pub fn switch_fpu(prev: Option<&Thread>, next: &Thread) {
+        if let Some(prev) = prev {
+            // Save the previous (current) thread's state.
+            xsave(prev.xsave_ptr);
+        }
+
+        xrstor(next.xsave_ptr);
     }
 
     pub fn enter(thread: *const Thread) -> Result<Infallible, ErrorCode> {
@@ -190,10 +231,6 @@ impl Thread {
         unsafe {
             asm!(
                 "mov rsp, {}",
-                "mov rdi, [rsp + {xsave_ptr_offset}]",
-                "mov eax, {xstate_mask_lo}",
-                "mov edx, {xstate_mask_hi}",
-                "xrstor64 [rdi]",
                 "swapgs",
                 "mov rax, [rsp + {gsbase_offset}]",
                 "wrgsbase rax",
@@ -227,9 +264,6 @@ impl Thread {
                 // > 7.14.3 IRET in IA-32e Mode
                 "iretq",
                 in(reg) thread,
-                xstate_mask_lo = const XSTATE_MASK & 0xffff_ffff,
-                xstate_mask_hi = const XSTATE_MASK >> 32,
-                xsave_ptr_offset = const offset_of!(Thread, xsave_ptr),
                 gsbase_offset = const offset_of!(Thread, gsbase),
                 fsbase_offset = const offset_of!(Thread, fsbase),
                 rax_offset = const offset_of!(Thread, rax),

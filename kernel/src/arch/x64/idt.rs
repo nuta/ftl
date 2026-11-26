@@ -19,7 +19,6 @@ use super::local_apic::SPURIOUS_INTERRUPT_VECTOR;
 use super::syscall::USER_RFLAGS;
 use super::syscall::syscall_copy_recover;
 use super::thread::Thread;
-use super::thread::XSTATE_MASK;
 use super::timer::TIMER_IRQ;
 use super::timer::monotime_read;
 use crate::address::UAddr;
@@ -249,14 +248,6 @@ extern "C" fn interrupt_entry() -> ! {
         "swapgs",
         "mov [rax + {gsbase_offset}], rdi",
 
-        // Save the user XSTATE.
-        "push rax",
-        "mov rdi, [rax + {xsave_ptr_offset}]",
-        "mov eax, {xstate_mask_lo}",
-        "mov edx, {xstate_mask_hi}",
-        "xsaveopt64 [rdi]",
-        "pop rax",
-
         // Save RAX too.
         "pop rbx",
         "mov [rax + {rax_offset}], rbx",
@@ -279,11 +270,8 @@ extern "C" fn interrupt_entry() -> ! {
         "sub rsp, 8",
         "jmp {handle_user_interrupt}",
         current_thread_offset = const offset_of!(CpuVar, current_thread),
-        xstate_mask_lo = const XSTATE_MASK & 0xffff_ffff,
-        xstate_mask_hi = const XSTATE_MASK >> 32,
         fsbase_offset = const offset_of!(Thread, fsbase),
         gsbase_offset = const offset_of!(Thread, gsbase),
-        xsave_ptr_offset = const offset_of!(Thread, xsave_ptr),
         rip_offset = const offset_of!(Thread, rip),
         rflags_offset = const offset_of!(Thread, rflags),
         rax_offset = const offset_of!(Thread, rax),
