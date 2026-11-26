@@ -26,7 +26,7 @@ impl DirEntry {
 
 pub trait Directory: Send + Sync {
     fn lookup(&self, name: &[u8]) -> Result<INode, Errno>;
-    fn readdir(&self, index: usize) -> Result<Option<DirEntry>, Errno>;
+    fn readdir(&self, offset: usize) -> Result<Option<(DirEntry, usize)>, Errno>;
 
     fn create(&self, name: &[u8]) -> Result<Arc<dyn FileLike>, Errno> {
         let _ = name;
@@ -62,8 +62,12 @@ impl Directory for MemDir {
         Err(Errno::ENOENT)
     }
 
-    fn readdir(&self, index: usize) -> Result<Option<DirEntry>, Errno> {
-        Ok(self.entries.get(index).cloned())
+    fn readdir(&self, offset: usize) -> Result<Option<(DirEntry, usize)>, Errno> {
+        let Some(entry) = self.entries.get(offset) else {
+            return Ok(None);
+        };
+
+        Ok(Some((entry.clone(), offset + 1)))
     }
 }
 
@@ -90,8 +94,8 @@ impl FileLike for OpenedDir {
         Err(Errno::EISDIR)
     }
 
-    fn readdir(&self, index: usize) -> Result<Option<DirEntry>, Errno> {
-        self.dir.readdir(index)
+    fn readdir(&self, offset: usize) -> Result<Option<(DirEntry, usize)>, Errno> {
+        self.dir.readdir(offset)
     }
 
     fn pnode(&self) -> Option<Arc<PathNode>> {

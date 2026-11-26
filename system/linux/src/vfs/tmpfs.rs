@@ -126,8 +126,13 @@ impl Directory for TmpDir {
         Err(Errno::ENOENT)
     }
 
-    fn readdir(&self, index: usize) -> Result<Option<DirEntry>, Errno> {
-        Ok(self.entries.lock().get(index).cloned())
+    fn readdir(&self, offset: usize) -> Result<Option<(DirEntry, usize)>, Errno> {
+        let entries = self.entries.lock();
+        let Some(entry) = entries.get(offset) else {
+            return Ok(None);
+        };
+
+        Ok(Some((entry.clone(), offset + 1)))
     }
 
     fn create(&self, name: &[u8]) -> Result<Arc<dyn FileLike>, Errno> {

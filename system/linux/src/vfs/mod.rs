@@ -281,8 +281,8 @@ pub trait FileLike: Send + Sync {
         Ok(total)
     }
 
-    fn readdir(&self, index: usize) -> Result<Option<DirEntry>, Errno> {
-        let _ = index;
+    fn readdir(&self, offset: usize) -> Result<Option<(DirEntry, usize)>, Errno> {
+        let _ = offset;
         Err(Errno::ENOTDIR)
     }
 
