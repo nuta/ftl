@@ -52,6 +52,11 @@ pub trait Directory: Send + Sync {
         Err(Errno::EROFS)
     }
 
+    fn link(&self, name: &[u8], inode: INode) -> Result<(), Errno> {
+        let _ = (name, inode);
+        Err(Errno::EROFS)
+    }
+
     fn unlink(&self, name: &[u8]) -> Result<(), Errno> {
         let _ = name;
         Err(Errno::EROFS)

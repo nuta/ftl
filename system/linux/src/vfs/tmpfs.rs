@@ -212,6 +212,10 @@ impl Directory for TmpDir {
         Ok(entries.is_empty())
     }
 
+    fn link(&self, name: &[u8], inode: INode) -> Result<(), Errno> {
+        self.add(name, inode)
+    }
+
     fn unlink(&self, name: &[u8]) -> Result<(), Errno> {
         let mut entries = self.entries.lock();
         let Some(entry) = entries.iter().find(|entry| *entry.name == *name) else {

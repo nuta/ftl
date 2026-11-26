@@ -44,6 +44,8 @@ mod gettid;
 mod getuid;
 mod ioctl;
 mod kill;
+mod link;
+mod linkat;
 mod listen;
 mod lseek;
 mod lstat;
@@ -144,6 +146,8 @@ use self::gettid::sys_gettid;
 use self::getuid::sys_getuid;
 use self::ioctl::sys_ioctl;
 use self::kill::sys_kill;
+use self::link::sys_link;
+use self::linkat::sys_linkat;
 use self::listen::sys_listen;
 use self::lseek::sys_lseek;
 use self::lstat::sys_lstat;
@@ -263,6 +267,8 @@ use crate::types::sys::syscall::SYS_GETTID;
 use crate::types::sys::syscall::SYS_GETUID;
 use crate::types::sys::syscall::SYS_IOCTL;
 use crate::types::sys::syscall::SYS_KILL;
+use crate::types::sys::syscall::SYS_LINK;
+use crate::types::sys::syscall::SYS_LINKAT;
 use crate::types::sys::syscall::SYS_LISTEN;
 use crate::types::sys::syscall::SYS_LSEEK;
 use crate::types::sys::syscall::SYS_LSTAT;
@@ -395,6 +401,17 @@ fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
         SYS_RMDIR => sys_rmdir(current, arg0 as *const u8),
         SYS_UNLINK => sys_unlink(current, arg0 as *const u8),
         SYS_UNLINKAT => sys_unlinkat(current, arg0 as c_int, arg1 as *const u8, arg2 as c_int),
+        SYS_LINK => sys_link(current, arg0 as *const u8, arg1 as *const u8),
+        SYS_LINKAT => {
+            sys_linkat(
+                current,
+                arg0 as c_int,
+                arg1 as *const u8,
+                arg2 as c_int,
+                frame.arg3() as *const u8,
+                frame.arg4() as c_int,
+            )
+        }
         SYS_STAT => sys_stat(current, arg0 as *const u8, arg1 as *mut Stat),
         SYS_FSTAT => sys_fstat(current, arg0 as c_int, arg1 as *mut Stat),
         SYS_LSTAT => sys_lstat(current, arg0 as *const u8, arg1 as *mut Stat),
