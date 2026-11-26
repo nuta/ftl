@@ -6,6 +6,7 @@ use ftl::vmo::Vmo;
 use crate::initfs::InitFsLoader;
 use crate::net::TcpIp;
 use crate::vfs::DevFs;
+use crate::vfs::Directory;
 use crate::vfs::FtlFs;
 use crate::vfs::INode;
 use crate::vfs::PathNode;
@@ -54,6 +55,7 @@ pub fn build_root_dir(quota: Arc<Quota>, image: Vmo, network: Arc<TcpIp>) -> INo
     root_dir.add(b"proc", INode::Dir(Arc::new(procfs))).unwrap();
     root_dir.add(b"dev", INode::Dir(Arc::new(devfs))).unwrap();
     root_dir.add(b"ftl", INode::Dir(Arc::new(ftlfs))).unwrap();
+    root_dir.mkdir(b"tmp").unwrap();
 
     INode::Dir(root_dir)
 }
