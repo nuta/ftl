@@ -58,6 +58,7 @@ pub const SYS_TRUNCATE: usize = 76;
 pub const SYS_FTRUNCATE: usize = 77;
 pub const SYS_GETCWD: usize = 79;
 pub const SYS_CHDIR: usize = 80;
+pub const SYS_CREAT: usize = 85;
 pub const SYS_UMASK: usize = 95;
 pub const SYS_SYSINFO: usize = 99;
 pub const SYS_GETUID: usize = 102;

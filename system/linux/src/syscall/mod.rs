@@ -12,6 +12,7 @@ mod clock_nanosleep;
 mod clone;
 mod close;
 mod connect;
+mod creat;
 mod dup2;
 mod dup3;
 mod epoll_create1;
@@ -106,6 +107,7 @@ use self::clock_nanosleep::sys_clock_nanosleep;
 use self::clone::sys_clone;
 use self::close::sys_close;
 use self::connect::sys_connect;
+use self::creat::sys_creat;
 use self::dup2::sys_dup2;
 use self::dup3::sys_dup3;
 use self::epoll_create1::sys_epoll_create1;
@@ -216,6 +218,7 @@ use crate::types::sys::syscall::SYS_CLOCK_NANOSLEEP;
 use crate::types::sys::syscall::SYS_CLONE;
 use crate::types::sys::syscall::SYS_CLOSE;
 use crate::types::sys::syscall::SYS_CONNECT;
+use crate::types::sys::syscall::SYS_CREAT;
 use crate::types::sys::syscall::SYS_DUP2;
 use crate::types::sys::syscall::SYS_DUP3;
 use crate::types::sys::syscall::SYS_EPOLL_CREATE1;
@@ -367,6 +370,7 @@ fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
             )
         }
         SYS_OPEN => sys_open(current, arg0 as *const u8, arg1 as c_int),
+        SYS_CREAT => sys_creat(current, arg0 as *const u8),
         SYS_ACCESS => sys_access(current, arg0 as *const u8, arg1 as c_int),
         SYS_FACCESSAT => sys_faccessat(current, arg0 as c_int, arg1 as *const u8, arg2 as c_int),
         SYS_IOCTL => sys_ioctl(current, arg0 as c_int, arg1 as c_ulong, arg2),
