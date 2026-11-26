@@ -33,6 +33,14 @@ impl PathNode {
         &self.inode
     }
 
+    pub fn new(parent_dir: Arc<Self>, name: &[u8], inode: INode) -> Arc<Self> {
+        Arc::new(Self {
+            parent_dir: Some(parent_dir),
+            name: name.into(),
+            inode,
+        })
+    }
+
     /// Resolves a path relative to this pnode.
     pub fn lookup(self: &Arc<Self>, path: &[u8]) -> Result<Arc<Self>, Errno> {
         let mut current = self.clone();
@@ -61,11 +69,7 @@ impl PathNode {
 
             // Look up the next path component.
             let inode = dir.lookup(name)?;
-            current = Arc::new(Self {
-                parent_dir: Some(current.clone()),
-                name: name.into(),
-                inode,
-            });
+            current = PathNode::new(current, name, inode);
         }
 
         Ok(current)

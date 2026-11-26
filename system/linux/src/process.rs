@@ -500,6 +500,26 @@ impl Process {
         dir.lookup(path)
     }
 
+    /// Resolves the parent directory of `path`, and returns it with the base
+    /// name of the path.
+    pub fn lookup_parent<'a>(
+        &self,
+        path: &'a [u8],
+        dirfd: Option<c_int>,
+    ) -> Result<(Arc<PathNode>, &'a [u8]), Errno> {
+        let Some(slash) = path.iter().rposition(|&b| b == b'/') else {
+            // No slashes. The parent is the current directory or `dirfd`.
+            let parent = self.lookup_path(b".", dirfd)?;
+            return Ok((parent, path));
+        };
+
+        // "/path/to/file.txt" => parent="/path/to/", name="file.txt"
+        let parent_path = &path[..slash + 1];
+        let name = &path[slash + 1..];
+        let parent = self.lookup_path(parent_path, dirfd)?;
+        Ok((parent, name))
+    }
+
     pub fn cwd(&self) -> Arc<PathNode> {
         self.mutable.lock().cwd.clone()
     }
