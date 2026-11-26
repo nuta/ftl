@@ -112,6 +112,10 @@ impl<T> EntryList<T> {
         self.items.iter().map(|(_, item)| item)
     }
 
+    fn is_empty(&self) -> bool {
+        self.items.is_empty()
+    }
+
     fn try_push(&mut self, item: T) -> Result<(), Errno> {
         let id = self.next_id;
         if id == usize::MAX {
@@ -203,13 +207,40 @@ impl Directory for TmpDir {
         self.add(name, INode::Dir(Arc::new(new_dir)))
     }
 
-    fn remove(&self, name: &[u8]) -> Result<(), Errno> {
+    fn is_empty(&self) -> Result<bool, Errno> {
+        let entries = self.entries.lock();
+        Ok(entries.is_empty())
+    }
+
+    fn unlink(&self, name: &[u8]) -> Result<(), Errno> {
         let mut entries = self.entries.lock();
-        let removed = entries.remove(|entry| *entry.name == *name);
-        if removed.is_none() {
+        let Some(entry) = entries.iter().find(|entry| *entry.name == *name) else {
             return Err(Errno::ENOENT);
+        };
+
+        if let INode::Dir(_) = entry.inode {
+            return Err(Errno::EISDIR);
         }
 
+        entries.remove(|entry| *entry.name == *name);
+        Ok(())
+    }
+
+    fn rmdir(&self, name: &[u8]) -> Result<(), Errno> {
+        let mut entries = self.entries.lock();
+        let Some(entry) = entries.iter().find(|entry| *entry.name == *name) else {
+            return Err(Errno::ENOENT);
+        };
+
+        let INode::Dir(dir) = &entry.inode else {
+            return Err(Errno::ENOTDIR);
+        };
+
+        if !dir.is_empty()? {
+            return Err(Errno::ENOTEMPTY);
+        }
+
+        entries.remove(|entry| *entry.name == *name);
         Ok(())
     }
 }

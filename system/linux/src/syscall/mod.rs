@@ -68,6 +68,7 @@ mod read;
 mod readlink;
 mod readv;
 mod recvfrom;
+mod rmdir;
 mod rt_sigaction;
 mod rt_sigprocmask;
 mod rt_sigreturn;
@@ -167,6 +168,7 @@ use self::read::sys_read;
 use self::readlink::sys_readlink;
 use self::readv::sys_readv;
 use self::recvfrom::sys_recvfrom;
+use self::rmdir::sys_rmdir;
 use self::rt_sigaction::sys_rt_sigaction;
 use self::rt_sigprocmask::sys_rt_sigprocmask;
 use self::rt_sigreturn::sys_rt_sigreturn;
@@ -285,6 +287,7 @@ use crate::types::sys::syscall::SYS_READ;
 use crate::types::sys::syscall::SYS_READLINK;
 use crate::types::sys::syscall::SYS_READV;
 use crate::types::sys::syscall::SYS_RECVFROM;
+use crate::types::sys::syscall::SYS_RMDIR;
 use crate::types::sys::syscall::SYS_RT_SIGACTION;
 use crate::types::sys::syscall::SYS_RT_SIGPROCMASK;
 use crate::types::sys::syscall::SYS_RT_SIGRETURN;
@@ -389,6 +392,7 @@ fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
         SYS_OPENAT => sys_openat(current, arg0 as c_int, arg1 as *const u8, arg2 as c_int),
         SYS_MKDIR => sys_mkdir(current, arg0 as *const u8),
         SYS_MKDIRAT => sys_mkdirat(current, arg0 as c_int, arg1 as *const u8),
+        SYS_RMDIR => sys_rmdir(current, arg0 as *const u8),
         SYS_UNLINK => sys_unlink(current, arg0 as *const u8),
         SYS_UNLINKAT => sys_unlinkat(current, arg0 as c_int, arg1 as *const u8, arg2 as c_int),
         SYS_STAT => sys_stat(current, arg0 as *const u8, arg1 as *mut Stat),

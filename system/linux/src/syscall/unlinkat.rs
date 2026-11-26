@@ -5,6 +5,7 @@ use crate::thread::Thread;
 use crate::types::c_int;
 use crate::types::errno::Errno;
 use crate::types::sys::fcntl::AT_FDCWD;
+use crate::types::sys::fcntl::AT_REMOVEDIR;
 use crate::vfs::INode;
 
 pub fn sys_unlinkat(
@@ -17,14 +18,22 @@ pub fn sys_unlinkat(
         return Err(Errno::EFAULT);
     }
 
-    // TODO: Support AT_REMOVEDIR.
-    if flags != 0 {
+    if flags & !AT_REMOVEDIR != 0 {
+        // Unsupported flags.
         return Err(Errno::EINVAL);
     }
 
-    let path = unsafe { CStr::from_ptr(path.cast()) }.to_bytes();
+    let mut path = unsafe { CStr::from_ptr(path.cast()) }.to_bytes();
     if path.is_empty() {
         return Err(Errno::ENOENT);
+    }
+
+    let rmdir = flags & AT_REMOVEDIR != 0;
+    if rmdir {
+        // Remove trailing slashes when deleting a directory.
+        while path.len() > 1 && path.ends_with(b"/") {
+            path = &path[..path.len() - 1];
+        }
     }
 
     // Open the parent directory.
@@ -32,19 +41,19 @@ pub fn sys_unlinkat(
     let dirfd = if dirfd == AT_FDCWD { None } else { Some(dirfd) };
     let (parent, name) = process.lookup_parent(path, dirfd)?;
     if name.is_empty() || name == b"." || name == b".." {
-        return Err(Errno::EISDIR);
+        let errno = if rmdir { Errno::EINVAL } else { Errno::EISDIR };
+        return Err(errno);
     }
 
     let INode::Dir(dir) = parent.inode() else {
         return Err(Errno::ENOTDIR);
     };
 
-    let inode = dir.lookup(name)?;
-
-    if let INode::Dir(_) = inode {
-        return Err(Errno::EISDIR);
+    if rmdir {
+        dir.rmdir(name)?;
+    } else {
+        dir.unlink(name)?;
     }
 
-    dir.remove(name)?;
     Ok(SyscallResult::Done(0))
 }

@@ -61,6 +61,7 @@ pub const SYS_FTRUNCATE: usize = 77;
 pub const SYS_GETCWD: usize = 79;
 pub const SYS_CHDIR: usize = 80;
 pub const SYS_MKDIR: usize = 83;
+pub const SYS_RMDIR: usize = 84;
 pub const SYS_CREAT: usize = 85;
 pub const SYS_UNLINK: usize = 87;
 pub const SYS_UMASK: usize = 95;

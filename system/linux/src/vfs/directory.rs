@@ -52,9 +52,19 @@ pub trait Directory: Send + Sync {
         Err(Errno::EROFS)
     }
 
-    fn remove(&self, name: &[u8]) -> Result<(), Errno> {
+    fn unlink(&self, name: &[u8]) -> Result<(), Errno> {
         let _ = name;
         Err(Errno::EROFS)
+    }
+
+    fn rmdir(&self, name: &[u8]) -> Result<(), Errno> {
+        let _ = name;
+        Err(Errno::EROFS)
+    }
+
+    fn is_empty(&self) -> Result<bool, Errno> {
+        let first_entry = self.readdir(DirOffset::new(0))?;
+        Ok(first_entry.is_none())
     }
 }
 

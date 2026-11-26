@@ -34,6 +34,7 @@ impl Errno {
     pub const EPIPE: Self = Self(32);
     pub const ERANGE: Self = Self(34);
     pub const ENOSYS: Self = Self(38);
+    pub const ENOTEMPTY: Self = Self(39);
     pub const ENOTSOCK: Self = Self(88);
     pub const EDESTADDRREQ: Self = Self(89);
     pub const EMSGSIZE: Self = Self(90);
