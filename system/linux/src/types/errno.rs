@@ -28,6 +28,7 @@ impl Errno {
     pub const ENOTDIR: Self = Self(20);
     pub const EISDIR: Self = Self(21);
     pub const EINVAL: Self = Self(22);
+    pub const ENOSPC: Self = Self(28);
     pub const ESPIPE: Self = Self(29);
     pub const EROFS: Self = Self(30);
     pub const EPIPE: Self = Self(32);

@@ -24,9 +24,23 @@ impl DirEntry {
     }
 }
 
+/// A `readdir` offset.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct DirOffset(usize);
+
+impl DirOffset {
+    pub const fn new(offset: usize) -> Self {
+        Self(offset)
+    }
+
+    pub const fn as_usize(&self) -> usize {
+        self.0
+    }
+}
+
 pub trait Directory: Send + Sync {
     fn lookup(&self, name: &[u8]) -> Result<INode, Errno>;
-    fn readdir(&self, offset: usize) -> Result<Option<(DirEntry, usize)>, Errno>;
+    fn readdir(&self, offset: DirOffset) -> Result<Option<(DirEntry, DirOffset)>, Errno>;
 
     fn create(&self, name: &[u8]) -> Result<Arc<dyn FileLike>, Errno> {
         let _ = name;
@@ -67,12 +81,13 @@ impl Directory for MemDir {
         Err(Errno::ENOENT)
     }
 
-    fn readdir(&self, offset: usize) -> Result<Option<(DirEntry, usize)>, Errno> {
-        let Some(entry) = self.entries.get(offset) else {
+    fn readdir(&self, offset: DirOffset) -> Result<Option<(DirEntry, DirOffset)>, Errno> {
+        let Some(entry) = self.entries.get(offset.as_usize()) else {
             return Ok(None);
         };
 
-        Ok(Some((entry.clone(), offset + 1)))
+        let next = DirOffset::new(offset.as_usize() + 1);
+        Ok(Some((entry.clone(), next)))
     }
 }
 
@@ -99,7 +114,7 @@ impl FileLike for OpenedDir {
         Err(Errno::EISDIR)
     }
 
-    fn readdir(&self, offset: usize) -> Result<Option<(DirEntry, usize)>, Errno> {
+    fn readdir(&self, offset: DirOffset) -> Result<Option<(DirEntry, DirOffset)>, Errno> {
         self.dir.readdir(offset)
     }
 

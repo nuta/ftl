@@ -33,6 +33,7 @@ pub use console::Console;
 pub use devfs::DevFs;
 pub use devfs::Null;
 pub use directory::DirEntry;
+pub use directory::DirOffset;
 pub use directory::Directory;
 pub use directory::MemDir;
 pub use directory::OpenedDir;
@@ -281,7 +282,7 @@ pub trait FileLike: Send + Sync {
         Ok(total)
     }
 
-    fn readdir(&self, offset: usize) -> Result<Option<(DirEntry, usize)>, Errno> {
+    fn readdir(&self, offset: DirOffset) -> Result<Option<(DirEntry, DirOffset)>, Errno> {
         let _ = offset;
         Err(Errno::ENOTDIR)
     }

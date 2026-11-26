@@ -8,6 +8,7 @@ use crate::types::errno::Errno;
 use crate::types::sys::stat::S_IFREG;
 use crate::types::sys::stat::Stat;
 use crate::vfs::DirEntry;
+use crate::vfs::DirOffset;
 use crate::vfs::Directory;
 use crate::vfs::FileLike;
 use crate::vfs::INode;
@@ -92,25 +93,81 @@ impl FileLike for TmpFile {
     }
 }
 
+/// A list of directory entries, sorted by its ID.
+struct EntryList<T> {
+    /// Sorted by the ID (`usize`).
+    items: Vec<(usize, T)>,
+    next_id: usize,
+}
+
+impl<T> EntryList<T> {
+    fn new() -> Self {
+        Self {
+            items: Vec::new(),
+            next_id: 0,
+        }
+    }
+
+    fn iter(&self) -> impl Iterator<Item = &T> {
+        self.items.iter().map(|(_, item)| item)
+    }
+
+    fn try_push(&mut self, item: T) -> Result<(), Errno> {
+        let id = self.next_id;
+        if id == usize::MAX {
+            return Err(Errno::ENOSPC);
+        }
+
+        // Reserve memory first to `push` without panicking.
+        self.items.try_reserve(1).map_err(|_| Errno::ENOMEM)?;
+
+        self.items.push((id, item));
+        self.next_id += 1;
+        Ok(())
+    }
+
+    /// Returns the first item at or after `offset`, and the next offset.
+    fn readdir_from(&self, offset: DirOffset) -> Option<(&T, DirOffset)> {
+        let index = self
+            .items
+            .partition_point(|(id, _)| *id < offset.as_usize());
+
+        let (id, item) = self.items.get(index)?;
+        let next_offset = DirOffset::new(id + 1);
+        Some((item, next_offset))
+    }
+
+    /// Removes the first item that matches `pred`.
+    fn remove<P>(&mut self, pred: P) -> Option<T>
+    where
+        P: Fn(&T) -> bool,
+    {
+        let index = self.items.iter().position(|(_, item)| pred(item))?;
+        let (_offset, item) = self.items.remove(index);
+        Some(item)
+    }
+}
+
 pub struct TmpDir {
-    entries: Mutex<Vec<DirEntry>>,
+    entries: Mutex<EntryList<DirEntry>>,
 }
 
 impl TmpDir {
     pub fn new() -> Self {
         Self {
-            entries: Mutex::new(Vec::new()),
+            entries: Mutex::new(EntryList::new()),
         }
     }
 
     pub fn add(&self, name: &[u8], inode: INode) -> Result<(), Errno> {
         let mut entries = self.entries.lock();
-        if entries.iter().any(|entry| *entry.name == *name) {
-            return Err(Errno::EEXIST);
+        for entry in entries.iter() {
+            if *entry.name == *name {
+                return Err(Errno::EEXIST);
+            }
         }
 
-        entries.push(DirEntry::new(name, inode));
-        Ok(())
+        entries.try_push(DirEntry::new(name, inode))
     }
 }
 
@@ -126,13 +183,13 @@ impl Directory for TmpDir {
         Err(Errno::ENOENT)
     }
 
-    fn readdir(&self, offset: usize) -> Result<Option<(DirEntry, usize)>, Errno> {
+    fn readdir(&self, offset: DirOffset) -> Result<Option<(DirEntry, DirOffset)>, Errno> {
         let entries = self.entries.lock();
-        let Some(entry) = entries.get(offset) else {
+        let Some((entry, next_offset)) = entries.readdir_from(offset) else {
             return Ok(None);
         };
 
-        Ok(Some((entry.clone(), offset + 1)))
+        Ok(Some((entry.clone(), next_offset)))
     }
 
     fn create(&self, name: &[u8]) -> Result<Arc<dyn FileLike>, Errno> {
@@ -144,5 +201,15 @@ impl Directory for TmpDir {
     fn mkdir(&self, name: &[u8]) -> Result<(), Errno> {
         let new_dir = TmpDir::new();
         self.add(name, INode::Dir(Arc::new(new_dir)))
+    }
+
+    fn remove(&self, name: &[u8]) -> Result<(), Errno> {
+        let mut entries = self.entries.lock();
+        let removed = entries.remove(|entry| *entry.name == *name);
+        if removed.is_none() {
+            return Err(Errno::ENOENT);
+        }
+
+        Ok(())
     }
 }

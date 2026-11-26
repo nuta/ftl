@@ -21,6 +21,7 @@ use crate::types::sys::socket::SockAddr;
 use crate::types::unistd::SEEK_CUR;
 use crate::types::unistd::SEEK_END;
 use crate::types::unistd::SEEK_SET;
+use crate::vfs::DirOffset;
 use crate::vfs::FileLike;
 use crate::vfs::INode;
 use crate::vfs::IoVecSlice;
@@ -192,7 +193,12 @@ impl OpenFile {
     pub fn getdents(&self, buf: &mut [u8]) -> Result<usize, Errno> {
         let mut mutable = self.mutable.lock();
         let mut written = 0;
-        while let Some((entry, next_offset)) = self.file.readdir(mutable.offset)? {
+        loop {
+            let offset = DirOffset::new(mutable.offset);
+            let Some((entry, next_offset)) = self.file.readdir(offset)? else {
+                break;
+            };
+
             let name_offset = offset_of!(Dirent64, d_name);
 
             // Calculate the length of this entry.
@@ -205,7 +211,7 @@ impl OpenFile {
 
             let header = Dirent64 {
                 d_ino: mutable.offset as u64 + 1,
-                d_off: next_offset as i64,
+                d_off: next_offset.as_usize() as i64,
                 d_reclen: reclen as u16,
                 d_type: match entry.inode {
                     INode::Dir(_) => DT_DIR,
@@ -228,7 +234,7 @@ impl OpenFile {
             dirent[name_offset + entry.name.len()] = 0;
 
             written += reclen;
-            mutable.offset = next_offset;
+            mutable.offset = next_offset.as_usize();
         }
 
         Ok(written)
