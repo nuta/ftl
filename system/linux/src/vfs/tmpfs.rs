@@ -65,6 +65,19 @@ impl FileLike for TmpFile {
         Ok(buf.len())
     }
 
+    fn truncate(&self, len: usize) -> Result<(), Errno> {
+        let mut data = self.data.lock();
+
+        // Reserve memory first to `resize` without panicking.
+        let old_len = data.len();
+        if old_len < len {
+            data.try_reserve(len - old_len).map_err(|_| Errno::ENOMEM)?;
+        }
+
+        data.resize(len, 0);
+        Ok(())
+    }
+
     fn is_seekable(&self) -> bool {
         true
     }

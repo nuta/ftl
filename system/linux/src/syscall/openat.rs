@@ -12,6 +12,7 @@ use crate::types::sys::fcntl::O_CREAT;
 use crate::types::sys::fcntl::O_DIRECTORY;
 use crate::types::sys::fcntl::O_EXCL;
 use crate::types::sys::fcntl::O_RDWR;
+use crate::types::sys::fcntl::O_TRUNC;
 use crate::types::sys::fcntl::O_WRONLY;
 use crate::vfs::INode;
 use crate::vfs::OpenedDir;
@@ -77,6 +78,10 @@ pub fn sys_openat(
     let file = match pnode.inode() {
         INode::File(_) if flags & O_DIRECTORY != 0 => return Err(Errno::ENOTDIR),
         INode::File(file) => {
+            if flags & O_TRUNC != 0 {
+                file.truncate(0)?;
+            }
+
             match file.open() {
                 Ok(Some(opened)) => opened,
                 Ok(None) => file.clone(),

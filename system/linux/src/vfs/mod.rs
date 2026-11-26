@@ -286,6 +286,11 @@ pub trait FileLike: Send + Sync {
         Err(Errno::ENOTDIR)
     }
 
+    fn truncate(&self, len: usize) -> Result<(), Errno> {
+        let _ = len;
+        Err(Errno::EINVAL)
+    }
+
     fn pnode(&self) -> Option<Arc<PathNode>> {
         None
     }
