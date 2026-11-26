@@ -27,6 +27,7 @@ mod faccessat;
 mod fcntl;
 mod fork;
 mod fstat;
+mod ftruncate;
 mod futex;
 mod getcwd;
 mod getdents64;
@@ -81,6 +82,7 @@ mod statx;
 mod sync;
 mod sysinfo;
 mod tgkill;
+mod truncate;
 mod umask;
 mod uname;
 mod wait4;
@@ -119,6 +121,7 @@ use self::faccessat::sys_faccessat;
 use self::fcntl::sys_fcntl;
 use self::fork::sys_fork;
 use self::fstat::sys_fstat;
+use self::ftruncate::sys_ftruncate;
 use self::futex::sys_futex;
 use self::getcwd::sys_getcwd;
 use self::getdents64::sys_getdents64;
@@ -173,6 +176,7 @@ use self::statx::sys_statx;
 use self::sync::sys_sync;
 use self::sysinfo::sys_sysinfo;
 use self::tgkill::sys_tgkill;
+use self::truncate::sys_truncate;
 use self::umask::sys_umask;
 use self::uname::sys_uname;
 use self::wait4::sys_wait4;
@@ -227,6 +231,7 @@ use crate::types::sys::syscall::SYS_FACCESSAT;
 use crate::types::sys::syscall::SYS_FCNTL;
 use crate::types::sys::syscall::SYS_FORK;
 use crate::types::sys::syscall::SYS_FSTAT;
+use crate::types::sys::syscall::SYS_FTRUNCATE;
 use crate::types::sys::syscall::SYS_FUTEX;
 use crate::types::sys::syscall::SYS_GETCWD;
 use crate::types::sys::syscall::SYS_GETDENTS64;
@@ -284,6 +289,7 @@ use crate::types::sys::syscall::SYS_STATX;
 use crate::types::sys::syscall::SYS_SYNC;
 use crate::types::sys::syscall::SYS_SYSINFO;
 use crate::types::sys::syscall::SYS_TGKILL;
+use crate::types::sys::syscall::SYS_TRUNCATE;
 use crate::types::sys::syscall::SYS_UMASK;
 use crate::types::sys::syscall::SYS_UNAME;
 use crate::types::sys::syscall::SYS_VFORK;
@@ -327,6 +333,8 @@ fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
         SYS_WRITE => sys_write(current, arg0 as c_int, arg1 as *const c_void, arg2),
         SYS_READ => sys_read(current, arg0 as c_int, arg1 as *mut c_void, arg2),
         SYS_LSEEK => sys_lseek(current, arg0 as c_int, arg1 as off_t, arg2 as c_int),
+        SYS_TRUNCATE => sys_truncate(current, arg0 as *const u8, arg1 as off_t),
+        SYS_FTRUNCATE => sys_ftruncate(current, arg0 as c_int, arg1 as off_t),
         SYS_PREAD64 => {
             sys_pread64(
                 current,

@@ -10,6 +10,7 @@ pub const FD_CLOEXEC: c_int = 1;
 pub const O_RDONLY: c_int = 0;
 pub const O_WRONLY: c_int = 1;
 pub const O_RDWR: c_int = 2;
+pub const O_ACCMODE: c_int = 3;
 pub const O_CREAT: c_int = 0o100;
 pub const O_EXCL: c_int = 0o200;
 pub const O_TRUNC: c_int = 0o1000;
