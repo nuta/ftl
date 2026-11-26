@@ -14,6 +14,7 @@ use crate::types::dirent::DT_REG;
 use crate::types::dirent::Dirent64;
 use crate::types::errno::Errno;
 use crate::types::off_t;
+use crate::types::sys::fcntl::O_APPEND;
 use crate::types::sys::fcntl::O_NONBLOCK;
 use crate::types::sys::socket::MSG_DONTWAIT;
 use crate::types::sys::socket::SockAddr;
@@ -90,6 +91,16 @@ impl OpenFile {
         self.flags() & O_NONBLOCK != 0
     }
 
+    fn write_offset(&self) -> Result<usize, Errno> {
+        let append = self.flags() & O_APPEND != 0;
+        if append && self.file.is_seekable() {
+            return self.file.size();
+        }
+
+        let offset = self.mutable.lock().offset;
+        Ok(offset)
+    }
+
     pub fn read(&self, buf: &mut [u8], sleep: Sleep<'_>) -> Result<usize, Errno> {
         let offset = self.mutable.lock().offset;
         let n = self.file.read(buf, offset, self.nonblocking(), sleep)?;
@@ -113,14 +124,14 @@ impl OpenFile {
     }
 
     pub fn do_write(&self, buf: &[u8], sleep: Sleep<'_>) -> Result<usize, Errno> {
-        let offset = self.mutable.lock().offset;
+        let offset = self.write_offset()?;
         let n = self.file.write(buf, offset, self.nonblocking(), sleep)?;
         self.mutable.lock().offset = offset + n;
         Ok(n)
     }
 
     pub fn do_writev(&self, iovecs: &IoVecSlice, sleep: Sleep<'_>) -> Result<usize, Errno> {
-        let offset = self.mutable.lock().offset;
+        let offset = self.write_offset()?;
         let n = self
             .file
             .writev(iovecs, offset, self.nonblocking(), sleep)?;
