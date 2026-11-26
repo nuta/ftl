@@ -37,6 +37,11 @@ pub trait Directory: Send + Sync {
         let _ = name;
         Err(Errno::EROFS)
     }
+
+    fn remove(&self, name: &[u8]) -> Result<(), Errno> {
+        let _ = name;
+        Err(Errno::EROFS)
+    }
 }
 
 pub struct MemDir {

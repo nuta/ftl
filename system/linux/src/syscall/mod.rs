@@ -88,6 +88,8 @@ mod tgkill;
 mod truncate;
 mod umask;
 mod uname;
+mod unlink;
+mod unlinkat;
 mod wait4;
 mod write;
 mod writev;
@@ -185,6 +187,8 @@ use self::tgkill::sys_tgkill;
 use self::truncate::sys_truncate;
 use self::umask::sys_umask;
 use self::uname::sys_uname;
+use self::unlink::sys_unlink;
+use self::unlinkat::sys_unlinkat;
 use self::wait4::sys_wait4;
 use self::write::sys_write;
 use self::writev::sys_writev;
@@ -301,6 +305,8 @@ use crate::types::sys::syscall::SYS_TGKILL;
 use crate::types::sys::syscall::SYS_TRUNCATE;
 use crate::types::sys::syscall::SYS_UMASK;
 use crate::types::sys::syscall::SYS_UNAME;
+use crate::types::sys::syscall::SYS_UNLINK;
+use crate::types::sys::syscall::SYS_UNLINKAT;
 use crate::types::sys::syscall::SYS_VFORK;
 use crate::types::sys::syscall::SYS_WAIT4;
 use crate::types::sys::syscall::SYS_WRITE;
@@ -383,6 +389,8 @@ fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
         SYS_OPENAT => sys_openat(current, arg0 as c_int, arg1 as *const u8, arg2 as c_int),
         SYS_MKDIR => sys_mkdir(current, arg0 as *const u8),
         SYS_MKDIRAT => sys_mkdirat(current, arg0 as c_int, arg1 as *const u8),
+        SYS_UNLINK => sys_unlink(current, arg0 as *const u8),
+        SYS_UNLINKAT => sys_unlinkat(current, arg0 as c_int, arg1 as *const u8, arg2 as c_int),
         SYS_STAT => sys_stat(current, arg0 as *const u8, arg1 as *mut Stat),
         SYS_FSTAT => sys_fstat(current, arg0 as c_int, arg1 as *mut Stat),
         SYS_LSTAT => sys_lstat(current, arg0 as *const u8, arg1 as *mut Stat),
