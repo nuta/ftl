@@ -46,6 +46,7 @@ pub struct File<'a> {
     pub name: &'a [u8],
     pub data: &'a [u8],
     pub is_dir: bool,
+    pub mode: u32,
 }
 
 pub struct InitFsLoader<'a> {
@@ -95,6 +96,7 @@ impl<'a> Iterator for InitFsLoader<'a> {
             name,
             data,
             is_dir: mode & S_IFMT == S_IFDIR,
+            mode: (mode & 0o7777) as u32,
         })
     }
 }

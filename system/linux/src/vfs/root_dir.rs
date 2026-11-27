@@ -35,10 +35,10 @@ fn populate_from_initfs(root_dir: &Arc<TmpDir>) {
 
         if file.is_dir {
             parent_dir
-                .mkdir(name, 0o755)
+                .mkdir(name, file.mode)
                 .expect("initfs: failed to mkdir");
         } else {
-            let new_file = parent_dir.create(name, 0o755).unwrap();
+            let new_file = parent_dir.create(name, file.mode).unwrap();
             new_file
                 .write(file.data, 0, false, Sleep::Uninterruptible)
                 .unwrap();
