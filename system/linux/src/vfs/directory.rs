@@ -85,6 +85,11 @@ pub trait Directory: Send + Sync {
         Err(Errno::EROFS)
     }
 
+    fn chown(&self, uid: Option<u32>, gid: Option<u32>) -> Result<(), Errno> {
+        let _ = (uid, gid);
+        Err(Errno::EROFS)
+    }
+
     fn fsync(&self) -> Result<(), Errno> {
         Err(Errno::EINVAL)
     }
@@ -169,6 +174,10 @@ impl FileLike for OpenedDir {
 
     fn set_times(&self, atime: Option<WallTime>, mtime: Option<WallTime>) -> Result<(), Errno> {
         self.dir.set_times(atime, mtime)
+    }
+
+    fn chown(&self, uid: Option<u32>, gid: Option<u32>) -> Result<(), Errno> {
+        self.dir.chown(uid, gid)
     }
 
     fn fsync(&self) -> Result<(), Errno> {

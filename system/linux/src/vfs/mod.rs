@@ -320,6 +320,11 @@ pub trait FileLike: Send + Sync {
         Err(Errno::EPERM)
     }
 
+    fn chown(&self, uid: Option<u32>, gid: Option<u32>) -> Result<(), Errno> {
+        let _ = (uid, gid);
+        Err(Errno::EPERM)
+    }
+
     fn fsync(&self) -> Result<(), Errno> {
         Err(Errno::EINVAL)
     }

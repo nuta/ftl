@@ -20,47 +20,47 @@ use crate::vfs::addr_as_ino;
 use crate::wait_queue::Sleep;
 
 struct Times {
-    accessed_at: WallTime,
-    modified_at: WallTime,
-    created_at: WallTime,
+    atime: WallTime,
+    mtime: WallTime,
+    ctime: WallTime,
 }
 
 impl Times {
     fn now() -> Self {
         let now = WallTime::now();
         Self {
-            accessed_at: now,
-            modified_at: now,
-            created_at: now,
+            atime: now,
+            mtime: now,
+            ctime: now,
         }
     }
 
     fn update_mtime(&mut self) {
         let now = WallTime::now();
-        self.modified_at = now;
-        self.created_at = now;
+        self.mtime = now;
+        self.ctime = now;
     }
 
     fn update_ctime(&mut self) {
-        self.created_at = WallTime::now();
+        self.ctime = WallTime::now();
     }
 
     fn set(&mut self, atime: Option<WallTime>, mtime: Option<WallTime>) {
         if let Some(atime) = atime {
-            self.accessed_at = atime;
+            self.atime = atime;
         }
 
         if let Some(mtime) = mtime {
-            self.modified_at = mtime;
+            self.mtime = mtime;
         }
 
         self.update_ctime();
     }
 
     fn fill_stat(&self, stat: &mut Stat) {
-        let atime = TimeSpec::from_nanos(self.accessed_at.as_nanos());
-        let mtime = TimeSpec::from_nanos(self.modified_at.as_nanos());
-        let ctime = TimeSpec::from_nanos(self.created_at.as_nanos());
+        let atime = TimeSpec::from_nanos(self.atime.as_nanos());
+        let mtime = TimeSpec::from_nanos(self.mtime.as_nanos());
+        let ctime = TimeSpec::from_nanos(self.ctime.as_nanos());
         stat.st_atime = atime.tv_sec as i64;
         stat.st_atime_nsec = atime.tv_nsec as i64;
         stat.st_mtime = mtime.tv_sec as i64;
@@ -73,6 +73,8 @@ impl Times {
 struct FileInner {
     data: Vec<u8>,
     mode: u32,
+    uid: u32,
+    gid: u32,
     times: Times,
 }
 
@@ -86,6 +88,8 @@ impl TmpFile {
             inner: Mutex::new(FileInner {
                 data: Vec::new(),
                 mode,
+                uid: 0,
+                gid: 0,
                 times: Times::now(),
             }),
         }
@@ -165,6 +169,8 @@ impl FileLike for TmpFile {
         let inner = self.inner.lock();
         let size = inner.data.len();
         let mut stat = Stat::new(addr_as_ino(self), S_IFREG | inner.mode, size);
+        stat.st_uid = inner.uid;
+        stat.st_gid = inner.gid;
         inner.times.fill_stat(&mut stat);
         Ok(stat)
     }
@@ -179,6 +185,20 @@ impl FileLike for TmpFile {
     fn set_times(&self, atime: Option<WallTime>, mtime: Option<WallTime>) -> Result<(), Errno> {
         let mut inner = self.inner.lock();
         inner.times.set(atime, mtime);
+        Ok(())
+    }
+
+    fn chown(&self, uid: Option<u32>, gid: Option<u32>) -> Result<(), Errno> {
+        let mut inner = self.inner.lock();
+        if let Some(uid) = uid {
+            inner.uid = uid;
+        }
+
+        if let Some(gid) = gid {
+            inner.gid = gid;
+        }
+
+        inner.times.update_ctime();
         Ok(())
     }
 
@@ -249,6 +269,8 @@ impl<T> EntryList<T> {
 struct DirInner {
     entries: EntryList<DirEntry>,
     mode: u32,
+    uid: u32,
+    gid: u32,
     times: Times,
 }
 
@@ -262,6 +284,8 @@ impl TmpDir {
             inner: Mutex::new(DirInner {
                 entries: EntryList::new(),
                 mode,
+                uid: 0,
+                gid: 0,
                 times: Times::now(),
             }),
         }
@@ -340,6 +364,8 @@ impl Directory for TmpDir {
     fn stat(&self) -> Result<Stat, Errno> {
         let inner = self.inner.lock();
         let mut stat = Stat::new(addr_as_ino(self), S_IFDIR | inner.mode, 0);
+        stat.st_uid = inner.uid;
+        stat.st_gid = inner.gid;
         inner.times.fill_stat(&mut stat);
         Ok(stat)
     }
@@ -354,6 +380,20 @@ impl Directory for TmpDir {
     fn set_times(&self, atime: Option<WallTime>, mtime: Option<WallTime>) -> Result<(), Errno> {
         let mut inner = self.inner.lock();
         inner.times.set(atime, mtime);
+        Ok(())
+    }
+
+    fn chown(&self, uid: Option<u32>, gid: Option<u32>) -> Result<(), Errno> {
+        let mut inner = self.inner.lock();
+        if let Some(uid) = uid {
+            inner.uid = uid;
+        }
+
+        if let Some(gid) = gid {
+            inner.gid = gid;
+        }
+
+        inner.times.update_ctime();
         Ok(())
     }
 

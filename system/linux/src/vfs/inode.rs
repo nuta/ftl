@@ -34,4 +34,11 @@ impl INode {
             INode::File(file) => file.set_times(atime, mtime),
         }
     }
+
+    pub fn chown(&self, uid: Option<u32>, gid: Option<u32>) -> Result<(), Errno> {
+        match self {
+            INode::Dir(dir) => dir.chown(uid, gid),
+            INode::File(file) => file.chown(uid, gid),
+        }
+    }
 }

@@ -7,6 +7,7 @@ mod brk;
 mod capget;
 mod chdir;
 mod chmod;
+mod chown;
 mod clock_getres;
 mod clock_gettime;
 mod clock_nanosleep;
@@ -28,6 +29,8 @@ mod exit_group;
 mod faccessat;
 mod fchmod;
 mod fchmodat;
+mod fchown;
+mod fchownat;
 mod fcntl;
 mod fork;
 mod fstat;
@@ -48,6 +51,7 @@ mod gettid;
 mod getuid;
 mod ioctl;
 mod kill;
+mod lchown;
 mod link;
 mod linkat;
 mod listen;
@@ -115,6 +119,7 @@ use self::brk::sys_brk;
 use self::capget::sys_capget;
 use self::chdir::sys_chdir;
 use self::chmod::sys_chmod;
+use self::chown::sys_chown;
 use self::clock_getres::sys_clock_getres;
 use self::clock_gettime::sys_clock_gettime;
 use self::clock_nanosleep::sys_clock_nanosleep;
@@ -136,6 +141,8 @@ use self::exit_group::sys_exit_group;
 use self::faccessat::sys_faccessat;
 use self::fchmod::sys_fchmod;
 use self::fchmodat::sys_fchmodat;
+use self::fchown::sys_fchown;
+use self::fchownat::sys_fchownat;
 use self::fcntl::sys_fcntl;
 use self::fork::sys_fork;
 use self::fstat::sys_fstat;
@@ -156,6 +163,7 @@ use self::gettid::sys_gettid;
 use self::getuid::sys_getuid;
 use self::ioctl::sys_ioctl;
 use self::kill::sys_kill;
+use self::lchown::sys_lchown;
 use self::link::sys_link;
 use self::linkat::sys_linkat;
 use self::listen::sys_listen;
@@ -239,6 +247,7 @@ use crate::types::sys::syscall::SYS_BRK;
 use crate::types::sys::syscall::SYS_CAPGET;
 use crate::types::sys::syscall::SYS_CHDIR;
 use crate::types::sys::syscall::SYS_CHMOD;
+use crate::types::sys::syscall::SYS_CHOWN;
 use crate::types::sys::syscall::SYS_CLOCK_GETRES;
 use crate::types::sys::syscall::SYS_CLOCK_GETTIME;
 use crate::types::sys::syscall::SYS_CLOCK_NANOSLEEP;
@@ -260,6 +269,8 @@ use crate::types::sys::syscall::SYS_EXIT_GROUP;
 use crate::types::sys::syscall::SYS_FACCESSAT;
 use crate::types::sys::syscall::SYS_FCHMOD;
 use crate::types::sys::syscall::SYS_FCHMODAT;
+use crate::types::sys::syscall::SYS_FCHOWN;
+use crate::types::sys::syscall::SYS_FCHOWNAT;
 use crate::types::sys::syscall::SYS_FCNTL;
 use crate::types::sys::syscall::SYS_FDATASYNC;
 use crate::types::sys::syscall::SYS_FORK;
@@ -284,6 +295,7 @@ use crate::types::sys::syscall::SYS_GETTID;
 use crate::types::sys::syscall::SYS_GETUID;
 use crate::types::sys::syscall::SYS_IOCTL;
 use crate::types::sys::syscall::SYS_KILL;
+use crate::types::sys::syscall::SYS_LCHOWN;
 use crate::types::sys::syscall::SYS_LINK;
 use crate::types::sys::syscall::SYS_LINKAT;
 use crate::types::sys::syscall::SYS_LISTEN;
@@ -453,6 +465,19 @@ fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
         SYS_CHMOD => sys_chmod(current, arg0 as *const u8, arg1 as u32),
         SYS_FCHMOD => sys_fchmod(current, arg0 as c_int, arg1 as u32),
         SYS_FCHMODAT => sys_fchmodat(current, arg0 as c_int, arg1 as *const u8, arg2 as u32),
+        SYS_CHOWN => sys_chown(current, arg0 as *const u8, arg1 as u32, arg2 as u32),
+        SYS_FCHOWN => sys_fchown(current, arg0 as c_int, arg1 as u32, arg2 as u32),
+        SYS_LCHOWN => sys_lchown(current, arg0 as *const u8, arg1 as u32, arg2 as u32),
+        SYS_FCHOWNAT => {
+            sys_fchownat(
+                current,
+                arg0 as c_int,
+                arg1 as *const u8,
+                arg2 as u32,
+                frame.arg3() as u32,
+                frame.arg4() as c_int,
+            )
+        }
         SYS_UTIMENSAT => {
             sys_utimensat(
                 current,
