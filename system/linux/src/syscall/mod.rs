@@ -27,6 +27,7 @@ mod execve;
 mod exit;
 mod exit_group;
 mod faccessat;
+mod faccessat2;
 mod fchmod;
 mod fchmodat;
 mod fchown;
@@ -139,6 +140,7 @@ use self::execve::sys_execve;
 use self::exit::sys_exit;
 use self::exit_group::sys_exit_group;
 use self::faccessat::sys_faccessat;
+use self::faccessat2::sys_faccessat2;
 use self::fchmod::sys_fchmod;
 use self::fchmodat::sys_fchmodat;
 use self::fchown::sys_fchown;
@@ -267,6 +269,7 @@ use crate::types::sys::syscall::SYS_EXECVE;
 use crate::types::sys::syscall::SYS_EXIT;
 use crate::types::sys::syscall::SYS_EXIT_GROUP;
 use crate::types::sys::syscall::SYS_FACCESSAT;
+use crate::types::sys::syscall::SYS_FACCESSAT2;
 use crate::types::sys::syscall::SYS_FCHMOD;
 use crate::types::sys::syscall::SYS_FCHMODAT;
 use crate::types::sys::syscall::SYS_FCHOWN;
@@ -436,6 +439,15 @@ fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
         SYS_CREAT => sys_creat(current, arg0 as *const u8, arg1 as u32),
         SYS_ACCESS => sys_access(current, arg0 as *const u8, arg1 as c_int),
         SYS_FACCESSAT => sys_faccessat(current, arg0 as c_int, arg1 as *const u8, arg2 as c_int),
+        SYS_FACCESSAT2 => {
+            sys_faccessat2(
+                current,
+                arg0 as c_int,
+                arg1 as *const u8,
+                arg2 as c_int,
+                frame.arg3() as c_int,
+            )
+        }
         SYS_IOCTL => sys_ioctl(current, arg0 as c_int, arg1 as c_ulong, arg2),
         SYS_OPENAT => {
             sys_openat(

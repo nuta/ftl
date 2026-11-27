@@ -25,6 +25,7 @@ pub const SYS_STATX: usize = 332;
 pub const SYS_READLINK: usize = 89;
 pub const SYS_ACCESS: usize = 21;
 pub const SYS_FACCESSAT: usize = 269;
+pub const SYS_FACCESSAT2: usize = 439;
 pub const SYS_CLOSE: usize = 3;
 pub const SYS_DUP2: usize = 33;
 pub const SYS_NANOSLEEP: usize = 35;
