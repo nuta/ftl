@@ -31,6 +31,7 @@ mod fchmodat;
 mod fcntl;
 mod fork;
 mod fstat;
+mod fsync;
 mod ftruncate;
 mod futex;
 mod getcwd;
@@ -136,6 +137,7 @@ use self::fchmodat::sys_fchmodat;
 use self::fcntl::sys_fcntl;
 use self::fork::sys_fork;
 use self::fstat::sys_fstat;
+use self::fsync::sys_fsync;
 use self::ftruncate::sys_ftruncate;
 use self::futex::sys_futex;
 use self::getcwd::sys_getcwd;
@@ -255,8 +257,10 @@ use crate::types::sys::syscall::SYS_FACCESSAT;
 use crate::types::sys::syscall::SYS_FCHMOD;
 use crate::types::sys::syscall::SYS_FCHMODAT;
 use crate::types::sys::syscall::SYS_FCNTL;
+use crate::types::sys::syscall::SYS_FDATASYNC;
 use crate::types::sys::syscall::SYS_FORK;
 use crate::types::sys::syscall::SYS_FSTAT;
+use crate::types::sys::syscall::SYS_FSYNC;
 use crate::types::sys::syscall::SYS_FTRUNCATE;
 use crate::types::sys::syscall::SYS_FUTEX;
 use crate::types::sys::syscall::SYS_GETCWD;
@@ -368,6 +372,8 @@ fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
         SYS_LSEEK => sys_lseek(current, arg0 as c_int, arg1 as off_t, arg2 as c_int),
         SYS_TRUNCATE => sys_truncate(current, arg0 as *const u8, arg1 as off_t),
         SYS_FTRUNCATE => sys_ftruncate(current, arg0 as c_int, arg1 as off_t),
+        SYS_FSYNC => sys_fsync(current, arg0 as c_int),
+        SYS_FDATASYNC => sys_fsync(current, arg0 as c_int),
         SYS_PREAD64 => {
             sys_pread64(
                 current,

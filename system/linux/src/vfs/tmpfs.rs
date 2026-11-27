@@ -95,6 +95,10 @@ impl FileLike for TmpFile {
     fn chmod(&self, _mode: u32) -> Result<(), Errno> {
         Ok(())
     }
+
+    fn fsync(&self) -> Result<(), Errno> {
+        Ok(())
+    }
 }
 
 /// A list of directory entries, sorted by its ID.
@@ -235,6 +239,10 @@ impl Directory for TmpDir {
     }
 
     fn chmod(&self, _mode: u32) -> Result<(), Errno> {
+        Ok(())
+    }
+
+    fn fsync(&self) -> Result<(), Errno> {
         Ok(())
     }
 

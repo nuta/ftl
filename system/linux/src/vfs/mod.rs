@@ -313,6 +313,10 @@ pub trait FileLike: Send + Sync {
         Err(Errno::EPERM)
     }
 
+    fn fsync(&self) -> Result<(), Errno> {
+        Err(Errno::EINVAL)
+    }
+
     fn ioctl(&self, _cmd: c_ulong, _arg: usize) -> Result<c_long, Errno> {
         Err(Errno::ENOTTY)
     }
