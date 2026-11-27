@@ -308,6 +308,11 @@ pub trait FileLike: Send + Sync {
         Err(Errno::ENOTSUP)
     }
 
+    fn chmod(&self, mode: u32) -> Result<(), Errno> {
+        let _ = mode;
+        Err(Errno::EPERM)
+    }
+
     fn ioctl(&self, _cmd: c_ulong, _arg: usize) -> Result<c_long, Errno> {
         Err(Errno::ENOTTY)
     }

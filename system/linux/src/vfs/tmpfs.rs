@@ -91,6 +91,10 @@ impl FileLike for TmpFile {
         let size = self.data.lock().len();
         Ok(Stat::new(addr_as_ino(self), S_IFREG | 0o755, size))
     }
+
+    fn chmod(&self, _mode: u32) -> Result<(), Errno> {
+        Ok(())
+    }
 }
 
 /// A list of directory entries, sorted by its ID.
@@ -227,6 +231,10 @@ impl Directory for TmpDir {
         }
 
         entries.remove(|entry| *entry.name == *name);
+        Ok(())
+    }
+
+    fn chmod(&self, _mode: u32) -> Result<(), Errno> {
         Ok(())
     }
 

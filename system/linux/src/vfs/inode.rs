@@ -20,4 +20,11 @@ impl INode {
             INode::File(file) => file.stat(),
         }
     }
+
+    pub fn chmod(&self, mode: u32) -> Result<(), Errno> {
+        match self {
+            INode::Dir(dir) => dir.chmod(mode),
+            INode::File(file) => file.chmod(mode),
+        }
+    }
 }

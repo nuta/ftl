@@ -67,6 +67,11 @@ pub trait Directory: Send + Sync {
         Err(Errno::EROFS)
     }
 
+    fn chmod(&self, mode: u32) -> Result<(), Errno> {
+        let _ = mode;
+        Err(Errno::EROFS)
+    }
+
     fn is_empty(&self) -> Result<bool, Errno> {
         let first_entry = self.readdir(DirOffset::new(0))?;
         Ok(first_entry.is_none())
@@ -139,5 +144,9 @@ impl FileLike for OpenedDir {
 
     fn stat(&self) -> Result<Stat, Errno> {
         self.pnode.inode().stat()
+    }
+
+    fn chmod(&self, mode: u32) -> Result<(), Errno> {
+        self.dir.chmod(mode)
     }
 }
