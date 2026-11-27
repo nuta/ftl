@@ -97,6 +97,7 @@ mod umask;
 mod uname;
 mod unlink;
 mod unlinkat;
+mod utimensat;
 mod wait4;
 mod write;
 mod writev;
@@ -203,6 +204,7 @@ use self::umask::sys_umask;
 use self::uname::sys_uname;
 use self::unlink::sys_unlink;
 use self::unlinkat::sys_unlinkat;
+use self::utimensat::sys_utimensat;
 use self::wait4::sys_wait4;
 use self::write::sys_write;
 use self::writev::sys_writev;
@@ -329,6 +331,7 @@ use crate::types::sys::syscall::SYS_UMASK;
 use crate::types::sys::syscall::SYS_UNAME;
 use crate::types::sys::syscall::SYS_UNLINK;
 use crate::types::sys::syscall::SYS_UNLINKAT;
+use crate::types::sys::syscall::SYS_UTIMENSAT;
 use crate::types::sys::syscall::SYS_VFORK;
 use crate::types::sys::syscall::SYS_WAIT4;
 use crate::types::sys::syscall::SYS_WRITE;
@@ -438,6 +441,15 @@ fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
         SYS_CHMOD => sys_chmod(current, arg0 as *const u8, arg1 as u32),
         SYS_FCHMOD => sys_fchmod(current, arg0 as c_int, arg1 as u32),
         SYS_FCHMODAT => sys_fchmodat(current, arg0 as c_int, arg1 as *const u8, arg2 as u32),
+        SYS_UTIMENSAT => {
+            sys_utimensat(
+                current,
+                arg0 as c_int,
+                arg1 as *const u8,
+                arg2 as *const TimeSpec,
+                frame.arg3() as c_int,
+            )
+        }
         SYS_STAT => sys_stat(current, arg0 as *const u8, arg1 as *mut Stat),
         SYS_FSTAT => sys_fstat(current, arg0 as c_int, arg1 as *mut Stat),
         SYS_LSTAT => sys_lstat(current, arg0 as *const u8, arg1 as *mut Stat),

@@ -45,6 +45,18 @@ impl Times {
         self.created_at = WallTime::now();
     }
 
+    fn set(&mut self, atime: Option<WallTime>, mtime: Option<WallTime>) {
+        if let Some(atime) = atime {
+            self.accessed_at = atime;
+        }
+
+        if let Some(mtime) = mtime {
+            self.modified_at = mtime;
+        }
+
+        self.update_ctime();
+    }
+
     fn fill_stat(&self, stat: &mut Stat) {
         let atime = TimeSpec::from_nanos(self.accessed_at.as_nanos());
         let mtime = TimeSpec::from_nanos(self.modified_at.as_nanos());
@@ -161,6 +173,12 @@ impl FileLike for TmpFile {
         let mut inner = self.inner.lock();
         inner.mode = mode & 0o7777;
         inner.times.update_ctime();
+        Ok(())
+    }
+
+    fn set_times(&self, atime: Option<WallTime>, mtime: Option<WallTime>) -> Result<(), Errno> {
+        let mut inner = self.inner.lock();
+        inner.times.set(atime, mtime);
         Ok(())
     }
 
@@ -330,6 +348,12 @@ impl Directory for TmpDir {
         let mut inner = self.inner.lock();
         inner.mode = mode & 0o7777;
         inner.times.update_ctime();
+        Ok(())
+    }
+
+    fn set_times(&self, atime: Option<WallTime>, mtime: Option<WallTime>) -> Result<(), Errno> {
+        let mut inner = self.inner.lock();
+        inner.times.set(atime, mtime);
         Ok(())
     }
 

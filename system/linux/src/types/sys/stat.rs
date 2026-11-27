@@ -1,7 +1,12 @@
+use crate::types::c_long;
+
 pub const S_IFIFO: u32 = 0o010000;
 pub const S_IFCHR: u32 = 0o020000;
 pub const S_IFDIR: u32 = 0o040000;
 pub const S_IFREG: u32 = 0o100000;
+
+pub const UTIME_NOW: c_long = 0x3fffffff;
+pub const UTIME_OMIT: c_long = 0x3ffffffe;
 
 pub const STATX_BASIC_STATS: u32 = 0x7ff;
 

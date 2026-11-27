@@ -3,6 +3,8 @@ use core::cmp::min;
 use core::ptr;
 use core::slice;
 
+use ftl::time::WallTime;
+
 use crate::types;
 use crate::types::c_int;
 use crate::types::c_long;
@@ -310,6 +312,11 @@ pub trait FileLike: Send + Sync {
 
     fn chmod(&self, mode: u32) -> Result<(), Errno> {
         let _ = mode;
+        Err(Errno::EPERM)
+    }
+
+    fn set_times(&self, atime: Option<WallTime>, mtime: Option<WallTime>) -> Result<(), Errno> {
+        let _ = (atime, mtime);
         Err(Errno::EPERM)
     }
 

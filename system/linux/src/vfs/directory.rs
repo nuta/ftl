@@ -1,6 +1,8 @@
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 
+use ftl::time::WallTime;
+
 use crate::types::errno::Errno;
 use crate::types::sys::stat::S_IFDIR;
 use crate::types::sys::stat::Stat;
@@ -75,6 +77,11 @@ pub trait Directory: Send + Sync {
 
     fn chmod(&self, mode: u32) -> Result<(), Errno> {
         let _ = mode;
+        Err(Errno::EROFS)
+    }
+
+    fn set_times(&self, atime: Option<WallTime>, mtime: Option<WallTime>) -> Result<(), Errno> {
+        let _ = (atime, mtime);
         Err(Errno::EROFS)
     }
 
@@ -158,6 +165,10 @@ impl FileLike for OpenedDir {
 
     fn chmod(&self, mode: u32) -> Result<(), Errno> {
         self.dir.chmod(mode)
+    }
+
+    fn set_times(&self, atime: Option<WallTime>, mtime: Option<WallTime>) -> Result<(), Errno> {
+        self.dir.set_times(atime, mtime)
     }
 
     fn fsync(&self) -> Result<(), Errno> {

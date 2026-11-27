@@ -18,6 +18,7 @@ pub const SYS_NEWFSTATAT: usize = 262;
 pub const SYS_UNLINKAT: usize = 263;
 pub const SYS_LINKAT: usize = 265;
 pub const SYS_FCHMODAT: usize = 268;
+pub const SYS_UTIMENSAT: usize = 280;
 pub const SYS_STATX: usize = 332;
 pub const SYS_READLINK: usize = 89;
 pub const SYS_ACCESS: usize = 21;

@@ -1,5 +1,7 @@
 use alloc::sync::Arc;
 
+use ftl::time::WallTime;
+
 use crate::types::errno::Errno;
 use crate::types::sys::stat::Stat;
 use crate::vfs::Directory;
@@ -23,6 +25,13 @@ impl INode {
         match self {
             INode::Dir(dir) => dir.chmod(mode),
             INode::File(file) => file.chmod(mode),
+        }
+    }
+
+    pub fn set_times(&self, atime: Option<WallTime>, mtime: Option<WallTime>) -> Result<(), Errno> {
+        match self {
+            INode::Dir(dir) => dir.set_times(atime, mtime),
+            INode::File(file) => file.set_times(atime, mtime),
         }
     }
 }
