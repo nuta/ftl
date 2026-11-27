@@ -6,6 +6,7 @@ pub const SYS_RT_SIGPROCMASK: usize = 14;
 pub const SYS_RT_SIGRETURN: usize = 15;
 pub const SYS_IOCTL: usize = 16;
 pub const SYS_PREAD64: usize = 17;
+pub const SYS_PWRITE64: usize = 18;
 pub const SYS_SIGALTSTACK: usize = 131;
 pub const SYS_TGKILL: usize = 234;
 pub const SYS_OPEN: usize = 2;

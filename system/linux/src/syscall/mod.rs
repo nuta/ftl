@@ -70,6 +70,7 @@ mod prctl;
 mod pread64;
 mod prlimit64;
 mod pselect6;
+mod pwrite64;
 mod read;
 mod readlink;
 mod readv;
@@ -177,6 +178,7 @@ use self::prctl::sys_prctl;
 use self::pread64::sys_pread64;
 use self::prlimit64::sys_prlimit64;
 use self::pselect6::sys_pselect6;
+use self::pwrite64::sys_pwrite64;
 use self::read::sys_read;
 use self::readlink::sys_readlink;
 use self::readv::sys_readv;
@@ -304,6 +306,7 @@ use crate::types::sys::syscall::SYS_PRCTL;
 use crate::types::sys::syscall::SYS_PREAD64;
 use crate::types::sys::syscall::SYS_PRLIMIT64;
 use crate::types::sys::syscall::SYS_PSELECT6;
+use crate::types::sys::syscall::SYS_PWRITE64;
 use crate::types::sys::syscall::SYS_READ;
 use crate::types::sys::syscall::SYS_READLINK;
 use crate::types::sys::syscall::SYS_READV;
@@ -382,6 +385,15 @@ fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
                 current,
                 arg0 as c_int,
                 arg1 as *mut c_void,
+                arg2,
+                frame.arg3() as off_t,
+            )
+        }
+        SYS_PWRITE64 => {
+            sys_pwrite64(
+                current,
+                arg0 as c_int,
+                arg1 as *const c_void,
                 arg2,
                 frame.arg3() as off_t,
             )

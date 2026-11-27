@@ -117,6 +117,14 @@ impl OpenFile {
         self.file.read(buf, offset, self.nonblocking(), sleep)
     }
 
+    pub fn pwrite(&self, buf: &[u8], offset: usize, sleep: Sleep<'_>) -> Result<usize, Errno> {
+        if !self.file.is_seekable() {
+            return Err(Errno::ESPIPE);
+        }
+
+        self.file.write(buf, offset, self.nonblocking(), sleep)
+    }
+
     pub fn readv(&self, iovecs: &IoVecSlice, sleep: Sleep<'_>) -> Result<usize, Errno> {
         let offset = self.mutable.lock().offset;
         let n = self.file.readv(iovecs, offset, self.nonblocking(), sleep)?;
