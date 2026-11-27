@@ -3,11 +3,14 @@ use alloc::vec::Vec;
 use core::cmp::min;
 
 use ftl::mutex::Mutex;
+use ftl::time::WallTime;
+use ftl::time::WallTimeExt;
 
 use crate::types::errno::Errno;
 use crate::types::sys::stat::S_IFDIR;
 use crate::types::sys::stat::S_IFREG;
 use crate::types::sys::stat::Stat;
+use crate::types::sys::time::TimeSpec;
 use crate::vfs::DirEntry;
 use crate::vfs::DirOffset;
 use crate::vfs::Directory;
@@ -16,9 +19,49 @@ use crate::vfs::INode;
 use crate::vfs::addr_as_ino;
 use crate::wait_queue::Sleep;
 
+struct Times {
+    accessed_at: WallTime,
+    modified_at: WallTime,
+    created_at: WallTime,
+}
+
+impl Times {
+    fn now() -> Self {
+        let now = WallTime::now();
+        Self {
+            accessed_at: now,
+            modified_at: now,
+            created_at: now,
+        }
+    }
+
+    fn update_mtime(&mut self) {
+        let now = WallTime::now();
+        self.modified_at = now;
+        self.created_at = now;
+    }
+
+    fn update_ctime(&mut self) {
+        self.created_at = WallTime::now();
+    }
+
+    fn fill_stat(&self, stat: &mut Stat) {
+        let atime = TimeSpec::from_nanos(self.accessed_at.as_nanos());
+        let mtime = TimeSpec::from_nanos(self.modified_at.as_nanos());
+        let ctime = TimeSpec::from_nanos(self.created_at.as_nanos());
+        stat.st_atime = atime.tv_sec as i64;
+        stat.st_atime_nsec = atime.tv_nsec as i64;
+        stat.st_mtime = mtime.tv_sec as i64;
+        stat.st_mtime_nsec = mtime.tv_nsec as i64;
+        stat.st_ctime = ctime.tv_sec as i64;
+        stat.st_ctime_nsec = ctime.tv_nsec as i64;
+    }
+}
+
 struct FileInner {
     data: Vec<u8>,
     mode: u32,
+    times: Times,
 }
 
 pub struct TmpFile {
@@ -31,6 +74,7 @@ impl TmpFile {
             inner: Mutex::new(FileInner {
                 data: Vec::new(),
                 mode,
+                times: Times::now(),
             }),
         }
     }
@@ -75,6 +119,7 @@ impl FileLike for TmpFile {
         }
 
         inner.data[offset..end].copy_from_slice(buf);
+        inner.times.update_mtime();
         Ok(buf.len())
     }
 
@@ -91,6 +136,7 @@ impl FileLike for TmpFile {
         }
 
         inner.data.resize(len, 0);
+        inner.times.update_mtime();
         Ok(())
     }
 
@@ -106,12 +152,15 @@ impl FileLike for TmpFile {
     fn stat(&self) -> Result<Stat, Errno> {
         let inner = self.inner.lock();
         let size = inner.data.len();
-        Ok(Stat::new(addr_as_ino(self), S_IFREG | inner.mode, size))
+        let mut stat = Stat::new(addr_as_ino(self), S_IFREG | inner.mode, size);
+        inner.times.fill_stat(&mut stat);
+        Ok(stat)
     }
 
     fn chmod(&self, mode: u32) -> Result<(), Errno> {
         let mut inner = self.inner.lock();
         inner.mode = mode & 0o7777;
+        inner.times.update_ctime();
         Ok(())
     }
 
@@ -182,6 +231,7 @@ impl<T> EntryList<T> {
 struct DirInner {
     entries: EntryList<DirEntry>,
     mode: u32,
+    times: Times,
 }
 
 pub struct TmpDir {
@@ -194,6 +244,7 @@ impl TmpDir {
             inner: Mutex::new(DirInner {
                 entries: EntryList::new(),
                 mode,
+                times: Times::now(),
             }),
         }
     }
@@ -206,7 +257,9 @@ impl TmpDir {
             }
         }
 
-        inner.entries.try_push(DirEntry::new(name, inode))
+        inner.entries.try_push(DirEntry::new(name, inode))?;
+        inner.times.update_mtime();
+        Ok(())
     }
 }
 
@@ -262,17 +315,21 @@ impl Directory for TmpDir {
         }
 
         inner.entries.remove(|entry| *entry.name == *name);
+        inner.times.update_mtime();
         Ok(())
     }
 
     fn stat(&self) -> Result<Stat, Errno> {
         let inner = self.inner.lock();
-        Ok(Stat::new(addr_as_ino(self), S_IFDIR | inner.mode, 0))
+        let mut stat = Stat::new(addr_as_ino(self), S_IFDIR | inner.mode, 0);
+        inner.times.fill_stat(&mut stat);
+        Ok(stat)
     }
 
     fn chmod(&self, mode: u32) -> Result<(), Errno> {
         let mut inner = self.inner.lock();
         inner.mode = mode & 0o7777;
+        inner.times.update_ctime();
         Ok(())
     }
 
@@ -295,6 +352,7 @@ impl Directory for TmpDir {
         }
 
         inner.entries.remove(|entry| *entry.name == *name);
+        inner.times.update_mtime();
         Ok(())
     }
 }
