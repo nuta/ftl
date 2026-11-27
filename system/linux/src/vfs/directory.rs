@@ -2,10 +2,12 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 
 use crate::types::errno::Errno;
+use crate::types::sys::stat::S_IFDIR;
 use crate::types::sys::stat::Stat;
 use crate::vfs::FileLike;
 use crate::vfs::INode;
 use crate::vfs::PathNode;
+use crate::vfs::addr_as_ino;
 use crate::wait_queue::Sleep;
 
 /// An entry in a directory.
@@ -65,6 +67,10 @@ pub trait Directory: Send + Sync {
     fn rmdir(&self, name: &[u8]) -> Result<(), Errno> {
         let _ = name;
         Err(Errno::EROFS)
+    }
+
+    fn stat(&self) -> Result<Stat, Errno> {
+        Ok(Stat::new(addr_as_ino(self), S_IFDIR | 0o755, 0))
     }
 
     fn chmod(&self, mode: u32) -> Result<(), Errno> {

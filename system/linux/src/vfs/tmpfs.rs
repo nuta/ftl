@@ -5,6 +5,7 @@ use core::cmp::min;
 use ftl::mutex::Mutex;
 
 use crate::types::errno::Errno;
+use crate::types::sys::stat::S_IFDIR;
 use crate::types::sys::stat::S_IFREG;
 use crate::types::sys::stat::Stat;
 use crate::vfs::DirEntry;
@@ -15,14 +16,22 @@ use crate::vfs::INode;
 use crate::vfs::addr_as_ino;
 use crate::wait_queue::Sleep;
 
+struct FileInner {
+    data: Vec<u8>,
+    mode: u32,
+}
+
 pub struct TmpFile {
-    data: Mutex<Vec<u8>>,
+    inner: Mutex<FileInner>,
 }
 
 impl TmpFile {
     pub fn new() -> Self {
         Self {
-            data: Mutex::new(Vec::new()),
+            inner: Mutex::new(FileInner {
+                data: Vec::new(),
+                mode: 0o755,
+            }),
         }
     }
 }
@@ -35,13 +44,13 @@ impl FileLike for TmpFile {
         _nonblocking: bool,
         _sleep: Sleep<'_>,
     ) -> Result<usize, Errno> {
-        let data = self.data.lock();
-        if offset >= data.len() {
+        let inner = self.inner.lock();
+        if offset >= inner.data.len() {
             return Ok(0);
         }
 
-        let copy_len = min(buf.len(), data.len() - offset);
-        buf[..copy_len].copy_from_slice(&data[offset..offset + copy_len]);
+        let copy_len = min(buf.len(), inner.data.len() - offset);
+        buf[..copy_len].copy_from_slice(&inner.data[offset..offset + copy_len]);
         Ok(copy_len)
     }
 
@@ -53,29 +62,35 @@ impl FileLike for TmpFile {
         _sleep: Sleep<'_>,
     ) -> Result<usize, Errno> {
         let end = offset.checked_add(buf.len()).ok_or(Errno::EINVAL)?;
-        let mut data = self.data.lock();
+        let mut inner = self.inner.lock();
 
         // Extend the buffer if it is not large enough.
-        let len = data.len();
+        let len = inner.data.len();
         if len < end {
-            data.try_reserve(end - len).map_err(|_| Errno::ENOMEM)?;
-            data.resize(end, 0);
+            inner
+                .data
+                .try_reserve(end - len)
+                .map_err(|_| Errno::ENOMEM)?;
+            inner.data.resize(end, 0);
         }
 
-        data[offset..end].copy_from_slice(buf);
+        inner.data[offset..end].copy_from_slice(buf);
         Ok(buf.len())
     }
 
     fn truncate(&self, len: usize) -> Result<(), Errno> {
-        let mut data = self.data.lock();
+        let mut inner = self.inner.lock();
 
         // Reserve memory first to `resize` without panicking.
-        let old_len = data.len();
+        let old_len = inner.data.len();
         if old_len < len {
-            data.try_reserve(len - old_len).map_err(|_| Errno::ENOMEM)?;
+            inner
+                .data
+                .try_reserve(len - old_len)
+                .map_err(|_| Errno::ENOMEM)?;
         }
 
-        data.resize(len, 0);
+        inner.data.resize(len, 0);
         Ok(())
     }
 
@@ -84,15 +99,19 @@ impl FileLike for TmpFile {
     }
 
     fn size(&self) -> Result<usize, Errno> {
-        Ok(self.data.lock().len())
+        let inner = self.inner.lock();
+        Ok(inner.data.len())
     }
 
     fn stat(&self) -> Result<Stat, Errno> {
-        let size = self.data.lock().len();
-        Ok(Stat::new(addr_as_ino(self), S_IFREG | 0o755, size))
+        let inner = self.inner.lock();
+        let size = inner.data.len();
+        Ok(Stat::new(addr_as_ino(self), S_IFREG | inner.mode, size))
     }
 
-    fn chmod(&self, _mode: u32) -> Result<(), Errno> {
+    fn chmod(&self, mode: u32) -> Result<(), Errno> {
+        let mut inner = self.inner.lock();
+        inner.mode = mode & 0o7777;
         Ok(())
     }
 
@@ -160,33 +179,41 @@ impl<T> EntryList<T> {
     }
 }
 
+struct DirInner {
+    entries: EntryList<DirEntry>,
+    mode: u32,
+}
+
 pub struct TmpDir {
-    entries: Mutex<EntryList<DirEntry>>,
+    inner: Mutex<DirInner>,
 }
 
 impl TmpDir {
     pub fn new() -> Self {
         Self {
-            entries: Mutex::new(EntryList::new()),
+            inner: Mutex::new(DirInner {
+                entries: EntryList::new(),
+                mode: 0o755,
+            }),
         }
     }
 
     pub fn add(&self, name: &[u8], inode: INode) -> Result<(), Errno> {
-        let mut entries = self.entries.lock();
-        for entry in entries.iter() {
+        let mut inner = self.inner.lock();
+        for entry in inner.entries.iter() {
             if *entry.name == *name {
                 return Err(Errno::EEXIST);
             }
         }
 
-        entries.try_push(DirEntry::new(name, inode))
+        inner.entries.try_push(DirEntry::new(name, inode))
     }
 }
 
 impl Directory for TmpDir {
     fn lookup(&self, name: &[u8]) -> Result<INode, Errno> {
-        let entries = self.entries.lock();
-        for entry in entries.iter() {
+        let inner = self.inner.lock();
+        for entry in inner.entries.iter() {
             if *entry.name == *name {
                 return Ok(entry.inode.clone());
             }
@@ -196,8 +223,8 @@ impl Directory for TmpDir {
     }
 
     fn readdir(&self, offset: DirOffset) -> Result<Option<(DirEntry, DirOffset)>, Errno> {
-        let entries = self.entries.lock();
-        let Some((entry, next_offset)) = entries.readdir_from(offset) else {
+        let inner = self.inner.lock();
+        let Some((entry, next_offset)) = inner.entries.readdir_from(offset) else {
             return Ok(None);
         };
 
@@ -216,8 +243,8 @@ impl Directory for TmpDir {
     }
 
     fn is_empty(&self) -> Result<bool, Errno> {
-        let entries = self.entries.lock();
-        Ok(entries.is_empty())
+        let inner = self.inner.lock();
+        Ok(inner.entries.is_empty())
     }
 
     fn link(&self, name: &[u8], inode: INode) -> Result<(), Errno> {
@@ -225,8 +252,8 @@ impl Directory for TmpDir {
     }
 
     fn unlink(&self, name: &[u8]) -> Result<(), Errno> {
-        let mut entries = self.entries.lock();
-        let Some(entry) = entries.iter().find(|entry| *entry.name == *name) else {
+        let mut inner = self.inner.lock();
+        let Some(entry) = inner.entries.iter().find(|entry| *entry.name == *name) else {
             return Err(Errno::ENOENT);
         };
 
@@ -234,11 +261,18 @@ impl Directory for TmpDir {
             return Err(Errno::EISDIR);
         }
 
-        entries.remove(|entry| *entry.name == *name);
+        inner.entries.remove(|entry| *entry.name == *name);
         Ok(())
     }
 
-    fn chmod(&self, _mode: u32) -> Result<(), Errno> {
+    fn stat(&self) -> Result<Stat, Errno> {
+        let inner = self.inner.lock();
+        Ok(Stat::new(addr_as_ino(self), S_IFDIR | inner.mode, 0))
+    }
+
+    fn chmod(&self, mode: u32) -> Result<(), Errno> {
+        let mut inner = self.inner.lock();
+        inner.mode = mode & 0o7777;
         Ok(())
     }
 
@@ -247,8 +281,8 @@ impl Directory for TmpDir {
     }
 
     fn rmdir(&self, name: &[u8]) -> Result<(), Errno> {
-        let mut entries = self.entries.lock();
-        let Some(entry) = entries.iter().find(|entry| *entry.name == *name) else {
+        let mut inner = self.inner.lock();
+        let Some(entry) = inner.entries.iter().find(|entry| *entry.name == *name) else {
             return Err(Errno::ENOENT);
         };
 
@@ -260,7 +294,7 @@ impl Directory for TmpDir {
             return Err(Errno::ENOTEMPTY);
         }
 
-        entries.remove(|entry| *entry.name == *name);
+        inner.entries.remove(|entry| *entry.name == *name);
         Ok(())
     }
 }
