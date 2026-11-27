@@ -11,6 +11,7 @@ pub fn sys_mkdirat(
     current: &Thread,
     dirfd: c_int,
     path: *const u8,
+    mode: u32,
 ) -> Result<SyscallResult, Errno> {
     if path.is_null() {
         return Err(Errno::EFAULT);
@@ -41,6 +42,9 @@ pub fn sys_mkdirat(
         return Err(Errno::ENOTDIR);
     };
 
-    dir.mkdir(name)?;
+    // 0o1000 = sticky bit
+    let mode = mode & 0o1777 & !process.umask();
+
+    dir.mkdir(name, mode)?;
     Ok(SyscallResult::Done(0))
 }

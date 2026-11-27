@@ -538,6 +538,11 @@ impl Process {
         Ok(())
     }
 
+    pub fn umask(&self) -> u32 {
+        let mutable = self.mutable.lock();
+        mutable.umask
+    }
+
     /// Sets the umask of this process, and returns the old one.
     pub fn set_umask(&self, umask: u32) -> u32 {
         let mut mutable = self.mutable.lock();

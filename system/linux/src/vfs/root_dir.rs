@@ -34,9 +34,11 @@ fn populate_from_initfs(root_dir: &Arc<TmpDir>) {
         };
 
         if file.is_dir {
-            parent_dir.mkdir(name).expect("initfs: failed to mkdir");
+            parent_dir
+                .mkdir(name, 0o755)
+                .expect("initfs: failed to mkdir");
         } else {
-            let new_file = parent_dir.create(name).unwrap();
+            let new_file = parent_dir.create(name, 0o755).unwrap();
             new_file
                 .write(file.data, 0, false, Sleep::Uninterruptible)
                 .unwrap();
@@ -46,7 +48,7 @@ fn populate_from_initfs(root_dir: &Arc<TmpDir>) {
 
 /// Builds the root directory.
 pub fn build_root_dir(quota: Arc<Quota>, image: Vmo, network: Arc<TcpIp>) -> INode {
-    let root_dir = Arc::new(TmpDir::new());
+    let root_dir = Arc::new(TmpDir::new(0o755));
     populate_from_initfs(&root_dir);
 
     let devfs = DevFs::new();
@@ -55,7 +57,7 @@ pub fn build_root_dir(quota: Arc<Quota>, image: Vmo, network: Arc<TcpIp>) -> INo
     root_dir.add(b"proc", INode::Dir(Arc::new(procfs))).unwrap();
     root_dir.add(b"dev", INode::Dir(Arc::new(devfs))).unwrap();
     root_dir.add(b"ftl", INode::Dir(Arc::new(ftlfs))).unwrap();
-    root_dir.mkdir(b"tmp").unwrap();
+    root_dir.mkdir(b"tmp", 0o1777).unwrap();
 
     INode::Dir(root_dir)
 }

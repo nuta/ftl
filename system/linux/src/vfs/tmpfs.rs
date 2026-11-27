@@ -26,11 +26,11 @@ pub struct TmpFile {
 }
 
 impl TmpFile {
-    pub fn new() -> Self {
+    pub fn new(mode: u32) -> Self {
         Self {
             inner: Mutex::new(FileInner {
                 data: Vec::new(),
-                mode: 0o755,
+                mode,
             }),
         }
     }
@@ -189,11 +189,11 @@ pub struct TmpDir {
 }
 
 impl TmpDir {
-    pub fn new() -> Self {
+    pub fn new(mode: u32) -> Self {
         Self {
             inner: Mutex::new(DirInner {
                 entries: EntryList::new(),
-                mode: 0o755,
+                mode,
             }),
         }
     }
@@ -231,14 +231,14 @@ impl Directory for TmpDir {
         Ok(Some((entry.clone(), next_offset)))
     }
 
-    fn create(&self, name: &[u8]) -> Result<Arc<dyn FileLike>, Errno> {
-        let new_file = Arc::new(TmpFile::new());
+    fn create(&self, name: &[u8], mode: u32) -> Result<Arc<dyn FileLike>, Errno> {
+        let new_file = Arc::new(TmpFile::new(mode));
         self.add(name, INode::File(new_file.clone()))?;
         Ok(new_file)
     }
 
-    fn mkdir(&self, name: &[u8]) -> Result<(), Errno> {
-        let new_dir = TmpDir::new();
+    fn mkdir(&self, name: &[u8], mode: u32) -> Result<(), Errno> {
+        let new_dir = TmpDir::new(mode);
         self.add(name, INode::Dir(Arc::new(new_dir)))
     }
 

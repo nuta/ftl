@@ -44,13 +44,13 @@ pub trait Directory: Send + Sync {
     fn lookup(&self, name: &[u8]) -> Result<INode, Errno>;
     fn readdir(&self, offset: DirOffset) -> Result<Option<(DirEntry, DirOffset)>, Errno>;
 
-    fn create(&self, name: &[u8]) -> Result<Arc<dyn FileLike>, Errno> {
-        let _ = name;
+    fn create(&self, name: &[u8], mode: u32) -> Result<Arc<dyn FileLike>, Errno> {
+        let _ = (name, mode);
         Err(Errno::EROFS)
     }
 
-    fn mkdir(&self, name: &[u8]) -> Result<(), Errno> {
-        let _ = name;
+    fn mkdir(&self, name: &[u8], mode: u32) -> Result<(), Errno> {
+        let _ = (name, mode);
         Err(Errno::EROFS)
     }
 

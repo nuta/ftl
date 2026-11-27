@@ -405,14 +405,22 @@ fn do_handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
                 frame.arg5(),
             )
         }
-        SYS_OPEN => sys_open(current, arg0 as *const u8, arg1 as c_int),
-        SYS_CREAT => sys_creat(current, arg0 as *const u8),
+        SYS_OPEN => sys_open(current, arg0 as *const u8, arg1 as c_int, arg2 as u32),
+        SYS_CREAT => sys_creat(current, arg0 as *const u8, arg1 as u32),
         SYS_ACCESS => sys_access(current, arg0 as *const u8, arg1 as c_int),
         SYS_FACCESSAT => sys_faccessat(current, arg0 as c_int, arg1 as *const u8, arg2 as c_int),
         SYS_IOCTL => sys_ioctl(current, arg0 as c_int, arg1 as c_ulong, arg2),
-        SYS_OPENAT => sys_openat(current, arg0 as c_int, arg1 as *const u8, arg2 as c_int),
-        SYS_MKDIR => sys_mkdir(current, arg0 as *const u8),
-        SYS_MKDIRAT => sys_mkdirat(current, arg0 as c_int, arg1 as *const u8),
+        SYS_OPENAT => {
+            sys_openat(
+                current,
+                arg0 as c_int,
+                arg1 as *const u8,
+                arg2 as c_int,
+                frame.arg3() as u32,
+            )
+        }
+        SYS_MKDIR => sys_mkdir(current, arg0 as *const u8, arg1 as u32),
+        SYS_MKDIRAT => sys_mkdirat(current, arg0 as c_int, arg1 as *const u8, arg2 as u32),
         SYS_RMDIR => sys_rmdir(current, arg0 as *const u8),
         SYS_UNLINK => sys_unlink(current, arg0 as *const u8),
         SYS_UNLINKAT => sys_unlinkat(current, arg0 as c_int, arg1 as *const u8, arg2 as c_int),

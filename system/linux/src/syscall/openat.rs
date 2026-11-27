@@ -24,6 +24,7 @@ fn lookup_or_create(
     path: &[u8],
     dirfd: Option<c_int>,
     exclusive: bool,
+    mode: u32,
 ) -> Result<Arc<PathNode>, Errno> {
     let (parent, name) = process.lookup_parent(path, dirfd)?;
     if name.is_empty() || name == b"." || name == b".." {
@@ -47,7 +48,7 @@ fn lookup_or_create(
     }
 
     // The file does not exist. Create it.
-    let new_file = dir.create(name)?;
+    let new_file = dir.create(name, mode)?;
     Ok(PathNode::new(parent, name, INode::File(new_file)))
 }
 
@@ -56,6 +57,7 @@ pub fn sys_openat(
     dirfd: c_int,
     path: *const u8,
     flags: c_int,
+    mode: u32,
 ) -> Result<SyscallResult, Errno> {
     if path.is_null() {
         return Err(Errno::EFAULT);
@@ -70,7 +72,8 @@ pub fn sys_openat(
     let dirfd = if dirfd == AT_FDCWD { None } else { Some(dirfd) };
     let pnode = if flags & O_CREAT != 0 {
         let exclusive = flags & O_EXCL != 0;
-        lookup_or_create(&process, path, dirfd, exclusive)?
+        let mode = mode & 0o7777 & !process.umask();
+        lookup_or_create(&process, path, dirfd, exclusive, mode)?
     } else {
         process.lookup_path(path, dirfd)?
     };
